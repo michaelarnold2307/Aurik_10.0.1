@@ -5,7 +5,7 @@ import numpy as np
 from backend.core.phases.phase_59_modulation_noise_reduction import ModulationNoiseReductionPhase
 
 
-def _profile(material: str, qm: str = "balanced", rest: float = 50.0) -> dict:
+def _profile(material: str, qm: str | None = "balanced", rest: float = 50.0) -> dict:
     return ModulationNoiseReductionPhase._compute_modulation_noise_profile(material, qm, rest)
 
 
@@ -38,11 +38,14 @@ def test_low_restorability_adjustments():
 
 def test_profile_bounds():
     for material in ["tape", "cassette", "cd_digital", "unknown"]:
-        for qm in ["balanced", "quality", "maximum", "fast", None]:
+        for qm in ["balanced", "quality", "maximum", "fast"]:
             for rest in [5.0, 50.0, 95.0]:
                 p = _profile(material, qm, rest)
                 assert 0.05 <= p["min_modulation_noise_score"] <= 0.25
                 assert 0.02 <= p["g_floor"] <= 0.30
+        p_none = _profile(material, None, 50.0)
+        assert 0.05 <= p_none["min_modulation_noise_score"] <= 0.25
+        assert 0.02 <= p_none["g_floor"] <= 0.30
 
 
 def test_process_metadata_contains_profile():
@@ -63,3 +66,47 @@ def test_process_metadata_contains_profile():
     assert "modulation_noise_profile" in result.metadata
     assert "min_modulation_noise_score" in result.metadata
     assert "g_floor" in result.metadata
+    assert "repair_locality_coverage" in result.metadata
+
+
+def test_locality_profile_is_event_strength_adaptive():
+    sr = 48000
+    profile, coverage = ModulationNoiseReductionPhase._build_locality_profile(
+        n_samples=sr * 3,
+        sample_rate=sr,
+        defect_locations={"modulation_noise": [(0.30, 0.90)], "nr_breathing_artifact": [(1.70, 2.30)]},
+        event_metadata={
+            "modulation_noise": {"severity": 0.95, "confidence": 0.95},
+            "nr_breathing_artifact": {"severity": 0.35, "confidence": 0.65},
+        },
+    )
+
+    assert profile.shape == (sr * 3,)
+    assert 0.0 < coverage < 0.50
+    strong_region = float(np.mean(profile[int(0.45 * sr) : int(0.75 * sr)]))
+    mild_region = float(np.mean(profile[int(1.85 * sr) : int(2.15 * sr)]))
+    clean_region = float(np.mean(profile[int(1.10 * sr) : int(1.35 * sr)]))
+    assert strong_region > mild_region * 1.5
+    assert clean_region < 0.04
+
+
+def test_vibrato_zone_caps_modulation_noise_profile():
+    sr = 48000
+    free, _ = ModulationNoiseReductionPhase._build_locality_profile(
+        n_samples=sr * 3,
+        sample_rate=sr,
+        defect_locations={"modulation_noise": [(1.20, 1.80)]},
+        event_metadata={"modulation_noise": {"severity": 0.95, "confidence": 0.95}},
+    )
+    capped, _ = ModulationNoiseReductionPhase._build_locality_profile(
+        n_samples=sr * 3,
+        sample_rate=sr,
+        defect_locations={"modulation_noise": [(1.20, 1.80)]},
+        event_metadata={"modulation_noise": {"severity": 0.95, "confidence": 0.95}},
+        protected_zones=[(1.15, 1.85, 0.20)],
+    )
+
+    free_strength = float(np.mean(free[int(1.35 * sr) : int(1.65 * sr)]))
+    capped_strength = float(np.mean(capped[int(1.35 * sr) : int(1.65 * sr)]))
+    assert capped_strength <= 0.21
+    assert capped_strength < free_strength * 0.55

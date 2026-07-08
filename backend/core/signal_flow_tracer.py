@@ -455,7 +455,7 @@ class SignalFlowTracer:
             data = json.loads(_LATEST_SYMLINK.read_text(encoding="utf-8"))
             wav = data.get("output_wav")
             if wav and Path(wav).exists():
-                return wav
+                return wav  # type: ignore[no-any-return]
         except Exception:
             pass
         # 3. Filesystem-Fallback: neueste WAV in output/
@@ -558,7 +558,7 @@ def _to_mono(audio: np.ndarray | None) -> np.ndarray | None:
                 a = np.mean(a, axis=0)
             else:
                 a = np.mean(a, axis=1)
-        return a.ravel()
+        return a.ravel()  # type: ignore[no-any-return]
     except Exception:
         return None
 
@@ -639,7 +639,7 @@ def _compute_spectral_novelty_fast(
         pp = post_psd[:n]
 
         # Anteil Frequenzbins wo Post > Original + 3 dB (Faktor 2)
-        excess_bins = np.sum(pp > op * 2.0)
+        excess_bins: int = int(np.sum(pp > op * 2.0))
         novelty = float(excess_bins) / float(n) if n > 0 else 0.0
         return float(np.clip(novelty, 0.0, 1.0))
     except Exception:
@@ -711,7 +711,7 @@ def _detect_echo(diff: np.ndarray, sr: int, pre: np.ndarray | None = None) -> tu
         max_samples = int(0.2 * sr)
         seg = diff[:max_samples].astype(np.float64)
         seg -= np.mean(seg)
-        energy = np.sum(seg**2)
+        energy: float = float(np.sum(seg**2))
         if energy < 1e-12:
             return 0.0, 0.0
 
@@ -800,7 +800,7 @@ def _find_latest_output_wav() -> str | None:
     """Sucht die neueste WAV-Datei in output/ und output_audio/ per Timestamp."""
     try:
         workspace = Path(__file__).parent.parent.parent
-        candidates = []
+        candidates: list[Path] = []
         for subdir in ("output", "output_audio"):
             d = workspace / subdir
             if d.is_dir():

@@ -290,7 +290,7 @@ class MusicalStructureAnalyzer:
 
         # Clip negative values (only peaks matter)
         novelty = np.clip(novelty, 0.0, None)
-        return novelty
+        return novelty  # type: ignore[no-any-return]
 
     @staticmethod
     def _gauss_smooth(x: np.ndarray, sigma: float) -> np.ndarray:
@@ -301,7 +301,7 @@ class MusicalStructureAnalyzer:
         t = np.arange(-half, half + 1)
         kernel = np.exp(-(t**2) / (2 * sigma**2)).astype(np.float32)
         kernel /= kernel.sum()
-        return np.convolve(x, kernel, mode="same").astype(np.float32)
+        return np.convolve(x, kernel, mode="same").astype(np.float32)  # type: ignore[no-any-return]
 
     @staticmethod
     def _pick_peaks(novelty: np.ndarray, min_dist: int = 8) -> list[int]:
@@ -437,7 +437,7 @@ class MusicalStructureAnalyzer:
         end = max(start, min(int(segment.end_sample), mono.size))
         frame = np.nan_to_num(mono[start:end].astype(np.float32, copy=False))
         if frame.size < max(32, sr // 20):
-            return np.zeros(12, dtype=np.float32)
+            return np.zeros(12, dtype=np.float32)  # type: ignore[no-any-return]
 
         max_samples = max(1024, min(frame.size, int(sr * 4.0)))
         if frame.size > max_samples:
@@ -454,8 +454,8 @@ class MusicalStructureAnalyzer:
             np.add.at(chroma, pitch_classes, spectrum[valid])
         norm = float(np.linalg.norm(chroma))
         if norm < 1e-8:
-            return np.zeros(12, dtype=np.float32)
-        return (chroma / norm).astype(np.float32)
+            return np.zeros(12, dtype=np.float32)  # type: ignore[no-any-return]
+        return (chroma / norm).astype(np.float32)  # type: ignore[no-any-return]
 
     @staticmethod
     def _structure_metadata(segments: list[SegmentInfo]) -> dict[str, object]:

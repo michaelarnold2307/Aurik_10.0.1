@@ -17,11 +17,12 @@ from backend.core.unified_restorer_v3 import RestorationConfig
 def test_performance_guard_budget_constants_are_within_policy_bounds() -> None:
     """Performance constants must stay within release policy bounds.
 
-    Spec §2.38 KMV (v9.10.72): LIMIT_BALANCED/QUALITY/MAXIMUM = 32.0,
-    RT8_EXCELLENCE_BUDGET = 32.0.  Old 8× limit caused excessive deferral
-    for normal-length songs with multi-model pipelines.
+    Spec §2.38 KMV: LIMIT_FAST = 8.0 for real-audio proof/headroom,
+    LIMIT_BALANCED/QUALITY/MAXIMUM = 32.0, RT8_EXCELLENCE_BUDGET = 32.0.
+    Old 3× FAST caused noisy real-audio validation warnings despite successful
+    bounded processing.
     """
-    assert PerformanceGuard.LIMIT_FAST <= 3.0
+    assert PerformanceGuard.LIMIT_FAST <= 8.0
     assert PerformanceGuard.LIMIT_BALANCED <= 32.0
     assert PerformanceGuard.LIMIT_3X_RT <= 32.0
     assert PerformanceGuard.RT8_EXCELLENCE_BUDGET <= 32.0
@@ -35,7 +36,7 @@ def test_performance_guard_target_mapping_is_consistent() -> None:
     balanced_guard = PerformanceGuard(mode=QualityMode.BALANCED, enforce_limit=True, enable_adaptive_skipping=True)
     quality_guard = PerformanceGuard(mode=QualityMode.QUALITY, enforce_limit=True, enable_adaptive_skipping=True)
 
-    assert fast_guard.target_rt_factor <= 3.0
+    assert fast_guard.target_rt_factor <= 8.0
     assert balanced_guard.target_rt_factor <= 32.0
     assert quality_guard.target_rt_factor >= balanced_guard.target_rt_factor
 

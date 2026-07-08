@@ -65,8 +65,11 @@ MIIPHER_SINGING_CONFIDENCE_MIN = 0.35
 # DeepFilterNet Fallback energy_bias bei Gesang (§0j)
 _DFN_FALLBACK_ENERGY_BIAS_DB = -6.0
 
+# Native MIIPHER ONNX — Standard-SR für W2v-BERT-2.0 / HuBERT-basierte Modelle
+_MIIPHER_NATIVE_SR_DEFAULT = 16000
+
 # Singleton
-_instance: MiipherPlugin | None = None
+_INSTANCE_HOLDER: list[MiipherPlugin | None] = [None]
 _lock = threading.Lock()
 
 
@@ -96,11 +99,13 @@ class MiipherPlugin:
     def __init__(self) -> None:
         self._model_loaded = False
         self._model_session = None
+        self._last_miipher_path: str = "none"  # Tracking: welcher Pfad zuletzt genutzt wurde
         self._last_route_metadata: dict[str, object] = {
             "model_used": "none",
             "capability_status": "unavailable",
             "fallback_chain": [],
             "native_miipher_loaded": False,
+            "activation_reason": "not_initialized",
         }
         self._try_load_model()
 
@@ -110,20 +115,24 @@ class MiipherPlugin:
         return dict(self._last_route_metadata)
 
     def is_productive(self) -> bool:
-        """True when a real local SOTA/fallback model path is available."""
+        """True, wenn ein produktiver lokaler MIIPHER- oder Fallback-Pfad verfügbar ist."""
+        if self._model_loaded and self._model_session is not None:
+            return True
         try:
-            get_model_capability_gate = _load_symbol(
-                "backend.core.dsp.model_capability_gate",
-                "get_model_capability_gate",
+            sgmse_plugin = _load_module("plugins.sgmse_plugin")
+            get_sgmse = getattr(sgmse_plugin, "get_loaded_sgmse_plus_plugin", None) or getattr(
+                sgmse_plugin,
+                "get_sgmse_plus_plugin",
+                None,
             )
-            report = get_model_capability_gate().build_report()
-            capabilities = report.get("capabilities", {}) if isinstance(report, dict) else {}
-            if not isinstance(capabilities, dict):
-                return False
-            for name in ("sgmse_plus", "deepfilternet_v3_ii"):
-                cap = capabilities.get(name, {})
-                if isinstance(cap, dict) and cap.get("status") in {"sota_real", "sota_fallback"}:
-                    return True
+            sgmse = get_sgmse() if callable(get_sgmse) else None
+            if sgmse is not None and bool(getattr(sgmse, "_model_loaded", False)):
+                return True
+
+            get_deepfilternet_plugin = _load_symbol("plugins.deepfilternet_v3_ii_plugin", "get_deepfilternet_plugin")
+            dfn = get_deepfilternet_plugin()
+            if dfn is not None and bool(getattr(dfn, "_model_loaded", False)):
+                return True
         except Exception as exc:  # pylint: disable=broad-except
             logger.debug("MIIPHER adapter capability check unavailable: %s", exc)
         return False
@@ -154,10 +163,14 @@ class MiipherPlugin:
             try:
                 _reg = _load_symbol("backend.core.plugin_lifecycle_manager", "register_plugin")
 
+                def _miipher_unload() -> None:
+                    self._model_session = None
+                    self._model_loaded = False
+
                 _reg(
                     "MIIPHER",
                     size_gb=0.8,
-                    unload_fn=lambda s=self: setattr(s, "_model_session", None) or setattr(s, "_model_loaded", False),
+                    unload_fn=_miipher_unload,
                 )
             except Exception as _exc:
                 logger.debug("PLM-Registrierung MIIPHER (non-critical): %s", _exc)
@@ -214,18 +227,22 @@ class MiipherPlugin:
             "capability_status": "unavailable",
             "fallback_chain": fallback_chain.copy(),
             "native_miipher_loaded": bool(self._model_loaded),
+            "activation_reason": "miipher_entry",
         }
 
         # Productive open-source SOTA chain: SGMSE+ is the best available local
         # deep-noise vocal substitute for native MIIPHER when applied to a vocal stem.
         try:
+            self._last_miipher_path = "none"
             result = self._enhance_miipher(reference, sr, panns_singing=float(panns_singing))  # §0p
+            _is_native = self._last_miipher_path == "native_onnx"
             self._last_route_metadata = {
-                "model_used": "miipher_sgmse_plus",
-                "capability_status": "sota_fallback" if not self._model_loaded else "sota_real",
+                "model_used": f"miipher_{self._last_miipher_path}",
+                "capability_status": "sota_real" if _is_native else "sota_fallback",
                 "fallback_chain": fallback_chain.copy(),
                 "native_miipher_loaded": bool(self._model_loaded),
                 "energy_bias_db": _DFN_FALLBACK_ENERGY_BIAS_DB,
+                "activation_reason": "native_onnx" if _is_native else "sgmse_plus_chain",
             }
             return result
         except Exception as exc:  # pylint: disable=broad-except
@@ -248,6 +265,7 @@ class MiipherPlugin:
                 "fallback_chain": fallback_chain.copy(),
                 "native_miipher_loaded": bool(self._model_loaded),
                 "energy_bias_db": _used_bias,
+                "activation_reason": "deepfilternet_fallback",
             }
             return result
         except Exception as exc:  # pylint: disable=broad-except
@@ -262,8 +280,100 @@ class MiipherPlugin:
             "fallback_chain": fallback_chain.copy(),
             "native_miipher_loaded": bool(self._model_loaded),
             "energy_bias_db": _DFN_FALLBACK_ENERGY_BIAS_DB,
+            "activation_reason": "wiener_last_resort",
         }
         return result
+
+    def _run_native_miipher_onnx(
+        self,
+        audio: npt.NDArray[np.float32],
+        sr: int,
+    ) -> npt.NDArray[np.float32]:
+        """Native MIIPHER ONNX Inferenz (§4.4 SOTA-Primary).
+
+        Shape-adaptiv: [1,T] / [T] / [1,1,T] — erkennt Input-Nodes via get_inputs().
+        Stereo: Pro-Kanal-Verarbeitung (L/R unabhängig — vermeidet Desync).
+        Resampling: 48kHz → Modell-SR (ONNX-Metadaten oder 16kHz Default) → 48kHz.
+
+        Raises:
+            RuntimeError: wenn Inferenz fehlschlägt (→ Aufrufer fällt auf SGMSE+ zurück).
+        """
+        if self._model_session is None:
+            raise RuntimeError("MIIPHER ONNX: _model_session ist None")
+
+        # Input-Signatur lesen
+        _inputs = self._model_session.get_inputs()
+        if not _inputs:
+            raise RuntimeError("MIIPHER ONNX: keine Input-Nodes gefunden")
+        _input_name: str = _inputs[0].name
+        _input_shape: list = list(_inputs[0].shape)
+
+        # Modell-SR aus ONNX-Metadaten (custom_metadata_map) lesen
+        try:
+            _meta = self._model_session.get_modelmeta().custom_metadata_map
+            _model_sr = int(_meta.get("sample_rate", _MIIPHER_NATIVE_SR_DEFAULT))
+        except Exception:  # pylint: disable=broad-except
+            _model_sr = _MIIPHER_NATIVE_SR_DEFAULT
+
+        _is_stereo = audio.ndim == 2 and audio.shape[0] == 2
+        _n_target = audio.shape[-1]
+
+        def _process_channel(ch_audio: npt.NDArray[np.float32]) -> npt.NDArray[np.float32]:
+            """Resampled, führt ONNX-Inferenz durch und normalisiert Output für einen Mono-Kanal."""
+            _librosa = _load_module("librosa")
+
+            # 48kHz → model_sr
+            _resampled: npt.NDArray[np.float32] = (
+                _librosa.resample(ch_audio, orig_sr=sr, target_sr=_model_sr).astype(np.float32)
+                if sr != _model_sr
+                else ch_audio
+            )
+
+            # ONNX Input aufbereiten (Shape-adaptiv nach Anzahl Dimensionen)
+            _ndim_exp = len(_input_shape)
+            if _ndim_exp <= 1:
+                _onnx_in = _resampled  # [T]
+            elif _ndim_exp == 2:
+                _onnx_in = _resampled[np.newaxis, :]  # [1, T]
+            else:
+                _onnx_in = _resampled[np.newaxis, np.newaxis, :]  # [1, 1, T]
+
+            _onnx_out = self._model_session.run(None, {_input_name: _onnx_in})
+            _raw = np.asarray(_onnx_out[0], dtype=np.float32)
+
+            # Output-Shape normalisieren → [T] durch Squeeze führender Batch-Dimensionen
+            while _raw.ndim > 1:
+                _raw = _raw[0]
+
+            # model_sr → 48kHz
+            _enhanced: npt.NDArray[np.float32] = (
+                _librosa.resample(_raw, orig_sr=_model_sr, target_sr=sr).astype(np.float32) if _model_sr != sr else _raw
+            )
+
+            # Länge deterministisch anpassen (kein Time-Warp)
+            if _enhanced.shape[0] > _n_target:
+                _enhanced = _enhanced[:_n_target]
+            elif _enhanced.shape[0] < _n_target:
+                _enhanced = np.pad(_enhanced, (0, _n_target - _enhanced.shape[0]), mode="edge")
+
+            return np.clip(np.nan_to_num(_enhanced, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0).astype(np.float32)
+
+        # Pro-Kanal-Verarbeitung (Mono und Stereo)
+        if _is_stereo:
+            _ch_l = _process_channel(audio[0].astype(np.float32))
+            _ch_r = _process_channel(audio[1].astype(np.float32))
+            _result: npt.NDArray[np.float32] = np.stack([_ch_l, _ch_r], axis=0).astype(np.float32)
+        else:
+            _result = _process_channel(audio.astype(np.float32))
+
+        logger.info(
+            "MIIPHER native ONNX: Inferenz erfolgreich (model_sr=%d, is_stereo=%s, n=%d)",
+            _model_sr,
+            _is_stereo,
+            _n_target,
+        )
+        self._last_miipher_path = "native_onnx"
+        return self._apply_vocal_safety_guards(audio, _result, sr, model_name="NativeMIIPHER")
 
     def _enhance_stem_sgmse(
         self,
@@ -336,7 +446,11 @@ class MiipherPlugin:
 
         # --- 3. SGMSE+ nur auf Vocal-Stem ---
         sgmse_plugin = _load_module("plugins.sgmse_plugin")
-        getter = getattr(sgmse_plugin, "get_sgmse_plus_plugin", None) or getattr(sgmse_plugin, "get_sgmse_plugin", None)
+        getter = (
+            getattr(sgmse_plugin, "get_loaded_sgmse_plus_plugin", None)
+            or getattr(sgmse_plugin, "get_sgmse_plus_plugin", None)
+            or getattr(sgmse_plugin, "get_sgmse_plugin", None)
+        )
         if getter is None:
             raise RuntimeError("SGMSE+ accessor unavailable")
         sgmse = getter()
@@ -387,32 +501,45 @@ class MiipherPlugin:
         sr: int,
         panns_singing: float = 0.0,  # §0p v9.12.9: weitergereicht an SGMSE+
     ) -> npt.NDArray[np.float32]:
-        """Productive open-source MIIPHER substitute via SGMSE+.
+        """MIIPHER-Kaskade: native ONNX → Stem-SGMSE+ → Full-Mix-SGMSE+.
 
         Prioritätskaskade:
-        1. Stem-SGMSE+ (MelBandRoFormer → SGMSE+ auf Vocal-Stem → Remix) — bestes Ergebnis
+        0. Native MIIPHER ONNX (§4.4 SOTA-Primary — nur wenn Modell geladen)
+        1. Stem-SGMSE+ (MelBandRoFormer → SGMSE+ auf Vocal-Stem → Remix)
         2. Full-Mix-SGMSE+ (Fallback wenn MBR nicht verfügbar oder SDRi zu niedrig)
 
-        Beide Pfade: HNR-Blend (§0p) + Hallucination-Guard (§2.46e).
+        Alle Pfade: HNR-Blend (§0p) + Hallucination-Guard (§2.46e).
         Raises RuntimeError → Aufrufer leitet an _enhance_dfn_fallback.
         """
+        # Priorität 0: Native MIIPHER ONNX (§4.4 SOTA-Primary)
+        if self._model_loaded and self._model_session is not None:
+            try:
+                return self._run_native_miipher_onnx(audio, sr)
+            except Exception as _native_exc:  # pylint: disable=broad-except
+                logger.debug(
+                    "MIIPHER native ONNX Inferenz fehlgeschlagen: %s — SGMSE+ Fallback",
+                    _native_exc,
+                )
+
         # Priorität 1: Stem-based SGMSE+ (MIIPHER-Annäherung)
         try:
-            return self._enhance_stem_sgmse(audio, sr, panns_singing=float(panns_singing))
+            _stem_result = self._enhance_stem_sgmse(audio, sr, panns_singing=float(panns_singing))
+            self._last_miipher_path = "sgmse_plus_stem"
+            return _stem_result
         except Exception as _stem_exc:
             logger.debug(
                 "MIIPHER adapter: Stem-SGMSE+ nicht verfügbar (%s) — Full-Mix-SGMSE+ Fallback",
                 _stem_exc,
             )
 
-        # Priorität 2: Full-Mix-SGMSE+ (bisheriger Ansatz)
+        # Priorität 2: Full-Mix-SGMSE+ (Fallback)
         try:
             sgmse_plugin = _load_module("plugins.sgmse_plugin")
 
-            getter = getattr(sgmse_plugin, "get_sgmse_plus_plugin", None) or getattr(
-                sgmse_plugin,
-                "get_sgmse_plugin",
-                None,
+            getter = (
+                getattr(sgmse_plugin, "get_loaded_sgmse_plus_plugin", None)
+                or getattr(sgmse_plugin, "get_sgmse_plus_plugin", None)
+                or getattr(sgmse_plugin, "get_sgmse_plugin", None)
             )
             if getter is None:
                 raise RuntimeError("SGMSE+ accessor unavailable")
@@ -429,6 +556,7 @@ class MiipherPlugin:
             enhanced = self._apply_vocal_safety_guards(audio, enhanced, sr, model_name="SGMSE+")
 
             logger.debug("MIIPHER adapter: SGMSE+ chain succeeded for deep-noise vocal restoration")
+            self._last_miipher_path = "sgmse_plus_fullmix"
             return enhanced
         except RuntimeError:
             raise
@@ -710,9 +838,10 @@ class MiipherPlugin:
 
 def get_miipher_plugin() -> MiipherPlugin:
     """Thread-safe Singleton (Double-Checked Locking, §3.2)."""
-    global _instance  # pylint: disable=global-statement
-    if _instance is None:
+    if _INSTANCE_HOLDER[0] is None:
         with _lock:
-            if _instance is None:
-                _instance = MiipherPlugin()
-    return _instance
+            if _INSTANCE_HOLDER[0] is None:
+                _INSTANCE_HOLDER[0] = MiipherPlugin()
+    plugin = _INSTANCE_HOLDER[0]
+    assert plugin is not None
+    return plugin

@@ -1,4 +1,4 @@
-# Aurik 9 — Spec 07: Qualitätsziele & Tests
+# Aurik 10 — Spec 07: Qualitätsziele & Tests
 
 > PQS-Metriken, AMRB-Benchmark, universelle Garantien, Test-Standards,
 > E2E-Assertions, Performance-Budget.
@@ -8,6 +8,16 @@
 > Urteilsvermögen bei jeder Importdatei erreichen muss. Metriken unterhalb dieser
 > Grenzen sind kein „ausreichendes Ergebnis" — sie zeigen an, dass das maximal
 > mögliche Ergebnis noch nicht erreicht wurde.
+
+---
+
+## §v10 Pleasantness-First (2026-07-05)
+
+> **HPE ist oberste Instanz.** PMGG darf Phasen ueberspringen, wenn sie
+> den Klang fuer menschliche Ohren verschlechtern (§2.29 v10).
+> Siehe backend/core/per_phase_musical_goals_gate.py, 
+> backend/core/human_pleasantness_estimator.py.
+> **Kein Rollback-Verbot mehr.** CausalDefectReasoner kann irren — das Ohr nicht.
 
 ---
 
@@ -146,13 +156,14 @@ in der MushraEvaluator-Gewichtungsmatrix bereits abgebildet und ist kein Ausschl
 | AMRB-08-HUM | 50-Hz-Brumm + Obertöne | OQS ≥ 80 | OQS ≥ 72 |
 | AMRB-09-DROPOUT | Tape-Dropout 50–200 ms | OQS ≥ 80 | OQS ≥ 72 |
 | AMRB-10-COMPOSITE | Kombinierte Degradierung | OQS ≥ 80 | OQS ≥ 70 |
+| AMRB-11-CASSETTE | IEC 60094-1 Typ I: BW ≤ 12 kHz + HF-Hiss + Flutter 0.15 % WRMS | OQS ≥ 72 | OQS ≥ 65 (analog Kassette) |
 
 **[RELEASE_MUST] Fragment-Mindestlänge**: Jedes AMRB-Stimulusfragment MUSS **≥ 30 s** lang sein.
 Fragmente < 30 s erzeugen OQS-Varianz von ±8 Punkten — ausreichend um einen 80-Punkt-Pass-Fail-Schwellwert
 unzuverlässig zu machen. `run_amrb_baseline.py` erzwingt diesen Guard automatisch (`_MIN_AMRB_FRAGMENT_S = 30.0`)
 und korrigiert kürzere `--duration`-Angaben mit einem Warn-Log. `n_items ≥ 5` bleibt Pflicht (Nightly-Config).
 
-**Interne Führungs-Schwelle**: Gesamt-Score ≥ **84.0** UND ≥ 8/10 Szenarien bestanden.
+**Interne Führungs-Schwelle**: Gesamt-Score ≥ **84.0** UND ≥ 8/11 Szenarien bestanden.
 
 ```python
 from benchmarks.musical_restoration_benchmark import run_benchmark, BenchmarkConfig
@@ -192,8 +203,8 @@ item_seed = _sid_offset(scenario_id)  # RICHTIG
 | Chroma-Korrelation (Tonart) | Pearson ≥ 0.95 |
 | **Pass-Through (sauberes Material)** | PQS-MOS-Verlust ≤ 0.05, Goals stabil ± 0.02 |
 | **Rauschboden (Studio-2026)** | ≤ −72 dBFS, A-gew. ≤ −75 dB(A), 0 Musical-Noise-Events |
-| **Rauschboden (Restoration)** | Material-adaptiv (§0a): wax_cylinder ≤ −35, shellac ≤ −45, vinyl ≤ −55, tape/reel_tape ≤ −58, cassette ≤ −52, minidisc ≤ −65, cd_digital ≤ −72 dBFS. Niveau UND Textur des Quellmediums bewahren, nicht aggressiver. |
-| **Rauschtextur-Kohärenz (Restoration)** | `noise_texture_coherence ≥ 0.80` (§4.7) — Restrauschen muss Carrier-Profil entsprechen |
+| **Rauschboden (Restoration)** | Export-Ziel für alle analogen Tonträger: CD-ähnlicher Rauschboden statt analogem Trägerboden. `shellac`, `wax_cylinder`, `lacquer_disc`, `wire_recording`, `vinyl`, `tape`, `reel_tape`, `cassette` dürfen keinen analogen Mindestboden reinjizieren; bei nötiger Resttextur-Auffüllung Ziel `cd_digital`, ca. −74 dBFS und Testanker ≤ −68 dBFS. `minidisc`, `cd_digital`, `dat`, `mp3_*` bleiben ohne analoge Floor-Injektion. |
+| **Rauschtextur-Kohärenz (Restoration)** | `noise_texture_coherence ≥ 0.80` (§4.7) — analoge Trägerdefekt-Textur darf im Export nicht zurückkehren; Ziel ist CD-ähnliche Resttextur ohne Musical-Noise. |
 | **Temporale Kohärenz** | MOS-Spanne über 10-s-Segmente ≤ 0.30, σ ≤ 0.15 |
 | **Stereo-Authentizität** | Mono-Ären M/S-Korrelation nach Restaur. ≥ 0.97 |
 | **HF-Kumulativ-Limit** | Presence + Air kumulativ ≤ +4 dB (Listening-Fatigue) |
@@ -295,6 +306,14 @@ Jede Änderung an GUI, CLI, Batch, REST-Legacy, Bridge, Import, Denker-Einstieg 
 
 Kanonischer Testanker: `tests/normative/test_canonical_contract_drift_gate.py`.
 
+**GUI-Live-Status-Zusatzpflicht:** Aenderungen an Defektchips, Waveform-Markern,
+Statusmeldungen oder Hauptfortschrittsmapping MUESSEN zusaetzlich durch
+`tests/normative/test_modern_window_gui_contract.py` abgesichert sein. Pflichtfaelle:
+Dropout-Aliase (`dropouts`, `DROPOUTS`, `gap`, `gaps`, `tape_dropout`) zaehlen zum
+sichtbaren Chip `Tonaussetzer`; lokalisierte Dropout-Events zaehlen waehrend echter
+Dropout-/Inpainting-Phasen anhand des Timeline-Cursors herunter; UV3-Post-Processing darf
+den Hauptbalken nicht ueber 90 % treiben, bevor Export/Finalisierung explizit gestartet sind.
+
 ### §8.3.2a Era-/VFA-/GP-Prior-Regressionspflicht [RELEASE_MUST]
 
 Jede Änderung an Vokal-Gates, VFA-Zonen, GP-Priors oder RecordingChainProfiler-Integration MUSS fokussierte Unit-Tests enthalten:
@@ -330,6 +349,9 @@ dass der Mittelteil angehoben wird, während Intro/Outro-Peaks relativ zur Refer
 
 **Real-Audio-Gate (heavy)**: `tests/normative/test_real_audio_edge_lag_gate.py` muss bei
 `--run-heavy-tests` grün sein (Intro/Outro-Peak-Exzess + Interchannel-Delay-Delta).
+Alle Fixture-Payloads in diesem Gate muessen statisch typisiert werden; `dict[str, object]`-
+Werte sind vor numerischer Umwandlung per `typing.cast` oder lokaler Typpruefung zu verengen,
+damit `call-overload`-Fehler nicht durch schwache Fixture-Typisierung verdeckt werden.
 
 ## §8.5 [RELEASE_MUST] Globales Parameterregister
 
@@ -377,7 +399,7 @@ automatisch geprüft werden.
 | RestorabilityEstimator | ≤ **5 s** |
 | Export (FLAC 24-bit) | ≤ 10 s |
 
-**Absolutes Zeitlimit Stufe 1:** `MAX_ABSOLUTE_SECONDS = 5400.0` (90 Minuten).
+**Absolutes Zeitlimit Stufe 1:** `_MAX_TOTAL_SECONDS = 14400.0` (240 Minuten, §K 64×RT-aligned)
 Nach Überschreitung: KMV Stufe 2 (`MLRefinementThread`) übernimmt automatisch.
 
 **FeedbackChain-Abbruch (Fix M, v9.10.100 — MOS-Metrik präzisiert, harmonisiert v9.12.0):**
@@ -1202,7 +1224,7 @@ Bei Änderungen an Kernphasen, PMGG, DefectScanner oder heavy ML-Fallbacks:
 - ≤ 1960: `N(0.75, 0.08)`
 - ≥ 1970: `N(0.50, 0.10)`
 
-### §8.6 [RELEASE_MUST] Worldclass Hybrid-Engineer Protocol (v9.12.10)
+### §8.6 [RELEASE_MUST] Worldclass Hybrid-Engineer Protocol (v10.0.0)
 
 Rolle Aurik: hybrider Restaurierungstoningenieur fuer Musik mit Gesang.
 Diese Rolle ist nur erfuellt, wenn menschlich nachbildbare Spitzenfaehigkeiten
@@ -1378,3 +1400,11 @@ Fehlt einer dieser Nachweise, ist der Weltspitzen-Claim fuer den Patch nicht gue
 Fuer psychoakustische Kern-Changes ist die konsolidierte Engineering-Basis in
 `docs/PSYCHOACOUSTIC_ENGINEERING_INSIGHTS_2026-05-21.md` normativ zu nutzen
 (Architektur, Telemetrie, DoD, offene Risiken).
+
+
+## v10 Test-Status
+
+- 358 Unit-Tests bestehen
+- 37 neue v10-Tests in `test_v10_worldclass_modules.py`
+- Bridge-Compliance: 0 Bypasses in CLI und Batch
+- ML-Fallback-Audit: 54 Module, 3 Silent-Failures behoben

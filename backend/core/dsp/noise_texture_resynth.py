@@ -1,12 +1,12 @@
-"""Noise-Texture-Re-Synthesis — Rauchtextur nach Over-NR wiederherstellen (§TimbralCoherence).
+"""Noise-Texture-Re-Synthesis — Rauschtextur nach Over-NR kontrolliert auffüllen (§TimbralCoherence).
 
 Problem: Aggressive NR (DeepFilterNet, OMLSA, SGMSE+) entfernt nicht nur Rauschen, sondern
-         auch die charakteristische Trägerprofil-Textur des Aufnahmemediums. Das Ergebnis
-         klingt „plastisch" (weißer/flacher Rauschboden statt Vinyl/Shellac-Profil).
+         auch den letzten ruhigen Rauschboden. Das Ergebnis klingt „plastisch" oder hart
+         abgeschnitten, wenn Stillezonen völlig tot wirken.
 
-Lösung:  Nach jeder NR-Phase: Messe gemessene Rauchtextur im NR-Ausgang und vergleiche
-         mit Material-Referenzprofil. Wenn Abweichung > 3 dB → reiniziere carrier-authentische
-         Rauchtextur in Stille-Passagen (< -40 dBFS).
+Lösung:  Nach jeder NR-Phase: Messe gemessene Rauschtextur im NR-Ausgang und vergleiche
+         mit Zielprofil. Analoge Tonträger zielen im Export auf CD-ähnliche Textur und
+         CD-ähnlichen Boden; analoges Hiss-/Oberflächenrauschen wird nicht zurückgefüllt.
 
 API:
     from backend.core.dsp.noise_texture_resynth import restore_carrier_noise_texture
@@ -24,6 +24,7 @@ Basierend auf:
 from __future__ import annotations
 
 import logging
+from typing import cast
 
 import numpy as np
 
@@ -40,6 +41,30 @@ _DEFAULT_MAX_CORRECTION_DB = 6.0
 # Minimum Quiet-Frames: brauchen >= 3 Frames für zuverlässige Messung
 _MIN_QUIET_FRAMES = 3
 
+_CD_LIKE_FLOOR_DBFS = -74.0
+_ANALOG_CD_FLOOR_MAX_CORRECTION_DB = 32.0
+_ANALOG_CD_FLOOR_TARGETS = frozenset(
+    {
+        "shellac",
+        "wax_cylinder",
+        "lacquer_disc",
+        "wire_recording",
+        "reel_tape",
+        "tape",
+        "vinyl",
+        "cassette",
+        "unknown_analog",
+    }
+)
+
+
+def _material_resynth_target(material_type: str) -> tuple[str, float | None]:
+    """Liefert Textur-Zielmaterial und optionalen Maximalboden für Resynthese."""
+    key = str(material_type or "unknown").lower().strip()
+    if key in _ANALOG_CD_FLOOR_TARGETS:
+        return "cd_digital", _CD_LIKE_FLOOR_DBFS
+    return key, None
+
 
 def restore_carrier_noise_texture(
     audio_pre_nr: np.ndarray,
@@ -55,8 +80,8 @@ def restore_carrier_noise_texture(
     Wenn die Abweichung > 3 dB ist (Over-NR erkannt), wird comfort noise mit
     der Carrier-typischen Spektralform in Stille-Passagen eingemischt.
 
-    §0a: "Rauschboden-Niveau UND -Textur des originalen Aufnahmemediums anstreben"
-    §TimbralCoherence: Über-NR-tes Audio klingt plastisch ohne natürliche Rauchtextur.
+    §0a: Analoge Trägerdefekt-Böden im Export auf CD-ähnliches Ziel bringen.
+    §TimbralCoherence: Über-NR-tes Audio klingt plastisch ohne kontrollierte Resttextur.
 
     Parameters
     ----------
@@ -151,9 +176,9 @@ def restore_carrier_noise_texture(
                 synthesize_comfort_noise,
             )
 
-        result = np.nan_to_num(result, nan=0.0, posinf=0.0, neginf=0.0)
-        result = np.clip(result, -1.0, 1.0)
-        return result.astype(audio_post_nr.dtype)
+        result_arr = np.asarray(np.nan_to_num(result, nan=0.0, posinf=0.0, neginf=0.0), dtype=np.float64)
+        result_arr = np.asarray(np.clip(result_arr, -1.0, 1.0), dtype=np.float64)
+        return cast(np.ndarray, result_arr.astype(np.asarray(audio_post_nr).dtype, copy=False))
 
     except Exception as _exc:
         logger.debug("noise_texture_resynth: Fehler (nicht-blockierend): %s", _exc)
@@ -174,8 +199,9 @@ def _restore_channel(
     """Rauchtextur-Korrektur für einen einzelnen Kanal."""
     # Messe aktuelle Rauchtextur im post-NR Signal
     measured = compute_noise_texture_profile(post, sr)
+    target_material, floor_cap_dbfs = _material_resynth_target(material_type)
     # Referenzprofil für dieses Material
-    target = get_material_noise_texture(material_type)
+    target = get_material_noise_texture(target_material)
 
     # Abweichung berechnen: max dB-Unterschied zwischen gemessener und Zieltextur
     measured_safe = np.clip(measured, 1e-10, None)
@@ -201,7 +227,22 @@ def _restore_channel(
 
     # Begrenze Korrekturniveau auf max_correction_db (§TimbralCoherence: nie zu aggressiv)
     effective_floor = float(np.clip(rms_floor, -80.0, -20.0))
-    correction_floor = float(np.clip(effective_floor * strength, -75.0, -20.0))
+    # BUG-FIX: strength im linearen Bereich skalieren (NICHT als dBFS-Multiplikator!).
+    # Falsch: effective_floor * 0.48 = -24.96 dBFS → Rauschen LAUTER als Original.
+    # Korrekt: 20*log10(strength) addieren → Rauschen leiser als Original wenn strength < 1.
+    _str_db = 20.0 * np.log10(max(float(strength), 1e-6))
+    correction_floor = float(np.clip(effective_floor + _str_db, -75.0, effective_floor))
+    if floor_cap_dbfs is not None:
+        # Analoge Träger: Hiss/Oberflächenrauschen ist zu korrigierender Defekt.
+        # Wenn Textur nachgefüllt werden muss, dann nur CD-ähnlich leise.
+        correction_floor = min(correction_floor, float(floor_cap_dbfs))
+        if effective_floor - correction_floor > _ANALOG_CD_FLOOR_MAX_CORRECTION_DB:
+            logger.debug(
+                "noise_texture_resynth: Analog→CD-Floor übersprungen (material=%s floor_delta=%.1f dB)",
+                material_type,
+                effective_floor - correction_floor,
+            )
+            return post
 
     corrected = synthesize_comfort_noise(
         post.astype(np.float64),
@@ -210,14 +251,15 @@ def _restore_channel(
         target_texture=target,
         noise_floor_dbfs=correction_floor,
     )
-    corrected = np.asarray(corrected, dtype=np.float64)
+    corrected_arr = np.asarray(corrected, dtype=np.float64)
     logger.info(
-        "noise_texture_resynth: Over-NR-Korrektur angewandt (material=%s deviation=%.1f dB floor=%.1f dBFS)",
+        "noise_texture_resynth: Over-NR-Korrektur angewandt (material=%s target=%s deviation=%.1f dB floor=%.1f dBFS)",
         material_type,
+        target_material,
         deviation_db,
         correction_floor,
     )
-    return corrected
+    return cast(np.ndarray, corrected_arr)
 
 
 def _estimate_noise_floor_dbfs(audio: np.ndarray, sr: int) -> float:

@@ -181,7 +181,7 @@ class UncertaintyQuantifier:
             except Exception:
                 val = float(calculator(audio))
             scores[i] = val
-        return scores
+        return scores  # type: ignore[no-any-return]
 
     # ------------------------------------------------------------------
     # Uncertainty components

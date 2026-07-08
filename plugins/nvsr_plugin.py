@@ -339,7 +339,7 @@ class NvsrPlugin:
             channel_out = channel_out[pad_len : pad_len + n]
             if len(channel_out) < n:
                 channel_out = np.pad(channel_out, (0, n - len(channel_out)))
-            return channel_out.astype(np.float32)
+            return channel_out.astype(np.float32)  # type: ignore[no-any-return]
 
         # SBR-Kern: Spektrale Einhüllende aus Quellband ableiten
         src_mag = np.abs(Zxx[src_low_bin : src_high_bin + 1, :])  # (src_bins, T)
@@ -415,7 +415,7 @@ class NvsrPlugin:
             channel_sbr = np.pad(channel_sbr, (0, n - len(channel_sbr)))
 
         channel_sbr = np.nan_to_num(channel_sbr, nan=0.0, posinf=0.0, neginf=0.0)
-        return np.clip(channel_sbr, -1.0, 1.0).astype(np.float32)
+        return np.clip(channel_sbr, -1.0, 1.0).astype(np.float32)  # type: ignore[no-any-return]
 
     # ------------------------------------------------------------------
     # ONNX-Hook (zukünftige DNN-Eskalation)

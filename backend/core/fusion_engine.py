@@ -51,7 +51,7 @@ class FusionEngine:
         Fused audio as float32 ndarray.
         """
         if not outputs:
-            return np.zeros(1, dtype=np.float32)
+            return np.zeros(1, dtype=np.float32)  # type: ignore[no-any-return]
 
         arrays = [np.asarray(o, dtype=np.float32) for o in outputs]
         # Ensure equal length
@@ -70,7 +70,7 @@ class FusionEngine:
         else:
             result = arrays[0]
 
-        return np.nan_to_num(result, nan=0.0, posinf=0.0, neginf=0.0)
+        return np.nan_to_num(result, nan=0.0, posinf=0.0, neginf=0.0)  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------

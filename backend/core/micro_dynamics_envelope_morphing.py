@@ -31,7 +31,7 @@ def _savgol_smooth(arr: np.ndarray, window: int = 7, polyorder: int = 2) -> np.n
     try:
         from scipy.signal import savgol_filter
 
-        return savgol_filter(arr, window_length=window, polyorder=polyorder).astype(np.float32)
+        return savgol_filter(arr, window_length=window, polyorder=polyorder).astype(np.float32)  # type: ignore[no-any-return]
     except Exception:
         # Boxcar-Fallback
         half = window // 2
@@ -88,7 +88,7 @@ class MicroDynamicsEnvelopeMorphing:
             end = start + fsize
             frame = arr[start : min(end, n)]
             profile[i] = _lufs_frame(frame)
-        return profile
+        return profile  # type: ignore[no-any-return]
 
     def morph(
         self,
@@ -176,12 +176,17 @@ class MicroDynamicsEnvelopeMorphing:
             )
 
         is_stereo = res.ndim == 2
+        res_channel_first = bool(is_stereo and res.shape[0] <= 8)
+        orig_channel_first = bool(orig.ndim == 2 and orig.shape[0] <= 8)
         if is_stereo:
-            res_mono = res.mean(axis=0)
-            orig_mono = orig.mean(axis=0) if orig.ndim == 2 else orig
+            res_mono = res.mean(axis=0) if res_channel_first else res.mean(axis=1)
+            if orig.ndim == 2:
+                orig_mono = orig.mean(axis=0) if orig_channel_first else orig.mean(axis=1)
+            else:
+                orig_mono = orig
         else:
             res_mono = res
-            orig_mono = orig if orig.ndim == 1 else orig.mean(axis=0)
+            orig_mono = orig if orig.ndim == 1 else (orig.mean(axis=0) if orig_channel_first else orig.mean(axis=1))
 
         L_orig = self.compute_lufs_profile(orig_mono, sr)
         L_rest = self.compute_lufs_profile(res_mono, sr)
@@ -372,16 +377,18 @@ class MicroDynamicsEnvelopeMorphing:
 
         # Auf Stereo/Mono anwenden
         if is_stereo:
-            out = res * gain_envelope[np.newaxis, : res.shape[1]] if res.shape[0] == 2 else res
-            # Sicherere Anwendung
-            if res.ndim == 2:
-                n_ch = res.shape[0]
-                out = np.zeros_like(res)
-                for ch in range(n_ch):
-                    n_samp = min(len(res[ch]), len(gain_envelope))
+            out = np.zeros_like(res)
+            if res_channel_first:
+                for ch in range(res.shape[0]):
+                    n_samp = min(res.shape[1], len(gain_envelope))
                     out[ch, :n_samp] = res[ch, :n_samp] * gain_envelope[:n_samp]
                     if n_samp < res.shape[1]:
                         out[ch, n_samp:] = res[ch, n_samp:]
+            else:
+                n_samp = min(res.shape[0], len(gain_envelope))
+                out[:n_samp, :] = res[:n_samp, :] * gain_envelope[:n_samp, np.newaxis]
+                if n_samp < res.shape[0]:
+                    out[n_samp:, :] = res[n_samp:, :]
         else:
             n_samp = min(n, len(gain_envelope))
             out = res.copy()
@@ -408,19 +415,31 @@ class MicroDynamicsEnvelopeMorphing:
                 gain2 = out2 / _safe_res_mono
                 _quiet_thresh_retry = float(10.0 ** (-36.0 / 20.0))
                 out_retry = np.zeros_like(res)
-                for ch in range(res.shape[0]):
-                    n_s = min(len(res[ch]), len(gain2))
-                    _ch_out = res[ch, :n_s] * gain2[:n_s]
-                    # §2.30b Per-Channel Quiet-Zone Guard: supprimiere positiven Gain wo
-                    # der jeweilige Kanal in der Quiet-Zone liegt (<-36 dBFS).
+                if res_channel_first:
+                    for ch in range(res.shape[0]):
+                        n_s = min(res.shape[1], len(gain2))
+                        _ch_out = res[ch, :n_s] * gain2[:n_s]
+                        # §2.30b Per-Channel Quiet-Zone Guard: supprimiere positiven Gain wo
+                        # der jeweilige Kanal in der Quiet-Zone liegt (<-36 dBFS).
+                        _ch_rms_frames = max(1, n_s // 480)
+                        _ch_seg = res[ch, : _ch_rms_frames * 480].reshape(_ch_rms_frames, 480)
+                        _ch_rms = np.sqrt(np.mean(_ch_seg**2, axis=1) + 1e-12)
+                        _ch_quiet = np.repeat(_ch_rms < _quiet_thresh_retry, 480)[:n_s]
+                        _ch_gain_pos = gain2[:n_s] > 1.0
+                        _ch_out[_ch_quiet & _ch_gain_pos] = res[ch, :n_s][_ch_quiet & _ch_gain_pos]
+                        out_retry[ch, :n_s] = _ch_out
+                        out_retry[ch, n_s:] = res[ch, n_s:]
+                else:
+                    n_s = min(res.shape[0], len(gain2))
+                    _ch_out = res[:n_s, :] * gain2[:n_s, np.newaxis]
                     _ch_rms_frames = max(1, n_s // 480)
-                    _ch_seg = res[ch, : _ch_rms_frames * 480].reshape(_ch_rms_frames, 480)
+                    _ch_seg = res[: _ch_rms_frames * 480, :].reshape(_ch_rms_frames, 480, res.shape[1])
                     _ch_rms = np.sqrt(np.mean(_ch_seg**2, axis=1) + 1e-12)
-                    _ch_quiet = np.repeat(_ch_rms < _quiet_thresh_retry, 480)[:n_s]
-                    _ch_gain_pos = gain2[:n_s] > 1.0
-                    _ch_out[_ch_quiet & _ch_gain_pos] = res[ch, :n_s][_ch_quiet & _ch_gain_pos]
-                    out_retry[ch, :n_s] = _ch_out
-                    out_retry[ch, n_s:] = res[ch, n_s:]
+                    _ch_quiet = np.repeat(_ch_rms < _quiet_thresh_retry, 480, axis=0)[:n_s, :]
+                    _ch_gain_pos = gain2[:n_s, np.newaxis] > 1.0
+                    _ch_out[_ch_quiet & _ch_gain_pos] = res[:n_s, :][_ch_quiet & _ch_gain_pos]
+                    out_retry[:n_s, :] = _ch_out
+                    out_retry[n_s:, :] = res[n_s:, :]
                 final = np.clip(np.nan_to_num(out_retry), -self.TRUE_PEAK_LIMIT, self.TRUE_PEAK_LIMIT).astype(
                     np.float32
                 )
@@ -444,7 +463,7 @@ class MicroDynamicsEnvelopeMorphing:
                 )
             else:
                 logger.info("§8.2 MDEM Micro-Dynamics pearson=%.4f ≥ 0.92 (retry, r_before=%.4f)", r_final, r)
-            return final
+            return final  # type: ignore[no-any-return]
 
         # §8.2 Observability: log final pearson (universal guarantee ≥ 0.92)
         if r < 0.92:
@@ -457,7 +476,7 @@ class MicroDynamicsEnvelopeMorphing:
         else:
             logger.debug("§8.2 MDEM Micro-Dynamics pearson=%.4f ≥ 0.92 (max_gain=%.1f dB)", r, max_gain)
 
-        return out.astype(np.float32)
+        return out.astype(np.float32)  # type: ignore[no-any-return]
 
     def _morph_internal(
         self,

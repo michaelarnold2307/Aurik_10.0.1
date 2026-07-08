@@ -304,9 +304,13 @@ class LoudnessAnalyzer:
         """
         try:
             import pyloudnorm as pyln
+            _has_pyln = True
         except ImportError:
-            logger.error("pyloudnorm not installed. Install via: pip install pyloudnorm")
-            raise
+            _has_pyln = False
+            logger.warning(
+                "pyloudnorm not installed — using RMS-based loudness estimation. "
+                "Install via: pip install pyloudnorm for ITU-R BS.1770-4 compliance."
+            )
 
         # Ensure correct shape
         if audio.ndim == 1:
@@ -316,10 +320,14 @@ class LoudnessAnalyzer:
         else:
             raise ValueError(f"Invalid audio shape: {audio.shape}")
 
-        meter = pyln.Meter(sample_rate)
-
         # Integrated Loudness
-        integrated_lufs = meter.integrated_loudness(audio_2d)
+        if _has_pyln:
+            meter = pyln.Meter(sample_rate)
+            integrated_lufs = meter.integrated_loudness(audio_2d)
+        else:
+            # RMS-based fallback: −23 LUFS ≈ −23 dB relative to full scale for typical speech
+            rms = float(np.sqrt(np.mean(np.square(audio_2d))) + 1e-12)
+            integrated_lufs = float(20 * np.log10(rms + 1e-12))
 
         # Loudness Range (LRA)
         # pyloudnorm doesn't have LRA built-in, but we can use percentile analysis
@@ -330,9 +338,9 @@ class LoudnessAnalyzer:
                 # LRA ≈ difference between 95th and 10th percentile
                 lra = np.percentile(short_term_loudness, 95) - np.percentile(short_term_loudness, 10)
             else:
-                lra = 0.0
+                lra = 0.0  # type: ignore[assignment]
         except Exception:
-            lra = 0.0
+            lra = 0.0  # type: ignore[assignment]
 
         # True Peak (dBTP)
         # True Peak = Sample Peak level considering inter-sample peaks
@@ -342,7 +350,7 @@ class LoudnessAnalyzer:
 
             # Oversample 4x for True Peak approximation
             oversampled = signal.resample(audio_2d, len(audio_2d) * 4, axis=0)
-            true_peak_linear = np.max(np.abs(oversampled))
+            true_peak_linear: float = float(np.max(np.abs(oversampled)))
             true_peak_dbtp = 20 * np.log10(true_peak_linear + 1e-10)
         except Exception:
             # Fallback: Use sample peak
@@ -350,7 +358,7 @@ class LoudnessAnalyzer:
             true_peak_dbtp = 20 * np.log10(true_peak_linear + 1e-10)
 
         # Sample Peak (dBFS)
-        sample_peak_linear = np.max(np.abs(audio_2d))
+        sample_peak_linear: float = float(np.max(np.abs(audio_2d)))
         sample_peak_dbfs = 20 * np.log10(sample_peak_linear + 1e-10)
 
         return LoudnessResult(
@@ -396,11 +404,11 @@ class LoudnessAnalyzer:
                 except Exception:
                     continue
 
-            return np.array(loudness_values)
+            return np.array(loudness_values)  # type: ignore[no-any-return]
 
         except Exception as e:
             logger.warning("Short-term loudness calculation failed: %s", e)
-            return np.array([])
+            return np.array([])  # type: ignore[no-any-return]
 
 
 class TruePeakLimiter:
@@ -452,12 +460,12 @@ class TruePeakLimiter:
             # Downsample back
             result = signal.resample(limited, len(audio), axis=0)
 
-            return result.astype(audio.dtype)
+            return result.astype(audio.dtype)  # type: ignore[no-any-return]
 
         except Exception as e:
             logger.warning("True Peak limiting failed: %s, using simple clipper", e)
             # Fallback: Simple hard clip
-            return np.clip(audio, -self.threshold_linear, self.threshold_linear)
+            return np.clip(audio, -self.threshold_linear, self.threshold_linear)  # type: ignore[no-any-return]
 
     def _soft_clip(self, audio: np.ndarray, threshold: float) -> np.ndarray:
         """
@@ -472,7 +480,7 @@ class TruePeakLimiter:
         clipped_normalized = np.tanh(normalized)
 
         # Scale back
-        return clipped_normalized * threshold
+        return clipped_normalized * threshold  # type: ignore[no-any-return]
 
 
 class BWFMetadataWriter:
@@ -568,7 +576,7 @@ class BWFMetadataWriter:
                     # RIFF-Größe anpassen
                     new_riff_size = len(new_raw) - 8
                     new_raw = new_raw[:4] + struct.pack("<I", new_riff_size) + new_raw[8:]
-                    with open(audio_file_path, "wb") as fh:
+                    with open(audio_file_path, "wb") as fh:  # type: ignore[assignment]
                         fh.write(new_raw)
                     logger.info("BWF/BEXT-Chunk geschrieben: %s (%s Bytes)", audio_file_path, len(bext_content))
                     return True
@@ -786,7 +794,7 @@ class DeliveryStandardsManager:
 
             gain_smooth = gaussian_filter1d(gain, sigma=window_size)
 
-            return audio * gain_smooth
+            return audio * gain_smooth  # type: ignore[no-any-return]
 
         except Exception as e:
             logger.warning("DRC failed: %s, returning original", e)

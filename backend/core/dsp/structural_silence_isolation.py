@@ -80,7 +80,7 @@ def _get_structural_silence_zones(
             return list(zones)
 
     # Versuch 3: eigenständige Berechnung (Fallback)
-    logger.warning(
+    logger.info(
         "SSIP: structural_silence_zones nicht in context — "
         "eigenständige Berechnung aus original_audio (Fallback, non-blocking)"
     )
@@ -458,11 +458,11 @@ class StructuralSilenceIsolator:
                         result[s : s + actual_len] = data[:actual_len]
 
             result = np.nan_to_num(result, nan=0.0, posinf=0.0, neginf=0.0)
-            return np.clip(result, -1.0, 1.0)
+            return np.clip(result, -1.0, 1.0)  # type: ignore[no-any-return]
 
         except Exception as exc:
             logger.warning("SSIP.reassemble_from_segments fehlgeschlagen — Passthrough: %s", exc)
-            return np.asarray(original_silence_audio, dtype=np.float32)
+            return np.asarray(original_silence_audio, dtype=np.float32)  # type: ignore[no-any-return]
 
     def post_inpainting_silence_audit(
         self,
@@ -491,7 +491,7 @@ class StructuralSilenceIsolator:
             Audio mit zurückgesetzten Stille-Zonen wenn nötig.
         """
         if not silence_zones:
-            return np.asarray(audio_after_inpainting, dtype=np.float32)
+            return np.asarray(audio_after_inpainting, dtype=np.float32)  # type: ignore[no-any-return]
 
         try:
             before = np.asarray(audio_before_inpainting, dtype=np.float32)
@@ -541,8 +541,8 @@ class StructuralSilenceIsolator:
                 )
 
             result = np.nan_to_num(result, nan=0.0, posinf=0.0, neginf=0.0)
-            return np.clip(result, -1.0, 1.0)
+            return np.clip(result, -1.0, 1.0)  # type: ignore[no-any-return]
 
         except Exception as exc:
             logger.warning("SSIP.post_inpainting_silence_audit fehlgeschlagen — Passthrough: %s", exc)
-            return np.asarray(audio_after_inpainting, dtype=np.float32)
+            return np.asarray(audio_after_inpainting, dtype=np.float32)  # type: ignore[no-any-return]

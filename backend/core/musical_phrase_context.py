@@ -289,7 +289,7 @@ class MusicalPhraseContextExtractor:
         gap_audio = np.nan_to_num(gap_audio, nan=0.0, posinf=0.0, neginf=0.0)
 
         if len(gap_audio) < 256:
-            return np.clip(gap_audio, -1.0, 1.0)
+            return np.clip(gap_audio, -1.0, 1.0)  # type: ignore[no-any-return]
 
         # Chroma des inpainted Signals
         inpainted_chroma = self._compute_chroma(gap_audio, 48000)
@@ -303,7 +303,7 @@ class MusicalPhraseContextExtractor:
                 corr,
             )
 
-        return np.clip(gap_audio, -1.0, 1.0).astype(np.float32)
+        return np.clip(gap_audio, -1.0, 1.0).astype(np.float32)  # type: ignore[no-any-return]
 
     def estimate_tempo(self, audio: np.ndarray, sr: int) -> float:
         """Öffentliche Tempo-Schätzung für externe Aufrufer.
@@ -494,7 +494,7 @@ class MusicalPhraseContextExtractor:
             Normierter Chroma-Vektor (float32, shape=(12,))
         """
         if len(audio) < 512:
-            return np.ones(N_CHROMA, dtype=np.float32) / N_CHROMA
+            return np.ones(N_CHROMA, dtype=np.float32) / N_CHROMA  # type: ignore[no-any-return]
 
         n_fft = min(4096, len(audio))
         window = np.hanning(n_fft).astype(np.float32)
@@ -519,7 +519,7 @@ class MusicalPhraseContextExtractor:
         else:
             chroma = np.ones(N_CHROMA, dtype=np.float32) / N_CHROMA
 
-        return chroma.astype(np.float32)
+        return chroma.astype(np.float32)  # type: ignore[no-any-return]
 
     @staticmethod
     def _pearson(a: np.ndarray, b: np.ndarray) -> float:

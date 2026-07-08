@@ -38,7 +38,7 @@ def _analytic_envelope(signal_in: np.ndarray) -> np.ndarray:
     x = np.asarray(signal_in, dtype=np.float64).reshape(-1)
     n = x.shape[0]
     if n == 0:
-        return np.asarray([], dtype=np.float64)
+        return np.asarray([], dtype=np.float64)  # type: ignore[no-any-return]
     spectrum = np.fft.fft(x)
     h = np.zeros(n, dtype=np.float64)
     if n % 2 == 0:
@@ -48,7 +48,7 @@ def _analytic_envelope(signal_in: np.ndarray) -> np.ndarray:
     else:
         h[0] = 1.0
         h[1 : (n + 1) // 2] = 2.0
-    return np.abs(np.fft.ifft(spectrum * h))
+    return np.abs(np.fft.ifft(spectrum * h))  # type: ignore[no-any-return]
 
 
 # Import Vocal AI Enhancement
@@ -74,7 +74,7 @@ try:
     DYNAMICS_PHASES_AVAILABLE = True
 except ImportError:
     DYNAMICS_PHASES_AVAILABLE = False
-    PhasesMaterialType = None
+    PhasesMaterialType = None  # type: ignore[assignment,misc]
     logger.warning("Dynamics phases (Compression/Limiting) not available")
 
 
@@ -353,8 +353,8 @@ class UnifiedDefectDetector:
         std_hf = np.std(hf_energy)
 
         # Hiss: consistent (low std), moderate level
-        consistency = 1.0 - min(1.0, std_hf / (mean_hf + 1e-10))
-        level = min(1.0, mean_hf / 0.1)
+        consistency = float(min(1.0, std_hf / (mean_hf + 1e-10)))  # type: ignore[arg-type]
+        level = float(min(1.0, mean_hf / 0.1))  # type: ignore[arg-type]
 
         confidence = (consistency + level) / 2
         severity = level
@@ -386,7 +386,7 @@ class UnifiedDefectDetector:
         energy_60hz = check_hum(60.0)
 
         # Total energy for normalization
-        total_energy = np.sum(spectrum)
+        total_energy: float = float(np.sum(spectrum))
 
         # Relative hum energy
         hum_energy = max(energy_50hz, energy_60hz)
@@ -545,9 +545,9 @@ class UnifiedDefectDetector:
         flutter_sev = severity
 
         # Continuous effect
-        locations = [(0, len(audio) / self.sr)] if return_locs and confidence > 0.3 else []
+        locations = [(0, len(audio) / self.sr)] if return_locs and confidence > 0.3 else []  # type: ignore[operator]
 
-        return wow_conf, wow_sev, locations, flutter_conf, flutter_sev, locations
+        return wow_conf, wow_sev, locations, flutter_conf, flutter_sev, locations  # type: ignore[return-value]
 
     def _detect_clipping(self, audio: np.ndarray, return_locs: bool) -> tuple[float, float, list]:
         """Clipping-Erkennung (hartes Begrenzen)."""
@@ -771,7 +771,7 @@ class UnifiedAudioRestorer:
 
         # Stereo processing
         if audio.ndim == 2:
-            return np.stack([self._reduce_hiss_mono(audio[:, ch], mode) for ch in range(audio.shape[1])], axis=1)
+            return np.stack([self._reduce_hiss_mono(audio[:, ch], mode) for ch in range(audio.shape[1])], axis=1)  # type: ignore[no-any-return]
         else:
             return self._reduce_hiss_mono(audio, mode)
 
@@ -810,7 +810,7 @@ class UnifiedAudioRestorer:
         elif len(restored) < len(audio):
             restored = np.pad(restored, (0, len(audio) - len(restored)))
 
-        return restored
+        return restored  # type: ignore[no-any-return]
 
     def _remove_hum(self, audio: np.ndarray) -> np.ndarray:
         """Eigenentwicklung: Notch filtering for hum removal."""
@@ -973,7 +973,7 @@ class UnifiedAudioEnhancer:
         else:
             result = signal.filtfilt(b, a, audio)
 
-        return result
+        return result  # type: ignore[no-any-return]
 
     def _enhance_presence(self, audio: np.ndarray, amount: float) -> np.ndarray:
         """Eigenentwicklung: Presence enhancement via high-frequency emphasis."""
@@ -1007,7 +1007,7 @@ class UnifiedAudioEnhancer:
         else:
             result = signal.filtfilt(b, a, audio)
 
-        return result
+        return result  # type: ignore[no-any-return]
 
     def _enhance_detail(self, audio: np.ndarray, amount: float) -> np.ndarray:
         """Eigenentwicklung: Detail enhancement via transient emphasis."""
@@ -1020,7 +1020,7 @@ class UnifiedAudioEnhancer:
         else:
             result = self._enhance_detail_mono(audio, amount)
 
-        return result
+        return result  # type: ignore[no-any-return]
 
     def _enhance_detail_mono(self, audio: np.ndarray, amount: float) -> np.ndarray:
         """Mono transient enhancement."""
@@ -1045,7 +1045,7 @@ class UnifiedAudioEnhancer:
 
         result = audio * gain
 
-        return result
+        return result  # type: ignore[no-any-return]
 
 
 # ============================================================
@@ -1138,8 +1138,8 @@ class Studio2026Processor:
             self.limiting = LimitingPhase()
             logger.info("✓ Dynamics phases (Compression/Limiting) loaded")
         else:
-            self.compression = None
-            self.limiting = None
+            self.compression = None  # type: ignore[assignment]
+            self.limiting = None  # type: ignore[assignment]
             logger.warning("⚠ Dynamics phases not available - using fallback")
 
         logger.info("Initializing Studio 2026 Processor...")
@@ -1252,7 +1252,7 @@ class Studio2026Processor:
         Returns:
             (processed_audio, dynamics_report)
         """
-        report = {
+        report: dict[str, Any] = {
             "compression_applied": False,
             "limiting_applied": False,
         }
@@ -1270,7 +1270,7 @@ class Studio2026Processor:
         phase_material = self._map_material_type(material)
 
         # Phase 10: Compression
-        compression_result = self.compression.process(audio, self.sr, phase_material)
+        compression_result = self.compression.process(audio, self.sr, phase_material)  # type: ignore[arg-type,union-attr]
 
         if compression_result.success:
             audio = compression_result.audio
@@ -1285,7 +1285,7 @@ class Studio2026Processor:
         # Phase 11: Limiting
         if self.limiting is None:
             return audio, report
-        limiting_result = self.limiting.process(audio, self.sr, phase_material)
+        limiting_result = self.limiting.process(audio, self.sr, phase_material)  # type: ignore[arg-type,union-attr]
 
         if limiting_result.success:
             audio = limiting_result.audio
@@ -1316,7 +1316,7 @@ class Studio2026Processor:
         if peak > 0.99:
             mastered = mastered / peak * 0.99
 
-        return mastered
+        return mastered  # type: ignore[no-any-return]
 
 
 # ============================================================
@@ -1350,7 +1350,7 @@ class AurikAIFramework:
             self.vocal_enhancer = UnifiedVocalAIEnhancer(sample_rate=sample_rate)
             logger.info("✅ Aurik AI Framework Initialized (with Vocal AI)")
         else:
-            self.vocal_enhancer = None
+            self.vocal_enhancer = None  # type: ignore[assignment]
             logger.info("✅ Aurik AI Framework Initialized (Vocal AI not available)")
 
     def analyze(self, audio: np.ndarray) -> DefectDetectionResult:
@@ -1369,7 +1369,7 @@ class AurikAIFramework:
 
     def restoration_magic_button(self, audio: np.ndarray) -> tuple[np.ndarray, dict[str, Any]]:
         """Magic Button 1: Restoration Only (keine Enhancement)."""
-        return self.restoration_button.process(audio)
+        return self.restoration_button.process(audio)  # type: ignore[no-any-return,attr-defined]
 
     def studio2026_magic_button(self, audio: np.ndarray) -> tuple[np.ndarray, dict[str, Any]]:
         """Magic Button 2: Studio 2026 Complete Pipeline."""

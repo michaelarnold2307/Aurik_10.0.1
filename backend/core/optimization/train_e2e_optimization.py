@@ -67,7 +67,7 @@ class AudioRestorationDataset(Dataset):
 
     def _find_audio_pairs(self) -> list[tuple[Path, Path]]:
         """Findet Paare aus degradierten und sauberen Audiodateien."""
-        pairs = []
+        pairs: list[tuple[Path, Path]] = []
 
         degraded_dir = self.data_dir / "degraded"
         clean_dir = self.data_dir / "clean"
@@ -187,7 +187,7 @@ def train_e2e_optimization(
             is_best = val_metrics["total_perceptual_loss"] < best_val_loss
             best_val_loss = min(best_val_loss, val_metrics["total_perceptual_loss"])
 
-            framework.save_checkpoint(epoch, {"train": train_metrics, "val": val_metrics})
+            framework.save_checkpoint(epoch, {"train": train_metrics, "val": val_metrics})  # type: ignore[dict-item]
 
             if is_best:
                 logger.info("  *** New best validation loss: %.4f ***", best_val_loss)
@@ -203,7 +203,7 @@ def train_e2e_optimization(
     logger.info("\nTraining completed!")
 
 
-def train_hyperparameter_optimization(
+def train_hyperparameter_optimization(  # type: ignore[return]
     dataset_path: Path, output_path: Path, material_type: str, n_trials: int = 100, n_jobs: int = 4
 ) -> np.ndarray:
     """
@@ -239,7 +239,7 @@ def train_hyperparameter_optimization(
         # Interface-Vertrag des Optimizers erwartet (audio, config).
         del config
         # Simulate processing
-        return audio * 0.9
+        return audio * 0.9  # type: ignore[no-any-return]
 
     # Run optimization
     results = optimizer.optimize(evaluation_dataset=eval_dataset, process_function=process_audio)

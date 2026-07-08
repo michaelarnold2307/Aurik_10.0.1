@@ -176,7 +176,7 @@ class PsychoacousticCore:
             )
             self.masking_analyzer = MaskingAnalyzer(masking_config)
         else:
-            self.masking_analyzer = None
+            self.masking_analyzer = None  # type: ignore[assignment]
 
         if self.config.enable_fletcher_munson:
             fm_config = FletcherMunsonConfig(
@@ -184,7 +184,7 @@ class PsychoacousticCore:
             )
             self.fm_processor = FletcherMunsonProcessor(fm_config)
         else:
-            self.fm_processor = None
+            self.fm_processor = None  # type: ignore[assignment]
 
         logger.info("PsychoacousticCore initialized with all components enabled")
 
@@ -288,7 +288,7 @@ class PsychoacousticCore:
 
         compensated, _ = self.fm_processor.apply_compensation(audio, sr, target_phon, reference_phon)
         compensated = np.nan_to_num(compensated, nan=0.0, posinf=0.0, neginf=0.0)
-        return np.clip(compensated, -1.0, 1.0)
+        return np.clip(compensated, -1.0, 1.0)  # type: ignore[no-any-return]
 
     def remove_masked_components(self, audio: np.ndarray, sr: int, threshold_db: float = 0.0) -> np.ndarray:
         """
@@ -350,7 +350,7 @@ class PsychoacousticCore:
 
         eq_curve = gaussian_filter1d(eq_curve, sigma=2.0)
 
-        return eq_curve
+        return eq_curve  # type: ignore[no-any-return]
 
     def get_bark_bands(self):
         """Gibt zurück: list of Bark bands."""

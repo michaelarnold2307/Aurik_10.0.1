@@ -130,7 +130,7 @@ class PolyphonicSpeedCurveEstimator:
         try:
             from plugins.basicpitch_plugin import get_basicpitch_plugin
 
-            self._bp = get_basicpitch_plugin()
+            self._bp = get_basicpitch_plugin()  # type: ignore[assignment]
             logger.info(
                 "PolyphonicSpeedCurveEstimator: BasicPitch geladen (model_loaded=%s)",
                 getattr(self._bp, "_model_loaded", False),
@@ -242,7 +242,7 @@ class PolyphonicSpeedCurveEstimator:
         # not trigger a full fallback for a crackle-heavy vinyl recording.
         _max_abs_cents = float(np.percentile(np.abs(speed_curve), 99.0)) if len(speed_curve) > 0 else 0.0
         if _max_abs_cents > 200.0:
-            logger.warning(
+            logger.info(
                 "PolyphonicSpeedCurveEstimator: speed_range implausible (max |%.1f| cents > 200) — switching to pYIN fallback",
                 _max_abs_cents,
             )
@@ -355,8 +355,8 @@ class HybridWowFlutter:
         try:
             from plugins.fcpe_plugin import get_fcpe_plugin
 
-            self.crepe = get_fcpe_plugin()
-            logger.info("FCPE pitch plugin loaded for wow/flutter detection (model=%s)", self.crepe.model_used)
+            self.crepe = get_fcpe_plugin()  # type: ignore[assignment]
+            logger.info("FCPE pitch plugin loaded for wow/flutter detection (model=%s)", self.crepe.model_used)  # type: ignore[attr-defined]
             return
         except Exception as e:
             logger.debug("FCPE-Plugin nicht verfügbar (%s) — RMVPE-Fallback (§4.4 Tier-2)", e)
@@ -382,7 +382,7 @@ class HybridWowFlutter:
         try:
             from plugins.crepe_plugin import get_crepe_plugin
 
-            self.crepe = get_crepe_plugin()
+            self.crepe = get_crepe_plugin()  # type: ignore[assignment]
             logger.info("CREPE plugin geladen für wow/flutter-Detektion (§4.4 Tier-4 legacy)")
         except Exception as e:
             logger.warning("Kein Pitch-ML-Plugin verfügbar (%s) — pYIN-Fallback", e)
@@ -473,7 +473,7 @@ class HybridWowFlutter:
         processing_time = time.time() - start_time
         valid = confidence[confidence > 0]
         mean_confidence = float(np.mean(valid)) if len(valid) > 0 else 0.0
-        metadata["processing_time"] = processing_time
+        metadata["processing_time"] = processing_time  # type: ignore[assignment]
 
         return WowFlutterResult(
             pitch_trajectory=pitch_trajectory,

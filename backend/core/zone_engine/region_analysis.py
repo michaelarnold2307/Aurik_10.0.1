@@ -161,7 +161,7 @@ class RegionDetector:
         zcr = librosa.feature.zero_crossing_rate(y=audio, frame_length=frame_length, hop_length=hop_length)[0]
 
         # 4. Harmonic-percussive separation
-        harmonic, percussive = librosa.effects.hpss(audio, margin=2.0)
+        harmonic, percussive = librosa.effects.hpss(audio, margin=2.0)  # type: ignore[attr-defined]
         harmonic_ratio = self._compute_harmonic_ratio_per_frame(harmonic, percussive, hop_length)
 
         # Classify each frame
@@ -172,7 +172,7 @@ class RegionDetector:
                 spectral_centroid[i] if i < len(spectral_centroid) else 0,
                 spectral_rolloff[i] if i < len(spectral_rolloff) else 0,
                 zcr[i] if i < len(zcr) else 0,
-                harmonic_ratio[i] if i < len(harmonic_ratio) else 0.5,
+                harmonic_ratio[i] if i < len(harmonic_ratio) else 0.5,  # type: ignore[arg-type]
             )
             frame_types.append((frame_type, confidence))
 
@@ -238,7 +238,7 @@ class RegionDetector:
             where=total_energy > 1e-10,
         )
 
-        return harmonic_ratio
+        return harmonic_ratio  # type: ignore[no-any-return]
 
     def _merge_frames_to_regions(
         self, frame_types: list[tuple[RegionType, float]], hop_length: int, sr: int
@@ -371,7 +371,7 @@ class RegionAnalyzer:
         elif region.region_type == RegionType.MUSIC:
             # Tempo for music
             try:
-                tempo, _ = librosa.beat.beat_track(y=region_audio, sr=sr)
+                tempo, _ = librosa.beat.beat_track(y=region_audio, sr=sr)  # type: ignore[attr-defined]
                 analysis["tempo_bpm"] = float(np.asarray(tempo).flat[0])
             except Exception as e:
                 logger.warning("Tempo analysis failed: %s", e)

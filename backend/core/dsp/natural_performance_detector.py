@@ -439,7 +439,7 @@ def _detect_early_reflection_zones(
         import librosa  # pylint: disable=import-outside-toplevel
 
         hop_length = 512
-        onset_frames = librosa.onset.onset_detect(
+        onset_frames = librosa.onset.onset_detect(  # type: ignore[attr-defined]
             y=mono,
             sr=sr,
             hop_length=hop_length,

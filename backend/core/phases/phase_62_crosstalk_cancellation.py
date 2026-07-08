@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import logging
 import time as _time
+from typing import cast
 
 import numpy as np
 import scipy.signal as sps
@@ -109,7 +110,7 @@ def _estimate_alpha_f(
     denom = np.sqrt(np.maximum(sum_ll * sum_rr, 1e-30))
     alpha_f = np.sqrt(sum_lr_r**2 + sum_lr_i**2) / denom
     # Hard cap to guarantee invertibility and prevent over-correction
-    return np.clip(alpha_f, 0.0, alpha_max)
+    return np.clip(alpha_f, 0.0, alpha_max)  # type: ignore[no-any-return]
 
 
 def apply(
@@ -128,12 +129,12 @@ def apply(
         xt_score = float(defect_scores.get("crosstalk", 0.0))
         if xt_score < min_crosstalk_score:
             logger.debug("Phase 62: crosstalk score %.3f < %.3f — skipped", xt_score, min_crosstalk_score)
-            return np.clip(audio, -1.0, 1.0)
+            return np.clip(audio, -1.0, 1.0)  # type: ignore[no-any-return]
 
     # Crosstalk cancellation only applies to stereo
     if audio.ndim != 2:
         logger.debug("Phase 62: mono input — skipped (no crosstalk possible)")
-        return np.clip(audio, -1.0, 1.0)
+        return np.clip(audio, -1.0, 1.0)  # type: ignore[no-any-return]
 
     # Normalise to [channels, samples] = (2, N)
     if audio.shape[0] == 2 and audio.shape[1] != 2:
@@ -200,7 +201,7 @@ def apply(
     else:
         result = np.stack([left_out, right_out], axis=1)
 
-    return np.clip(result, -1.0, 1.0).astype(np.float32)
+    return np.clip(result, -1.0, 1.0).astype(np.float32)  # type: ignore[no-any-return]
 
 
 # ─── PhaseInterface ────────────────────────────────────────────────────────────
@@ -279,6 +280,107 @@ class CrosstalkCancellationPhase(PhaseInterface):
             "alpha_max": float(np.clip(alpha_max, 0.50, 0.70)),
         }
 
+    @staticmethod
+    def _local_event_strength(key: str, loc: tuple[float, float], event_metadata: dict[str, dict] | None) -> float:
+        duration_s = max(0.0, float(loc[1]) - float(loc[0]))
+        duration_factor = float(np.clip(duration_s / 0.90, 0.30, 1.0))
+        key_factor = {
+            "crosstalk": 1.0,
+            "stereo_imbalance": 0.72,
+            "phase_issues": 0.66,
+            "azimuth_error": 0.58,
+        }.get(key, 0.62)
+        severity = 0.55
+        confidence = 0.80
+        meta_obj = (event_metadata or {}).get(key)
+        if isinstance(meta_obj, dict):
+            severity = float(np.clip(float(meta_obj.get("severity", severity)), 0.0, 1.0))
+            confidence = float(np.clip(float(meta_obj.get("confidence", confidence)), 0.0, 1.0))
+        return float(np.clip(key_factor * (0.36 + 0.44 * severity + 0.20 * confidence) * duration_factor, 0.14, 1.0))
+
+    @staticmethod
+    def _collect_protected_zones(kwargs: dict) -> list[tuple[float, float, float]]:
+        zones: list[tuple[float, float, float]] = []
+        for key, cap in (
+            ("vibrato_zones", 0.20),
+            ("frisson_zones", 0.30),
+            ("whisper_zones", 0.25),
+            ("passaggio_zones", 0.35),
+        ):
+            for zone in kwargs.get(key) or []:
+                try:
+                    start_s = float(getattr(zone, "start_s", None) or zone[0])
+                    end_s = float(getattr(zone, "end_s", None) or zone[1])
+                    if end_s > start_s:
+                        zones.append((start_s, end_s, cap))
+                except Exception:
+                    continue
+        return zones
+
+    @staticmethod
+    def _build_locality_profile(
+        n_samples: int,
+        sample_rate: int,
+        defect_locations: dict[str, list[tuple[float, float]]] | None,
+        event_metadata: dict[str, dict] | None = None,
+        protected_zones: list[tuple[float, float, float]] | None = None,
+    ) -> tuple[np.ndarray, float]:
+        if n_samples <= 0 or sample_rate <= 0:
+            return np.zeros(0, dtype=np.float32), 0.0
+        if not isinstance(defect_locations, dict) or not defect_locations:
+            return np.ones(n_samples, dtype=np.float32), 0.0
+
+        keys = ("crosstalk", "stereo_imbalance", "phase_issues", "azimuth_error")
+        mask = np.zeros(n_samples, dtype=np.float32)
+        for key in keys:
+            pad = int((0.080 if key == "crosstalk" else 0.050) * sample_rate)
+            for loc in defect_locations.get(key) or []:
+                if not isinstance(loc, tuple) or len(loc) != 2:
+                    continue
+                try:
+                    start = int(max(0.0, float(loc[0])) * sample_rate)
+                    end = int(max(0.0, float(loc[1])) * sample_rate)
+                except Exception:
+                    continue
+                if end <= start:
+                    continue
+                start = max(0, start - pad)
+                end = min(n_samples, end + pad)
+                if end > start:
+                    strength = CrosstalkCancellationPhase._local_event_strength(key, loc, event_metadata)
+                    mask[start:end] = np.maximum(mask[start:end], strength)
+
+        if float(np.mean(mask)) <= 1e-6:
+            return np.ones(n_samples, dtype=np.float32), 0.0
+
+        smooth = max(16, int(0.030 * sample_rate))
+        mask = np.convolve(mask, np.ones(smooth, dtype=np.float32) / float(smooth), mode="same")
+        mask = np.clip(mask, 0.0, 1.0).astype(np.float32)
+        if protected_zones:
+            for start_s, end_s, cap in protected_zones:
+                start = int(max(0.0, float(start_s)) * sample_rate)
+                end = int(max(0.0, float(end_s)) * sample_rate)
+                if end > start:
+                    mask[start : min(n_samples, end)] = np.minimum(mask[start : min(n_samples, end)], float(cap))
+        return mask, float(np.mean(mask))
+
+    @staticmethod
+    def _blend_with_locality(reference: np.ndarray, candidate: np.ndarray, profile: np.ndarray) -> np.ndarray:
+        if reference.shape != candidate.shape or profile.size == 0:
+            return candidate
+        wet: np.ndarray
+        if reference.ndim == 1:
+            wet = np.asarray(profile, dtype=np.float32)
+        elif reference.ndim == 2 and reference.shape[0] == profile.size and reference.shape[1] <= 8:
+            wet = np.asarray(profile[:, np.newaxis], dtype=np.float32)
+        elif reference.ndim == 2 and reference.shape[1] == profile.size:
+            wet = np.asarray(profile[np.newaxis, :], dtype=np.float32)
+        else:
+            return candidate
+        blended = cast(np.ndarray, reference + wet * (candidate - reference))
+        clipped = cast(np.ndarray, np.clip(np.nan_to_num(blended, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0))
+        return cast(np.ndarray, clipped.astype(np.float32))
+
     def process(
         self,
         audio: np.ndarray,
@@ -328,6 +430,18 @@ class CrosstalkCancellationPhase(PhaseInterface):
             min_crosstalk_score=_profile_62["min_crosstalk_score"],
             alpha_max=_profile_62["alpha_max"],
         )
+        _n_samples62 = (
+            audio.shape[1] if audio.ndim == 2 and audio.shape[0] == 2 and audio.shape[1] > 2 else audio.shape[0]
+        )
+        _local_profile62, _local_coverage62 = self._build_locality_profile(
+            int(_n_samples62),
+            sample_rate,
+            kwargs.get("defect_locations"),
+            kwargs.get("defect_event_metadata"),
+            self._collect_protected_zones(kwargs),
+        )
+        if _local_coverage62 > 0.0:
+            result_audio = self._blend_with_locality(audio, result_audio, _local_profile62)
         elapsed = _time.perf_counter() - t0
 
         # V20 Mikrodynamik-Korrelation (§2.75): Crosstalk-Inversion darf voiced Frames
@@ -337,11 +451,13 @@ class CrosstalkCancellationPhase(PhaseInterface):
             try:
                 from backend.core.dsp.mikrodynamik_guard import (
                     frame_energy_correlation,  # pylint: disable=import-outside-toplevel
+                    recommend_mikrodynamik_wet,
                 )
 
                 _corr62 = frame_energy_correlation(audio, result_audio, sample_rate, frame_ms=10.0)
                 if _corr62 < 0.97:
-                    _wet62 = min(1.0, (_corr62 - 0.90) / 0.07) if _corr62 > 0.90 else 0.0
+                    _need62 = float(kwargs.get("mikrodynamik_global_need", kwargs.get("global_need", 0.0)) or 0.0)
+                    _wet62 = recommend_mikrodynamik_wet(_corr62, _panns62, global_need=_need62)
                     result_audio = (_wet62 * result_audio + (1.0 - _wet62) * audio).astype(np.float32)
                     logger.warning(
                         "Phase62 V20 Mikrodynamik-Korr=%.3f < 0.97 → wet=%.3f Blend",
@@ -393,6 +509,36 @@ class CrosstalkCancellationPhase(PhaseInterface):
         except Exception as _pmask62_exc:
             logger.debug("§2.62 Phase62 Masking-Guard (non-blocking): %s", _pmask62_exc)
 
+        # §V19 Noise-Textur-Invariante (VERBOTEN-V19): Residual bewahrt Materialcharakter
+        _mat62_str = str(material_type or "unknown").lower()
+        try:
+            from backend.core.dsp.noise_texture_guard import (  # pylint: disable=import-outside-toplevel
+                compute_noise_texture_distance as _nt62_fn,
+            )
+
+            if result_audio.shape == audio.shape:
+                _nt62_d = _nt62_fn(
+                    audio.astype(np.float32) - result_audio.astype(np.float32), _mat62_str, sr=sample_rate
+                )
+                if _nt62_d > 0.25:
+                    result_audio = (0.5 * result_audio + 0.5 * audio).astype(np.float32)
+                    logger.warning("§V19 phase_62 noise_texture dist=%.3f > 0.25 → 50%%-Blend", _nt62_d)
+        except Exception as _nt62_exc:
+            logger.debug("§V19 phase_62 noise_texture_guard (non-blocking): %s", _nt62_exc)
+
+        # §V24 Spektralfarbe-Prüfung (VERBOTEN-V24): 1/3-Oktav-Profil darf nicht verfärbt werden
+        try:
+            from backend.core.dsp.spectral_color_guard import (  # pylint: disable=import-outside-toplevel
+                check_spectral_color_preservation as _scg62,
+            )
+
+            if result_audio.shape == audio.shape:
+                _sc62 = _scg62(audio.astype(np.float32), result_audio.astype(np.float32), sample_rate)
+                if not _sc62.ok:
+                    result_audio = (0.70 * result_audio + 0.30 * audio).astype(np.float32)
+        except Exception as _sc62_exc:
+            logger.debug("§V24 phase_62 spectral_color_guard (non-blocking): %s", _sc62_exc)
+
         _rms_out_db = _rms_dbfs_gated(result_audio)
         _rms_drop = (_rms_out_db - _rms_in_db) if _rms_in_db > -80.0 else 0.0
         return PhaseResult(
@@ -408,6 +554,7 @@ class CrosstalkCancellationPhase(PhaseInterface):
                 "crosstalk_profile": dict(_profile_62),
                 "min_crosstalk_score": float(_profile_62["min_crosstalk_score"]),
                 "alpha_max": float(_profile_62["alpha_max"]),
+                "repair_locality_coverage": round(float(_local_coverage62), 6),
                 "phase_locality_factor": phase_locality_factor,
                 "effective_strength": _effective_strength,
                 "rms_drop_db": round(float(min(0.0, _rms_drop)), 3),

@@ -195,7 +195,7 @@ class ONNXInferenceSession:
             if profile:
                 logger.info("Inference time: %.2f ms", inference_time * 1000)
 
-            return outputs
+            return outputs  # type: ignore[no-any-return]
 
         except Exception as e:
             logger.error("ONNX inference failed: %s", e)

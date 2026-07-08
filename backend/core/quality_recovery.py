@@ -631,7 +631,7 @@ class QualityRecoverySystem:
         else:
             logger.info("  → BEST ACHIEVABLE quality: %.1f/100", best_score)
 
-        return best_audio.astype(np.float32)
+        return best_audio.astype(np.float32)  # type: ignore[no-any-return]
 
     def _reduce_intensity(self, original: np.ndarray, processed: np.ndarray, parameters: dict[str, Any]) -> np.ndarray:
         """Reduce processing intensity by blending with original."""
@@ -643,7 +643,7 @@ class QualityRecoverySystem:
 
         logger.info("  → Blending: %.1f original + %.1f processed", (1 - intensity_factor), intensity_factor)
 
-        return blended.astype(np.float32)
+        return blended.astype(np.float32)  # type: ignore[no-any-return]
 
     def _reprocess_without_modules(
         self,
@@ -720,7 +720,7 @@ class QualityRecoverySystem:
                         )
                     )
                 result = np.stack(channels, axis=1)
-                return np.clip(result, -1.0, 1.0).astype(np.float32)
+                return np.clip(result, -1.0, 1.0).astype(np.float32)  # type: ignore[no-any-return]
 
             if len(PROC) != len(ORIG):
                 n_min = min(len(PROC), len(ORIG))
@@ -776,12 +776,12 @@ class QualityRecoverySystem:
                 skip_ratio,
                 skip_cats,
             )
-            return result
+            return result  # type: ignore[no-any-return]
 
         except Exception as exc:
             logger.warning("  → STFT correction failed (%s), using time-domain blend.", exc)
             blended = blend_orig * original + blend_proc * processed
-            return np.clip(blended, -1.0, 1.0).astype(np.float32)
+            return np.clip(blended, -1.0, 1.0).astype(np.float32)  # type: ignore[no-any-return]
 
     def _incremental_processing(
         self, original: np.ndarray, target: np.ndarray, parameters: dict[str, Any]
@@ -794,7 +794,7 @@ class QualityRecoverySystem:
 
         logger.info("  → Incremental step: %.1f towards target", step_size)
 
-        return incremental.astype(np.float32)
+        return incremental.astype(np.float32)  # type: ignore[no-any-return]
 
     def _adjust_parameters(
         self,
@@ -821,7 +821,7 @@ class QualityRecoverySystem:
         lf_boost = float(parameters.get("low_freq_boost", 0.0))
 
         if hf_red == 0.0 and comp_rat == 0.0 and lf_boost == 0.0:
-            return processed.astype(np.float32)
+            return processed.astype(np.float32)  # type: ignore[no-any-return]
 
         audio_f32 = processed.astype(np.float32)
         orig_f32 = original.astype(np.float32)
@@ -892,11 +892,11 @@ class QualityRecoverySystem:
                 comp_rat,
                 lf_boost,
             )
-            return result
+            return result  # type: ignore[no-any-return]
 
         except Exception as exc:
             logger.warning("  → _adjust_parameters STFT failed (%s), returning processed unchanged.", exc)
-            return processed.astype(np.float32)
+            return processed.astype(np.float32)  # type: ignore[no-any-return]
 
     def _use_alternative(
         self,
@@ -986,12 +986,12 @@ class QualityRecoverySystem:
                 high_mid_blend,
                 hf_blend,
             )
-            return result
+            return result  # type: ignore[no-any-return]
 
         except Exception as exc:
             logger.warning("  → _use_alternative STFT failed (%s), using blend fallback.", exc)
             blend = 0.5 * processed + 0.5 * original
-            return np.clip(blend, -1.0, 1.0).astype(np.float32)
+            return np.clip(blend, -1.0, 1.0).astype(np.float32)  # type: ignore[no-any-return]
 
 
 def create_quality_recovery_system() -> QualityRecoverySystem:

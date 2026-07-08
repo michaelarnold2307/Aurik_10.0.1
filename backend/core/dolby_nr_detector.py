@@ -64,6 +64,7 @@ from __future__ import annotations
 import logging
 import threading
 from dataclasses import dataclass, field
+from fractions import Fraction
 from typing import Literal
 
 import numpy as np
@@ -188,8 +189,6 @@ def detect_dolby_encoding(
 
     # Resample to 48 kHz for consistent filter behaviour
     if sr != 48000:
-        from fractions import Fraction
-
         ratio = Fraction(48000, sr).limit_denominator(100)
         mono = sps.resample_poly(mono, ratio.numerator, ratio.denominator)
     sr_p = 48000
@@ -319,7 +318,6 @@ def _make_biquad_sos(btype: str, fc: float, gain_db: float, q: float, sr: int) -
     Returns SOS array shape (1, 6).
     """
     if btype in ("highshelf", "lowshelf"):
-        b, a = sps.iirpeak(fc / (sr / 2.0), q) if btype == "peaking" else (None, None)  # placeholder
         # Use scipy.signal.iirfilter won't give shelves easily — use manual bilinear
         A = 10.0 ** (gain_db / 40.0)
         w0 = 2.0 * np.pi * fc / sr
@@ -342,9 +340,9 @@ def _make_biquad_sos(btype: str, fc: float, gain_db: float, q: float, sr: int) -
 
         b_coeffs = np.array([b0, b1, b2]) / a0
         a_coeffs = np.array([a0, a1, a2]) / a0
-        return np.array([[b_coeffs[0], b_coeffs[1], b_coeffs[2], 1.0, a_coeffs[1], a_coeffs[2]]])
+        return np.array([[b_coeffs[0], b_coeffs[1], b_coeffs[2], 1.0, a_coeffs[1], a_coeffs[2]]])  # type: ignore[no-any-return]
 
-    elif btype == "peaking":
+    if btype == "peaking":
         A = 10.0 ** (gain_db / 40.0)
         w0 = 2.0 * np.pi * fc / sr
         alpha = np.sin(w0) / (2.0 * q)
@@ -356,10 +354,10 @@ def _make_biquad_sos(btype: str, fc: float, gain_db: float, q: float, sr: int) -
         a2 = 1 - alpha / A
         b_c = np.array([b0, b1, b2]) / a0
         a_c = np.array([a0, a1, a2]) / a0
-        return np.array([[b_c[0], b_c[1], b_c[2], 1.0, a_c[1], a_c[2]]])
+        return np.array([[b_c[0], b_c[1], b_c[2], 1.0, a_c[1], a_c[2]]])  # type: ignore[no-any-return]
 
     # Fallback: identity
-    return np.array([[1.0, 0.0, 0.0, 1.0, 0.0, 0.0]])
+    return np.array([[1.0, 0.0, 0.0, 1.0, 0.0, 0.0]])  # type: ignore[no-any-return]
 
 
 def build_inverse_filter_sos(nr_type: DolbyType, sr: int = 48000) -> np.ndarray | None:
@@ -371,7 +369,7 @@ def build_inverse_filter_sos(nr_type: DolbyType, sr: int = 48000) -> np.ndarray 
         return None
     specs = _INVERSE_BIQUADS[nr_type]
     sections = [_make_biquad_sos(btype, fc, gain_db, q, sr) for btype, fc, gain_db, q in specs]
-    return np.vstack(sections)
+    return np.vstack(sections)  # type: ignore[no-any-return]
 
 
 def apply_inverse_filter(
@@ -396,11 +394,11 @@ def apply_inverse_filter(
     """
     assert sr == 48000, f"SR must be 48000, got {sr}"
     if nr_type == "none":
-        return np.clip(audio, -1.0, 1.0)
+        return np.asarray(np.clip(audio, -1.0, 1.0), dtype=np.float32)  # type: ignore[no-any-return]
 
     sos = build_inverse_filter_sos(nr_type, sr)
     if sos is None:
-        return np.clip(audio, -1.0, 1.0)
+        return np.asarray(np.clip(audio, -1.0, 1.0), dtype=np.float32)  # type: ignore[no-any-return]
 
     audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
 
@@ -415,25 +413,25 @@ def apply_inverse_filter(
         filtered = sps.sosfiltfilt(sos, ch.astype(np.float64))
         if conf < 1.0:
             filtered = ch.astype(np.float64) * (1.0 - conf) + filtered * conf
-        return np.clip(filtered, -1.0, 1.0).astype(np.float32)
+        filtered_arr = np.asarray(filtered, dtype=np.float64)
+        return np.asarray(np.clip(filtered_arr, -1.0, 1.0), dtype=np.float32)  # type: ignore[no-any-return]
 
     if audio.ndim == 1:
-        return _filter_channel(audio)
-    elif audio.shape[0] == 2 and audio.shape[1] != 2:
+        return np.asarray(_filter_channel(audio), dtype=np.float32)  # type: ignore[no-any-return]
+    if audio.shape[0] == 2 and audio.shape[1] != 2:
         # (2, N) channels-first
         left = _filter_channel(audio[0])
         right = _filter_channel(audio[1])
-        return np.stack([left, right], axis=0)
-    else:
-        # (N, 2) samples-first
-        left = _filter_channel(audio[:, 0])
-        right = _filter_channel(audio[:, 1])
-        return np.stack([left, right], axis=1)
+        return np.asarray(np.stack([left, right], axis=0), dtype=np.float32)  # type: ignore[no-any-return]
+    # (N, 2) samples-first
+    left = _filter_channel(audio[:, 0])
+    right = _filter_channel(audio[:, 1])
+    return np.asarray(np.stack([left, right], axis=1), dtype=np.float32)  # type: ignore[no-any-return]
 
 
 # ─── Singleton ─────────────────────────────────────────────────────────────────
 
-_instance: DolbyNRDetector | None = None
+_INSTANCE_HOLDER: list[DolbyNRDetector | None] = [None]
 _lock = threading.Lock()
 
 
@@ -447,6 +445,7 @@ class DolbyNRDetector:
         material_type: str = "tape",
         era_decade: int | None = None,
     ) -> DolbyDetectionResult:
+        """Analysiert Audio auf nicht dekodierte Dolby-/DBX-Emphasis."""
         return detect_dolby_encoding(audio, sr, material_type, era_decade)
 
     def apply_inverse(
@@ -456,14 +455,16 @@ class DolbyNRDetector:
         sr: int = 48000,
         confidence: float = 1.0,
     ) -> np.ndarray:
+        """Wendet die approximative inverse Dolby-/DBX-Korrektur an."""
         return apply_inverse_filter(audio, nr_type, sr, confidence)
 
 
 def get_dolby_nr_detector() -> DolbyNRDetector:
     """Gibt thread-safe singleton zurück."""
-    global _instance
-    if _instance is None:
+    if _INSTANCE_HOLDER[0] is None:
         with _lock:
-            if _instance is None:
-                _instance = DolbyNRDetector()
-    return _instance
+            if _INSTANCE_HOLDER[0] is None:
+                _INSTANCE_HOLDER[0] = DolbyNRDetector()
+    detector = _INSTANCE_HOLDER[0]
+    assert detector is not None
+    return detector

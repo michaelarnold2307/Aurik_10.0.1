@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import cast
 
 import numpy as np
 
@@ -14,7 +15,8 @@ SR = 48_000
 def _make_sibilant(freq: float = 7000.0, duration: float = 0.4, amp: float = 0.45) -> np.ndarray:
     t = np.linspace(0.0, duration, int(SR * duration), endpoint=False, dtype=np.float32)
     env = np.sin(np.linspace(0.0, np.pi, t.size, dtype=np.float32)) ** 2
-    return (amp * env * np.sin(2.0 * np.pi * freq * t)).astype(np.float32)
+    audio = cast(np.ndarray, np.asarray(amp * env * np.sin(2.0 * np.pi * freq * t), dtype=np.float32))
+    return audio
 
 
 @dataclass
@@ -165,3 +167,48 @@ def test_phase43_uses_stronger_intensity_for_hot_sibilance():
     assert float(hot.metadata["deesser_intensity"]) > float(mild.metadata["deesser_intensity"])
     assert float(hot.metadata["control_strength"]) >= float(mild.metadata["control_strength"])
     assert float(hot.metadata["strength_cap"]) <= float(mild.metadata["strength_cap"])
+
+
+def test_phase43_sibilance_locality_profile_is_event_strength_adaptive():
+    from backend.core.phases.phase_43_ml_deesser import _build_sibilance_locality_profile
+
+    profile, coverage = _build_sibilance_locality_profile(
+        n_samples=SR * 2,
+        sample_rate=SR,
+        defect_locations={"sibilance": [(0.20, 0.38)], "vocal_harshness": [(1.20, 1.38)]},
+        event_metadata={
+            "sibilance": {"severity": 0.95, "confidence": 0.95},
+            "vocal_harshness": {"severity": 0.30, "confidence": 0.65},
+        },
+    )
+
+    assert profile.shape == (SR * 2,)
+    assert 0.0 < coverage < 0.35
+    strong_region = float(np.mean(profile[int(0.24 * SR) : int(0.34 * SR)]))
+    mild_region = float(np.mean(profile[int(1.24 * SR) : int(1.34 * SR)]))
+    clean_region = float(np.mean(profile[int(0.60 * SR) : int(0.90 * SR)]))
+    assert strong_region > mild_region * 1.5
+    assert clean_region < 0.04
+
+
+def test_phase43_vibrato_zone_caps_sibilance_profile():
+    from backend.core.phases.phase_43_ml_deesser import _build_sibilance_locality_profile
+
+    free, _ = _build_sibilance_locality_profile(
+        n_samples=SR * 2,
+        sample_rate=SR,
+        defect_locations={"sibilance": [(1.10, 1.35)]},
+        event_metadata={"sibilance": {"severity": 0.95, "confidence": 0.95}},
+    )
+    capped, _ = _build_sibilance_locality_profile(
+        n_samples=SR * 2,
+        sample_rate=SR,
+        defect_locations={"sibilance": [(1.10, 1.35)]},
+        event_metadata={"sibilance": {"severity": 0.95, "confidence": 0.95}},
+        protected_zones=[(1.05, 1.40, 0.20)],
+    )
+
+    free_strength = float(np.mean(free[int(1.16 * SR) : int(1.30 * SR)]))
+    capped_strength = float(np.mean(capped[int(1.16 * SR) : int(1.30 * SR)]))
+    assert capped_strength <= 0.21
+    assert capped_strength < free_strength * 0.35

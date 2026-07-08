@@ -39,7 +39,7 @@ _PIPELINE_EMERGENCY_PCT: float = 70.0  # RAM% ab der auch WÄHREND Pipeline evic
 _SWAP_EVICT_THRESHOLD_PCT: float = 80.0  # Swap% ab der Eviction erzwungen wird (unabhängig von RAM-%).
 _SWAP_EVICT_FORCE_PCT: float = 95.0  # Harte Swap-Notlage: immer evicten (Crash-Prävention)
 _SWAP_RELAX_RAM_PCT: float = 70.0  # Unterhalb davon gilt hoher Swap nicht automatisch als akut
-_SWAP_RELAX_FREE_MB: float = 12_000.0  # Mit viel freiem RAM sind alte Swap-Reste oft unkritisch
+_SWAP_RELAX_FREE_MB: float = 10_000.0  # Mit viel freiem RAM sind alte Swap-Reste oft unkritisch (10 GB Schwelle — 11–12 GB frei ist kein Notfall)
 # Rationale: Crash 2026-04-14 — swap=99 %, avail=18.79 GB → OOM-Killer wegen
 # Apollo-TorchScript-Allokation. RAM-only-Guards erkannten die Gefahr nicht.
 _MONITOR_JOIN_TIMEOUT_S: float = 1.0  # Shutdown darf Tests/App-Ende nicht unbounded blockieren
@@ -156,6 +156,15 @@ class PluginLifecycleManager:
         self._auto_evict_thread: threading.Thread | None = None
         self._stop_event = threading.Event()
         self._pipeline_active: int = 0  # Refcount: >0 suppresses auto-eviction during pipeline
+        # §Perf Look-Ahead-Eviction: Modelle, die eine baldige Phase erneut braucht.
+        # Vom Orchestrator vor jeder Phase via evict_for_phase_window() gesetzt; von ALLEN
+        # evict_for_phase()-Call-Sites (auch phasen-intern) respektiert → kein Reload-Thrashing.
+        # Leer = Originalverhalten (nur eigenes Phasenmodell geschützt). Rein RAM-Scheduling,
+        # bit-identisches Audio.
+        self._lookahead_models: frozenset[str] = frozenset()
+        self._last_swap_warn_ts: float = (
+            0.0  # Cooldown für Swap-Druck-Warnungen (min. 60 s zwischen identischen Meldungen)
+        )
         self._start_auto_evict_monitor()
         logger.info("PluginLifecycleManager: initialized (RAM eviction threshold %.0f %%)", _RAM_EVICT_THRESHOLD_PCT)
 
@@ -210,6 +219,10 @@ class PluginLifecycleManager:
         """Decrement pipeline-active refcount in a thread-safe way."""
         with self._lock:
             self._pipeline_active = max(0, self._pipeline_active - 1)
+            # §Perf: Look-Ahead-Fenster zurücksetzen, wenn keine Pipeline mehr läuft —
+            # verhindert, dass ein veraltetes Fenster spätere Standalone-Eviction über-schützt.
+            if self._pipeline_active == 0:
+                self._lookahead_models = frozenset()
             return self._pipeline_active
 
     def pipeline_active_count(self) -> int:
@@ -240,35 +253,46 @@ class PluginLifecycleManager:
         free_mb = self._free_mb()
         swap_pct = self._swap_percent()
         swap_emergency = self._swap_pressure_requires_evict(ram_pct=ram_pct, free_mb=free_mb, swap_pct=swap_pct)
+        pipeline_emergency = (
+            self._pipeline_active > 0 and ram_pct >= _PIPELINE_EMERGENCY_PCT and free_mb < _SWAP_RELAX_FREE_MB
+        )
         # §Safety: Während Pipeline-Ausführung normalerweise keine automatische
         # Eviction — ONNX-Session-Destruktoren können mit laufender Inferenz
         # kollidieren. ABER: bei kritischem RAM-Druck (>= 82%) MUSS trotzdem
         # evicted werden, sonst killt systemd-oomd den gesamten Prozess.
         if self._pipeline_active > 0 and required_mb <= 0:
-            if ram_pct < _PIPELINE_EMERGENCY_PCT and free_mb >= _MIN_FREE_MB_HARD and not swap_emergency:
+            if not pipeline_emergency and free_mb >= _MIN_FREE_MB_HARD and not swap_emergency:
                 return 0
-            logger.warning(
-                "PLM: Pipeline aktiv, aber Speicher kritisch (RAM=%.0f %%, frei=%.0f MB, swap=%.0f %%) "
-                "— erzwinge Notfall-Eviction inaktiver Plugins",
-                ram_pct,
-                free_mb,
-                swap_pct,
-            )
+            _now = time.monotonic()
+            if _now - self._last_swap_warn_ts >= 60.0:
+                _log_fn = logger.warning if (free_mb < _MIN_FREE_MB_HARD or swap_emergency) else logger.info
+                _log_fn(
+                    "PLM: Pipeline aktiv, Speicherpflege (RAM=%.0f %%, frei=%.0f MB, swap=%.0f %%) "
+                    "— evicte inaktive Plugins",
+                    ram_pct,
+                    free_mb,
+                    swap_pct,
+                )
+                self._last_swap_warn_ts = _now
         # required_mb kommt bereits MIT Margin aus ml_memory_budget._preflight_system_memory.
         # Keine doppelte Margin (war 1.25×) — direkt prüfen ob genug frei ist.
         needs_evict = (
             ram_pct > _RAM_EVICT_THRESHOLD_PCT
             or free_mb < _MIN_FREE_MB_HARD
             or (required_mb > 0 and free_mb < required_mb)
+            or pipeline_emergency
             or swap_emergency
         )
         if swap_emergency and not (ram_pct > _RAM_EVICT_THRESHOLD_PCT or free_mb < _MIN_FREE_MB_HARD):
-            logger.warning(
-                "PLM: Swap-Druck kritisch (%.0f %%) — erzwinge Eviction inaktiver Plugins (RAM=%.0f %%, frei=%.0f MB)",
-                swap_pct,
-                ram_pct,
-                free_mb,
-            )
+            _now_s = time.monotonic()
+            if _now_s - self._last_swap_warn_ts >= 60.0:
+                logger.warning(
+                    "PLM: Swap-Druck kritisch (%.0f %%) — erzwinge Eviction inaktiver Plugins (RAM=%.0f %%, frei=%.0f MB)",
+                    swap_pct,
+                    ram_pct,
+                    free_mb,
+                )
+                self._last_swap_warn_ts = _now_s
         if not needs_evict:
             return 0
         return self._do_evict(target_pct=_RAM_TARGET_PCT, required_mb=required_mb)
@@ -278,6 +302,9 @@ class PluginLifecycleManager:
 
         Wird vom AurikDenker nach abgeschlossener Batch-Datei aufgerufen.
         """
+        with self._lock:
+            # §Perf: Look-Ahead-Fenster der abgeschlossenen Datei verwerfen.
+            self._lookahead_models = frozenset()
         return self._do_evict(target_pct=0.0, force_all=True)
 
     def evict_for_phase(self, phase_id: str) -> int:
@@ -299,6 +326,10 @@ class PluginLifecycleManager:
         needed = _PHASE_REQUIRED_MODELS.get(phase_id, frozenset())
 
         with self._lock:
+            # §Perf Look-Ahead: zusätzlich zur eigenen Phase auch Modelle schützen, die eine
+            # baldige Phase im aktuellen Pipeline-Fenster erneut braucht (vom Orchestrator via
+            # evict_for_phase_window gesetzt). Leeres Fenster → exakt Originalverhalten.
+            needed = needed | self._lookahead_models
             candidates = [e for e in self._entries.values() if not e.active and e.name not in needed]
             # LRU: älteste zuerst
             candidates.sort(key=lambda e: e.last_used_ts)
@@ -336,6 +367,80 @@ class PluginLifecycleManager:
                 "PLM: %d Plugin(s) entladen vor %s — RAM nach GC: %.0f %% (%.0f MB frei)",
                 evicted,
                 phase_id,
+                self._ram_percent(),
+                self._free_mb(),
+            )
+        return evicted
+
+    def evict_for_phase_window(self, upcoming_phase_ids: list[str] | tuple[str, ...]) -> int:
+        """§Perf Look-Ahead-Eviction: schützt Modelle, die eine *baldige* Phase erneut braucht.
+
+        Identisch zu ``evict_for_phase()``, ABER die Menge der geschützten Modelle ist
+        die Vereinigung der von ALLEN anstehenden Phasen (``upcoming_phase_ids``, inkl.
+        der aktuellen an Position 0) benötigten Modelle. Dadurch wird Reload-Thrashing
+        eliminiert: Ein 6-GB-Modell wie ``AudioSR`` (phase_06 → phase_23 → phase_24) wird
+        NICHT zwischen seinen Nutzungen entladen und teuer von Disk neu geladen, nur weil
+        die unmittelbar nächste Phase es nicht braucht.
+
+        WISSENSCHAFTLICHE INVARIANTE (strikt): Diese Methode ändert ausschließlich, WANN
+        ML-Modelle im RAM liegen. Sie berührt NIEMALS das restaurierte Audio, die
+        Carrier-Chain-Reihenfolge (§2.46), die Phasenabfolge oder irgendeine Messung/Gate
+        (PMGG/CIG/AFG/HPI/VQI). Das Ergebnis ist bit-identisch zur aktuellen Pipeline —
+        nur ohne redundante Modell-Reloads. Sie erzeugt KEIN OOM-Risiko: Bei echtem
+        Speicherdruck greift weiterhin unabhängig ``evict_if_needed()`` (LRU + Swap-Guard)
+        und entlädt auch fenster-geschützte (inaktive) Modelle. Look-Ahead unterdrückt nur
+        die *proaktive* Entladung — niemals die druckgetriebene.
+
+        Args:
+            upcoming_phase_ids: Verbleibende Phasen ab der aktuellen (Position 0 = aktuelle
+                                Phase). Üblicherweise ``selected_phases[len(executed):]``.
+
+        Returns:
+            Anzahl der entladenen Plugins.
+        """
+        if not upcoming_phase_ids:
+            return 0
+
+        needed: frozenset[str] = frozenset().union(
+            *(_PHASE_REQUIRED_MODELS.get(pid, frozenset()) for pid in upcoming_phase_ids)
+        )
+        _current_phase = upcoming_phase_ids[0]
+
+        with self._lock:
+            # Fenster persistieren, damit phasen-interne evict_for_phase()-Calls (15 Phasen)
+            # dieselbe Look-Ahead-Protektion erben und das Modell nicht doch noch entladen.
+            self._lookahead_models = needed
+            candidates = [e for e in self._entries.values() if not e.active and e.name not in needed]
+            # LRU: älteste zuerst
+            candidates.sort(key=lambda e: e.last_used_ts)
+
+        if not candidates:
+            return 0
+
+        evicted = 0
+        for entry in candidates:
+            try:
+                logger.info(
+                    "PLM: Entlade '%s' (%.2f GB) vor %s — von keiner anstehenden Phase benötigt (Look-Ahead)",
+                    entry.name,
+                    entry.size_gb,
+                    _current_phase,
+                )
+                entry.unload_fn()
+                _release_ml_memory_budget(entry.name)
+                with self._lock:
+                    self._entries.pop(entry.name, None)
+                evicted += 1
+            except Exception as exc:
+                logger.warning("PLM: Fehler beim Entladen von '%s': %s", entry.name, exc)
+
+        if evicted > 0:
+            gc.collect()
+            time.sleep(0)  # GIL explizit freigeben → Qt-Event-Loop bleibt responsiv
+            logger.info(
+                "PLM: %d Plugin(s) Look-Ahead-entladen vor %s — RAM nach GC: %.0f %% (%.0f MB frei)",
+                evicted,
+                _current_phase,
                 self._ram_percent(),
                 self._free_mb(),
             )
@@ -512,6 +617,17 @@ def evict_for_phase(phase_id: str) -> int:
     §2.37: Vor jeder Phase nur benötigte Modelle im RAM behalten.
     """
     return get_plugin_lifecycle_manager().evict_for_phase(phase_id)
+
+
+def evict_for_phase_window(upcoming_phase_ids: list[str] | tuple[str, ...]) -> int:
+    """§Perf Look-Ahead-Eviction: behält Modelle, die eine baldige Phase erneut braucht.
+
+    Schützt die Vereinigung aller von ``upcoming_phase_ids`` benötigten Modelle vor
+    proaktiver Entladung → eliminiert Reload-Thrashing (z. B. AudioSR phase_06 → phase_23).
+    Bit-identisch zum Audio-Ergebnis; berührt nur RAM-Scheduling. Druckgetriebene
+    Eviction (``evict_if_needed``) bleibt unabhängig aktiv → kein OOM-Risiko.
+    """
+    return get_plugin_lifecycle_manager().evict_for_phase_window(upcoming_phase_ids)
 
 
 def set_pipeline_active(active: bool) -> None:

@@ -143,7 +143,7 @@ def _to_mono_resampled(audio: np.ndarray, src_sr: int) -> np.ndarray:
     mono = mono.astype(np.float64)
 
     # Amplitude normieren auf [-1, 1]
-    peak = np.max(np.abs(mono))
+    peak: float = float(np.max(np.abs(mono)))
     if peak > 1e-9:
         mono = mono / peak
 
@@ -152,7 +152,7 @@ def _to_mono_resampled(audio: np.ndarray, src_sr: int) -> np.ndarray:
         n_out = int(len(mono) * ratio)
         mono = scipy.signal.resample(mono, n_out)
 
-    return mono
+    return mono  # type: ignore[no-any-return]
 
 
 def _stft_mag(sig: np.ndarray, n_fft: int, hop: int) -> np.ndarray:
@@ -163,10 +163,10 @@ def _stft_mag(sig: np.ndarray, n_fft: int, hop: int) -> np.ndarray:
     sig_p = np.pad(sig, (pad, pad))
     nframes = 1 + (len(sig_p) - n_fft) // hop
     if nframes < 1:
-        return np.zeros((n_fft // 2 + 1, 1))
+        return np.zeros((n_fft // 2 + 1, 1))  # type: ignore[no-any-return]
     frames = np.lib.stride_tricks.sliding_window_view(sig_p, n_fft)[::hop][:nframes]
     S = np.abs(np.fft.rfft(frames * win, n=n_fft, axis=1)).T  # (bins, frames)
-    return S.astype(np.float32)
+    return S.astype(np.float32)  # type: ignore[no-any-return]
 
 
 def _log_band_energy(S: np.ndarray, n_fft: int, n_bands: int) -> np.ndarray:
@@ -179,7 +179,7 @@ def _log_band_energy(S: np.ndarray, n_fft: int, n_bands: int) -> np.ndarray:
     for b in range(n_bands):
         lo, hi = edges[b], max(edges[b + 1], edges[b] + 1)
         band_energy[b] = np.mean(S[lo:hi], axis=0)
-    return band_energy
+    return band_energy  # type: ignore[no-any-return]
 
 
 def _bark_hz_to_band(f_hz: float) -> int:
@@ -206,7 +206,7 @@ def _channel_a(mono: np.ndarray) -> np.ndarray:
         sigma = np.std(bands, axis=1) + 1e-9
         feats.append(mu)
         feats.append(sigma)
-    return np.concatenate(feats).astype(np.float32)  # 96 Dim
+    return np.concatenate(feats).astype(np.float32)  # type: ignore[no-any-return]  # 96 Dim
 
 
 # ---------------------------------------------------------------------------
@@ -235,7 +235,7 @@ def _channel_b(mono: np.ndarray) -> np.ndarray:
 
     mu = np.mean(specific_loudness, axis=1)  # (24,)
     sigma = np.std(specific_loudness, axis=1) + 1e-9  # (24,)
-    return np.concatenate([mu, sigma]).astype(np.float32)  # 48 Dim
+    return np.concatenate([mu, sigma]).astype(np.float32)  # type: ignore[no-any-return]  # 48 Dim
 
 
 # ---------------------------------------------------------------------------
@@ -278,7 +278,7 @@ def _channel_c(mono: np.ndarray) -> np.ndarray:
             feats.append(np.zeros(12, dtype=np.float32))
         else:
             feats.append(np.mean(chroma[:, seg], axis=1).astype(np.float32))
-    return np.concatenate(feats)  # 36 Dim
+    return np.concatenate(feats)  # type: ignore[no-any-return]  # 36 Dim
 
 
 # ---------------------------------------------------------------------------
@@ -317,7 +317,7 @@ def _channel_d(mono: np.ndarray) -> np.ndarray:
         kurt = np.clip(kurt, -5.0, 10.0)
         feats.extend([mu, sigma, skew, kurt])
 
-    return np.array(feats, dtype=np.float32)  # 32 Dim
+    return np.array(feats, dtype=np.float32)  # type: ignore[no-any-return]  # 32 Dim
 
 
 # ---------------------------------------------------------------------------
@@ -402,7 +402,7 @@ def _channel_e(mono: np.ndarray) -> np.ndarray:
         float(np.mean(SH > SP)),  # Tonalitätsindex
     ]
     feats.extend(contrast_feats[:32])  # 10 Bänder × 4 = 40, wir beschneiden auf 32
-    return np.array(feats[:44], dtype=np.float32)  # 44 Dim
+    return np.array(feats[:44], dtype=np.float32)  # type: ignore[no-any-return]  # 44 Dim
 
 
 # ---------------------------------------------------------------------------

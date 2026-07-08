@@ -85,7 +85,7 @@ def _one_sided_gap_envelope(
     the already computed per-song goal profile (§2.56) and restorability.
     """
     if gap_length <= 0:
-        return np.zeros(0, dtype=np.float32)
+        return np.zeros(0, dtype=np.float32)  # type: ignore[no-any-return]
 
     _gw = goal_weights if isinstance(goal_weights, dict) else {}
     _preserve = float(
@@ -118,8 +118,8 @@ def _one_sided_gap_envelope(
     )
     _phase = np.linspace(0.0, np.pi / 2.0, gap_length, dtype=np.float32)
     if fade_direction == "out":
-        return (np.cos(_phase) ** _shape).astype(np.float32)
-    return (np.sin(_phase) ** _shape).astype(np.float32)
+        return (np.cos(_phase) ** _shape).astype(np.float32)  # type: ignore[no-any-return]
+    return (np.sin(_phase) ** _shape).astype(np.float32)  # type: ignore[no-any-return]
 
 
 # ───────────────────────────────────────────────────────────────────────────
@@ -204,7 +204,7 @@ def _stft(signal: np.ndarray, n_fft: int, hop_length: int) -> np.ndarray:
         start = i * hop_length
         frame = padded[start : start + n_fft] * window
         frames[:, i] = np.fft.rfft(frame)
-    return frames
+    return frames  # type: ignore[no-any-return]
 
 
 def _istft(stft_matrix: np.ndarray, hop_length: int, n_fft: int) -> np.ndarray:
@@ -236,7 +236,7 @@ def _istft(stft_matrix: np.ndarray, hop_length: int, n_fft: int) -> np.ndarray:
 
     # Remove padding
     pad_len = n_fft // 2
-    return output[pad_len:-pad_len] if pad_len > 0 else output
+    return output[pad_len:-pad_len] if pad_len > 0 else output  # type: ignore[no-any-return]
 
 
 # ───────────────────────────────────────────────────────────────────────────
@@ -263,7 +263,7 @@ def _extract_spectral_envelope(signal: np.ndarray, sr: int, order: int) -> np.nd
     """
     n = len(signal)
     if n < order + 1:
-        return np.ones(_N_FFT // 2 + 1, dtype=np.float32)
+        return np.ones(_N_FFT // 2 + 1, dtype=np.float32)  # type: ignore[no-any-return]
 
     # Limit to _MAX_CTX_SAMPLES to bound compute cost
     if n > _MAX_CTX_SAMPLES:
@@ -282,7 +282,7 @@ def _extract_spectral_envelope(signal: np.ndarray, sr: int, order: int) -> np.nd
     # Levinson-Durbin recursion
     r = acf[: order + 1].astype(np.float64)
     if abs(r[0]) < 1e-12:
-        return np.ones(_N_FFT // 2 + 1, dtype=np.float32)
+        return np.ones(_N_FFT // 2 + 1, dtype=np.float32)  # type: ignore[no-any-return]
 
     a = np.zeros(order + 1, dtype=np.float64)
     a[0] = 1.0
@@ -302,7 +302,7 @@ def _extract_spectral_envelope(signal: np.ndarray, sr: int, order: int) -> np.nd
     # All-pole frequency response
     freq_resp = np.fft.rfft(a, n=_N_FFT)
     envelope = 1.0 / (np.abs(freq_resp) + 1e-10)
-    return envelope.astype(np.float32)
+    return envelope.astype(np.float32)  # type: ignore[no-any-return]
 
 
 def _track_sinusoidal_partials(
@@ -372,7 +372,7 @@ def _synthesize_sinusoidal(
         output += amp * np.sin(2.0 * np.pi * freq_hz * t + phase)
 
     # Robust level match (no RMS normalization)
-    peak = np.max(np.abs(output))
+    peak: float = float(np.max(np.abs(output)))
     if peak > 0:
         target_level = (
             float(np.median(np.abs(np.array([a for _, a in partials[:8]], dtype=np.float64)))) if partials else 0.1
@@ -380,7 +380,7 @@ def _synthesize_sinusoidal(
         current_level = float(np.percentile(np.abs(output), 90)) + 1e-10
         output *= target_level / current_level
 
-    return output.astype(np.float32)
+    return output.astype(np.float32)  # type: ignore[no-any-return]
 
 
 # ───────────────────────────────────────────────────────────────────────────
@@ -507,7 +507,7 @@ def _build_target_estimate(
             restorability_score=restorability_score,
         )
 
-    return np.nan_to_num(target, nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32)
+    return np.nan_to_num(target, nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32)  # type: ignore[no-any-return]
 
 
 def _flow_ode_step(
@@ -573,7 +573,7 @@ def _flow_ode_step(
         x_next = _istft(mag * np.exp(1j * phase), _HOP, _N_FFT)
         x_next = x_next[: len(x_t)] if len(x_next) >= len(x_t) else np.pad(x_next, (0, len(x_t) - len(x_next)))
 
-    return np.nan_to_num(x_next, nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32)
+    return np.nan_to_num(x_next, nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32)  # type: ignore[no-any-return]
 
 
 def _solve_flow_ode(
@@ -700,7 +700,7 @@ def _pghi_finalize(
             post_head = post_ctx[:fade_samples]
             reconstructed[-fade_samples:] = fade_out * reconstructed[-fade_samples:] + (1.0 - fade_out) * post_head
 
-    return np.nan_to_num(reconstructed, nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32)
+    return np.nan_to_num(reconstructed, nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32)  # type: ignore[no-any-return]
 
 
 # ───────────────────────────────────────────────────────────────────────────

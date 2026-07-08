@@ -196,7 +196,7 @@ class HarmonicLatticeAnalyzer:
             or audio_f32.ndim != 1
             or len(audio_f32) < 512
         ):
-            return np.clip(audio_f32, -1.0, 1.0)
+            return np.clip(audio_f32, -1.0, 1.0)  # type: ignore[no-any-return]
 
         n_samples = len(audio_f32)
         n_fft = min(2048, n_samples)
@@ -229,7 +229,7 @@ class HarmonicLatticeAnalyzer:
             n_corrections += 1
 
         if n_corrections == 0:
-            return np.clip(audio_f32, -1.0, 1.0)
+            return np.clip(audio_f32, -1.0, 1.0)  # type: ignore[no-any-return]
 
         # Apply correction via STFT → spectral multiply → ISTFT (zero-phase, boundary='even').
         try:
@@ -259,11 +259,11 @@ class HarmonicLatticeAnalyzer:
             else:
                 audio_corr = np.pad(audio_corr, (0, n_samples - len(audio_corr)))
         except Exception:
-            return np.clip(audio_f32, -1.0, 1.0)  # graceful passthrough on any STFT error
+            return np.clip(audio_f32, -1.0, 1.0)  # type: ignore[no-any-return]  # graceful passthrough on any STFT error
 
         # Dry/wet blend — confidence already factored into `wet`.
         out = (1.0 - wet) * audio_f32 + wet * audio_corr
-        return np.clip(np.nan_to_num(out, nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32), -1.0, 1.0)
+        return np.clip(np.nan_to_num(out, nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32), -1.0, 1.0)  # type: ignore[no-any-return]
 
     @staticmethod
     def _to_mono(audio: np.ndarray) -> np.ndarray:
@@ -276,7 +276,7 @@ class HarmonicLatticeAnalyzer:
                 arr = np.mean(arr, axis=0)
             else:
                 arr = np.mean(arr, axis=-1)
-        return np.nan_to_num(arr, nan=0.0, posinf=0.0, neginf=0.0)
+        return np.nan_to_num(arr, nan=0.0, posinf=0.0, neginf=0.0)  # type: ignore[no-any-return]
 
     @staticmethod
     def _estimate_f0(audio: np.ndarray, sr: int) -> float:

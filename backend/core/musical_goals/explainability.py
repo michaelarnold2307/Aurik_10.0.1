@@ -228,7 +228,7 @@ class GoalExplainer:
         # Measure initial goals
         initial_scores = self.checker.measure_all(original_audio, sr)
         self.goal_history.append(
-            {"step": "Original", "scores": initial_scores, "audio_hash": hash(original_audio.tobytes())}
+            {"step": "Original", "scores": initial_scores, "audio_hash": hash(original_audio.tobytes())}  # type: ignore[dict-item]
         )
 
         logger.info("Started goal tracking in %s mode", mode.value)
@@ -261,7 +261,7 @@ class GoalExplainer:
         )
 
         self.goal_history.append(
-            {"step": step_name, "scores": current_scores, "audio_hash": hash(processed_audio.tobytes())}
+            {"step": step_name, "scores": current_scores, "audio_hash": hash(processed_audio.tobytes())}  # type: ignore[dict-item]
         )
 
         logger.debug("Recorded step '%s': %s", step_name, current_scores)
@@ -328,7 +328,7 @@ class GoalExplainer:
         }
 
         return GoalExplanation(
-            mode=self.mode,
+            mode=self.mode,  # type: ignore[arg-type]
             overall_success=overall_success,
             achieved_goals=achieved_goals,
             failed_goals=failed_goals,
@@ -345,13 +345,13 @@ class GoalExplainer:
 
         # Get all goal names
         initial_scores = self.goal_history[0]["scores"]
-        goal_names = list(initial_scores.keys())
+        goal_names = list(initial_scores.keys())  # type: ignore[attr-defined]
 
         for goal_name in goal_names:
             # Extract scores through processing chain
             step_scores = []
             for entry in self.goal_history:
-                step_scores.append(entry["scores"][goal_name])
+                step_scores.append(entry["scores"][goal_name])  # type: ignore[index]
 
             # Calculate deltas
             step_deltas = []
@@ -413,8 +413,8 @@ class GoalExplainer:
             negative = []
             total_impact = 0.0
 
-            for goal_name in scores_before.keys():
-                delta = scores_after[goal_name] - scores_before[goal_name]
+            for goal_name in scores_before.keys():  # type: ignore[attr-defined]
+                delta = scores_after[goal_name] - scores_before[goal_name]  # type: ignore[index]
                 goal_changes[goal_name] = delta
                 total_impact += abs(delta)
 

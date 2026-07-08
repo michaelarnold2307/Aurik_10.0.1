@@ -397,7 +397,18 @@ class ApolloPlugin:
                         elapsed,
                         n_total - pos,
                     )
-                    result[pos:] = self._repair_dsp_fallback(audio[pos:], sr, material)
+                    # DSP-Fallback für Restfragment in eigenem try — sehr kurze Fragmente
+                    # (< n_fft Samples) werfen sonst einen Shape-Fehler, der zum äußeren
+                    # except propagiert und dort DSP auf dem GESAMTEN Audio auslöst.
+                    try:
+                        result[pos:] = self._repair_dsp_fallback(audio[pos:], sr, material)
+                    except Exception as _fb_exc:
+                        logger.debug(
+                            "Apollo: DSP-Fallback Restfragment fehlgeschlagen (%s) — Originalsamples behalten (n=%d)",
+                            _fb_exc,
+                            n_total - pos,
+                        )
+                        # result[pos:] enthält bereits audio[pos:] via audio.copy() — kein Schaden.
                     break
 
                 chunk_end = min(pos + chunk_samples, n_total)
@@ -703,6 +714,11 @@ def get_apollo() -> ApolloPlugin:
     return plugin
 
 
+def get_loaded_apollo() -> ApolloPlugin | None:
+    """Gibt nur eine bereits geladene Apollo-Instanz zurück, ohne Lazy-Load."""
+    return _instance_holder[0]
+
+
 def repair_codec_artifacts(
     audio: np.ndarray,
     sr: int,
@@ -711,7 +727,10 @@ def repair_codec_artifacts(
     bitrate_kbps: int | None = None,
 ) -> CodecRepairResult:
     """Convenience-Wrapper — Apollo Codec-Reparatur ohne Klassen-Instantiierung.
-
+    plugin = get_loaded_apollo()
+    if plugin is None:
+        plugin = get_apollo()
+    return plugin.repair(audio, sr, material=material, bitrate_kbps=bitrate_kbps)
     Beispiel::
 
         result = repair_codec_artifacts(audio, sr=48000, material="mp3_low")

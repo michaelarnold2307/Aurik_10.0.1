@@ -30,11 +30,11 @@ class SOTAMaximumAnalyzer:
             + 0.1 * result["transient_ratio"]
         )
         # Empfehlungen
-        result["recommendations"] = []
+        result["recommendations"] = []  # type: ignore[assignment]
         if result["snr"] < 10:
-            result["recommendations"].append("SNR niedrig: Rauschunterdrückung oder Clean-Up empfohlen.")
+            result["recommendations"].append("SNR niedrig: Rauschunterdrückung oder Clean-Up empfohlen.")  # type: ignore[attr-defined]
         if result["dynamic_range"] < 0.1:
-            result["recommendations"].append("Dynamik gering: Kompression überprüfen.")
+            result["recommendations"].append("Dynamik gering: Kompression überprüfen.")  # type: ignore[attr-defined]
         if result["clarity"] < 0.01:
-            result["recommendations"].append("Klarheit gering: EQ oder Enhancer nutzen.")
+            result["recommendations"].append("Klarheit gering: EQ oder Enhancer nutzen.")  # type: ignore[attr-defined]
         return result

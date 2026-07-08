@@ -19,6 +19,7 @@ from backend.core.causal_defect_reasoner import (
     CausalDefectReasoner,
     RestorationPlan,
     SpectralFeatures,
+    _normalize_defect_scores,
     extract_spectral_features,
     get_reasoner,
     reason_about_defects,
@@ -218,9 +219,11 @@ class TestRestorationPlan:
         total = sum(plan.cause_probabilities.values())
         assert abs(total - 1.0) < 1e-6
 
-    def test_23_confidence_equals_max_posterior(self):
+    def test_23_confidence_calibrated_from_posteriors(self):
         plan = self._get_plan()
-        assert abs(plan.confidence - max(plan.cause_probabilities.values())) < 1e-9
+        max_posterior = max(plan.cause_probabilities.values())
+        assert 0.0 <= plan.confidence <= 1.0
+        assert plan.confidence >= max_posterior
 
     def test_24_ranked_causes_sorted(self):
         plan = self._get_plan()
@@ -294,6 +297,84 @@ class TestReasonerMaterials:
         audio = _stereo(secs=2.0)
         plan = self.r.reason({}, material="vinyl", audio=audio, sample_rate=SR)
         assert isinstance(plan, RestorationPlan)
+
+
+class TestDefectAliasNormalization:
+    def setup_method(self):
+        self.r = CausalDefectReasoner()
+
+    def test_dropout_alias_group_is_reciprocal(self):
+        norm = _normalize_defect_scores({"tape_dropout": 0.72})
+        assert pytest.approx(norm["tape_dropout"], rel=1e-6) == 0.72
+        assert pytest.approx(norm["dropouts"], rel=1e-6) == 0.72
+        assert pytest.approx(norm["dropout_severity"], rel=1e-6) == 0.72
+
+    def test_clip_alias_group_is_reciprocal(self):
+        norm = _normalize_defect_scores({"digital_clip": 0.66})
+        assert pytest.approx(norm["digital_clip"], rel=1e-6) == 0.66
+        assert pytest.approx(norm["clipping"], rel=1e-6) == 0.66
+        assert pytest.approx(norm["clip_severity"], rel=1e-6) == 0.66
+
+    def test_hum_alias_group_is_reciprocal(self):
+        norm = _normalize_defect_scores({"electrical_hum": 0.44})
+        assert pytest.approx(norm["electrical_hum"], rel=1e-6) == 0.44
+        assert pytest.approx(norm["hum"], rel=1e-6) == 0.44
+
+    def test_hiss_alias_group_is_reciprocal(self):
+        norm = _normalize_defect_scores({"tape_hiss": 0.41})
+        assert pytest.approx(norm["tape_hiss"], rel=1e-6) == 0.41
+        assert pytest.approx(norm["high_freq_noise"], rel=1e-6) == 0.41
+
+    def test_nr_breathing_alias_group_is_reciprocal(self):
+        norm = _normalize_defect_scores({"nr_breathing": 0.53})
+        assert pytest.approx(norm["nr_breathing"], rel=1e-6) == 0.53
+        assert pytest.approx(norm["nr_breathing_artifact"], rel=1e-6) == 0.53
+
+    def test_wow_and_flutter_alias_groups_are_reciprocal(self):
+        norm = _normalize_defect_scores({"wow": 0.49, "flutter_severity": 0.37})
+        assert pytest.approx(norm["wow"], rel=1e-6) == 0.49
+        assert pytest.approx(norm["wow_severity"], rel=1e-6) == 0.49
+        assert pytest.approx(norm["flutter"], rel=1e-6) == 0.37
+        assert pytest.approx(norm["flutter_severity"], rel=1e-6) == 0.37
+
+    def test_azimuth_alias_group_is_reciprocal(self):
+        norm = _normalize_defect_scores({"cassette_azimuth_tolerance": 0.58})
+        assert pytest.approx(norm["cassette_azimuth_tolerance"], rel=1e-6) == 0.58
+        assert pytest.approx(norm["azimuth_error"], rel=1e-6) == 0.58
+        assert pytest.approx(norm["head_misalignment"], rel=1e-6) == 0.58
+
+    def test_defect_score_key_drift_guard(self):
+        # Guard: alle defect_scores.get("...")-Keys im Reasoner müssen
+        # entweder DefectType-Keys oder explizit erlaubte Legacy-/Proxy-Keys sein.
+        import inspect
+        import re
+
+        import backend.core.causal_defect_reasoner as _cdr
+
+        src = inspect.getsource(_cdr)
+        found = set(re.findall(r'defect_scores\.get\("([a-zA-Z0-9_]+)"', src))
+        from backend.core.defect_scanner import DefectType
+
+        defect_keys = {d.value for d in DefectType}
+        allowed_non_defect = {
+            "click_severity",
+            "dropout_severity",
+            "clip_severity",
+            "wow_severity",
+            "flutter_severity",
+            "tape_dropout",
+            "tape_hiss",
+            "electrical_hum",
+            "digital_clip",
+            "head_misalignment",
+            "hum",
+            "nr_breathing",
+            "silence_ratio",
+            "noise_floor_db",
+            "wow_flutter",
+        }
+        unknown = sorted(k for k in found if k not in defect_keys and k not in allowed_non_defect)
+        assert not unknown, f"Unerlaubte defect_scores-Keys entdeckt: {unknown}"
 
     def test_35_reason_no_audio(self):
         plan = self.r.reason({}, material="tape", audio=None)
@@ -464,3 +545,36 @@ class TestConvenienceFunctions:
             "§ERA 1900-1925: phase_07 BW-Ceiling für wax_cylinder ist noch 5000 Hz — muss 3000 Hz sein"
         )
         assert '"wax_cylinder": 3000.0' in src, "§ERA 1900-1925: phase_07 BW-Ceiling für wax_cylinder muss 3000 Hz sein"
+
+    def test_59_causal_coalition_priority_lifts_digital_pair(self):
+        """§2.67: phase_50 wird als Partner von phase_23 in der Rangfolge angehoben."""
+        reasoner = CausalDefectReasoner()
+        ordered = [
+            "phase_23_spectral_repair",
+            "phase_29_tape_hiss_reduction",
+            "phase_50_spectral_repair",
+        ]
+        ranked = [
+            ("generation_loss", 0.60),
+            ("high_freq_noise", 0.54),
+            ("aliasing", 0.10),
+        ]
+
+        result = reasoner._apply_phase_coalition_priority(ordered, ranked)
+        assert result.index("phase_50_spectral_repair") < result.index("phase_29_tape_hiss_reduction")
+
+    def test_60_causal_coalition_priority_keeps_non_members_stable(self):
+        """Ohne ausreichende Koalitions-Mitglieder bleibt die Reihenfolge unverändert."""
+        reasoner = CausalDefectReasoner()
+        ordered = [
+            "phase_29_tape_hiss_reduction",
+            "phase_03_denoise",
+            "phase_04_eq_correction",
+        ]
+        ranked = [
+            ("tape_hiss", 0.62),
+            ("motor_interference", 0.41),
+        ]
+
+        result = reasoner._apply_phase_coalition_priority(ordered, ranked)
+        assert result == ordered

@@ -16,9 +16,11 @@ import json
 import math
 import os
 import tempfile
+from typing import cast
 
 import numpy as np
 import pytest
+from numpy.typing import NDArray
 
 from backend.core.auto_musical_goal_setter import (
     _MATERIAL_ADJUSTMENTS,
@@ -36,12 +38,12 @@ from backend.core.self_learning_optimizer import ArmStats, SelfLearningOptimizer
 # ---------------------------------------------------------------------------
 
 
-def _make_audio(sr: int = 44100, duration: float = 0.5, noise: float = 0.01) -> np.ndarray:
+def _make_audio(sr: int = 44100, duration: float = 0.5, noise: float = 0.01) -> NDArray[np.float32]:
     """Erzeugt ein synthetisches Testsignal (Sinus + weißes Rauschen)."""
     t = np.linspace(0, duration, int(sr * duration), endpoint=False)
     signal = 0.5 * np.sin(2 * np.pi * 440 * t).astype(np.float32)
     signal += noise * np.random.randn(len(signal)).astype(np.float32)
-    return signal
+    return np.asarray(signal, dtype=np.float32)
 
 
 def _make_defect_result(
@@ -435,6 +437,13 @@ class TestDefectPhaseMapper:
         for dt in DefectType:
             assert dt in _PHASE_MAP, f"Kein Mapping für DefectType.{dt.name}"
 
+    def test_phase_map_is_complete_for_all_defect_types(self):
+        """Die kanonische Defekt-Phase-Tabelle muss alle DefectType-Werte abdecken."""
+        from backend.core.defect_phase_mapper import _PHASE_MAP
+
+        missing = [dt.name for dt in DefectType if dt not in _PHASE_MAP]
+        assert not missing, f"Fehlende DefectType-Zuordnung: {', '.join(missing)}"
+
     def test_primary_phases_not_empty(self):
         """Jede PhaseAssignment muss mindestens eine Primary-Phase haben."""
         from backend.core.defect_phase_mapper import _PHASE_MAP
@@ -463,10 +472,22 @@ class TestDefectPhaseMapper:
             for p in primary:
                 assert p in all_p
 
+    def test_restoration_mode_filters_forbidden_primary_phases(self):
+        """Im Restoration-Modus dürfen keine §0a-verbotenen Primärphasen erscheinen."""
+        from backend.core.defect_phase_mapper import DefectPhaseMapper
+
+        mapper = DefectPhaseMapper()
+        for dt in DefectType:
+            phases = mapper.get_primary_phases(dt, mode="restoration")
+            assert not any(
+                phase in {"phase_21_exciter", "phase_35_multiband_compression", "phase_42_vocal_enhancement"}
+                for phase in phases
+            ), f"{dt.name}: verbotene Phase im Restoration-Modus"
+
     def test_build_specialist_config_clicks(self):
         """Klick-Config muss hohe click_removal_sensitivity haben."""
         from backend.core.defect_phase_mapper import DefectPhaseMapper
-        from backend.core.processing_modes import get_processing_config
+        from backend.core.processing_modes import ProcessingConfig, get_processing_config
 
         mapper = DefectPhaseMapper()
         base = get_processing_config(ProcessingMode.RESTORATION)
@@ -476,13 +497,14 @@ class TestDefectPhaseMapper:
             severity=0.8,
             is_restoration_mode=True,
         )
+        config = cast(ProcessingConfig, config)
         assert config.click_removal_sensitivity > 0.5
         assert "click" in name.lower() or "specialist" in name.lower()
 
     def test_build_specialist_config_hum_sets_lowfreq(self):
         """HUM-Config muss low_freq_rolloff_hz setzen."""
         from backend.core.defect_phase_mapper import DefectPhaseMapper
-        from backend.core.processing_modes import get_processing_config
+        from backend.core.processing_modes import ProcessingConfig, get_processing_config
 
         mapper = DefectPhaseMapper()
         base = get_processing_config(ProcessingMode.RESTORATION)
@@ -492,13 +514,14 @@ class TestDefectPhaseMapper:
             severity=0.7,
             is_restoration_mode=True,
         )
+        config = cast(ProcessingConfig, config)
         assert config.low_freq_rolloff_hz is not None
         assert config.low_freq_rolloff_hz > 0
 
     def test_build_specialist_config_digital_artifacts_enables_spectral_repair(self):
         """DIGITAL_ARTIFACTS-Config muss spektrale Reparatur aktivieren."""
         from backend.core.defect_phase_mapper import DefectPhaseMapper
-        from backend.core.processing_modes import get_processing_config
+        from backend.core.processing_modes import ProcessingConfig, get_processing_config
 
         mapper = DefectPhaseMapper()
         base = get_processing_config(ProcessingMode.RESTORATION)
@@ -508,13 +531,14 @@ class TestDefectPhaseMapper:
             severity=0.9,
             is_restoration_mode=True,
         )
+        config = cast(ProcessingConfig, config)
         assert config.enable_spectral_repair is True
         assert config.spectral_repair_strength > 0.5
 
     def test_restoration_mode_caps_denoise_at_0_9(self):
         """Im RESTORATION-Modus darf denoise_strength nie > 0.9 sein."""
         from backend.core.defect_phase_mapper import DefectPhaseMapper
-        from backend.core.processing_modes import get_processing_config
+        from backend.core.processing_modes import ProcessingConfig, get_processing_config
 
         mapper = DefectPhaseMapper()
         for dt in DefectType:
@@ -525,6 +549,7 @@ class TestDefectPhaseMapper:
                 severity=1.0,
                 is_restoration_mode=True,
             )
+            config = cast(ProcessingConfig, config)
             assert config.denoise_strength <= 0.90, f"{dt.name}: denoise_strength={config.denoise_strength:.2f} > 0.9"
 
     def test_phases_for_defect_profile_ordering(self):
@@ -542,6 +567,25 @@ class TestDefectPhaseMapper:
         # Primary-Phase für CLICKS (höchste Severity) muss früh erscheinen
         assert "phase_01_click_removal" in phases
         assert phases.index("phase_01_click_removal") < len(phases) // 2 + 2
+
+    def test_phases_for_defect_profile_coalition_priority(self):
+        """§2.67: Koalitionsphasen werden im Profil als zusammengehörige Gruppe priorisiert."""
+        from backend.core.defect_phase_mapper import DefectPhaseMapper
+
+        mapper = DefectPhaseMapper()
+        defects = [
+            DefectScore(DefectType.GENERATION_LOSS, severity=0.9, confidence=0.9),
+            DefectScore(DefectType.LOW_FREQ_RUMBLE, severity=0.8, confidence=0.8),
+        ]
+        phases = mapper.phases_for_defect_profile(defects, max_phases=10)
+
+        assert "phase_23_spectral_repair" in phases
+        assert "phase_07_harmonic_restoration" in phases
+        assert "phase_05_rumble_filter" in phases
+
+        # Ohne Koalitions-Priorisierung läge phase_05 (0.8) vor phase_07 (0.54).
+        # Mit §2.67-Coalition wird phase_07 als Partner von phase_23 nach vorne gezogen.
+        assert phases.index("phase_07_harmonic_restoration") < phases.index("phase_05_rumble_filter")
 
     def test_describe_returns_string(self):
         """describe() gibt nicht-leeren String zurück."""
@@ -589,18 +633,20 @@ class TestIntrinsicAudioQualityScorer:
         freq: float = 440.0,
         noise: float = 0.0,
         harmonics: int = 3,
-    ) -> np.ndarray:
+    ) -> NDArray[np.float32]:
         t = np.linspace(0, dur, int(sr * dur), dtype=np.float32)
-        sig = sum((1.0 / n) * np.sin(2 * np.pi * freq * n * t) for n in range(1, harmonics + 1)).astype(np.float32)
+        sig = np.zeros_like(t, dtype=np.float32)
+        for n in range(1, harmonics + 1):
+            sig += ((1.0 / n) * np.sin(2 * np.pi * freq * n * t)).astype(np.float32)
         sig /= np.max(np.abs(sig)) + 1e-9
         sig *= 0.5
         if noise > 0:
             sig += np.random.default_rng(42).normal(0, noise, len(sig)).astype(np.float32)
-        return sig
+        return np.asarray(sig, dtype=np.float32)
 
     def test_returns_intrinsic_quality_score(self):
         """score() gibt IntrinsicQualityScore mit allen Feldern zurück."""
-        from backend.core.intrinsic_audio_quality_scorer import IntrinsicAudioQualityScorer, IntrinsicQualityScore
+        from backend.core.multi_pass_strategy import IntrinsicAudioQualityScorer, IntrinsicQualityScore
 
         scorer = IntrinsicAudioQualityScorer()
         audio = self._make_signal()
@@ -611,7 +657,7 @@ class TestIntrinsicAudioQualityScorer:
 
     def test_clean_scores_higher_than_noisy(self):
         """Sauberes Signal muss besser bewertet werden als verrauschtes."""
-        from backend.core.intrinsic_audio_quality_scorer import IntrinsicAudioQualityScorer
+        from backend.core.multi_pass_strategy import IntrinsicAudioQualityScorer
 
         scorer = IntrinsicAudioQualityScorer()
         sr = 44100
@@ -621,7 +667,7 @@ class TestIntrinsicAudioQualityScorer:
 
     def test_snr_higher_for_clean(self):
         """SNR-Schätzung muss für sauberes Signal größer sein."""
-        from backend.core.intrinsic_audio_quality_scorer import IntrinsicAudioQualityScorer
+        from backend.core.multi_pass_strategy import IntrinsicAudioQualityScorer
 
         scorer = IntrinsicAudioQualityScorer()
         sr = 44100
@@ -631,7 +677,7 @@ class TestIntrinsicAudioQualityScorer:
 
     def test_clipping_score_detects_clipped_signal(self):
         """Geklipptes Signal muss niedrigeren clipping_score haben."""
-        from backend.core.intrinsic_audio_quality_scorer import IntrinsicAudioQualityScorer
+        from backend.core.multi_pass_strategy import IntrinsicAudioQualityScorer
 
         scorer = IntrinsicAudioQualityScorer()
         sr = 44100
@@ -649,7 +695,7 @@ class TestIntrinsicAudioQualityScorer:
 
     def test_stereo_input_handled(self):
         """Stereo-Input (2D-Array) muss ohne Fehler verarbeitet werden."""
-        from backend.core.intrinsic_audio_quality_scorer import IntrinsicAudioQualityScorer
+        from backend.core.multi_pass_strategy import IntrinsicAudioQualityScorer
 
         scorer = IntrinsicAudioQualityScorer()
         mono = self._make_signal()
@@ -660,7 +706,7 @@ class TestIntrinsicAudioQualityScorer:
 
     def test_very_short_signal_returns_neutral(self):
         """Zu kurzes Signal (< FFT-Größe) muss 0.5 zurückgeben, kein Crash."""
-        from backend.core.intrinsic_audio_quality_scorer import IntrinsicAudioQualityScorer
+        from backend.core.multi_pass_strategy import IntrinsicAudioQualityScorer
 
         scorer = IntrinsicAudioQualityScorer()
         tiny = np.zeros(16, dtype=np.float32)
@@ -670,7 +716,7 @@ class TestIntrinsicAudioQualityScorer:
 
     def test_score_as_float_consistent_with_score_overall(self):
         """score_as_float() muss identisch zu score().overall sein."""
-        from backend.core.intrinsic_audio_quality_scorer import IntrinsicAudioQualityScorer
+        from backend.core.multi_pass_strategy import IntrinsicAudioQualityScorer
 
         scorer = IntrinsicAudioQualityScorer()
         audio = self._make_signal()

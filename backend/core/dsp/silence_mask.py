@@ -121,7 +121,7 @@ def compute_silence_mask(
 
         _n_total = int(_mono.shape[0])
         if _n_total < 1:
-            return np.ones(0, dtype=np.float32)
+            return np.ones(0, dtype=np.float32)  # type: ignore[no-any-return]
 
         # Frame-Einstellungen (10 ms)
         _frame_n = max(240, int(sr * 0.010))
@@ -255,12 +255,12 @@ def compute_silence_mask(
             _total_dur_s,
             100.0 * _silence_dur_s / max(_total_dur_s, 1e-3),
         )
-        return _mask_smooth.astype(np.float32)
+        return _mask_smooth.astype(np.float32)  # type: ignore[no-any-return]
 
     except Exception:  # pragma: no cover
         logger.exception("silence_mask: Fehler bei compute_silence_mask — Fallback: alle aktiv")
         _n_fb = int(np.asarray(audio).shape[-1]) if np.asarray(audio).ndim >= 1 else 0
-        return np.ones(max(0, _n_fb), dtype=np.float32)
+        return np.ones(max(0, _n_fb), dtype=np.float32)  # type: ignore[no-any-return]
 
 
 def apply_silence_preservation(
@@ -296,7 +296,7 @@ def apply_silence_preservation(
         # Längenabgleich
         _n = min(_orig.shape[-1], _proc.shape[-1], _mask.shape[0])
         if _n <= 0:
-            return _proc
+            return _proc  # type: ignore[no-any-return]
 
         # Maske auf Audio-Shape erweitern (Stereo-Support)
         if _proc.ndim == 2:
@@ -332,11 +332,11 @@ def apply_silence_preservation(
             _out = _proc.copy()
             _out[:_n] = _result
 
-        return _out.astype(np.float32)
+        return _out.astype(np.float32)  # type: ignore[no-any-return]
 
     except Exception:  # pragma: no cover
         logger.exception("silence_mask: Fehler bei apply_silence_preservation — Fallback: unverändert")
-        return np.asarray(processed, dtype=np.float32)
+        return np.asarray(processed, dtype=np.float32)  # type: ignore[no-any-return]
 
 
 # ── Singleton ──────────────────────────────────────────────────────────────────

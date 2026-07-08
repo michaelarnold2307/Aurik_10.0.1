@@ -253,10 +253,10 @@ class PlosiveDetector:
         if librosa is None:
             return []
         # Compute onset strength
-        onset_env = librosa.onset.onset_strength(y=audio, sr=sr)
+        onset_env = librosa.onset.onset_strength(y=audio, sr=sr)  # type: ignore[attr-defined]
 
         # Detect onset peaks
-        onset_frames = librosa.onset.onset_detect(onset_envelope=onset_env, sr=sr, backtrack=True)
+        onset_frames = librosa.onset.onset_detect(onset_envelope=onset_env, sr=sr, backtrack=True)  # type: ignore[attr-defined]
 
         plosives = []
 
@@ -285,7 +285,7 @@ class PlosiveDetector:
                 continue
 
             # Energy
-            energy = np.max(envelope)
+            energy: float = float(np.max(envelope))
             energy_db = 20 * np.log10(energy + 1e-10)
 
             if energy_db < self.energy_threshold_db:
@@ -350,10 +350,10 @@ class TransientDetector:
         if librosa is None:
             return []
         # Compute onset strength (emphasizes transients)
-        onset_env = librosa.onset.onset_strength(y=audio, sr=sr, aggregate=np.median)
+        onset_env = librosa.onset.onset_strength(y=audio, sr=sr, aggregate=np.median)  # type: ignore[attr-defined]
 
         # Detect onsets with high threshold (transients only)
-        onset_frames = librosa.onset.onset_detect(
+        onset_frames = librosa.onset.onset_detect(  # type: ignore[attr-defined]
             onset_envelope=onset_env,
             sr=sr,
             backtrack=False,
@@ -386,7 +386,7 @@ class TransientDetector:
                 continue
 
             # Energy
-            energy = np.max(envelope)
+            energy: float = float(np.max(envelope))
             energy_db = 20 * np.log10(energy + 1e-10)
 
             if energy_db < self.energy_threshold_db:
@@ -402,7 +402,7 @@ class TransientDetector:
             transients.append(
                 TransientEvent(
                     peak_sample=peak_sample,
-                    attack_time_ms=attack_time_ms,
+                    attack_time_ms=attack_time_ms,  # type: ignore[arg-type]
                     energy=float(energy),
                     sharpness=sharpness,
                     confidence=confidence,
@@ -445,8 +445,8 @@ class SibilanceDetector:
         sibilance_band = signal.sosfilt(sos, audio)
 
         # Energy in sibilance band
-        sibilance_energy = np.sum(sibilance_band**2)
-        total_energy = np.sum(audio**2)
+        sibilance_energy: float = float(np.sum(sibilance_band**2))
+        total_energy: float = float(np.sum(audio**2))
 
         sibilance_density = sibilance_energy / (total_energy + 1e-10)
 
@@ -473,7 +473,7 @@ class SibilanceDetector:
         sibilant_frames = 0
         for i in range(0, len(sibilance_band) - window_samples, hop_samples):
             frame = sibilance_band[i : i + window_samples]
-            frame_energy = np.sum(frame**2)
+            frame_energy: float = float(np.sum(frame**2))
 
             # Threshold: significant sibilance energy
             if frame_energy > total_energy / len(audio) * window_samples * 2:
@@ -865,7 +865,7 @@ class AuthenticityMetrics:
         if len(retention_factors) > 0:
             retention_rate = np.mean(retention_factors)
         else:
-            retention_rate = 1.0  # No room tone to preserve
+            retention_rate = 1.0  # type: ignore[assignment]  # No room tone to preserve
 
         return float(retention_rate), original_analysis, processed_analysis
 

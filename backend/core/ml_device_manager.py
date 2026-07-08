@@ -38,12 +38,18 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+# Lazy/optionale ML-Imports innerhalb von Methoden sind bewusste Aurik-Design-Entscheidung
+# (RELEASE_MUST: optionale ML-Dependencies immer per try/except eingebunden — §E402).
+# pylint: disable=import-outside-toplevel
+
 # ---------------------------------------------------------------------------
 # GPU Backend enum
 # ---------------------------------------------------------------------------
 
 
 class GPUBackend(enum.Enum):
+    """GPU-Beschleunigungsbackend — ROCm (Linux), DirectML (Windows) oder CPU-Only (§GPU-Mixed-Mode)."""
+
     ROCM = "rocm"  # Linux: ROCm 6.x via torch.cuda API (AMD GPU primary path)
     DIRECTML = "directml"  # Windows: DirectML via onnxruntime-directml (AMD Windows)
     NONE = "none"  # CPU-only (no AMD GPU or GPU suppressed)
@@ -453,7 +459,7 @@ _init_lock: threading.Lock = threading.Lock()
 
 def get_ml_device_manager() -> MLDeviceManager:
     """Gibt the process-wide MLDeviceManager singleton (thread-safe, lazy-init) zurück."""
-    global _instance
+    global _instance  # pylint: disable=global-statement
     if _instance is None:
         with _init_lock:
             if _instance is None:
@@ -576,7 +582,8 @@ class MLDeviceManager:
             import torch  # type: ignore[import]
 
             if not torch.cuda.is_available():
-                logger.debug("MLDeviceManager: torch.cuda unavailable — ROCm not present")
+                logger.debug("MLDeviceManager: torch.cuda unavailable — checking ONNX ROCm fallback")
+                self._detect_rocm_onnx_only()
                 return
 
             device_name = torch.cuda.get_device_name(0)
@@ -595,6 +602,33 @@ class MLDeviceManager:
             # AMD architecture & tier detection
             self._gpu_architecture = _detect_amd_architecture(device_name)
             self._gpu_tier = _compute_gpu_tier(self._gpu_architecture, self._vram_total_gb, self._backend)
+
+        except Exception as exc:
+            logger.debug("MLDeviceManager: ROCm detection failed: %s — trying ONNX-only", exc)
+            self._detect_rocm_onnx_only()
+
+    def _detect_rocm_onnx_only(self) -> None:
+        """Fallback: detect ROCm via ONNX Runtime providers (no torch needed)."""
+        try:
+            import onnxruntime as ort  # type: ignore[import]
+            providers = ort.get_available_providers()
+            if "ROCMExecutionProvider" in providers:
+                self._backend = GPUBackend.ROCM
+                self._torch_gpu_device = "cpu"
+                self._ort_gpu_providers = ["ROCMExecutionProvider", "CPUExecutionProvider"]
+                self._gpu_available = True
+                self._gpu_name = "AMD GPU (ONNX ROCm, no torch)"
+                self._vram_total_gb = 4.0  # conservative estimate
+                self._vram_free_gb = 4.0
+                logger.info(
+                    "MLDeviceManager: ONNX ROCm provider detected — ONNX models will use GPU"
+                )
+            else:
+                logger.debug("MLDeviceManager: ONNX ROCm provider not available")
+        except ImportError:
+            logger.debug("MLDeviceManager: onnxruntime not installed")
+        except Exception as exc:
+            logger.debug("MLDeviceManager: ONNX ROCm detection error: %s", exc)
 
             logger.info(
                 "MLDeviceManager: AMD GPU arch=%s tier=%s name=%s VRAM=%.1f GB",
@@ -761,7 +795,7 @@ class MLDeviceManager:
             # Optional: torch-directml enables PyTorch models on DirectML.
             # Without it, only ONNX models get DirectML acceleration.
             try:
-                import torch_directml  # type: ignore[import]
+                import torch_directml  # type: ignore[import]  # pylint: disable=unused-import  # Side-Effect-Import: registriert DML-Device in PyTorch
 
                 self._torch_gpu_device = "dml"
                 logger.info("MLDeviceManager: torch-directml available — PyTorch models can use DML device")
@@ -791,6 +825,7 @@ class MLDeviceManager:
                 capture_output=True,
                 text=True,
                 timeout=3,
+                check=False,  # WMIC-Probe: Fehlercode irrelevant, Ausgabe wird ausgewertet
             )
             for line in result.stdout.splitlines():
                 if "Caption" in line and "=" in line:
@@ -807,7 +842,7 @@ class MLDeviceManager:
             import torch  # type: ignore[import]
 
             free_bytes, _ = torch.cuda.mem_get_info(0)
-            return round(free_bytes / (1024**3), 2)
+            return round(free_bytes / (1024**3), 2)  # type: ignore[no-any-return]
         except Exception:
             return self._vram_total_gb  # assume empty on query failure
 
@@ -821,6 +856,7 @@ class MLDeviceManager:
                 capture_output=True,
                 text=True,
                 timeout=3,
+                check=False,  # WMIC-Probe: Fehlercode irrelevant, Ausgabe wird ausgewertet
             )
             for line in result.stdout.splitlines():
                 if "AdapterRAM" in line and "=" in line:
@@ -979,7 +1015,8 @@ class MLDeviceManager:
 
             if already_used + size_gb > max_usable:
                 logger.warning(
-                    "MLDeviceManager: VRAM budget exceeded for %s (%.2f GB) — used %.2f / %.2f GB (tier=%s) → CPU fallback",
+                    "MLDeviceManager: VRAM budget exceeded for %s (%.2f GB)"
+                    " — used %.2f / %.2f GB (tier=%s) → CPU fallback",
                     plugin_name,
                     size_gb,
                     already_used,

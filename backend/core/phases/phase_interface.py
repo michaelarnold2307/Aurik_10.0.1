@@ -85,7 +85,12 @@ class PhaseMetadata:
 # ---------------------------------------------------------------------------
 @dataclass
 class PhaseResult:
-    """Ergebnis einer Phase-Verarbeitung — immer NaN/Inf-frei und geclippt."""
+    """Ergebnis einer Phase-Verarbeitung — immer NaN/Inf-frei und geclippt.
+
+    §2.59: time_range ermöglicht chirurgische Verarbeitung.
+    Wenn gesetzt, wurde die Phase NUR auf diesen Zeitbereich angewendet.
+    None = Phase hat gesamtes Audio verarbeitet (global).
+    """
 
     audio: np.ndarray  # Verarbeitetes Audio (float32, [-1,1])
     modifications: dict[str, Any] = field(default_factory=dict)
@@ -94,6 +99,7 @@ class PhaseResult:
     # metrics ist ein echtes Feld als Alias fuer metadata-Inhalte.
     # Wird es beim Konstruktor-Aufruf uebergeben, landet der Inhalt
     # in metadata (via __post_init__).
+    time_range: tuple[float, float] | None = None  # §2.59: (start_s, end_s) oder None=global
     metrics: dict[str, Any] = field(default_factory=dict)
     execution_time_seconds: float = 0.0
     ml_used: bool = False
@@ -245,6 +251,94 @@ class PhaseInterface(abc.ABC):
     # ------------------------------------------------------------------
     # Konkrete Hilfsmethoden (von allen Phasen geerbt)
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def surgical_dispatch(
+        phase: PhaseInterface,
+        audio: np.ndarray,
+        sample_rate: int,
+        material_type: str,
+        time_ranges: list[tuple[float, float]],
+        context_ms: float = 20.0,
+        crossfade_ms: float = 5.0,
+        **kwargs,
+    ) -> np.ndarray:
+        """§2.59.14: Führt eine Phase chirurgisch aus — nur auf Zeitfenstern.
+
+        Extrahiert jedes Zeitfenster mit Kontext, ruft phase.process()
+        auf das Fenster auf, und blended das Ergebnis via Cosine-Crossfade
+        nahtlos zurück ins Gesamtsignal.
+
+        Args:
+            phase: Die auszuführende Phase (muss PhaseInterface sein)
+            audio: Vollständiges Audio (channels, samples) oder (samples,)
+            sample_rate: Sample-Rate in Hz
+            material_type: Material-Typ für die Phase
+            time_ranges: Liste von (start_s, end_s) Zeitfenstern
+            context_ms: Kontext vor/nach jedem Fenster
+            crossfade_ms: Dauer des Crossfades an den Rändern
+            **kwargs: Werden an phase.process() weitergereicht
+
+        Returns:
+            Audio mit chirurgisch reparierten Zonen (gleiche Shape wie Input)
+        """
+        import numpy as np
+        was_mono = audio.ndim == 1
+        if was_mono:
+            audio = audio.reshape(1, -1)
+        result = audio.copy()
+        total_samples = audio.shape[1]
+        ctx_samples = int(context_ms * sample_rate / 1000)
+        fade_samples = int(crossfade_ms * sample_rate / 1000)
+        repaired = 0
+        skipped = 0
+
+        for start_s, end_s in sorted(time_ranges, key=lambda x: x[0]):
+            s0 = max(0, int(start_s * sample_rate) - ctx_samples)
+            s1 = min(total_samples, int(end_s * sample_rate) + ctx_samples)
+            if s1 - s0 < 32:  # Minimum für DSP
+                skipped += 1
+                continue
+
+            segment = audio[:, s0:s1].copy()
+            original = segment.copy()
+
+            try:
+                proc_result = phase.process(segment, sample_rate, material_type, **kwargs)
+                if isinstance(proc_result, np.ndarray):
+                    segment = proc_result
+                elif hasattr(proc_result, 'audio'):
+                    segment = proc_result.audio
+            except Exception:
+                skipped += 1
+                continue
+
+            # Safety-Clamp: ≤2× Original-Amplitude
+            import numpy as _np
+            abs_orig = _np.maximum(_np.abs(original), 1e-10)
+            limit = abs_orig * 2.0
+            _np.clip(segment, -limit, limit, out=segment)
+
+            # Cosine-Crossfade an den Rändern
+            if segment.shape[1] >= fade_samples * 2:
+                ramp_in = 0.5 * (1 - _np.cos(_np.pi * _np.arange(fade_samples) / fade_samples))
+                ramp_out = ramp_in[::-1]
+                for ch in range(segment.shape[0]):
+                    segment[ch, :fade_samples] = (
+                        original[ch, :fade_samples] * (1 - ramp_in)
+                        + segment[ch, :fade_samples] * ramp_in
+                    )
+                    segment[ch, -fade_samples:] = (
+                        original[ch, -fade_samples:] * (1 - ramp_out)
+                        + segment[ch, -fade_samples:] * ramp_out
+                    )
+
+            result[:, s0:s1] = segment
+            repaired += 1
+
+        if was_mono:
+            result = result[0]
+        return result.astype(np.float32)
 
     def _safe_process(
         self,

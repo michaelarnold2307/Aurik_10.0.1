@@ -22,6 +22,7 @@ Phase: 2D.2.1 - Real-World Validation Testing
 import logging
 from dataclasses import dataclass
 from enum import Enum
+from typing import cast
 
 import numpy as np
 
@@ -271,10 +272,12 @@ class RestorationArtifactDetector:
                 duration = (end_frame - start_frame) * self.hop_size / sr
 
                 # Compute severity based on variance increase
-                max_variance_increase = np.max(variance_increase[group])
+                max_variance_increase: float = float(np.max(variance_increase[group]))
                 severity = self._classify_severity(
-                    max_variance_increase / (np.mean(original_variance) + 1e-6), [0.5, 1.0, 2.0, 5.0]
+                    float(max_variance_increase / (float(np.mean(original_variance)) + 1e-6)),
+                    [0.5, 1.0, 2.0, 5.0],
                 )
+                confidence = float(np.clip(max_variance_increase / threshold, 0.0, 1.0))
 
                 artifacts.append(
                     Artifact(
@@ -282,7 +285,7 @@ class RestorationArtifactDetector:
                         severity=severity,
                         start_time=start_time,
                         duration=duration,
-                        confidence=min(1.0, max_variance_increase / threshold),
+                        confidence=confidence,
                         description=f"Musical noise detected at {start_time:.2f}s",
                         metadata={"variance_increase": max_variance_increase},
                     )
@@ -315,7 +318,9 @@ class RestorationArtifactDetector:
             start_time = smeared_frames[0] * self.hop_size / sr
             duration = len(smeared_frames) * self.hop_size / sr
 
-            severity = self._classify_severity(np.mean(flatness_increase[smeared_frames]), [0.05, 0.1, 0.15, 0.25])
+            severity = self._classify_severity(
+                float(np.mean(flatness_increase[smeared_frames])), [0.05, 0.1, 0.15, 0.25]
+            )
 
             artifacts.append(
                 Artifact(
@@ -354,7 +359,7 @@ class RestorationArtifactDetector:
                 start_time = group[0] * self.hop_size / sr
                 duration = len(group) * self.hop_size / sr
 
-                severity = self._classify_severity(np.mean(onset_reduction[group]), [0.1, 0.2, 0.3, 0.5])
+                severity = self._classify_severity(float(np.mean(onset_reduction[group])), [0.1, 0.2, 0.3, 0.5])
 
                 artifacts.append(
                     Artifact(
@@ -425,7 +430,7 @@ class RestorationArtifactDetector:
         if len(distorted_indices) > sr // 10:  # >100ms worth
             # Report overall phase distortion
             severity = self._classify_severity(
-                np.mean(phase_diff[distorted_indices]), [np.pi / 4, np.pi / 3, np.pi / 2, np.pi]
+                float(np.mean(phase_diff[distorted_indices])), [np.pi / 4, np.pi / 3, np.pi / 2, np.pi]
             )
 
             artifacts.append(
@@ -466,7 +471,7 @@ class RestorationArtifactDetector:
                     center_freq = (group[len(group) // 2] / len(restored_spectrum)) * (sr / 2)
                     bandwidth = (len(group) / len(restored_spectrum)) * (sr / 2)
 
-                    severity = self._classify_severity(np.mean(ratio[group]), [0.3, 0.2, 0.1, 0.05])
+                    severity = self._classify_severity(float(np.mean(ratio[group])), [0.3, 0.2, 0.1, 0.05])
 
                     artifacts.append(
                         Artifact(
@@ -488,14 +493,13 @@ class RestorationArtifactDetector:
 
         # Compute RMS envelope
         frame_length = int(0.05 * sr)  # 50ms frames
-        rms_envelope = []
+        rms_values: list[float] = []
 
         for i in range(0, len(audio) - frame_length, frame_length // 2):
-            frame = audio[i : i + frame_length]
-            rms = np.sqrt(np.mean(frame**2))
-            rms_envelope.append(rms)
+            rms = float(np.sqrt(np.mean(np.square(audio[i : i + frame_length]))))
+            rms_values.append(rms)
 
-        rms_envelope = np.array(rms_envelope)
+        rms_envelope = np.asarray(rms_values, dtype=np.float64)
 
         # Pumping = rapid RMS fluctuations
         rms_diff = np.abs(np.diff(rms_envelope))
@@ -505,7 +509,8 @@ class RestorationArtifactDetector:
 
         if len(fluctuating_frames) > 5:
             severity = self._classify_severity(
-                np.max(rms_diff[fluctuating_frames]), [threshold, threshold * 1.5, threshold * 2, threshold * 3]
+                float(np.max(rms_diff[fluctuating_frames])),
+                [float(threshold), float(threshold * 1.5), float(threshold * 2), float(threshold * 3)],
             )
 
             artifacts.append(
@@ -537,7 +542,7 @@ class RestorationArtifactDetector:
         ratio = nyquist_energy / (total_energy + 1e-10)
 
         if ratio > 0.1:  # >10% energy near Nyquist
-            severity = self._classify_severity(ratio, [0.1, 0.2, 0.3, 0.5])
+            severity = self._classify_severity(float(ratio), [0.1, 0.2, 0.3, 0.5])
 
             artifacts.append(
                 Artifact(
@@ -585,7 +590,7 @@ class RestorationArtifactDetector:
         # Pad to match original length
         onset_strength = np.concatenate([[0], onset_strength])
 
-        return onset_strength
+        return onset_strength  # type: ignore[no-any-return]
 
     def _compute_spectrogram(self, audio: np.ndarray) -> np.ndarray:
         """Berechnet magnitude spectrogram."""
@@ -611,7 +616,7 @@ class RestorationArtifactDetector:
             fft_frame = np.fft.rfft(frame)
             spec[:, i] = np.abs(fft_frame)
 
-        return spec
+        return spec  # type: ignore[no-any-return]
 
     def _compute_spectral_flatness(self, spec: np.ndarray) -> np.ndarray:
         """Berechnet spectral flatness for each frame."""
@@ -621,12 +626,15 @@ class RestorationArtifactDetector:
         # Avoid log(0)
         spec_safe = spec + 1e-10
 
-        geometric_mean = np.exp(np.mean(np.log(spec_safe), axis=0))
-        arithmetic_mean = np.mean(spec_safe, axis=0)
+        log_spec = np.asarray(np.log(spec_safe), dtype=np.float64)
+        mean_log_spec = np.asarray(np.mean(log_spec, axis=0), dtype=np.float64)
+        geometric_mean = np.asarray(np.exp(mean_log_spec), dtype=np.float64)
+        arithmetic_mean = np.asarray(np.mean(spec_safe, axis=0), dtype=np.float64)
 
         flatness = geometric_mean / (arithmetic_mean + 1e-10)
 
-        return flatness
+        flatness_array = np.asarray(flatness, dtype=np.float64)
+        return cast(np.ndarray, flatness_array)
 
     def _hilbert_transform(self, audio: np.ndarray) -> np.ndarray:
         """Berechnet analytic signal via Hilbert transform."""
@@ -639,9 +647,10 @@ class RestorationArtifactDetector:
         h[0] = 1
         h[1 : n // 2] = 2
 
-        analytic = np.fft.ifft(fft * h)
+        analytic: np.ndarray = np.asarray(np.fft.ifft(fft * h))
 
-        return analytic
+        analytic_array: np.ndarray = np.asarray(analytic)
+        return analytic_array
 
     def _group_adjacent_indices(self, indices: np.ndarray, max_gap: int = 1) -> list[list[int]]:
         """Group adjacent indices into continuous segments."""
@@ -660,7 +669,7 @@ class RestorationArtifactDetector:
 
         groups.append(current_group)
 
-        return groups
+        return groups  # type: ignore[return-value]
 
     def _classify_severity(
         self,

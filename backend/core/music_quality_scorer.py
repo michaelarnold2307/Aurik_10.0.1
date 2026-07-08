@@ -64,7 +64,7 @@ def _resample_to_16k(audio: np.ndarray, sample_rate: int) -> np.ndarray:
     resampled = np.interp(indices, np.arange(len(mono)), mono).astype(np.float32)
     # NaN/Inf-Guard (§3.1)
     resampled = np.nan_to_num(resampled, nan=0.0, posinf=1.0, neginf=-1.0)
-    return np.clip(resampled, -1.0, 1.0)
+    return np.clip(resampled, -1.0, 1.0)  # type: ignore[no-any-return]
 
 
 def _frame_audio(audio: np.ndarray) -> np.ndarray:
@@ -105,13 +105,13 @@ def _harmonicity(frames: np.ndarray) -> float:
             h_idx = f0_idx * k
             if h_idx < len(mag):
                 w = max(1, f0_idx // 4)
-                harmonic_energy += np.sum(mag[max(0, h_idx - w) : h_idx + w] ** 2)
+                harmonic_energy += float(np.sum(mag[max(0, h_idx - w) : h_idx + w] ** 2))  # type: ignore[call-overload]
         total_energy = np.sum(mag**2) + 1e-10
         scores.append(harmonic_energy / total_energy)
 
     result = float(np.mean(scores)) if scores else 0.3
     # NaN/Inf-Guard (§3.1)
-    result = np.nan_to_num(result, nan=0.3, posinf=1.0, neginf=0.0)
+    result = float(np.nan_to_num(result, nan=0.3, posinf=1.0, neginf=0.0))
     return float(np.clip(result, 0.0, 1.0))
 
 
@@ -133,7 +133,7 @@ def _click_density(audio: np.ndarray) -> float:
     threshold = np.percentile(abs_audio, 99.5)
     if threshold < 1e-10:
         return 0.0
-    n_clicks = np.sum(abs_audio > threshold * 3)
+    n_clicks: int = int(np.sum(abs_audio > threshold * 3))
     result = float(n_clicks / len(audio))
     # NaN/Inf-Guard (§3.1)
     result = np.nan_to_num(result, nan=0.0, posinf=1.0, neginf=0.0)
@@ -148,7 +148,7 @@ def _hum_energy_ratio(audio: np.ndarray) -> float:
     freqs = np.fft.rfftfreq(min(4096, len(audio)), 1 / _TARGET_SR)
     total_energy = np.sum(mag**2) + 1e-10
     hum_mask = ((freqs > 45) & (freqs < 65)) | ((freqs > 55) & (freqs < 75))  # 50 Hz +/-5  # 60 Hz +/-5
-    hum_energy = np.sum(mag[hum_mask] ** 2)
+    hum_energy: float = float(np.sum(mag[hum_mask] ** 2))
     result = float(hum_energy / total_energy)
     # NaN/Inf-Guard (§3.1)
     result = np.nan_to_num(result, nan=0.0, posinf=1.0, neginf=0.0)
@@ -164,7 +164,7 @@ def _envelope_smoothness(audio: np.ndarray) -> float:
     diffs = np.diff(np.log(rms_vals))
     roughness = np.std(diffs)
     # Typische Musik: roughness ~ 0.1–0.5; überprozessiert: >1.0
-    result = float(max(0.0, 1.0 - min(1.0, roughness / 0.8)))
+    result = float(max(0.0, 1.0 - min(1.0, roughness / 0.8)))  # type: ignore[operator]
     # NaN/Inf-Guard (§3.1)
     result = np.nan_to_num(result, nan=0.8, posinf=1.0, neginf=0.0)
     return float(np.clip(result, 0.0, 1.0))
@@ -184,7 +184,7 @@ def _spectral_centroid_stability(frames: np.ndarray) -> float:
     if len(centroids) < 3:
         return 0.8
     cv = np.std(centroids) / (np.mean(centroids) + 1e-10)
-    result = float(max(0.0, 1.0 - min(1.0, cv / 1.5)))
+    result = float(max(0.0, 1.0 - min(1.0, cv / 1.5)))  # type: ignore[operator]
     # NaN/Inf-Guard (§3.1)
     result = np.nan_to_num(result, nan=0.8, posinf=1.0, neginf=0.0)
     return float(np.clip(result, 0.0, 1.0))
@@ -312,7 +312,7 @@ def score_music_mos(audio: np.ndarray, sample_rate: int) -> MusicMOS:
 
         plugin = importlib.import_module("music_mos_plugin")
         if hasattr(plugin, "score"):
-            return plugin.score(audio, sample_rate)
+            return plugin.score(audio, sample_rate)  # type: ignore[no-any-return]
     except ImportError:
         pass
 

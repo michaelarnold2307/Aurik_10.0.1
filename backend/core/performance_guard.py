@@ -1,11 +1,11 @@
 """
-Performance Guard for Aurik 9.0 - 3× Real-Time Enforcement
+Performance Guard for Aurik 9.0 - adaptive Real-Time Enforcement
 ============================================================
 
-Überwacht Processing-Performance und stellt sicher, dass 3× Real-Time Limit
-eingehalten wird. Implementiert adaptive Quality-Reduction bei Bedarf.
+Überwacht Processing-Performance und stellt sicher, dass das mode-adaptive
+Real-Time-Budget eingehalten wird. Implementiert adaptive Quality-Reduction bei Bedarf.
 
-Performance Target: Max 3× Real-Time (3:45 Audio → max 11:15 Processing)
+Performance Target: FAST max 8× Real-Time; Quality/Maximum max 32× Real-Time.
 
 Key Features:
 - Real-time Performance Monitoring
@@ -39,7 +39,7 @@ class PerformanceStatus(Enum):
 class QualityMode(Enum):
     """Quality-Modi für adaptive Processing."""
 
-    FAST = "fast"  # ~1.5× RT, 87% Quality
+    FAST = "fast"  # max 8× RT, schneller Proof-/Desktop-Pfad mit Real-Audio-Reserve
     BALANCED = "balanced"  # max 3× RT (DEFAULT)
     QUALITY = "quality"  # max 5× RT
     MAXIMUM = "maximum"  # max 32× RT (§9.5 — maximum / studio_2026)
@@ -100,16 +100,18 @@ class PerformanceReport:
 
 class PerformanceGuard:
     """
-    Überwacht und enforced 3× Real-Time Performance-Limit.
+    Überwacht und enforced das mode-adaptive Real-Time Performance-Limit.
 
     Garantiert:
-    - Max 3× RT für Balanced Mode
+    - Max 8× RT für FAST Mode
+    - Max 32× RT für Balanced/Quality/Maximum Mode
     - Adaptive Phase-Skipping wenn nötig
     - Detailed Performance-Logging
     """
 
     # Performance Limits (RT Factors)
     # Rationale for values (desktop CPU, no GPU, longer/degraded audio):
+    #   FAST      = 8×  — quick desktop/proof path with enough headroom for real-audio guards.
     #   BALANCED  = 32× — Standard. Allows full pipeline including ML phases.
     #   QUALITY   = 32× — Restoration mode. Same budget to avoid premature deferral.
     #   MAXIMUM   = 32× — Studio 2026. Full ML chain (SGMSE+, BsRoformer, Vocos,
@@ -117,7 +119,7 @@ class PerformanceGuard:
     #                     for 5–10 min audio in Stufe 1 without excessive deferral.
     #   BACKGROUND = ∞  — MLRefinementThread (KMV Stufe 2) only — never for Stufe 1.
     LIMIT_3X_RT = 32.0  # Hard Limit (RT×32)
-    LIMIT_FAST = 3.0  # Target für Fast Mode
+    LIMIT_FAST = 8.0  # Target für Fast Mode — Real-Audio/ML-Guard-Reserve
     LIMIT_BALANCED = 32.0  # Budget für Balanced Mode — maximal RT×32
     LIMIT_QUALITY = 32.0  # Budget für Quality/Restoration Mode — maximal RT×32
     LIMIT_MAXIMUM = 32.0  # Budget für Maximum/Studio-2026-Pfade — maximal RT×32
@@ -184,6 +186,22 @@ class PerformanceGuard:
     # Hard Budget: maximaler RT-Faktor für Musikalische Exzellenz-Betrieb
     RT8_EXCELLENCE_BUDGET: float = 32.0
 
+    # Laufzeitintensive Phasen, die unter RT-Druck bevorzugt in KMV Stufe 2
+    # deferiert werden sollen, um spaete Skip-Lawinen zu vermeiden.
+    HEAVY_PHASE_IDS: frozenset[str] = frozenset(
+        {
+            "phase_23",
+            "phase_24",
+            "phase_29",
+            "phase_31",
+            "phase_32",
+            "phase_49",
+            "phase_50",
+            "phase_55",
+            "phase_56",
+        }
+    )
+
     # Absolutes Zeitlimit (§9.5): Stufe-1-Restaurierung endet spätestens nach 90 Minuten.
     # Rationale: 30-min Vinyl-Seite (1800s Audio) × 3× DSP-RT = 5400s. KMV Stufe 2
     # übernimmt danach automatisch die verbleibenden ML-Phasen ohne Zeitlimit.
@@ -198,7 +216,7 @@ class PerformanceGuard:
 
         Args:
             mode: Quality-Mode (bestimmt Performance-Target)
-            enforce_limit: Enforce 3× RT Limit (False = nur Monitor)
+            enforce_limit: Enforce active RT limit (False = nur Monitor)
             enable_adaptive_skipping: Adaptive Phase-Skipping aktivieren
         """
         self.mode = mode
@@ -220,6 +238,8 @@ class PerformanceGuard:
         self.audio_duration: float | None = None
         self.current_rt_factor: float = 0.0
         self.warnings: list[str] = []
+        self._skip_warned_phase_ids: set[str] = set()
+        self._last_rt_limit_warning_s: float = 0.0
         # Runtime-Set für verpflichtende Phasen (z. B. §6.2a Material-Pflichtphasen),
         # die auch unter RT-Druck niemals deferred/geskippt werden dürfen.
         self._runtime_never_skip_phase_ids: set[str] = set()
@@ -255,6 +275,8 @@ class PerformanceGuard:
         self.phase_performances.clear()
         self.skipped_phases.clear()
         self.warnings.clear()
+        self._skip_warned_phase_ids.clear()
+        self._last_rt_limit_warning_s = 0.0
         self.current_rt_factor = 0.0
         self._analytics_overhead_s = 0.0
 
@@ -437,13 +459,27 @@ class PerformanceGuard:
         # Marginale RT-Kosten dieser einzelnen Phase
         marginal_rt = estimated_time_seconds / self.audio_duration if self.audio_duration else 0
 
-        if current_rt >= skip_threshold:
+        # Fruehe Heavy-Phase-Deferral-Logik: wenn das Budget bereits deutlich
+        # angezogen ist, grosse Einzelkosten vorziehen statt viele spaete Skips.
+        _phase_parts = str(phase_id).split("_", 2)
+        _phase_prefix = (
+            f"{_phase_parts[0]}_{_phase_parts[1]}"
+            if len(_phase_parts) >= 2 and _phase_parts[0] == "phase" and _phase_parts[1].isdigit()
+            else short_id
+        )
+        _phase_is_heavy = _phase_prefix in self.HEAVY_PHASE_IDS
+        if _phase_is_heavy and current_rt >= (self.target_rt_factor * 0.75) and marginal_rt >= 0.18:
+            should_skip = True
+        else:
+            should_skip = False
+
+        if not should_skip and current_rt >= skip_threshold:
             # RT ist bereits über dem Threshold (z.B. nach BsRoformer Stem-Separation).
             # Nur Phasen mit hohen marginalen Kosten (> 0.5× RT) werden geskippt
             # und an KMV Stufe 2 deferiert. Leichte DSP-Phasen (EQ, Kompression,
             # Limiting etc.) laufen trotzdem — sie fügen nur Millisekunden hinzu.
             should_skip = marginal_rt > 0.5
-        else:
+        elif not should_skip:
             # RT noch unter Threshold — Standardlogik: projiziere Gesamtkosten
             estimated_total_time = _elapsed_processing + estimated_time_seconds
             estimated_remaining_time = remaining_phases * 0.3  # 0.3s pro DSP-Phase (konservativ)
@@ -453,11 +489,24 @@ class PerformanceGuard:
             should_skip = final_projected_rt_factor > skip_threshold
 
         if should_skip:
-            logger.warning(
-                f"⏭️ Skipping {phase_id} (priority={phase_priority}): "
-                f"current={current_rt:.2f}× RT, marginal={marginal_rt:.2f}× RT, "
-                f"threshold={skip_threshold:.1f}× — deferring to KMV Stufe 2"
-            )
+            # Skip-Warnungen pro Phase nur einmal pro Lauf ausgeben.
+            # Wiederholte Deferrals derselben Phase sind erwartbares Verhalten
+            # unter konstantem RT-Druck und erzeugen sonst Log-Spam ohne Mehrwert.
+            if phase_id not in self._skip_warned_phase_ids:
+                logger.warning(
+                    f"⏭️ Skipping {phase_id} (priority={phase_priority}): "
+                    f"current={current_rt:.2f}× RT, marginal={marginal_rt:.2f}× RT, "
+                    f"threshold={skip_threshold:.1f}× — deferring to KMV Stufe 2"
+                )
+                self._skip_warned_phase_ids.add(phase_id)
+            else:
+                logger.debug(
+                    "⏭️ Skipping %s erneut (current=%.2f×, marginal=%.2f×, threshold=%.1f×)",
+                    phase_id,
+                    current_rt,
+                    marginal_rt,
+                    skip_threshold,
+                )
             self.skipped_phases.append(phase_id)
 
         return should_skip
@@ -497,13 +546,24 @@ class PerformanceGuard:
         # Langsame Phasen werden durch should_skip_phase() / deferred_phases gehandelt.
         current_limit = self.target_rt_factor
         if self.current_rt_factor > current_limit:
-            logger.warning(
-                "⚠️ RT-Limit überschritten: %.2f× RT (limit=%.1f×), "
-                "%d Phasen verbleiben — Pipeline läuft weiter (§2.38 KMV, 90-min-Limit gilt)",
-                self.current_rt_factor,
-                current_limit,
-                remaining_phases,
-            )
+            _now = time.perf_counter()
+            # Wiederkehrende RT-Limit-Meldungen drosseln: maximal 1x / 30 s.
+            if (_now - self._last_rt_limit_warning_s) >= 30.0:
+                logger.warning(
+                    "⚠️ RT-Limit überschritten: %.2f× RT (limit=%.1f×), "
+                    "%d Phasen verbleiben — Pipeline läuft weiter (§2.38 KMV, 90-min-Limit gilt)",
+                    self.current_rt_factor,
+                    current_limit,
+                    remaining_phases,
+                )
+                self._last_rt_limit_warning_s = _now
+            else:
+                logger.debug(
+                    "RT-Limit weiterhin überschritten: %.2f× (limit=%.1f×, remaining=%d)",
+                    self.current_rt_factor,
+                    current_limit,
+                    remaining_phases,
+                )
             # KEIN return True — Pipeline läuft bis 30-min-Limit weiter
 
         return False

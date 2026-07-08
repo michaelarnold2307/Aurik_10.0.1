@@ -49,8 +49,8 @@ class VocalPresenceDetector:
         vocal_mask = (freqs >= self._low_hz) & (freqs <= self._high_hz)
         presence_mask = (freqs >= self._presence_low_hz) & (freqs <= self._presence_high_hz)
 
-        vocal_energy = np.sum(spec[vocal_mask] ** 2)
-        presence_energy = np.sum(spec[presence_mask] ** 2)
+        vocal_energy: float = float(np.sum(spec[vocal_mask] ** 2))
+        presence_energy: float = float(np.sum(spec[presence_mask] ** 2))
 
         score = (vocal_energy + 0.5 * presence_energy) / total_energy
         return float(np.clip(score, 0.0, 1.0))
@@ -109,13 +109,13 @@ class SelectiveVocalEnhancer:
         """
         x = np.asarray(audio, dtype=np.float32)
         if len(x) == 0:
-            return x.copy()
+            return x.copy()  # type: ignore[no-any-return]
 
         presence = self._detector.detect(x, sr)
 
         if presence < 0.15:
             # No vocals detected — pass through
-            return x.copy()
+            return x.copy()  # type: ignore[no-any-return]
 
         # Gentle 5 kHz 'air' lift via FFT
         n = len(x)
@@ -129,4 +129,4 @@ class SelectiveVocalEnhancer:
         spec[boost_mask] *= gain
 
         out = np.fft.irfft(spec, n=n).astype(np.float32)
-        return np.clip(np.nan_to_num(out, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0)
+        return np.clip(np.nan_to_num(out, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0)  # type: ignore[no-any-return]

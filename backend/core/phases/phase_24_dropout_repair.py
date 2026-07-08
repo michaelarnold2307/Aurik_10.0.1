@@ -322,6 +322,73 @@ class DropoutRepairPhase(PhaseInterface):
 
         return float(np.clip(strength, 0.0, base_strength))
 
+    def _compute_dropout_local_strength(
+        self,
+        mono_ref: np.ndarray,
+        start: int,
+        end: int,
+        sr: int,
+        base_strength: float,
+        protected_zones: list,
+    ) -> float:
+        """V38 Per-Event-Strength-Oracle für Dropout-Repair (§V38).
+
+        Berechnet event-spezifische Reparaturstärke basierend auf:
+        - 250 ms Kontext-RMS-Proxy: leichte Dropouts → niedrigere Stärke
+        - VFA-Schutzzonen-Caps: Vibrato 0.20, Frisson 0.30, Flüster 0.25, Passaggio 0.35
+
+        Args:
+            mono_ref: Mono-Referenz-Audio (vor Reparatur)
+            start:    Dropout-Start in Samples
+            end:      Dropout-Ende in Samples
+            sr:       Sampling-Rate (48000 Hz)
+            base_strength: Globale Basisstärke aus PMGG/Locality
+            protected_zones: [(start_s, end_s, max_cap), ...] — VFA-Schutzzonen
+
+        Returns:
+            Lokale Stärke für diesen Dropout (geclampt auf [0.0, 1.0]).
+        """
+        if base_strength < 1e-6:
+            return 0.0
+
+        # 250 ms Kontext-RMS-Proxy — Severity des Dropouts bestimmt Stärke
+        ctx_samples = int(0.250 * sr)
+        l0 = max(0, start - ctx_samples)
+        r1 = min(len(mono_ref), end + ctx_samples)
+        left_ctx = mono_ref[l0:start]
+        right_ctx = mono_ref[end:r1]
+        seg = mono_ref[start:end]
+
+        seg_rms = float(np.sqrt(np.mean(seg * seg) + 1e-12)) if len(seg) > 0 else 0.0
+        ref_parts = [p for p in [left_ctx, right_ctx] if len(p) > 0]
+        if ref_parts:
+            ref = np.concatenate(ref_parts)
+            ref_rms = float(np.sqrt(np.mean(ref * ref) + 1e-12))
+        else:
+            ref_rms = seg_rms + 1e-9
+
+        # Dropout-Schwere: 0 = kaum hörbar, 1 = vollständiger Ausfall
+        dropout_severity = float(np.clip(1.0 - seg_rms / max(ref_rms, 1e-9), 0.0, 1.0))
+        # Schwache Dropouts weniger aggressiv reparieren (Minimal-Intervention §0)
+        mag_factor = float(np.clip(0.50 + 0.50 * dropout_severity, 0.50, 1.0))
+        local_strength = base_strength * mag_factor
+
+        # VFA-Schutzzonen-Cap (§0p Vocal-Supremacy)
+        if protected_zones:
+            start_s = start / sr
+            end_s = end / sr
+            for _zone in protected_zones:
+                try:
+                    _zs, _ze, _cap = float(_zone[0]), float(_zone[1]), float(_zone[2])
+                    # Überlappung mit Schutzzone?
+                    if start_s < _ze and end_s > _zs:
+                        local_strength = min(local_strength, _cap)
+                except Exception:
+                    logger.debug("_compute_dropout_local_strength: silent except suppressed", exc_info=True)
+                    pass
+
+        return float(np.clip(local_strength, 0.0, 1.0))
+
     def _has_sufficient_ml_headroom(
         self,
         audio: np.ndarray,
@@ -857,9 +924,25 @@ class DropoutRepairPhase(PhaseInterface):
         phase_locality_factor = float(np.clip(phase_locality_factor, 0.35, 1.0))
         _pmgg_strength = float(kwargs.get("strength", 1.0))
         _effective_strength = float(np.clip(_pmgg_strength * phase_locality_factor, 0.0, 1.0))
-        params["repair_strength"] = float(  # type: ignore[operator]
-            np.clip(params["repair_strength"] * _effective_strength, 0.0, 1.0)
-        )
+
+        # §V41 ForwardMaskingGuard — Enhancement-Stärke in post-transienten Masking-Zonen erhöhen
+        _panns_s_24 = float(kwargs.get("panns_singing", 0.0))
+        if _panns_s_24 >= 0.25 and _effective_strength > 0.0:
+            try:
+                from backend.core.dsp.temporal_masking import (
+                    get_forward_masking_guard as _fmg_fn_24,
+                )
+
+                _fmz_24 = kwargs.get("forward_masking_zones") or _fmg_fn_24().compute_zones(audio, sample_rate)
+                if _fmz_24:
+                    _n_s_24 = audio.shape[-1] if audio.ndim > 1 else len(audio)
+                    _zone_s_24 = sum(z.end_sample - z.start_sample for z in _fmz_24)
+                    _zone_frac_24 = float(np.clip(_zone_s_24 / max(1, _n_s_24), 0.0, 1.0))
+                    _effective_strength = float(np.clip(_effective_strength + _zone_frac_24 * 0.15, 0.0, 1.0))
+            except Exception as _fmg_exc_24:
+                logger.debug("Phase24 §V41 ForwardMaskingGuard non-blocking: %s", _fmg_exc_24)
+
+        params["repair_strength"] = float(np.clip(float(params["repair_strength"]) * _effective_strength, 0.0, 1.0))  # type: ignore[arg-type]
 
         if _effective_strength <= 0.0:
             passthrough = np.nan_to_num(audio.copy(), nan=0.0, posinf=0.0, neginf=0.0)
@@ -938,6 +1021,40 @@ class DropoutRepairPhase(PhaseInterface):
             except Exception as _sil_exc_p24:
                 logger.debug("§silence-guarantee phase_24: non-blocking error: %s", _sil_exc_p24)
 
+        # §V38 VFA-Schutzzonen für per-Event-Strength-Oracle sammeln (§0p Vocal-Supremacy)
+        _p24_protected_zones: list[tuple[float, float, float]] = []
+        for _z in kwargs.get("vibrato_zones") or []:
+            try:
+                _p24_protected_zones.append((float(_z[0]), float(_z[1]), 0.20))  # §0p Vibrato-Schutz
+            except Exception:
+                logger.debug("process: silent except suppressed", exc_info=True)
+                pass
+        for _z in kwargs.get("frisson_zones") or []:
+            try:
+                _fz_s = float(getattr(_z, "start_s", None) or _z[0])
+                _fz_e = float(getattr(_z, "end_s", None) or _z[1])
+                _p24_protected_zones.append((_fz_s, _fz_e, 0.30))  # Frisson sakrosankt
+            except Exception:
+                logger.debug("process: silent except suppressed", exc_info=True)
+                pass
+        for _z in kwargs.get("whisper_zones") or []:
+            try:
+                _p24_protected_zones.append((float(_z[0]), float(_z[1]), 0.25))  # Flüsterpassagen
+            except Exception:
+                logger.debug("process: silent except suppressed", exc_info=True)
+                pass
+        for _z in kwargs.get("passaggio_zones") or []:
+            try:
+                _p24_protected_zones.append((float(_z[0]), float(_z[1]), 0.35))  # Passaggio-Übergänge
+            except Exception:
+                logger.debug("process: silent except suppressed", exc_info=True)
+                pass
+        if _p24_protected_zones:
+            logger.debug(
+                "§V38 phase_24: %d VFA-Schutzzone(n) aktiv (Vibrato/Frisson/Flüster/Passaggio)",
+                len(_p24_protected_zones),
+            )
+
         def _filter_pre_repaired(dropouts: list[tuple[int, int]]) -> tuple[list[tuple[int, int]], int]:
             """Filtert out dropouts that overlap with already-repaired gaps."""
             if not _repaired_gaps:
@@ -984,10 +1101,10 @@ class DropoutRepairPhase(PhaseInterface):
 
             # Repair both channels at the same (linked) boundaries
             repaired_left, ml_count_left = self._repair_dropouts_professional(
-                audio[:, 0], linked_dropouts, params, use_ml
+                audio[:, 0], linked_dropouts, params, use_ml, _p24_protected_zones or None
             )
             repaired_right, ml_count_right = self._repair_dropouts_professional(
-                audio[:, 1], linked_dropouts, params, use_ml
+                audio[:, 1], linked_dropouts, params, use_ml, _p24_protected_zones or None
             )
 
             repaired_audio = np.column_stack([repaired_left, repaired_right])
@@ -1008,7 +1125,9 @@ class DropoutRepairPhase(PhaseInterface):
                     len(all_dropouts),
                 )
             _pre_repaired_skipped += _sk
-            repaired_audio, ml_repaired_count = self._repair_dropouts_professional(audio, all_dropouts, params, use_ml)
+            repaired_audio, ml_repaired_count = self._repair_dropouts_professional(
+                audio, all_dropouts, params, use_ml, _p24_protected_zones or None
+            )
             _p24_lag_stats = {
                 "lag_input_samples": 0,
                 "lag_output_samples": 0,
@@ -1021,9 +1140,9 @@ class DropoutRepairPhase(PhaseInterface):
 
         if num_dropouts > 0:
             dropout_durations_ms = [(end - start) * 1000 / self.sample_rate for start, end in all_dropouts]
-            avg_dropout_ms = np.mean(dropout_durations_ms)
-            max_dropout_ms = np.max(dropout_durations_ms)
-            total_dropout_ms = np.sum(dropout_durations_ms)
+            avg_dropout_ms: float = float(np.mean(dropout_durations_ms))
+            max_dropout_ms: float = float(np.max(dropout_durations_ms))
+            total_dropout_ms: float = float(np.sum(dropout_durations_ms))
         else:
             avg_dropout_ms = 0.0  # type: ignore[assignment]
             max_dropout_ms = 0.0
@@ -1033,7 +1152,9 @@ class DropoutRepairPhase(PhaseInterface):
 
         # Generate warnings
         warnings = []
-        if max_dropout_ms > params["max_dropout_ms"]:
+        max_dropout_param = params["max_dropout_ms"]
+        max_allowed_dropout_ms = float(max_dropout_param) if isinstance(max_dropout_param, (int, float)) else 100.0
+        if max_dropout_ms > max_allowed_dropout_ms:
             warnings.append(f"Very long dropout detected: {max_dropout_ms:.1f}ms (quality-critical)")
         if num_dropouts == 0:
             warnings.append("No dropouts detected (clean signal)")
@@ -1129,6 +1250,35 @@ class DropoutRepairPhase(PhaseInterface):
             except Exception as _ssip_audit_p24_exc:
                 logger.debug("SSIP post_inpainting_silence_audit phase_24 (non-blocking): %s", _ssip_audit_p24_exc)
 
+        # §2.46e Hallucination-Guard: Dropout-Reparatur darf keine nicht-originären
+        # Spektralanteile einführen (VERBOTEN-§2.46e).
+        try:
+            from backend.core.dsp.hallucination_guard import (  # pylint: disable=import-outside-toplevel
+                check_hallucination as _hg_24,
+            )
+
+            _mode_24 = str(kwargs.get("mode", "restoration"))
+            _hg_result_24 = _hg_24(audio, repaired_audio, sr=sample_rate, mode=_mode_24)
+            if getattr(_hg_result_24, "requires_rollback", False):
+                repaired_audio = audio.copy()
+                logger.warning("Phase24 §2.46e Hallucination-Guard Rollback (spectral_novelty > 0.15)")
+        except Exception as _hg_exc_24:
+            logger.debug("Phase24 §2.46e Hallucination-Guard (non-blocking): %s", _hg_exc_24)
+
+        # §V24 Spektralfarbe-Prüfung (§2.74, non-blocking): Dropout-Reparatur darf Spektralfarbe nicht verändern
+        try:
+            from backend.core.dsp.spectral_color_guard import (  # pylint: disable=import-outside-toplevel
+                check_spectral_color_preservation as _scg24,
+            )
+
+            _sc24 = _scg24(audio, repaired_audio, sample_rate)
+            if not _sc24.ok:
+                _sc24_wet = 0.70
+                repaired_audio = (_sc24_wet * repaired_audio + (1.0 - _sc24_wet) * audio).astype(np.float32)
+                logger.warning("§V24 phase_24 spectral_color non-ok → strength −30%%")
+        except Exception as _sc24_exc:
+            logger.debug("§V24 phase_24 spectral_color (non-blocking): %s", _sc24_exc)
+
         return create_phase_result(
             audio=repaired_audio,
             modifications={
@@ -1202,17 +1352,17 @@ class DropoutRepairPhase(PhaseInterface):
         x = np.asarray(channel, dtype=np.float32)
         n = len(x)
         if n == 0 or shift_samples == 0:
-            return x.copy()
+            return x.copy()  # type: ignore[no-any-return]
         out = np.empty_like(x)
         if shift_samples > 0:
             shift = min(shift_samples, n - 1)
             out[:shift] = x[0]
             out[shift:] = x[:-shift]
-            return out
+            return out  # type: ignore[no-any-return]
         shift = min(-shift_samples, n - 1)
         out[:-shift] = x[shift:]
         out[-shift:] = x[-1]
-        return out
+        return out  # type: ignore[no-any-return]
 
     def _enforce_stereo_lag_safety(
         self,
@@ -1553,6 +1703,7 @@ class DropoutRepairPhase(PhaseInterface):
         dropouts: list[tuple[int, int]],
         params: dict[str, Any],
         use_ml: bool = False,
+        protected_zones: list | None = None,
     ) -> tuple[np.ndarray, int]:
         """
         Professional dropout repair with context-aware inpainting and ML-Hybrid support.
@@ -1661,8 +1812,13 @@ class DropoutRepairPhase(PhaseInterface):
             else:  # mixed
                 repaired_segment = self._repair_hybrid(before, after, end - start)
 
-            # Apply repair
-            strength = self._content_adaptive_repair_strength(params["repair_strength"], content_type, duration_ms)
+            # Apply repair — §V38 Per-Event-Strength-Oracle mit VFA-Schutzzonen-Caps
+            _base_strength = self._content_adaptive_repair_strength(
+                params["repair_strength"], content_type, duration_ms
+            )
+            strength = self._compute_dropout_local_strength(
+                audio, start, end, self.sample_rate, _base_strength, protected_zones or []
+            )
             repaired[start:end] = strength * repaired_segment + (1 - strength) * audio[start:end]
 
             # Crossfade
@@ -1730,6 +1886,7 @@ class DropoutRepairPhase(PhaseInterface):
             _plm24_asr = _get_plm24()
             _plm24_asr.set_active("AudioSR", True)
         except Exception:
+            logger.debug("_repair_with_audiosr: silent except suppressed", exc_info=True)
             pass
 
         for drop_idx, (start, end) in enumerate(dropouts):
@@ -1816,6 +1973,7 @@ class DropoutRepairPhase(PhaseInterface):
                 try:
                     _plm24_asr.set_active("AudioSR", False)
                 except Exception:
+                    logger.debug("_repair_with_audiosr: silent except suppressed", exc_info=True)
                     pass
             return True
 
@@ -1824,6 +1982,7 @@ class DropoutRepairPhase(PhaseInterface):
             try:
                 _plm24_asr.set_active("AudioSR", False)
             except Exception:
+                logger.debug("_repair_with_audiosr: silent except suppressed", exc_info=True)
                 pass
         return False
 
@@ -1869,7 +2028,7 @@ class DropoutRepairPhase(PhaseInterface):
             idx = np.argmin(np.abs(freqs - harmonic_freq))
             harmonic_energy += spectrum[idx] ** 2
 
-        total_energy = np.sum(spectrum**2)
+        total_energy: float = float(np.sum(spectrum**2))
         return harmonic_energy / (total_energy + 1e-10)  # type: ignore[no-any-return]
 
     def _mrsa_tonal_fill_refine(
@@ -1928,6 +2087,7 @@ class DropoutRepairPhase(PhaseInterface):
                 _, _, Z_bef = _stft_fn(ctx_bef, sr, nperseg=eff_win, noverlap=eff_win - eff_hop, boundary="even")
                 _, _, Z_aft = _stft_fn(ctx_aft, sr, nperseg=eff_win, noverlap=eff_win - eff_hop, boundary="even")
             except Exception:
+                logger.debug("_mrsa_tonal_fill_refine: silent except suppressed", exc_info=True)
                 continue
 
             n_freq = Z_bef.shape[0]
@@ -1953,6 +2113,7 @@ class DropoutRepairPhase(PhaseInterface):
 
                 _, _, Zxx_fill = _stft_fn(audio_fill, sr, nperseg=eff_win, noverlap=eff_win - eff_hop, boundary="even")
             except Exception:
+                logger.debug("_mrsa_tonal_fill_refine: silent except suppressed", exc_info=True)
                 continue
 
             n_fill_frames = Zxx_fill.shape[1]
@@ -1979,6 +2140,7 @@ class DropoutRepairPhase(PhaseInterface):
                     np.asarray(Zxx_refined, dtype=np.complex64), sr, nperseg=eff_win, noverlap=eff_win - eff_hop
                 )
             except Exception:
+                logger.debug("_mrsa_tonal_fill_refine: silent except suppressed", exc_info=True)
                 continue
 
             if len(seg) < gap_len:
@@ -1995,7 +2157,7 @@ class DropoutRepairPhase(PhaseInterface):
             mask_valid = weight_sum > 1e-9
             result = np.where(mask_valid, blended / np.where(mask_valid, weight_sum, 1.0), audio_fill)
 
-        return np.clip(np.nan_to_num(result), -1.0, 1.0)
+        return np.clip(np.nan_to_num(result), -1.0, 1.0)  # type: ignore[no-any-return]
 
     def _repair_tonal(self, before: np.ndarray, after: np.ndarray, gap_length: int) -> np.ndarray:
         """Sinusoidales Inpainting für tonalen Inhalt mit PGHI-Phasenkohärenz.
@@ -2019,7 +2181,7 @@ class DropoutRepairPhase(PhaseInterface):
             Rekonstruiertes Segment (1D, Float64)
         """
         if gap_length <= 0:
-            return np.zeros(0)
+            return np.zeros(0)  # type: ignore[no-any-return]
 
         nperseg, noverlap, hop = self._safe_stft_params(
             (len(before), len(after)),
@@ -2111,7 +2273,7 @@ class DropoutRepairPhase(PhaseInterface):
             Rekonstruiertes Segment (1D, Float64)
         """
         if gap_length <= 0:
-            return np.zeros(0)
+            return np.zeros(0)  # type: ignore[no-any-return]
 
         nperseg, noverlap, hop = self._safe_stft_params(
             (len(before), len(after), len(before) + len(after)),
@@ -2195,7 +2357,7 @@ class DropoutRepairPhase(PhaseInterface):
             _fb_seed = int(abs(float(np.sum(np.abs(context[: min(len(context), 64)])))) * 1e5 + gap_length) % (2**31)
             _rng_fb = np.random.default_rng(seed=_fb_seed)
             synthesized = noise_std * _rng_fb.standard_normal(gap_length)
-            return np.clip(synthesized, -1.0, 1.0)
+            return np.clip(synthesized, -1.0, 1.0)  # type: ignore[no-any-return]
 
     def _repair_hybrid(self, before: np.ndarray, after: np.ndarray, gap_length: int) -> np.ndarray:
         """Hybrid repair (tonal + atonal)."""
@@ -2204,7 +2366,7 @@ class DropoutRepairPhase(PhaseInterface):
         atonal = self._repair_atonal(before, after, gap_length)
 
         # 50/50 blend
-        return 0.5 * tonal + 0.5 * atonal
+        return 0.5 * tonal + 0.5 * atonal  # type: ignore[no-any-return]
 
     def supports_material(self, material_type: str) -> bool:  # pylint: disable=unused-argument
         """All materials supported."""

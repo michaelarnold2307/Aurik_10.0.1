@@ -385,7 +385,7 @@ class OutputFormatOptimization(PhaseInterface):
         # axis=-1 = time axis for channels-first (2,N) and samples-first (N,) alike.
         # axis=0 was resampling the 2-element channel dimension, producing polyphase
         # garbage that silenced the second half of the audio. §ph41-axis fix.
-        return signal.resample_poly(audio, up, down, axis=-1)
+        return signal.resample_poly(audio, up, down, axis=-1)  # type: ignore[no-any-return]
 
     def _normalize_loudness(
         self, audio: np.ndarray, sample_rate: int, lufs_target: float
@@ -405,12 +405,11 @@ class OutputFormatOptimization(PhaseInterface):
         # Apply gain — §2.45a-II: musical-frame-only when amplifying to avoid
         # boosting analog surface noise in silent/fade-out sections.
         if gain_linear > 1.0005:
-            # §2.45a-II v9.12.2: reference_for_gate=audio → signal-relative gate (P15+9 dB)
+            # §2.45a-II v10: Soft-knee defaults (crossfade_ms=200, knee_width_db=6).
             audio_normalized = apply_musical_gain_envelope(
                 audio,
                 gain_linear,
                 gate_dbfs=-36.0,
-                crossfade_ms=10.0,
                 sr=sample_rate,
                 reference_for_gate=audio,
             )
@@ -520,14 +519,14 @@ class OutputFormatOptimization(PhaseInterface):
                 error_buf = np.roll(error_buf, 1)
                 error_buf[0] = error
                 out[i] = quantised
-            return out
+            return out  # type: ignore[no-any-return]
 
         if audio.ndim == 2:
             shaped_audio = np.empty_like(audio, dtype=np.float64)
             for c in range(audio.shape[1]):
                 shaped_audio[:, c] = _shape_channel(audio[:, c])
-            return shaped_audio.astype(np.float32)
-        return _shape_channel(audio).astype(np.float32)
+            return shaped_audio.astype(np.float32)  # type: ignore[no-any-return]
+        return _shape_channel(audio).astype(np.float32)  # type: ignore[no-any-return]
 
     def _apply_tpdf_dither(self, audio: np.ndarray, bit_depth: int = 16) -> np.ndarray:
         """
@@ -551,7 +550,7 @@ class OutputFormatOptimization(PhaseInterface):
         dither2 = _rng41.uniform(-dither_amplitude, dither_amplitude, audio.shape)
         dither = dither1 + dither2
 
-        return audio + dither
+        return audio + dither  # type: ignore[no-any-return]
 
     def _apply_noise_shaped_dither(self, audio: np.ndarray) -> np.ndarray:
         """
@@ -581,7 +580,7 @@ class OutputFormatOptimization(PhaseInterface):
             dither_shaped[1:] = dither[1:] - 0.5 * dither[:-1]
             dither_shaped[0] = dither[0]
 
-        return audio + dither_shaped
+        return audio + dither_shaped  # type: ignore[no-any-return]
 
     def _quantize(self, audio: np.ndarray, bit_depth: int) -> np.ndarray:
         """
@@ -606,7 +605,7 @@ class OutputFormatOptimization(PhaseInterface):
         # Convert back to float
         audio_quantized = audio_int / max_val
 
-        return audio_quantized
+        return audio_quantized  # type: ignore[no-any-return]
 
     def _estimate_snr(self, audio: np.ndarray) -> float:
         """
@@ -620,7 +619,7 @@ class OutputFormatOptimization(PhaseInterface):
         block_rms = np.array([np.sqrt(np.mean(b**2)) for b in blocks])
         noise_floor = float(np.percentile(block_rms, 10)) + 1e-10
         snr_db = 20.0 * np.log10(rms_signal / noise_floor)
-        return min(snr_db, 120.0)
+        return min(snr_db, 120.0)  # type: ignore[no-any-return]
 
 
 # Test
@@ -663,7 +662,7 @@ if __name__ == "__main__":
         logger.debug("")
 
         phase = OutputFormatOptimization()
-        demo_result = phase.process(test_signal_stereo, demo_sr, demo_material)
+        demo_result = phase.process(test_signal_stereo, demo_sr, demo_material)  # type: ignore[arg-type]
 
         logger.debug("✅ Professional Output Format Optimization:")
         logger.debug("   Input: %s Hz", demo_result.metrics["input_sample_rate"])

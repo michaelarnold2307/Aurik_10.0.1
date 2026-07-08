@@ -71,7 +71,7 @@ def _mfcc_approx(audio: np.ndarray, sample_rate: int, n_mfcc: int = _N_MFCC) -> 
         for k in range(n_mfcc):
             mfcc_sum[k] += np.sum(log_mag * np.cos(np.pi * k * np.arange(len(log_mag)) / len(log_mag)))
 
-    return mfcc_sum / max(n_frames, 1)
+    return mfcc_sum / max(n_frames, 1)  # type: ignore[no-any-return]
 
 
 def _spectral_contrast(audio: np.ndarray, n_bands: int = _N_CONTRAST) -> np.ndarray:
@@ -83,7 +83,7 @@ def _spectral_contrast(audio: np.ndarray, n_bands: int = _N_CONTRAST) -> np.ndar
         band_mag = mag[b * band_size : (b + 1) * band_size]
         if len(band_mag) > 0:
             contrast[b] = np.log(np.percentile(band_mag, 90) / (np.percentile(band_mag, 10) + 1e-10) + 1)
-    return contrast
+    return contrast  # type: ignore[no-any-return]
 
 
 def compute_dsp_embedding(audio: np.ndarray, sample_rate: int) -> np.ndarray:
@@ -93,7 +93,7 @@ def compute_dsp_embedding(audio: np.ndarray, sample_rate: int) -> np.ndarray:
     """
     mono = _safe_mono(audio)
     if len(mono) < 512:
-        return np.zeros(_DSP_EMBED_DIM)
+        return np.zeros(_DSP_EMBED_DIM)  # type: ignore[no-any-return]
 
     features = []
 
@@ -148,7 +148,7 @@ def compute_dsp_embedding(audio: np.ndarray, sample_rate: int) -> np.ndarray:
 
     # L2-Normierung
     norm = np.linalg.norm(feat_arr) + 1e-10
-    return feat_arr / norm
+    return feat_arr / norm  # type: ignore[no-any-return]
 
 
 def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
@@ -166,7 +166,7 @@ def _spectral_envelope(audio: np.ndarray, n_bands: int = 32) -> np.ndarray:
     mag = np.abs(np.fft.rfft(audio[:8192] if len(audio) >= 8192 else audio))
     band_size = max(1, len(mag) // n_bands)
     envelope = np.array([np.mean(mag[b * band_size : (b + 1) * band_size] ** 2) for b in range(n_bands)])
-    return envelope + 1e-10
+    return envelope + 1e-10  # type: ignore[no-any-return]
 
 
 def spectral_transfer(
@@ -278,7 +278,7 @@ class CLAPReferenceMatcher:
 
             clap = importlib.import_module("clap_plugin")
             if hasattr(clap, "embed"):
-                return clap.embed(audio, sample_rate)
+                return clap.embed(audio, sample_rate)  # type: ignore[no-any-return]
         except Exception as _exc:
             logger.debug("Operation failed (non-critical): %s", _exc)
         return None

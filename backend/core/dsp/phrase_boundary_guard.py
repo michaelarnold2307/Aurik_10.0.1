@@ -138,7 +138,7 @@ def apply_phrase_boundary_taper(
     try:
         n = audio.shape[-1] if audio.ndim > 1 else len(audio)
         if not boundaries:
-            return np.ones(n, dtype=np.float32)
+            return np.ones(n, dtype=np.float32)  # type: ignore[no-any-return]
 
         taper_n = int(taper_ms * sr / 1000.0)
         taper_n = max(taper_n, 1)
@@ -162,12 +162,12 @@ def apply_phrase_boundary_taper(
             l = post_end - post_start
             env[post_start:post_end] = np.minimum(env[post_start:post_end], fi_slice[:l])
 
-        return np.nan_to_num(env, nan=1.0, posinf=1.0, neginf=0.0)
+        return np.nan_to_num(env, nan=1.0, posinf=1.0, neginf=0.0)  # type: ignore[no-any-return]
 
     except Exception as exc:
         logger.debug("apply_phrase_boundary_taper non-blocking: %s", exc)
         n = audio.shape[-1] if audio.ndim > 1 else len(audio)
-        return np.ones(n, dtype=np.float32)
+        return np.ones(n, dtype=np.float32)  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------
@@ -177,9 +177,9 @@ def apply_phrase_boundary_taper(
 
 def _to_mono(audio: np.ndarray) -> np.ndarray:
     if audio.ndim == 1:
-        return audio.astype(np.float32)
+        return audio.astype(np.float32)  # type: ignore[no-any-return]
     if audio.ndim == 2:
         if audio.shape[0] == 2 and audio.shape[1] > 2:
             return audio.mean(axis=0).astype(np.float32)  # type: ignore[no-any-return]
         return audio.mean(axis=-1).astype(np.float32)  # type: ignore[no-any-return]
-    return audio.flatten().astype(np.float32)
+    return audio.flatten().astype(np.float32)  # type: ignore[no-any-return]

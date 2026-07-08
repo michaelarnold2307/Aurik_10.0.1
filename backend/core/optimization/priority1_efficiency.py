@@ -35,11 +35,11 @@ class OptimizedFFT:
 
     def fft(self, frame: np.ndarray) -> np.ndarray:
         """Berechnet real-valued FFT of *frame*."""
-        return np.fft.rfft(frame, n=self.n_fft)
+        return np.fft.rfft(frame, n=self.n_fft)  # type: ignore[no-any-return]
 
     def ifft(self, spectrum: np.ndarray) -> np.ndarray:
         """Berechnet inverse FFT back to time domain."""
-        return np.fft.irfft(spectrum, n=self.n_fft)
+        return np.fft.irfft(spectrum, n=self.n_fft)  # type: ignore[no-any-return]
 
 
 class AlgorithmicEfficiencyOptimizer:
@@ -79,7 +79,7 @@ class AlgorithmicEfficiencyOptimizer:
         else:
             result = self._process_single(audio_f32)
 
-        return np.nan_to_num(np.clip(result, -1.0, 1.0), nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32)
+        return np.nan_to_num(np.clip(result, -1.0, 1.0), nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32)  # type: ignore[no-any-return]
 
     def _process_single(self, audio: np.ndarray) -> np.ndarray:
         hop = self._fft.n_fft // 2
@@ -114,7 +114,7 @@ class AlgorithmicEfficiencyOptimizer:
         with ThreadPoolExecutor(max_workers=self.n_cores) as ex:
             processed = list(ex.map(_proc, chunks))
 
-        return np.concatenate(processed)
+        return np.concatenate(processed)  # type: ignore[no-any-return]
 
     # ------------------------------------------------------------------
     # Benchmarking

@@ -267,7 +267,7 @@ class EqualLoudnessContour:
         """
         ref_spl = self.get_spl_at_frequency(reference_freq)
         relative = self.spl_levels - ref_spl
-        return relative
+        return relative  # type: ignore[no-any-return]
 
 
 @dataclass
@@ -415,7 +415,7 @@ class FletcherMunsonProcessor:
             kernel = np.ones(window) / window
             correction_db = np.convolve(correction_db, kernel, mode="same")
 
-        return correction_db
+        return correction_db  # type: ignore[no-any-return]
 
     def apply_compensation(
         self, audio: np.ndarray, sr: int, target_phon: int | None = None, reference_phon: int | None = None

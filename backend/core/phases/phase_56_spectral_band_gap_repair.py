@@ -74,7 +74,7 @@ try:
 
     _PGHI_AVAILABLE_P56 = True
 except ImportError:
-    _PGHIRec_P56 = None
+    _PGHIRec_P56 = None  # type: ignore[misc,assignment]
     _PGHI_AVAILABLE_P56 = False
 
 
@@ -140,7 +140,7 @@ _PGHI_ITERATIONS: int = 32
 def _to_mono(audio: np.ndarray) -> np.ndarray:
     """Stereo → Mono Mischung (float32). Handles both (N,2) and (2,N) layouts (§2.51)."""
     mono = safe_to_mono(audio) if audio.ndim == 2 else audio
-    return mono.astype(np.float32)
+    return mono.astype(np.float32)  # type: ignore[no-any-return]
 
 
 def _estimate_f0(mono: np.ndarray, sr: int) -> float | None:
@@ -158,6 +158,7 @@ def _estimate_f0(mono: np.ndarray, sr: int) -> float | None:
         _plm56_fcpe = _get_plm56f()
         _plm56_fcpe.set_active("FCPE", True)
     except Exception:
+        logger.debug("_estimate_f0: silent except suppressed", exc_info=True)
         pass
     try:
         from plugins.fcpe_plugin import get_fcpe_plugin
@@ -174,6 +175,7 @@ def _estimate_f0(mono: np.ndarray, sr: int) -> float | None:
             try:
                 _plm56_fcpe.set_active("FCPE", False)
             except Exception:
+                logger.debug("_estimate_f0: silent except suppressed", exc_info=True)
                 pass
 
     # Tier-2: RMVPE
@@ -184,11 +186,12 @@ def _estimate_f0(mono: np.ndarray, sr: int) -> float | None:
         _plm56_rmvpe = _get_plm56r()
         _plm56_rmvpe.set_active("RMVPE", True)
     except Exception:
+        logger.debug("_estimate_f0: silent except suppressed", exc_info=True)
         pass
     try:
         from plugins.rmvpe_plugin import get_rmvpe_plugin
 
-        result = get_rmvpe_plugin().analyze(mono, sr)
+        result = get_rmvpe_plugin().analyze(mono, sr)  # type: ignore[assignment]
         voiced_mask = result.voiced_prob >= 0.55
         voiced = result.f0_hz[voiced_mask]
         if len(voiced) > 5:
@@ -200,12 +203,13 @@ def _estimate_f0(mono: np.ndarray, sr: int) -> float | None:
             try:
                 _plm56_rmvpe.set_active("RMVPE", False)
             except Exception:
+                logger.debug("_estimate_f0: silent except suppressed", exc_info=True)
                 pass
 
     # Tier-3: PESTO
     try:
         _pesto_mod = importlib.import_module("plugins.pesto_plugin")
-        get_pesto_plugin = getattr(_pesto_mod, "get_pesto_plugin")
+        get_pesto_plugin = _pesto_mod.get_pesto_plugin
 
         result = get_pesto_plugin().analyze(mono, sr)
         voiced_mask = result.voiced_prob >= 0.55
@@ -221,7 +225,7 @@ def _estimate_f0(mono: np.ndarray, sr: int) -> float | None:
             f0, voiced_flag, _ = librosa.pyin(
                 mono,
                 fmin=50.0,  # ≥ 2 Perioden bei frame_length=2048 @48 kHz (min=46.875 Hz)
-                fmax=librosa.note_to_hz("C8"),
+                fmax=float(librosa.note_to_hz("C8")),
                 sr=sr,
             )
             voiced_f0 = f0[voiced_flag & np.isfinite(f0) & (f0 > 20.0)]
@@ -430,7 +434,7 @@ def _pghi_phase_reconstruction(mag: np.ndarray, n_fft: int, hop: int) -> np.ndar
         # Ensure shape matches input
         if _phase_out.shape == mag.shape:
             logger.debug("Phase 56: PGHI via PghiReconstructor (dsp/pghi.py) — n_fft=%d hop=%d", n_fft, hop)
-            return _phase_out
+            return _phase_out  # type: ignore[no-any-return]
         logger.debug("Phase 56: PGHI shape mismatch (%s vs %s), IF-Fallback", _phase_out.shape, mag.shape)
     except Exception as _pghi_import_exc:
         logger.debug("PghiReconstructor nicht verfügbar, IF-Fallback: %s", _pghi_import_exc)
@@ -449,7 +453,7 @@ def _pghi_phase_reconstruction(mag: np.ndarray, n_fft: int, hop: int) -> np.ndar
         d_mag_dt = mag[:, t] - mag[:, t - 1]
         phase[:, t] = phase[:, t - 1] + freq_per_bin * hop * np.arange(n_bins) + 0.01 * d_mag_dt
 
-    return phase.astype(np.float32)
+    return phase.astype(np.float32)  # type: ignore[no-any-return]
 
 
 def _nmf_beta_refine(
@@ -631,10 +635,52 @@ class SpectralBandGapRepairPhase(PhaseInterface):
         }
 
     @staticmethod
+    def _collect_protected_zones(kwargs: dict[str, Any]) -> list[tuple[float, float, float]]:
+        """Sammelt Vokal-/Performance-Zonen fuer lokale Reparatur-Caps."""
+        protected_zones: list[tuple[float, float, float]] = []
+        zone_sources = (
+            ("vibrato_zones", 0.20),
+            ("frisson_zones", 0.30),
+            ("whisper_zones", 0.25),
+            ("passaggio_zones", 0.35),
+        )
+        for key, cap in zone_sources:
+            for zone in kwargs.get(key) or []:
+                try:
+                    start_s = float(getattr(zone, "start_s", None) or zone[0])
+                    end_s = float(getattr(zone, "end_s", None) or zone[1])
+                    if end_s > start_s:
+                        protected_zones.append((start_s, end_s, cap))
+                except Exception:
+                    logger.debug("_collect_protected_zones: silent except suppressed", exc_info=True)
+                    continue
+        return protected_zones
+
+    @staticmethod
+    def _local_event_strength(key: str, loc: tuple[float, float], event_metadata: dict[str, Any] | None) -> float:
+        """Defekttyp- und Event-adaptive Einblendstaerke fuer Bandluecken."""
+        duration_s = max(0.0, float(loc[1]) - float(loc[0]))
+        duration_factor = float(np.clip(duration_s / 0.45, 0.25, 1.0))
+        key_factor = {
+            "tape_head_clog": 1.0,
+            "head_wear": 0.82,
+            "tape_head_level_dip": 0.58,
+        }.get(key, 0.7)
+        severity = 0.5
+        confidence = 0.8
+        meta_obj = (event_metadata or {}).get(key)
+        if isinstance(meta_obj, dict):
+            severity = float(np.clip(float(meta_obj.get("severity", severity)), 0.0, 1.0))
+            confidence = float(np.clip(float(meta_obj.get("confidence", confidence)), 0.0, 1.0))
+        return float(np.clip(key_factor * (0.42 + 0.38 * severity + 0.20 * confidence) * duration_factor, 0.18, 1.0))
+
+    @staticmethod
     def _build_locality_profile(
         n_samples: int,
         sample_rate: int,
         defect_locations: dict[str, list[tuple[float, float]]] | None,
+        event_metadata: dict[str, Any] | None = None,
+        protected_zones: list[tuple[float, float, float]] | None = None,
     ) -> tuple[np.ndarray, float]:
         """Erzeugt lokale Blendmaske für HEAD_WEAR/TAPE_HEAD_CLOG-Reparatur."""
         if n_samples <= 0 or sample_rate <= 0:
@@ -653,13 +699,15 @@ class SpectralBandGapRepairPhase(PhaseInterface):
                     s = int(max(0.0, float(loc[0])) * sample_rate)
                     e = int(max(0.0, float(loc[1])) * sample_rate)
                 except Exception:
+                    logger.debug("_build_locality_profile: silent except suppressed", exc_info=True)
                     continue
                 if e <= s:
                     continue
                 s = max(0, s - pad)
                 e = min(n_samples, e + pad)
                 if e > s:
-                    mask[s:e] = 1.0
+                    event_strength = SpectralBandGapRepairPhase._local_event_strength(key, loc, event_metadata)
+                    mask[s:e] = np.maximum(mask[s:e], event_strength)
 
         if float(np.mean(mask)) <= 1e-6:
             return np.ones(n_samples, dtype=np.float32), 0.0
@@ -667,6 +715,12 @@ class SpectralBandGapRepairPhase(PhaseInterface):
         smooth = max(16, int(0.02 * sample_rate))
         mask = np.convolve(mask, np.ones(smooth, dtype=np.float32) / float(smooth), mode="same")
         mask = np.clip(mask, 0.0, 1.0).astype(np.float32)
+        if protected_zones:
+            for start_s, end_s, cap in protected_zones:
+                s = int(max(0.0, float(start_s)) * sample_rate)
+                e = int(max(0.0, float(end_s)) * sample_rate)
+                if e > s:
+                    mask[s : min(n_samples, e)] = np.minimum(mask[s : min(n_samples, e)], float(cap))
         return mask, float(np.mean(mask))
 
     def process(
@@ -698,12 +752,30 @@ class SpectralBandGapRepairPhase(PhaseInterface):
 
             _get_plm_evict56().evict_for_phase("phase_56_spectral_band_gap_repair")
         except Exception:
+            logger.debug("process: silent except suppressed", exc_info=True)
             pass
 
         phase_locality_factor = float(kwargs.get("phase_locality_factor", 1.0))
         phase_locality_factor = float(np.clip(phase_locality_factor, 0.35, 1.0))
         effective_strength = float(kwargs.get("strength", 1.0)) * phase_locality_factor
         effective_strength = float(np.clip(effective_strength, 0.0, 1.0))
+
+        # §V41 ForwardMaskingGuard — Enhancement-Stärke in post-transienten Masking-Zonen erhöhen
+        _panns_s_56 = float(kwargs.get("panns_singing", 0.0))
+        if _panns_s_56 >= 0.25 and effective_strength > 0.0:
+            try:
+                from backend.core.dsp.temporal_masking import (
+                    get_forward_masking_guard as _fmg_fn_56,
+                )
+
+                _fmz_56 = kwargs.get("forward_masking_zones") or _fmg_fn_56().compute_zones(audio, sample_rate)
+                if _fmz_56:
+                    _n_s_56 = audio.shape[-1] if audio.ndim > 1 else len(audio)
+                    _zone_s_56 = sum(z.end_sample - z.start_sample for z in _fmz_56)
+                    _zone_frac_56 = float(np.clip(_zone_s_56 / max(1, _n_s_56), 0.0, 1.0))
+                    effective_strength = float(np.clip(effective_strength + _zone_frac_56 * 0.15, 0.0, 1.0))
+            except Exception as _fmg_exc_56:
+                logger.debug("Phase56 §V41 ForwardMaskingGuard non-blocking: %s", _fmg_exc_56)
 
         if effective_strength <= 1e-6:
             return create_phase_result(
@@ -834,6 +906,8 @@ class SpectralBandGapRepairPhase(PhaseInterface):
             n_samples=int(out.shape[0]),
             sample_rate=sample_rate,
             defect_locations=kwargs.get("defect_locations"),
+            event_metadata=kwargs.get("defect_event_metadata"),
+            protected_zones=self._collect_protected_zones(kwargs),
         )
         if _locality_profile.size > 0:
             if out.ndim == 2:
@@ -973,6 +1047,7 @@ class SpectralBandGapRepairPhase(PhaseInterface):
                 _, _, Zxx_in_z = signal.stft(audio_in, sr, nperseg=win_z, noverlap=win_z - hop_z)
                 _, _, Zxx_out_z = signal.stft(audio_out, sr, nperseg=win_z, noverlap=win_z - hop_z)
             except Exception:
+                logger.debug("_mrsa_gain_refinement: silent except suppressed", exc_info=True)
                 continue
 
             n_freq_z = Zxx_in_z.shape[0]
@@ -1021,7 +1096,7 @@ class SpectralBandGapRepairPhase(PhaseInterface):
             result = np.pad(result, (0, n - len(result)))
         result = result[:n]
 
-        return np.clip(np.nan_to_num(result), -1.0, 1.0)
+        return np.clip(np.nan_to_num(result), -1.0, 1.0)  # type: ignore[no-any-return]
 
     def _process_channel(
         self,
@@ -1147,4 +1222,4 @@ class SpectralBandGapRepairPhase(PhaseInterface):
         blend = float(np.clip(0.65 + 0.30 * _conf_norm, 0.65, 0.95))
         audio_out = blend * audio_out + (1.0 - blend) * mono.astype(np.float32)
 
-        return audio_out.astype(np.float32)
+        return audio_out.astype(np.float32)  # type: ignore[no-any-return]

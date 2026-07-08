@@ -31,6 +31,17 @@ _ALWAYS_APPLY: frozenset = frozenset(
     }
 )
 
+# §v10.1 Mode-aware Plugin-Routing
+_RESTORATION_BLOCKED_MODULES: frozenset[str] = frozenset({
+    "HarmonicExciterStudio", "StereoEnhancer", "SpeakerEnhancement",
+})
+_current_processing_mode: str = "restoration"
+
+
+def set_dsp_processing_mode(mode: str) -> None:
+    global _current_processing_mode
+    _current_processing_mode = str(mode or "restoration")
+
 
 def _compute_snr_db(audio: np.ndarray) -> float:
     """Schätzt SNR des Audio-Signals in dB via spektraler Flachheit (Wiener-Entropie)."""
@@ -111,7 +122,7 @@ def eq(audio: np.ndarray, sr: int, params: dict[str, Any]) -> np.ndarray:
         except Exception:
             continue  # Numerisch instabiles Band überspringen
 
-    return np.clip(audio_f64, -1.0, 1.0).astype(audio.dtype)
+    return np.clip(audio_f64, -1.0, 1.0).astype(audio.dtype)  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------
@@ -180,7 +191,7 @@ def compressor(audio: np.ndarray, sr: int, params: dict[str, Any]) -> np.ndarray
         gain[i] = cs
 
     result = audio_f64 * gain * makeup_lin
-    return np.clip(result, -1.0, 1.0).astype(audio.dtype)
+    return np.clip(result, -1.0, 1.0).astype(audio.dtype)  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------
@@ -223,7 +234,7 @@ def limiter(audio: np.ndarray, sr: int, params: dict[str, Any]) -> np.ndarray:
         gain[i] = current_gain
 
     result = audio_f64 * gain
-    return np.clip(result, -ceiling_lin, ceiling_lin).astype(audio.dtype)
+    return np.clip(result, -ceiling_lin, ceiling_lin).astype(audio.dtype)  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------
@@ -264,7 +275,7 @@ def enhancer(audio: np.ndarray, sr: int, params: dict[str, Any]) -> np.ndarray:
 
     # Mix: Original + Exziter-Anteil
     result = audio_f64 + mix * (hf_saturated - hf)
-    return np.clip(result, -1.0, 1.0).astype(audio.dtype)
+    return np.clip(result, -1.0, 1.0).astype(audio.dtype)  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------
@@ -373,107 +384,112 @@ def _apply_dsp_module(audio: np.ndarray, sr: int, module_name: str, params: dict
         if module_name == "DCBlocker":
             from dsp.dc_blocker import DCBlocker  # type: ignore[import]
 
-            return DCBlocker().process(audio, sr)
+            return DCBlocker().process(audio, sr)  # type: ignore[no-any-return]
         elif module_name in ("HighpassFilter", "LinearPhaseHighpass"):
             from dsp.highpass_filter import HighpassFilter  # type: ignore[import]
 
-            return HighpassFilter(cutoff_hz=params.get("cutoff_hz", 20.0)).process(audio, sr)
+            return HighpassFilter(cutoff_hz=params.get("cutoff_hz", 20.0)).process(audio, sr)  # type: ignore[no-any-return]
         elif module_name == "RumbleFilter":
             from dsp.rumble_filter import RumbleFilter  # type: ignore[import]
 
-            return RumbleFilter().process(audio, sr)
+            return RumbleFilter().process(audio, sr)  # type: ignore[no-any-return]
         elif module_name == "WowFlutterRemover":
             from dsp.wow_flutter_remover import WowFlutterRemover  # type: ignore[import]
 
-            return WowFlutterRemover().process(audio, sr)
+            return WowFlutterRemover().process(audio, sr)  # type: ignore[no-any-return]
         elif module_name == "AutomaticDeclicker":
             from dsp.automatic_declicker import AutomaticDeclicker  # type: ignore[import]
 
-            return AutomaticDeclicker(aggressive=params.get("aggressive", False)).process(audio, sr)
+            return AutomaticDeclicker(aggressive=params.get("aggressive", False)).process(audio, sr)  # type: ignore[no-any-return,call-arg]
         elif module_name == "ClickpopRemover":
             from dsp.clickpop_remover import ClickpopRemover  # type: ignore[import]
 
-            return ClickpopRemover().process(audio, sr)
+            return ClickpopRemover().process(audio, sr)  # type: ignore[no-any-return]
         elif module_name in ("AutomaticDeclipperVoice", "AutomaticDeclipperMusic", "AutomaticDeclipper"):
             from dsp.automatic_declipper import AutomaticDeclipper  # type: ignore[import]
 
-            return AutomaticDeclipper(mode="voice" if "Voice" in module_name else "music").process(audio, sr)
+            return AutomaticDeclipper(mode="voice" if "Voice" in module_name else "music").process(audio, sr)  # type: ignore[no-any-return,call-arg]
         elif module_name == "AutomaticDehum":
             from dsp.automatic_dehum import AutomaticDehum  # type: ignore[import]
 
-            return AutomaticDehum().process(audio, sr)
+            return AutomaticDehum().process(audio, sr)  # type: ignore[no-any-return]
         elif module_name in ("AdaptiveOMLSA", "AdaptiveMCRA"):
             from dsp.adaptive_noise_reduction import AdaptiveNoiseReduction  # type: ignore[import]
 
-            return AdaptiveNoiseReduction(algorithm="omlsa" if "OMLSA" in module_name else "mcra").process(audio, sr)
+            return AdaptiveNoiseReduction(algorithm="omlsa" if "OMLSA" in module_name else "mcra").process(audio, sr)  # type: ignore[no-any-return]
         elif module_name == "AdaptiveMusicalNoiseReduction":
             from dsp.musical_noise_reduction import MusicalNoiseReduction  # type: ignore[import]
 
-            return MusicalNoiseReduction().process(audio, sr)
+            return MusicalNoiseReduction().process(audio, sr)  # type: ignore[no-any-return]
         elif module_name == "TapeNoiseReduction":
             from dsp.tape_noise_reduction import TapeNoiseReduction  # type: ignore[import]
 
-            return TapeNoiseReduction().process(audio, sr)
+            return TapeNoiseReduction().process(audio, sr)  # type: ignore[no-any-return]
         elif module_name == "Dehiss":
             from dsp.dehiss import Dehiss  # type: ignore[import]
 
-            return Dehiss().process(audio, sr)
+            return Dehiss().process(audio, sr)  # type: ignore[no-any-return]
         elif module_name == "SpectralGate":
             from dsp.spectral_gate import SpectralGate  # type: ignore[import]
 
-            return SpectralGate(threshold=params.get("threshold", -40)).process(audio, sr)
+            return SpectralGate(threshold=params.get("threshold", -40)).process(audio, sr)  # type: ignore[no-any-return,call-arg]
         elif module_name == "RIAAEqualizer":
             from dsp.riaa_equalizer import RIAAEqualizer  # type: ignore[import]
 
             _curve = params.get("curve", "auto")
-            return RIAAEqualizer(mode="invert", curve=_curve).process(audio, sr)
+            return RIAAEqualizer(mode="invert", curve=_curve).process(audio, sr)  # type: ignore[no-any-return]
         elif module_name == "TapeEqualizer":
             from dsp.tape_equalizer import TapeEqualizer  # type: ignore[import]
 
-            return TapeEqualizer().process(audio, sr)
+            return TapeEqualizer().process(audio, sr)  # type: ignore[no-any-return]
         elif module_name == "CDDeemphasis":
             from dsp.cd_deemphasis import CDDeemphasis  # type: ignore[import]
 
-            return CDDeemphasis().process(audio, sr)
+            return CDDeemphasis().process(audio, sr)  # type: ignore[no-any-return]
         elif module_name == "AutoEQ":
             from dsp.auto_eq import AutoEQ  # type: ignore[import]
 
-            return AutoEQ().process(audio, sr)
+            return AutoEQ().process(audio, sr)  # type: ignore[no-any-return]
         elif module_name == "CustomCompressor":
             from dsp.custom_compressor import CustomCompressor  # type: ignore[import]
 
-            return CustomCompressor(
+            return CustomCompressor(  # type: ignore[no-any-return,call-arg]
                 ratio=params.get("ratio", 2.0),
                 threshold=params.get("threshold", -20.0),
             ).process(audio, sr)
         elif module_name == "TransientProtectionGuard":
             from dsp.transient_protection_guard import TransientProtectionGuard  # type: ignore[import]
 
-            return TransientProtectionGuard().process(audio, sr)
+            return TransientProtectionGuard().process(audio, sr)  # type: ignore[no-any-return]
         elif module_name == "HarmonicExciterStudio":
             from dsp.harmonic_exciter import HarmonicExciter  # type: ignore[import]
 
-            return HarmonicExciter(mode="studio").process(audio, sr)
+            return HarmonicExciter(mode="studio").process(audio, sr)  # type: ignore[no-any-return,call-arg]
         elif module_name == "SpeakerEnhancement":
             from dsp.speaker_enhancement import SpeakerEnhancement  # type: ignore[import]
 
-            return SpeakerEnhancement().process(audio, sr)
+            return SpeakerEnhancement().process(audio, sr)  # type: ignore[no-any-return]
         elif module_name == "StereoEnhancer":
             from dsp.stereo_enhancer import StereoEnhancer  # type: ignore[import]
 
-            return StereoEnhancer().process(audio, sr)
+            return StereoEnhancer().process(audio, sr)  # type: ignore[no-any-return]
         elif module_name == "StereoImageCorrection":
             from dsp.stereo_image_correction import StereoImageCorrection  # type: ignore[import]
 
-            return StereoImageCorrection().process(audio, sr)
+            return StereoImageCorrection().process(audio, sr)  # type: ignore[no-any-return]
         elif module_name == "MultibandLimiter":
             from dsp.multiband_limiter import MultibandLimiter  # type: ignore[import]
 
-            return MultibandLimiter(ceiling=params.get("ceiling", 0.95)).process(audio, sr)
+            return MultibandLimiter(ceiling=params.get("ceiling", 0.95)).process(audio, sr)  # type: ignore[no-any-return,call-arg]
         elif module_name == "Dither":
             from dsp.dither import Dither  # type: ignore[import]
 
-            return Dither().process(audio, sr)
+            return Dither().process(audio, sr)  # type: ignore[no-any-return]
+        # §v10.1 Mode-check: Studio-only Modules in Restoration blockieren
+        is_studio_mode = "studio" in _current_processing_mode.lower() or "2026" in _current_processing_mode.lower()
+        if not is_studio_mode and module_name in _RESTORATION_BLOCKED_MODULES:
+            logger.info("§v10.1 DSP: %s blockiert in Restoration → uebersprungen", module_name)
+            return audio
         elif module_name in dsp_effects:
             return dsp_effects[module_name](audio, sr, params)
         else:

@@ -152,6 +152,64 @@ class TestPhase56Process:
         assert in_region > out_region * 2.0
         assert float(result.metadata.get("repair_locality_coverage", 0.0)) > 0.0
 
+    def test_defect_locations_are_event_strength_adaptive(self, phase, sine_440_2s, monkeypatch):
+        def _fake_process_channel(channel, sr, instrument_tag, gap_fraction_min=None):
+            return (channel * 0.10).astype(np.float32)
+
+        monkeypatch.setattr(phase, "_process_channel", _fake_process_channel)
+        monkeypatch.setattr(phase, "_mrsa_gain_refinement", lambda pre, post, sr: post)
+
+        result = phase.process(
+            sine_440_2s,
+            sample_rate=SR,
+            confidence=1.0,
+            strength=1.0,
+            defect_locations={"tape_head_clog": [(0.20, 0.50)], "tape_head_level_dip": [(1.20, 1.50)]},
+            defect_event_metadata={
+                "tape_head_clog": {"severity": 0.95, "confidence": 0.95},
+                "tape_head_level_dip": {"severity": 0.35, "confidence": 0.70},
+            },
+        )
+        assert result.success is True
+        diff = np.abs(result.audio - sine_440_2s)
+        clog_region = float(np.mean(diff[int(0.25 * SR) : int(0.45 * SR)]))
+        dip_region = float(np.mean(diff[int(1.25 * SR) : int(1.45 * SR)]))
+        assert clog_region > dip_region * 1.25
+
+    def test_vibrato_zone_caps_local_band_gap_repair(self, phase, sine_440_2s, monkeypatch):
+        def _fake_process_channel(channel, sr, instrument_tag, gap_fraction_min=None):
+            return (channel * 0.10).astype(np.float32)
+
+        monkeypatch.setattr(phase, "_process_channel", _fake_process_channel)
+        monkeypatch.setattr(phase, "_mrsa_gain_refinement", lambda pre, post, sr: post)
+
+        free = phase.process(
+            sine_440_2s,
+            sample_rate=SR,
+            confidence=1.0,
+            strength=1.0,
+            defect_locations={"tape_head_clog": [(1.20, 1.50)]},
+            defect_event_metadata={"tape_head_clog": {"severity": 0.95, "confidence": 0.95}},
+        )
+        capped = phase.process(
+            sine_440_2s,
+            sample_rate=SR,
+            confidence=1.0,
+            strength=1.0,
+            defect_locations={"tape_head_clog": [(1.20, 1.50)]},
+            defect_event_metadata={"tape_head_clog": {"severity": 0.95, "confidence": 0.95}},
+            vibrato_zones=[(1.10, 1.60)],
+        )
+        free_delta = float(
+            np.mean(np.abs(free.audio[int(1.25 * SR) : int(1.45 * SR)] - sine_440_2s[int(1.25 * SR) : int(1.45 * SR)]))
+        )
+        capped_delta = float(
+            np.mean(
+                np.abs(capped.audio[int(1.25 * SR) : int(1.45 * SR)] - sine_440_2s[int(1.25 * SR) : int(1.45 * SR)])
+            )
+        )
+        assert capped_delta < free_delta * 0.55
+
 
 # ---------------------------------------------------------------------------
 # Tests: Stereo-Eingabe

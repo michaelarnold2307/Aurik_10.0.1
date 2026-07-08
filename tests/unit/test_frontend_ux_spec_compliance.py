@@ -15,6 +15,7 @@ Deckt ab:
 - Shortcuts (keine Duplikate)
 """
 
+import ast
 import importlib.util
 import sys
 
@@ -39,7 +40,7 @@ try:
     import importlib.util
 
     _spec = importlib.util.spec_from_file_location(
-        "modern_window", "/media/michael/Software 4TB/Aurik_Standalone/Aurik910/ui/modern_window.py"
+        "modern_window", "/media/michael/Software 4TB/Aurik_Standalone/Aurik10/ui/modern_window.py"
     )
     _mod = importlib.util.module_from_spec(_spec)  # type: ignore[arg-type]
     # Only load if display available — ast-based checks done without load
@@ -56,9 +57,10 @@ except Exception:
 # ─── AST-based source checks (no Qt needed) ──────────────────────────────────
 import pathlib
 
-_MODERN_WINDOW_SRC = pathlib.Path(
-    "/media/michael/Software 4TB/Aurik_Standalone/Aurik910/ui/modern_window.py"
-).read_text(encoding="utf-8")
+_MODERN_WINDOW_SRC = pathlib.Path("/media/michael/Software 4TB/Aurik_Standalone/Aurik10/ui/modern_window.py").read_text(
+    encoding="utf-8"
+)
+_MODERN_WINDOW_TREE = ast.parse(_MODERN_WINDOW_SRC)
 
 
 def _src_contains(pattern: str) -> bool:
@@ -292,6 +294,24 @@ class TestStructuredFailReasonShortStatus:
             "Kurzstatus-Hinweis für degradierte/blockierte Verarbeitung fehlt"
         )
 
+    def test_batch_completion_does_not_mask_degraded_as_success(self):
+        """Batch-Abschluss muss degraded/fail_reason vor status.saved_file prüfen."""
+        assert _src_contains("def _resolve_batch_completion_status"), (
+            "Batch-Kurzstatus-Resolver fehlt — degraded/recovered Exporte dürfen nicht als reiner Erfolg erscheinen"
+        )
+        assert _src_contains("_bridge_normalize_pipeline_health_state"), (
+            "Batch-Kurzstatus muss degradation_status normalisieren"
+        )
+        assert _src_contains("_bridge_resolve_pipeline_fail_reason"), (
+            "Batch-Kurzstatus muss fail_reason berücksichtigen"
+        )
+        assert _src_contains("_item_for_result.restoration_result = restoration_result"), (
+            "Batch-Item muss das echte Resultat speichern, bevor der Kurzstatus bewertet wird"
+        )
+        assert _src_contains("_batch_status = self._resolve_batch_completion_status(_item_for_result)"), (
+            "Result-Signal muss den vorherigen output_file-Erfolg mit echten Metadaten überschreiben können"
+        )
+
     def test_short_status_includes_error_code_suffix(self):
         """Kurzstatus ergänzt strukturierten Fehlercode wenn verfügbar."""
         assert _src_contains("Code:"), "Fehlercode-Suffix im Kurzstatus fehlt"
@@ -492,23 +512,31 @@ class TestKeyboardShortcuts:
 
 
 class TestAudioLoaderCascade:
-    """Audio-Lade-Kaskade (soundfile → pedalboard → librosa, §11.4)."""
+    """Audio-Lade-Kaskade läuft im Frontend über die Bridge (§11.4)."""
 
-    def test_soundfile_stage_present(self):
-        """Stufe 1: soundfile.SoundFile im _bg_load vorhanden."""
-        assert _src_contains("soundfile") or _src_contains("SoundFile"), (
-            "soundfile.SoundFile Stufe 1 in _bg_load fehlt — Spec §11.4"
+    def test_gui_loader_uses_bridge_cascade(self):
+        """GUI-Dateiimport muss an _load_audio_robust()/Bridge delegieren."""
+        assert _src_contains("def _load_audio_robust"), "Kanonischer GUI-Loader _load_audio_robust fehlt."
+        assert _src_contains("_bridge_get_load_audio_fn"), "GUI muss backend.api.bridge.get_load_audio_fn nutzen."
+        assert _src_contains("_loaded_audio, _loaded_sr = _load_audio_robust"), (
+            "_bg_load muss über _load_audio_robust laden, nicht über eigene Import-Stufen."
         )
 
-    def test_pedalboard_stage_present(self):
-        """Stufe 2: pedalboard.io.AudioFile im _bg_load vorhanden."""
-        assert _src_contains("pedalboard") or _src_contains("AudioFile"), (
-            "pedalboard Stufe 2 in _bg_load fehlt — Spec §11.4"
-        )
-
-    def test_librosa_fallback_present(self):
-        """Stufe 3: librosa.load() als letzter Fallback vorhanden."""
-        assert _src_contains("librosa"), "librosa.load() Fallback Stufe 3 fehlt — Spec §11.4"
+    def test_gui_loader_has_no_direct_import_stages(self):
+        """Direkte soundfile/pedalboard/librosa-Calls dürfen nicht im GUI-Releasepfad liegen."""
+        forbidden_calls: list[str] = []
+        for node in ast.walk(_MODERN_WINDOW_TREE):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name):
+                if (func.value.id, func.attr) in {("sf", "SoundFile"), ("librosa", "load")}:
+                    forbidden_calls.append(f"{func.value.id}.{func.attr}")
+                if (func.value.id, func.attr) == ("_PydubAudioSegment", "from_file"):
+                    forbidden_calls.append("_PydubAudioSegment.from_file")
+            elif isinstance(func, ast.Name) and func.id == "_PedalboardAudioFile":
+                forbidden_calls.append(func.id)
+        assert not forbidden_calls, f"GUI enthält verbotene Audio-Import-Bypässe: {forbidden_calls[:3]}"
 
 
 class TestWarmupThread:

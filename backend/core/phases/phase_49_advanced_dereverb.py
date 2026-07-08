@@ -56,6 +56,7 @@ import scipy.signal as sig
 from scipy.ndimage import median_filter
 
 from backend.core.audio_utils import restore_layout, to_channels_last
+from backend.core.restoration_policy import get_effective_song_goal_weights
 
 from .phase_interface import (
     PhaseCategory,
@@ -121,7 +122,7 @@ class AdvancedDereverbPhase(PhaseInterface):
         Keeps §4.5c behavior but adapts limits with §2.56 goal-importance context.
         Returns: (c80_down_limit_db, c80_soft_limit_db, c80_hard_limit_db, d50_limit)
         """
-        _gw = kwargs.get("song_goal_weights")
+        _gw = get_effective_song_goal_weights(kwargs)
         _w_nat = 1.0
         _w_auth = 1.0
         _w_timbre = 1.0
@@ -245,6 +246,16 @@ class AdvancedDereverbPhase(PhaseInterface):
             PhaseResult mit dereverberiertem Audio.
         """
         sample_rate = kwargs.get("sample_rate", 48000)
+        # ── §v10 PIM: Per-Band-Intensität kalibrieren ──
+        try:
+            from backend.core.pim_phase_hook import apply_pim_intensity
+            _pim = apply_pim_intensity(kwargs, "adv_dereverb",
+                default_nr=0.5, default_de_ess=0.3, default_comp=1.0)
+            for _key in ("noise_reduction_strength", "nr_strength", "strength", "wet"):
+                if _key in kwargs:
+                    kwargs[_key] = _pim["nr_strength"]
+        except Exception:
+            pass
         assert sample_rate == 48000, f"SR muss 48000 Hz sein, erhalten: {sample_rate}"
         self.validate_input(audio)
         # §2.51 Stereo-Kohärenz: normalize to channels-last (N,2) so all M/S
@@ -266,6 +277,32 @@ class AdvancedDereverbPhase(PhaseInterface):
         phase_locality_factor = float(np.clip(phase_locality_factor, 0.35, 1.0))
         effective_strength = float(kwargs.get("strength", 0.7)) * phase_locality_factor
         effective_strength = float(np.clip(effective_strength, 0.0, 1.0))
+
+        # §V40 NMR-Feedback: NR-Stärke adaptiv anpassen (FeedbackChain-aware).
+        try:
+            from backend.core.dsp.nmr_feedback import (
+                compute_nmr_score as _nmr_fn_49,  # pylint: disable=import-outside-toplevel
+            )
+
+            _nmr_result_49 = _nmr_fn_49(audio, sample_rate)
+            if not _nmr_result_49.ok:
+                logger.warning(
+                    "Phase49 §V40 NMR: nmr_above_masking → §2.45 Minimal-Intervention prüfen",
+                )
+            effective_strength = float(
+                np.clip(
+                    effective_strength + _nmr_result_49.recommended_nr_strength_delta,
+                    0.0,
+                    1.0,
+                )
+            )
+            logger.debug(
+                "Phase49 §V40 NMR: delta=%.3f → eff_str=%.3f",
+                _nmr_result_49.recommended_nr_strength_delta,
+                effective_strength,
+            )
+        except Exception as _nmr_exc_49:  # pylint: disable=broad-except
+            logger.debug("Phase49 §V40 NMR non-blocking: %s", _nmr_exc_49)
 
         if effective_strength <= 1e-6:
             dry = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
@@ -440,7 +477,21 @@ class AdvancedDereverbPhase(PhaseInterface):
         processed: np.ndarray = audio.copy()  # safe fallback if all paths are skipped
         _sgmse_used = False
         _ml_model_name = "WPE-DSP"
+        # Mindest-Signallänge für SGMSE+: RT60 > 0.4 s ist nur aus ≥ 1 s Audio
+        # zuverlässig messbar; kürzere Signale haben unzureichenden Kontext und
+        # erzeugen hohe ML-Overhead (> 10 s/call) ohne Qualitätsgewinn.
+        _audio_dur_mono_s = float(audio.shape[-1] if audio.ndim > 1 else len(audio)) / max(1, sample_rate)
+        _sgmse_min_dur_s = 1.0  # < 1 s → direkt WPE DSP
+        _sgmse_skipped_short = _audio_dur_mono_s < _sgmse_min_dur_s
+        if _sgmse_skipped_short:
+            logger.debug(
+                "Phase 49: SGMSE+ übersprungen (Signaldauer %.2fs < %.1fs Mindest) → WPE-DSP",
+                _audio_dur_mono_s,
+                _sgmse_min_dur_s,
+            )
         try:
+            if _sgmse_skipped_short:
+                raise ImportError("short-signal-skip")  # → WPE-DSP direkt
             from backend.core.ml_memory_budget import (  # pylint: disable=import-outside-toplevel
                 release as _release_49,
             )
@@ -922,10 +973,14 @@ class AdvancedDereverbPhase(PhaseInterface):
                 from backend.core.dsp.mikrodynamik_guard import (  # pylint: disable=import-outside-toplevel
                     frame_energy_correlation as _fec49,
                 )
+                from backend.core.dsp.mikrodynamik_guard import (
+                    recommend_mikrodynamik_wet as _recommend_mkk_wet,
+                )
 
                 _corr49 = _fec49(audio, processed, sample_rate, frame_ms=10.0)
                 if _corr49 < 0.97:
-                    _wet49 = float(np.clip((_corr49 - 0.90) / 0.07, 0.0, 1.0))
+                    _need49 = float(kwargs.get("mikrodynamik_global_need", kwargs.get("global_need", 0.0)) or 0.0)
+                    _wet49 = _recommend_mkk_wet(_corr49, _p49_panns, global_need=_need49)
                     processed = (_wet49 * processed + (1.0 - _wet49) * audio).astype(np.float32)
                     logger.warning("§V20 phase_49: mikrodynamik_corr=%.4f < 0.97 → wet=%.3f", _corr49, _wet49)
             except Exception as _v20_49_exc:
@@ -1100,7 +1155,7 @@ class AdvancedDereverbPhase(PhaseInterface):
                 t60,
                 n_orig,
             )
-            return np.clip(audio.copy(), -1.0, 1.0)
+            return np.clip(audio.copy(), -1.0, 1.0)  # type: ignore[no-any-return]
 
         # §C2 Blind RIR: refine WPE delay D using predelay estimate
         _rir_params = self._estimate_blind_rir(audio, sample_rate)
@@ -1211,7 +1266,7 @@ class AdvancedDereverbPhase(PhaseInterface):
             if abs(_level_gain - 1.0) > 0.001:
                 output = output * _level_gain
 
-        return np.clip(output, -1.0, 1.0)
+        return np.clip(output, -1.0, 1.0)  # type: ignore[no-any-return]
 
     # ------------------------------------------------------------------
     # WPE-Hilfsmethoden
@@ -1374,7 +1429,7 @@ class AdvancedDereverbPhase(PhaseInterface):
         T = len(y)
         n_eq = T - D - K
         if n_eq < K:
-            return np.zeros_like(y)
+            return np.zeros_like(y)  # type: ignore[no-any-return]
 
         # Regressionsmatrix X (n_eq × K)
         X = np.zeros((n_eq, K), dtype=complex)
@@ -1393,7 +1448,7 @@ class AdvancedDereverbPhase(PhaseInterface):
             reg = 1e-4 * np.eye(K)
             g = np.linalg.solve(XhXw + reg, XhBw)
         except np.linalg.LinAlgError:
-            return np.zeros_like(y)
+            return np.zeros_like(y)  # type: ignore[no-any-return]
 
         # Vectorized reverb prediction: r(t) = Σ_k g_k · y(t-D-k-1)
         # np.convolve flips the kernel internally, so we pass g directly.
@@ -1408,7 +1463,7 @@ class AdvancedDereverbPhase(PhaseInterface):
         if src_end > src_start and src_end <= len(conv_result):
             reverb[valid_start:valid_end] = conv_result[src_start:src_end]
 
-        return reverb * strength
+        return reverb * strength  # type: ignore[no-any-return]
 
     @staticmethod
     def _apply_wiener_postfilter(
@@ -1426,7 +1481,9 @@ class AdvancedDereverbPhase(PhaseInterface):
         gain = np.abs(enhanced) ** 2 / (np.abs(original) ** 2 + eps)
         gain = np.clip(gain, floor, 1.0)
         gain = median_filter(gain, size=(3, 1))
-        _wiener_out: np.ndarray = np.asarray(enhanced * gain, dtype=np.float64)
+        # STFT bleibt bis zur ISTFT komplex; ein fruehes Float-Cast wirft den
+        # Imaginaerteil weg und destabilisiert die Rueckprojektion unnoetig.
+        _wiener_out: np.ndarray = np.asarray(enhanced * gain, dtype=enhanced.dtype)
         return _wiener_out  # type: ignore[no-any-return]
 
     # ------------------------------------------------------------------
@@ -1518,4 +1575,4 @@ class AdvancedDereverbPhase(PhaseInterface):
                 hi = min(i + extend, n_frames)
                 mask[i:hi] = 1.0
 
-        return mask
+        return mask  # type: ignore[no-any-return]

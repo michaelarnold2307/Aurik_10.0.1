@@ -374,7 +374,7 @@ class IntentionalArtifactClassifier:
                 preserve_features = list(_res.preserve_features)
             else:
                 logger.debug("get_preserve_mask: keine iac_result und kein material_type → Zero-Maske")
-                return np.zeros(_N_BINS, dtype=np.float32)
+                return np.zeros(_N_BINS, dtype=np.float32)  # type: ignore[no-any-return]
 
             _sr_eff = max(int(sr), 44100)
             freqs = np.linspace(0.0, _sr_eff / 2.0, _N_BINS)
@@ -401,11 +401,11 @@ class IntentionalArtifactClassifier:
                 int((mask > 0.0).sum()),
                 float(mask.max()),
             )
-            return mask
+            return mask  # type: ignore[no-any-return]
 
         except Exception as _exc:
             logger.debug("get_preserve_mask non-blocking: %s", _exc)
-            return np.zeros(_N_BINS, dtype=np.float32)
+            return np.zeros(_N_BINS, dtype=np.float32)  # type: ignore[no-any-return]
 
 
 def _register_feature(

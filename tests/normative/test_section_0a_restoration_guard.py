@@ -55,10 +55,9 @@ _SECTION_0A_FORBIDDEN_IN_RESTORATION: frozenset[str] = frozenset(
         "phase_21_exciter",  # §0a: Harmonic Exciter VERBOTEN in Restoration
         "phase_35_multiband_compression",  # §0a: Multiband-Kompression = Stem-Enhancement
         "phase_42_vocal_enhancement",  # §0a: Vocal AI = Stem-Enhancement
-        # phase_44/45/51: Instrument-Stem-Enhancement — derzeit ambig.
-        # UV3 aktiviert sie bei instrument_detected ohne Mode-Gate.
-        # TODO §0a-Entscheidung: sind sie passive Korrektur (erlaubt) oder aktives Enhancement
-        # (verboten)? Solange offen: nur in _SECTION_0A_DOCUMENTED_EXCEPTIONS geführt.
+        "phase_44_guitar_enhancement",  # §0a: Instrument-Stem-Enhancement nur Studio 2026
+        "phase_45_brass_enhancement",  # §0a: Instrument-Stem-Enhancement nur Studio 2026
+        "phase_51_drums_enhancement",  # §0a: Instrument-Stem-Enhancement nur Studio 2026
         # phase_56_reference_mastering: keine .py-Datei in backend/core/phases/;
         # UV3-Guard-Eintrag ist vorbeugend für zukünftige Phase. → documented exception.
     }
@@ -74,10 +73,6 @@ _SECTION_0A_DOCUMENTED_EXCEPTIONS: dict[str, str] = {
     "phase_43_ml_deesser": "ML-De-Esser = passive Defektkorrektur (Sibilanten-Entfernung), kein Stem-Enhancement",
     # Phase-IDs die im UV3-Guard stehen aber (noch) keine .py-Datei haben
     "phase_56_reference_mastering": "KEIN .PY: UV3-Guard-Eintrag ist vorbeugend für eine zukünftige Phase. Wenn Phase implementiert wird: automatisch §0a-verboten.",
-    # Ambige Instrument-Enhancement-Phasen (TODO §0a-Entscheidung)
-    "phase_44_guitar_enhancement": "TODO §0a: UV3 aktiviert bei guitar/strings_detected ohne Mode-Gate. Wenn §0a-verboten: zu _SECTION_0A_FORBIDDEN_IN_RESTORATION migrieren + UV3-Guard ergänzen.",
-    "phase_45_brass_enhancement": "TODO §0a: UV3 aktiviert bei brass/woodwind_detected ohne Mode-Gate. Wenn §0a-verboten: zu _SECTION_0A_FORBIDDEN_IN_RESTORATION migrieren + UV3-Guard ergänzen.",
-    "phase_51_drums_enhancement": "TODO §0a: UV3 aktiviert bei drums_detected ohne Mode-Gate. Wenn §0a-verboten: zu _SECTION_0A_FORBIDDEN_IN_RESTORATION migrieren + UV3-Guard ergänzen.",
     # Eindeutig erlaubte Enhancement-Phasen
     "phase_46_spatial_enhancement": "Spatial-Enhancement: in Restoration nur aktiv wenn §2.49c Baseline-Evidenz vorhanden; UV3 prüft spatial_evidence_threshold",
     "phase_47_truepeak_limiter": "True-Peak-Limiter = Schutzfunktion, kein Stem-Enhancement",

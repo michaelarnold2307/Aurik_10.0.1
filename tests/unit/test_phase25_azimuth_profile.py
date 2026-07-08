@@ -2,7 +2,6 @@
 
 import numpy as np
 
-from backend.core.defect_scanner import MaterialType
 from backend.core.phases.phase_25_azimuth_correction import AzimuthCorrectionPhaseV2
 
 
@@ -83,7 +82,7 @@ class TestAzimuthLocalityBlend:
         result = phase.process(
             stereo,
             sr,
-            MaterialType.TAPE,
+            "tape",
             defect_locations={"azimuth_error": [(0.20, 0.30)]},
             strength=1.0,
         )
@@ -93,3 +92,70 @@ class TestAzimuthLocalityBlend:
         out_region = float(np.mean(diff[int(0.70 * sr) : int(0.85 * sr)]))
         assert in_region > out_region * 2.0
         assert float(result.metadata.get("repair_locality_coverage", 0.0)) > 0.0
+
+    def test_locality_profile_is_event_strength_adaptive(self):
+        sr = 48000
+        profile, coverage = AzimuthCorrectionPhaseV2._build_locality_profile(
+            n_samples=sr * 2,
+            sample_rate=sr,
+            defect_locations={"azimuth_error": [(0.20, 0.50)], "stereo_imbalance": [(1.20, 1.50)]},
+            event_metadata={
+                "azimuth_error": {"severity": 0.95, "confidence": 0.95},
+                "stereo_imbalance": {"severity": 0.35, "confidence": 0.70},
+            },
+        )
+
+        assert profile.shape == (sr * 2,)
+        assert 0.0 < coverage < 0.40
+        azimuth_region = float(np.mean(profile[int(0.25 * sr) : int(0.45 * sr)]))
+        imbalance_region = float(np.mean(profile[int(1.25 * sr) : int(1.45 * sr)]))
+        clean_region = float(np.mean(profile[int(0.70 * sr) : int(0.95 * sr)]))
+        assert azimuth_region > imbalance_region * 1.6
+        assert clean_region < 0.03
+
+    def test_vibrato_zone_caps_locality_profile(self):
+        sr = 48000
+        free, _ = AzimuthCorrectionPhaseV2._build_locality_profile(
+            n_samples=sr * 2,
+            sample_rate=sr,
+            defect_locations={"azimuth_error": [(1.20, 1.50)]},
+            event_metadata={"azimuth_error": {"severity": 0.95, "confidence": 0.95}},
+        )
+        capped, _ = AzimuthCorrectionPhaseV2._build_locality_profile(
+            n_samples=sr * 2,
+            sample_rate=sr,
+            defect_locations={"azimuth_error": [(1.20, 1.50)]},
+            event_metadata={"azimuth_error": {"severity": 0.95, "confidence": 0.95}},
+            protected_zones=[(1.10, 1.60, 0.20)],
+        )
+
+        free_strength = float(np.mean(free[int(1.25 * sr) : int(1.45 * sr)]))
+        capped_strength = float(np.mean(capped[int(1.25 * sr) : int(1.45 * sr)]))
+        assert capped_strength <= 0.21
+        assert capped_strength < free_strength * 0.60
+
+
+class TestAzimuthEnvelopeGuard:
+    def test_limits_new_frame_level_modulation(self):
+        sr = 48000
+        t = np.arange(sr * 2, dtype=np.float32) / sr
+        left = 0.18 * np.sin(2 * np.pi * 440.0 * t)
+        right = 0.18 * np.sin(2 * np.pi * 441.0 * t)
+        reference = np.stack([left, right], axis=1).astype(np.float32)
+        candidate = reference.copy()
+        candidate[: sr // 2] *= 2.4
+        candidate[sr : sr + sr // 2] *= 0.25
+
+        limited, stats = AzimuthCorrectionPhaseV2._limit_envelope_modulation(reference, candidate, sr)
+
+        assert stats["envelope_guard_applied"] == 1.0
+        assert stats["min_wet"] < 1.0
+
+        def _frame_rms_db(audio, start, end):
+            mono = np.mean(audio[start:end], axis=1)
+            return 20.0 * np.log10(float(np.sqrt(np.mean(mono**2) + 1e-12)))
+
+        loud_delta = abs(_frame_rms_db(limited, 0, sr // 2) - _frame_rms_db(reference, 0, sr // 2))
+        dip_delta = abs(_frame_rms_db(limited, sr, sr + sr // 2) - _frame_rms_db(reference, sr, sr + sr // 2))
+        assert loud_delta < 2.0
+        assert dip_delta < 2.0

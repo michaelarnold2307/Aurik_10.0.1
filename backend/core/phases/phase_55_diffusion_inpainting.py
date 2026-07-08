@@ -42,8 +42,11 @@ from __future__ import annotations
 
 import logging
 import time
+from typing import Any
 
 import numpy as np
+
+from backend.core.restoration_policy import get_effective_song_goal_weights
 
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult
 
@@ -142,24 +145,24 @@ def _burg_ar_predict(context: np.ndarray, order: int, n_samples: int) -> np.ndar
         Levinson (1947), Durbin (1960) — Toeplitz-Rekurrenz für AR-Schätzung
     """
     if len(context) < order + 1:
-        return np.zeros(n_samples)
+        return np.zeros(n_samples)  # type: ignore[no-any-return]
 
     # Autokorrelation schätzen — FFT-based O(N log N)
     from backend.core.core_utils import fft_autocorr  # pylint: disable=import-outside-toplevel
 
     ac = fft_autocorr(context, max_lag=order)
     if ac[0] < 1e-10:
-        return np.zeros(n_samples)
+        return np.zeros(n_samples)  # type: ignore[no-any-return]
 
     # Toeplitz-System lösen (Levinson-Durbin approx)
     try:
         R = np.array([ac[abs(i)] for i in range(order)])
         Rmat = np.array([[ac[abs(i - j)] for j in range(order)] for i in range(order)])
         if np.linalg.matrix_rank(Rmat) < order:
-            return np.zeros(n_samples)
+            return np.zeros(n_samples)  # type: ignore[no-any-return]
         ar_coeff = np.linalg.solve(Rmat, R)
     except np.linalg.LinAlgError:
-        return np.zeros(n_samples)
+        return np.zeros(n_samples)  # type: ignore[no-any-return]
 
     # Vorhersage iterativ berechnen
     buf = list(context[-order:])
@@ -170,7 +173,7 @@ def _burg_ar_predict(context: np.ndarray, order: int, n_samples: int) -> np.ndar
         predicted.append(val)
         buf.append(val)
 
-    return np.array(predicted)
+    return np.array(predicted)  # type: ignore[no-any-return]
 
 
 def _detect_gaps(audio: np.ndarray, sample_rate: int, min_gap_ms: float) -> list[tuple[int, int]]:
@@ -372,7 +375,7 @@ def _nmf_gap_fallback(
     n_bins, n_frames = mag_ctx.shape
     if n_frames < 4 or n_bins < 4:
         # Fallback: zeros
-        return np.zeros(gap_len, dtype=np.float32)
+        return np.zeros(gap_len, dtype=np.float32)  # type: ignore[no-any-return]
 
     # NMF-β (IS-Divergenz, β=0): multiplicative update rules (Févotte 2011)
     _rank = min(8, n_frames // 2)
@@ -441,7 +444,7 @@ def _nmf_gap_fallback(
     _gap_audio = _gap_audio * (ctx_border_rms / rec_rms)
 
     _gap_audio = np.nan_to_num(_gap_audio, nan=0.0, posinf=0.0, neginf=0.0)
-    return np.clip(_gap_audio, -1.0, 1.0).astype(np.float32)
+    return np.clip(_gap_audio, -1.0, 1.0).astype(np.float32)  # type: ignore[no-any-return]
 
 
 def _try_cqtdiff_plus_plugin(audio: np.ndarray, start: int, end: int, sample_rate: int) -> np.ndarray | None:
@@ -483,7 +486,7 @@ def _try_cqtdiff_plus_plugin(audio: np.ndarray, start: int, end: int, sample_rat
         # InpaintingResult.audio = volles Audio-Signal mit gefüllter Lücke
         repaired_segment = result.audio[start:end]
         if repaired_segment is not None and np.isfinite(repaired_segment).all():
-            return np.clip(repaired_segment.astype(np.float32), -1.0, 1.0)
+            return np.clip(repaired_segment.astype(np.float32), -1.0, 1.0)  # type: ignore[no-any-return]
         return None
     except Exception as _e:
         logger.debug("CQTdiff-Plugin nicht verfügbar: %s", _e)
@@ -626,7 +629,8 @@ def _try_consistency_model_inpainting(channel: np.ndarray, start: int, end: int,
             return None
 
         result = np.nan_to_num(np.asarray(result, dtype=np.float32), nan=0.0, posinf=0.0, neginf=0.0)
-        return np.clip(result[:gap_len], -1.0, 1.0)
+        _out_cim: np.ndarray = np.clip(result[:gap_len], -1.0, 1.0).astype(np.float32)
+        return _out_cim
     except Exception as _exc:
         logger.debug("_try_consistency_model_inpainting failed (non-critical): %s", _exc)
         return None
@@ -677,7 +681,8 @@ def _try_dac_token_inpainting(channel: np.ndarray, start: int, end: int, sample_
             return None
 
         result = np.nan_to_num(np.asarray(result, dtype=np.float32), nan=0.0, posinf=0.0, neginf=0.0)
-        return np.clip(result[:gap_len], -1.0, 1.0)
+        _out_dac: np.ndarray = np.clip(result[:gap_len], -1.0, 1.0).astype(np.float32)
+        return _out_dac
     except Exception as _exc:
         logger.debug("_try_dac_token_inpainting failed (non-critical): %s", _exc)
         return None
@@ -715,7 +720,8 @@ def _is_ml_thrashing() -> bool:
         except Exception:
             _result = False
         _is_ml_thrashing._cache = (_result, now)  # type: ignore[attr-defined]  # pylint: disable=protected-access
-    return _result
+    _final_thr: bool = bool(_result)
+    return _final_thr
 
 
 def _conservative_boundary_fill(channel: np.ndarray, start: int, end: int) -> np.ndarray:
@@ -727,7 +733,7 @@ def _conservative_boundary_fill(channel: np.ndarray, start: int, end: int) -> np
     """
     gap_len = max(0, end - start)
     if gap_len <= 0:
-        return np.zeros(0, dtype=np.float32)
+        return np.zeros(0, dtype=np.float32)  # type: ignore[no-any-return]
 
     left = float(channel[start - 1]) if start > 0 else 0.0
     # Trailing gap (end of audio): right boundary is silence (0.0), not left.
@@ -782,7 +788,7 @@ def _apply_shared_stereo_ratio(
     _ratio = mono_repaired / _den
     _ratio = np.clip(_ratio, -10.0, 10.0)
     _out = np.column_stack([audio_stereo[:, 0] * _ratio, audio_stereo[:, 1] * _ratio])
-    return np.clip(np.nan_to_num(_out, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0).astype(np.float32)
+    return np.clip(np.nan_to_num(_out, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0).astype(np.float32)  # type: ignore[no-any-return]
 
 
 def _process_channel(
@@ -795,6 +801,8 @@ def _process_channel(
     wall_budget_s: float = _PHASE55_WALL_BUDGET_S,
     goal_weights: dict[str, float] | None = None,
     restorability_score: float = 65.0,
+    protected_zones: list[tuple[float, float, float]] | None = None,
+    base_strength: float = 1.0,
 ) -> tuple[np.ndarray, dict]:
     """Inpainting für einen Mono-Kanal. Returns (repaired, stats)."""
     result = channel.copy()
@@ -847,6 +855,50 @@ def _process_channel(
             break
 
         gap_ms = (end - start) / sample_rate * 1000
+        local_strength = DiffusionInpaintingPhase._compute_inpainting_local_strength(
+            channel,
+            start,
+            end,
+            sample_rate,
+            base_strength,
+            protected_zones,
+        )
+        local_ratio = (
+            float(np.clip(local_strength / max(base_strength, 1e-6), 0.0, 1.0)) if base_strength > 1e-6 else 0.0
+        )
+
+        # §V38 VFA-Schutzzonen: ML-Inpainting in Vibrato/Frisson/Flüster/Passaggio-Zonen
+        # → konservativer Boundary-Fill (ML-Synthese würde falschen Pitch-Verlauf erzeugen → VQI-Degradation)
+        _p55_vfa_boundary = False
+        if protected_zones:
+            _p55_gs = start / sample_rate
+            _p55_ge = end / sample_rate
+            for _pz55_s, _pz55_e, _pz55_cap in protected_zones:
+                if _p55_gs < _pz55_e and _p55_ge > _pz55_s:
+                    _p55_vfa_boundary = True
+                    logger.debug(
+                        "§V38 phase_55: Gap [%.3f\u2013%.3f s] in VFA-Schutzzone"
+                        " [%.3f\u2013%.3f s, cap=%.2f] \u2192 Boundary-Fill",
+                        _p55_gs,
+                        _p55_ge,
+                        _pz55_s,
+                        _pz55_e,
+                        _pz55_cap,
+                    )
+                    break
+        if _p55_vfa_boundary:
+            candidate = _conservative_boundary_fill(channel, start, end)
+            result[start:end] = np.clip(
+                np.nan_to_num(candidate[: end - start], nan=0.0, posinf=0.0, neginf=0.0),
+                -1.0,
+                1.0,
+            )
+            if bw_cap_hz is not None:
+                gap_segment = result[start:end]
+                result[start:end] = _apply_bw_cap(gap_segment, sample_rate, bw_cap_hz)
+            stats["total_gap_ms"] += gap_ms
+            stats["max_gap_ms"] = max(stats["max_gap_ms"], gap_ms)
+            continue
 
         # Long "gaps" are usually musical low-energy passages or detection drift,
         # not true transport dropouts. Full AR/diffusion on these regions can stall
@@ -952,6 +1004,10 @@ def _process_channel(
             )
             candidate = _conservative_boundary_fill(channel, start, end)
 
+        if local_ratio < 0.999:
+            source_segment = channel[start:end]
+            candidate = source_segment + local_ratio * (candidate[: end - start] - source_segment)
+
         result[start:end] = np.clip(
             np.nan_to_num(candidate[: end - start], nan=0.0, posinf=0.0, neginf=0.0),
             -1.0,
@@ -1028,6 +1084,47 @@ class DiffusionInpaintingPhase(PhaseInterface):
         if _is_analog_sensitive and vocals_confidence >= 0.40:
             strength = min(strength, 0.58)
         return float(np.clip(strength, 0.0, 1.0))
+
+    @staticmethod
+    def _compute_inpainting_local_strength(
+        mono_ref: np.ndarray,
+        start: int,
+        end: int,
+        sr: int,
+        base_strength: float,
+        protected_zones: list[tuple[float, float, float]] | None,
+    ) -> float:
+        """Per-Gap-Strength-Orakel für Diffusions-Inpainting (§V38)."""
+        if base_strength < 1e-6:
+            return 0.0
+
+        context_samples = int(0.250 * sr)
+        left_context = mono_ref[max(0, start - context_samples) : start]
+        right_context = mono_ref[end : min(len(mono_ref), end + context_samples)]
+        gap_segment = mono_ref[start:end]
+
+        seg_rms = float(np.sqrt(np.mean(gap_segment * gap_segment) + 1e-12)) if len(gap_segment) > 0 else 0.0
+        ref_parts = [part for part in (left_context, right_context) if len(part) > 0]
+        if ref_parts:
+            reference = np.concatenate(ref_parts)
+            ref_rms = float(np.sqrt(np.mean(reference * reference) + 1e-12))
+        else:
+            ref_rms = seg_rms + 1e-9
+
+        dropout_severity = float(np.clip(1.0 - seg_rms / max(ref_rms, 1e-9), 0.0, 1.0))
+        duration_ms = float((end - start) / max(sr, 1) * 1000.0)
+        severity_factor = float(np.clip(0.45 + 0.55 * dropout_severity, 0.45, 1.0))
+        duration_factor = float(np.clip(0.60 + 0.40 * min(duration_ms / 120.0, 1.0), 0.60, 1.0))
+        local_strength = base_strength * severity_factor * duration_factor
+
+        if protected_zones:
+            start_s = start / sr
+            end_s = end / sr
+            for zone_start, zone_end, zone_cap in protected_zones:
+                if start_s < zone_end and end_s > zone_start:
+                    local_strength = min(local_strength, float(zone_cap))
+
+        return float(np.clip(local_strength, 0.0, base_strength))
 
     @staticmethod
     def _compute_inpainting_profile(
@@ -1173,16 +1270,16 @@ class DiffusionInpaintingPhase(PhaseInterface):
         if _is_stereo:
             return _apply_shared_stereo_ratio(audio, _mono, _repaired_mono)
 
-        return _repaired_mono.astype(np.float32)
+        return _repaired_mono.astype(np.float32)  # type: ignore[no-any-return]
 
-    def process(  # pylint: disable=arguments-renamed  # type: ignore[override]
+    def process(
         self,
         audio: np.ndarray,
-        sample_rate: int,
-        min_gap_ms: float = _MIN_GAP_MS_DEFAULT,
-        **kwargs,
+        sample_rate: int = 48000,
+        material_type: str = "unknown",
+        **kwargs: Any,
     ) -> PhaseResult:
-        sample_rate = kwargs.get("sample_rate", 48000)
+        sample_rate = int(kwargs.get("sample_rate", sample_rate))
         assert sample_rate == 48000, f"SR muss 48000 Hz sein, erhalten: {sample_rate}"
         t0 = time.perf_counter()
 
@@ -1202,7 +1299,7 @@ class DiffusionInpaintingPhase(PhaseInterface):
         effective_strength = float(np.clip(effective_strength, 0.0, 1.0))
 
         # §0 BW-Cap: prevent hallucination of HF content on bandwidth-limited carriers
-        _material = kwargs.get("material_type")
+        _material = kwargs.get("material_type", material_type) or material_type
         _mat_key = str(_material).lower() if _material is not None else ""
         _inpainting_profile = self._compute_inpainting_profile(
             _mat_key,
@@ -1213,7 +1310,23 @@ class DiffusionInpaintingPhase(PhaseInterface):
         if _vocals_conf == 0.0:  # Fallback: direct callers may use panns_singing key
             _vocals_conf = float(kwargs.get("panns_singing", 0.0))
         safe_strength = self._derive_safe_inpainting_strength(effective_strength, _mat_key, _vocals_conf)
-        _goal_weights = kwargs.get("song_goal_weights")
+
+        # §V41 ForwardMaskingGuard — Enhancement-Stärke in post-transienten Masking-Zonen erhöhen
+        if _vocals_conf >= 0.25 and effective_strength > 0.0:
+            try:
+                from backend.core.dsp.temporal_masking import (
+                    get_forward_masking_guard as _fmg_fn_55,
+                )
+
+                _fmz_55 = kwargs.get("forward_masking_zones") or _fmg_fn_55().compute_zones(audio, sample_rate)
+                if _fmz_55:
+                    _n_s_55 = audio.shape[-1] if audio.ndim > 1 else len(audio)
+                    _zone_s_55 = sum(z.end_sample - z.start_sample for z in _fmz_55)
+                    _zone_frac_55 = float(np.clip(_zone_s_55 / max(1, _n_s_55), 0.0, 1.0))
+                    effective_strength = float(np.clip(effective_strength + _zone_frac_55 * 0.15, 0.0, 1.0))
+            except Exception as _fmg_exc_55:
+                logger.debug("Phase55 §V41 ForwardMaskingGuard non-blocking: %s", _fmg_exc_55)
+        _goal_weights = get_effective_song_goal_weights(kwargs)
         if not isinstance(_goal_weights, dict):
             _goal_weights = None
         _restorability_score = float(kwargs.get("restorability_score", 50.0))
@@ -1251,14 +1364,13 @@ class DiffusionInpaintingPhase(PhaseInterface):
 
         # §2.68d [RELEASE_MUST] SSIP Null-Propagation-Guard: Stille-Zonen aus ORIGINAL-Audio.
         # _get_structural_silence_zones() liefert immer eine Liste — niemals None.
-        _n_samp_p55_ssip = int(audio.shape[-1] if audio.ndim == 2 else len(audio))
         _ssip_zones_p55: list[tuple[int, int]] = []
         try:
             from backend.core.dsp.structural_silence_isolation import (  # pylint: disable=import-outside-toplevel
                 _get_structural_silence_zones as _ssip_get_zones,
             )
 
-            _mat_key_p55 = str(kwargs.get("material_type", "unknown") or "unknown").lower()
+            _mat_key_p55 = str(kwargs.get("material_type", material_type) or material_type or "unknown").lower()
             _ssip_zones_p55 = _ssip_get_zones(kwargs, audio, sample_rate, _mat_key_p55)
             if _ssip_zones_p55:
                 _repaired_gaps = list(_repaired_gaps) + _ssip_zones_p55
@@ -1296,6 +1408,37 @@ class DiffusionInpaintingPhase(PhaseInterface):
             except Exception as _sil_exc_p55:
                 logger.debug("§silence-guarantee phase_55: non-blocking error: %s", _sil_exc_p55)
 
+        # §V38 VFA-Schutzzonen für _process_channel sammeln (§0p Vocal-Supremacy)
+        _p55_protected_zones: list[tuple[float, float, float]] = []
+        for _z in kwargs.get("vibrato_zones") or []:
+            try:
+                _p55_protected_zones.append((float(_z[0]), float(_z[1]), 0.20))  # §0p Vibrato
+            except Exception:
+                pass
+        for _z in kwargs.get("frisson_zones") or []:
+            try:
+                _fz_s = float(getattr(_z, "start_s", None) or _z[0])
+                _fz_e = float(getattr(_z, "end_s", None) or _z[1])
+                _p55_protected_zones.append((_fz_s, _fz_e, 0.30))  # Frisson sakrosankt
+            except Exception:
+                pass
+        for _z in kwargs.get("whisper_zones") or []:
+            try:
+                _p55_protected_zones.append((float(_z[0]), float(_z[1]), 0.25))  # Flüsterpassagen
+            except Exception:
+                pass
+        for _z in kwargs.get("passaggio_zones") or []:
+            try:
+                _p55_protected_zones.append((float(_z[0]), float(_z[1]), 0.35))  # Passaggio-Übergänge
+            except Exception:
+                pass
+        if _p55_protected_zones:
+            logger.debug(
+                "§V38 phase_55: %d VFA-Schutzzone(n) aktiv (Vibrato/Frisson/Flüster/Passaggio)",
+                len(_p55_protected_zones),
+            )
+        _p55_pz = _p55_protected_zones or None
+
         _n_repaired_skipped = 0
         _damage_guard_hits = 0
         _thrash_guard_active = False
@@ -1315,6 +1458,8 @@ class DiffusionInpaintingPhase(PhaseInterface):
                     wall_budget_s=wall_budget_s,
                     goal_weights=_goal_weights,
                     restorability_score=_restorability_score,
+                    protected_zones=_p55_pz,
+                    base_strength=safe_strength,
                 )
             except Exception as _ch55_exc:
                 logger.warning("phase_55 mono channel processing failed, using passthrough candidate: %s", _ch55_exc)
@@ -1376,6 +1521,8 @@ class DiffusionInpaintingPhase(PhaseInterface):
                         wall_budget_s=wall_budget_s,
                         goal_weights=_goal_weights,
                         restorability_score=_restorability_score,
+                        protected_zones=_p55_pz,
+                        base_strength=safe_strength,
                     )
                 except Exception as _ch55_exc:
                     logger.warning(
@@ -1526,6 +1673,38 @@ class DiffusionInpaintingPhase(PhaseInterface):
         except Exception as _guard55_exc:
             logger.debug("§2.46f/§2.46e Phase55 guards (non-blocking): %s", _guard55_exc)
 
+        # §V19 Noise-Textur-Invariante (§NTI): Residual-Rauschen darf Material-Profil nicht ändern (non-blocking)
+        try:
+            from backend.core.dsp.noise_texture_guard import (  # pylint: disable=import-outside-toplevel
+                compute_noise_texture_distance as _nt55_fn,
+            )
+
+            _nt55_thr = 0.18 if _vocals_conf >= 0.35 else 0.25
+            _nt55_d = _nt55_fn(source_audio - repaired, _mat_key_p55, sr=sample_rate)
+            if _nt55_d > _nt55_thr:
+                repaired = (0.5 * repaired + 0.5 * source_audio).astype(np.float32)
+                logger.warning(
+                    "§V19 phase_55 noise_texture_distance=%.3f > %.2f → 50%% Dry-Blend",
+                    _nt55_d,
+                    _nt55_thr,
+                )
+        except Exception as _nt55_exc:
+            logger.debug("§V19 phase_55 noise_texture (non-blocking): %s", _nt55_exc)
+
+        # §V24 Spektralfarbe-Prüfung (§2.74, non-blocking): Inpainting darf Spektralfarbe nicht verändern
+        try:
+            from backend.core.dsp.spectral_color_guard import (  # pylint: disable=import-outside-toplevel
+                check_spectral_color_preservation as _scg55,
+            )
+
+            _sc55 = _scg55(source_audio, repaired, sample_rate)
+            if not _sc55.ok:
+                _sc55_wet = 0.70
+                repaired = (_sc55_wet * repaired + (1.0 - _sc55_wet) * source_audio).astype(np.float32)
+                logger.warning("§V24 phase_55 spectral_color non-ok → strength −30%%")
+        except Exception as _sc55_exc:
+            logger.debug("§V24 phase_55 spectral_color (non-blocking): %s", _sc55_exc)
+
         return PhaseResult(
             success=True,
             audio=repaired,
@@ -1551,6 +1730,7 @@ class DiffusionInpaintingPhase(PhaseInterface):
                 "phase_locality_factor": phase_locality_factor,
                 "effective_strength": effective_strength,
                 "safe_strength": safe_strength,
+                "per_gap_local_strength_oracle": True,
                 "panns_vocals_confidence": _vocals_conf,
                 "bw_cap_hz": _bw_cap_hz,
                 "rms_drop_db": 0.0,

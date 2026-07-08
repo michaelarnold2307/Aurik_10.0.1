@@ -82,6 +82,23 @@ class Phase58LyricsGuidedEnhancement(PhaseInterface):
         _pmgg_strength = float(kwargs.get("strength", 1.0))
         _effective_strength = float(np.clip(_pmgg_strength * phase_locality_factor, 0.0, 1.0))
 
+        # §V41 ForwardMaskingGuard — Enhancement-Stärke in post-transienten Masking-Zonen erhöhen
+        _panns_s_58 = float(kwargs.get("panns_singing", 0.0))
+        if _panns_s_58 >= 0.25 and _effective_strength > 0.0:
+            try:
+                from backend.core.dsp.temporal_masking import (
+                    get_forward_masking_guard as _fmg_fn_58,
+                )
+
+                _fmz_58 = kwargs.get("forward_masking_zones") or _fmg_fn_58().compute_zones(audio, sample_rate)
+                if _fmz_58:
+                    _n_s_58 = audio.shape[-1] if audio.ndim > 1 else len(audio)
+                    _zone_s_58 = sum(z.end_sample - z.start_sample for z in _fmz_58)
+                    _zone_frac_58 = float(np.clip(_zone_s_58 / max(1, _n_s_58), 0.0, 1.0))
+                    _effective_strength = float(np.clip(_effective_strength + _zone_frac_58 * 0.15, 0.0, 1.0))
+            except Exception as _fmg_exc_58:
+                logger.debug("Phase58 §V41 ForwardMaskingGuard non-blocking: %s", _fmg_exc_58)
+
         if _effective_strength <= 0.0:
             return create_phase_result(
                 audio=audio,
@@ -146,18 +163,18 @@ class Phase58LyricsGuidedEnhancement(PhaseInterface):
                 load_error = exc
 
         if lge is None:
-            exc = load_error if load_error is not None else RuntimeError("lge unavailable")
+            _load_exc: BaseException = load_error if load_error is not None else RuntimeError("lge unavailable")
             logger.warning(
                 "phase_58_lyrics_guided_enhancement: LGE unavailable (%s) — DSP passthrough",
-                type(exc).__name__,
+                type(_load_exc).__name__,
             )
             return create_phase_result(
                 audio=audio,
-                modifications={"lge_fallback": "passthrough", "reason": type(exc).__name__},
-                warnings=[f"LGE unavailable ({type(exc).__name__}) — passthrough"],
+                modifications={"lge_fallback": "passthrough", "reason": type(_load_exc).__name__},
+                warnings=[f"LGE unavailable ({type(_load_exc).__name__}) — passthrough"],
                 metadata={
                     "lge_active": False,
-                    "lge_error": type(exc).__name__,
+                    "lge_error": type(_load_exc).__name__,
                     "retry_attempted": retry_attempted,
                     "load_attempts": load_attempts,
                 },
@@ -252,6 +269,32 @@ class Phase58LyricsGuidedEnhancement(PhaseInterface):
 
         # §2.36 Privacy-Pflicht: word count only — no text in metadata.
         n_words: int = len(transcription.words) if transcription is not None else 0
+
+        # §2.46e HallucinationGuard: Additive Phase darf kein halluziniertes Material einführen (VERBOTEN)
+        try:
+            from backend.core.dsp.hallucination_guard import (  # pylint: disable=import-outside-toplevel
+                check_hallucination as _chk_hg58,
+            )
+
+            _hg_mode_58 = str(kwargs.get("mode", "restoration"))
+            _pre58_mono = (
+                audio.mean(axis=0)
+                if (audio.ndim == 2 and audio.shape[0] == 2 and audio.shape[1] > 2)
+                else (audio.mean(axis=1) if audio.ndim == 2 else audio)
+            )
+            _post58_mono = (
+                audio_out.mean(axis=0)
+                if (audio_out.ndim == 2 and audio_out.shape[0] == 2 and audio_out.shape[1] > 2)
+                else (audio_out.mean(axis=1) if audio_out.ndim == 2 else audio_out)
+            )
+            _hg58 = _chk_hg58(
+                _pre58_mono.astype(np.float32), _post58_mono.astype(np.float32), sr=sample_rate, mode=_hg_mode_58
+            )
+            if _hg58.requires_rollback:
+                audio_out = audio.copy()
+                logger.warning("§2.46e phase_58 HallucinationGuard: rollback (spectral_novelty > 0.15)")
+        except Exception as _hg58_exc:
+            logger.debug("§2.46e phase_58 HallucinationGuard (non-blocking): %s", _hg58_exc)
 
         return create_phase_result(
             audio=audio_out,

@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import logging
 import math
+import os
 import threading
 import time
 from dataclasses import dataclass
@@ -52,6 +53,45 @@ _CKPT_CANDIDATES = (
     _ROOT / "models" / "sgmse_plus" / "sgmse_plus_src_1.ckpt",
     _ROOT / "models" / "sgmse_plus" / "sgmse_wsj0_reverb.ckpt",
 )
+
+
+def _is_corrupt_torchscript_error(exc: BaseException) -> bool:
+    """Erkennt deterministisch defekte/lokal falsche TorchScript-Dateien."""
+    msg = str(exc).lower()
+    return any(
+        token in msg
+        for token in (
+            "invalid magic number for torchscript archive",
+            "failed finding central directory",
+            "not a zip archive",
+            "constants.pkl",
+            "version file not found",
+        )
+    )
+
+
+def _quarantine_corrupt_torchscript(path: Path, exc: BaseException) -> Path | None:
+    """Verschiebt ein defektes lokales TorchScript aus dem Produktionspfad."""
+    if not path.exists():
+        return None
+    try:
+        quarantine = path.with_suffix(path.suffix + f".corrupt.{int(time.time())}")
+        os.replace(path, quarantine)
+        logger.warning(
+            "SGMSE+: defektes TorchScript isoliert: %s -> %s (%s)",
+            path.name,
+            quarantine.name,
+            str(exc).splitlines()[0],
+        )
+        return quarantine
+    except Exception as quarantine_exc:
+        logger.warning(
+            "SGMSE+: defektes TorchScript erkannt, aber Quarantäne fehlgeschlagen (%s): %s",
+            path,
+            quarantine_exc,
+        )
+        return None
+
 
 # Verarbeitungs-Konstanten (48 kHz)
 _SR: int = 48_000
@@ -116,7 +156,7 @@ class SGMSEPlusPlugin:
         self._hop: int = _DEFAULT_HOP
         self._win: int = _DEFAULT_WIN
         self._device: str = "cpu"  # set by _try_load or _try_load_from_checkpoint
-        self._device: str = "cpu"  # set by _try_load or _try_load_from_checkpoint
+        self._device: str = "cpu"  # type: ignore[no-redef]  # set by _try_load or _try_load_from_checkpoint
         self._load_model_geometry()
         self._try_load()
 
@@ -169,7 +209,7 @@ class SGMSEPlusPlugin:
                 try_allocate as _try_alloc,
             )
         except Exception:
-            _try_alloc = None
+            _try_alloc = None  # type: ignore[assignment]
 
         if _TS_PATH.exists():
             try:
@@ -206,9 +246,17 @@ class SGMSEPlusPlugin:
                         self._ts_model.to(_dev)
                         self._device = _dev
                     except Exception as _gpu_load_exc:
+                        if _is_corrupt_torchscript_error(_gpu_load_exc):
+                            _quarantine_corrupt_torchscript(_TS_PATH, _gpu_load_exc)
+                            raise
                         if _dev != "cpu":
                             logger.warning("SGMSE+: GPU-Load fehlgeschlagen (%s) — CPU-Retry", _gpu_load_exc)
-                            self._ts_model = torch.jit.load(str(_TS_PATH), map_location="cpu")  # nosec B614
+                            try:
+                                self._ts_model = torch.jit.load(str(_TS_PATH), map_location="cpu")  # nosec B614
+                            except Exception as _cpu_load_exc:
+                                if _is_corrupt_torchscript_error(_cpu_load_exc):
+                                    _quarantine_corrupt_torchscript(_TS_PATH, _cpu_load_exc)
+                                raise
                             self._ts_model.eval()
                             self._device = "cpu"
                         else:
@@ -613,7 +661,7 @@ class SGMSEPlusPlugin:
             time.perf_counter() - _t0,
             _runtime_budget_s,
         )
-        return np.clip(np.nan_to_num(out, nan=0.0), -1.0, 1.0)
+        return np.clip(np.nan_to_num(out, nan=0.0), -1.0, 1.0)  # type: ignore[no-any-return]
 
     # ------------------------------------------------------------------
     # ONNX Inference (SGMSE+ deterministic forward pass @ optimal sigma)
@@ -654,7 +702,7 @@ class SGMSEPlusPlugin:
             x = x[:n_orig]
         elif len(x) < n_orig:
             x = np.pad(x, (0, n_orig - len(x)))
-        return x
+        return x  # type: ignore[no-any-return]
 
     def _enhance_onnx(self, mono: np.ndarray, sigma: float) -> np.ndarray:
         """SGMSE+ ONNX-Inferenz: Score-Based Enhancement."""
@@ -692,7 +740,7 @@ class SGMSEPlusPlugin:
             Z_enhanced = np.nan_to_num(Z_enhanced, nan=0.0, posinf=0.0, neginf=0.0)
 
             result = self._istft(Z_enhanced, n_orig)
-            return np.clip(np.nan_to_num(result, nan=0.0), -1.0, 1.0)
+            return np.clip(np.nan_to_num(result, nan=0.0), -1.0, 1.0)  # type: ignore[no-any-return]
         except Exception as exc:
             logger.warning("SGMSE+ ONNX-Inferenzfehler: %s — WPE-Fallback.", exc)
             return self._wpe_fallback(mono, _SR)
@@ -841,7 +889,7 @@ class SGMSEPlusPlugin:
             except Exception as _exc:
                 logger.debug("Plugin operation failed (non-critical): %s", _exc)
 
-            return np.clip(np.nan_to_num(result, nan=0.0), -1.0, 1.0)
+            return np.clip(np.nan_to_num(result, nan=0.0), -1.0, 1.0)  # type: ignore[no-any-return]
         except Exception as exc:
             # Detect Torch / system OOM and re-raise as Python MemoryError so
             # UV3's §2.39 OOM-Recovery-Checkpoint handler can fire instead of
@@ -909,13 +957,13 @@ class SGMSEPlusPlugin:
             plugin = get_wpe_plugin()
             result = plugin.enhance(mono, sr)
             if hasattr(result, "audio"):
-                return np.clip(np.nan_to_num(result.audio.flatten(), nan=0.0), -1.0, 1.0)
+                return np.clip(np.nan_to_num(result.audio.flatten(), nan=0.0), -1.0, 1.0)  # type: ignore[no-any-return]
             # Legacy: result ist ndarray
             arr = np.asarray(result, dtype=np.float32).flatten()
-            return np.clip(np.nan_to_num(arr, nan=0.0), -1.0, 1.0)
+            return np.clip(np.nan_to_num(arr, nan=0.0), -1.0, 1.0)  # type: ignore[no-any-return]
         except Exception as exc:
             logger.error("WPE-Fallback fehlgeschlagen: %s — Audio unverändert.", exc)
-            return np.clip(np.nan_to_num(mono.copy(), nan=0.0), -1.0, 1.0)
+            return np.clip(np.nan_to_num(mono.copy(), nan=0.0), -1.0, 1.0)  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------
@@ -930,6 +978,11 @@ def get_sgmse_plus_plugin() -> SGMSEPlusPlugin:
         with _lock_plus:
             if _instance_plus is None:
                 _instance_plus = SGMSEPlusPlugin()
+    return _instance_plus
+
+
+def get_loaded_sgmse_plus_plugin() -> SGMSEPlusPlugin | None:
+    """Gibt nur eine bereits geladene SGMSE+-Instanz zurück, ohne Lazy-Load."""
     return _instance_plus
 
 

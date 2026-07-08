@@ -2,9 +2,13 @@
 # pyproject.toml — Aurik 9 Code-Qualitäts-Konfiguration (SOTA, März 2026)
 # =============================================================================
 
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "aurik9"
-version = "9.12.10"
+version = "9.20.3"
 description = "Intelligentes Musik-Restaurierungssystem — weltweite Erstimplementierung"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -29,6 +33,9 @@ classifiers = [
     "Topic :: Multimedia :: Sound/Audio :: Analysis",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
+
+[tool.setuptools]
+packages = ["backend", "cli", "dsp", "Aurik10", "plugins", "denker", "audit", "export", "usability", "benchmarks"]
 
 # =============================================================================
 # BLACK — Code-Formatierung
@@ -77,7 +84,7 @@ skip_glob = [
 ]
 known_first_party = [
     "aurik_90",
-    "Aurik910",
+    "Aurik10",
     "core",
     "backend",
     "dsp",
@@ -251,7 +258,7 @@ dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+_*)|dummy|unused|ignored)
 "backend/processing_pipeline_v8.py" = ["ALL"]
 # UI smooth-progress thread: _sp/_sp2/_sp_lock are intentional shared-state
 # objects, not changing loop-iteration values → B023 false positive
-"Aurik910/ui/modern_window.py" = ["B023"]
+"Aurik10/ui/modern_window.py" = ["B023"]
 # DefectScanner loop closures: also intentional shared-state
 "backend/core/defect_scanner.py" = ["B023"]
 
@@ -319,9 +326,9 @@ ignore_missing_imports = true
 # PyQt5-UI — Stubs-Lücken für Flags/Enums/Signals ignorieren
 [[tool.mypy.overrides]]
 module = [
-    "Aurik910.ui.modern_window",
-    "Aurik910.ui.*",
-    "Aurik910.core.*",
+    "Aurik10.ui.modern_window",
+    "Aurik10.ui.*",
+    "Aurik10.core.*",
 ]
 ignore_errors = true
 
@@ -347,6 +354,11 @@ module = [
     "backend.core.performance_guard",
 ]
 ignore_errors = true
+
+# phase_19: multi-line def override nicht suppressierbar via # type: ignore in mypy 1.x/2.x
+[[tool.mypy.overrides]]
+module = "backend.core.phases.phase_19_de_esser"
+disable_error_code = ["override"]
 
 # =============================================================================
 # PYLINT — Erweiterte statische Analyse
@@ -414,37 +426,6 @@ max-statements = 60
 min-similarity-lines = 10
 ignore-imports = true
 ignore-docstrings = true
-
-# =============================================================================
-# PYTEST — Test-Konfiguration
-# =============================================================================
-[tool.pytest.ini_options]
-minversion = "7.0"
-addopts = [
-    "--strict-markers",
-    "--import-mode=importlib",
-    "--timeout=30",
-    "-q",
-    "--tb=short",
-    "--disable-warnings",
-    "--no-header",
-]
-testpaths = ["tests"]
-python_files = ["test_*.py", "*_test.py"]
-python_classes = ["Test*"]
-python_functions = ["test_*"]
-markers = [
-    "e2e: End-to-End-Tests (aufwendig, langsam)",
-    "ml: Tests die ML-Modelle benötigen",
-    "slow: Langsame Tests (> 10 s)",
-    "gpu: Tests die GPU benötigen",
-    "network: Tests die Netzwerkzugang benötigen",
-]
-filterwarnings = [
-    "ignore::DeprecationWarning",
-    "ignore::PendingDeprecationWarning",
-    "ignore::UserWarning",
-]
 
 # =============================================================================
 # COVERAGE — Test-Abdeckung

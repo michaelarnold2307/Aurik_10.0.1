@@ -1,5 +1,5 @@
 
-# Aurik 9 — Spec 04: DSP-Standards & SOTA-Algorithmen
+# Aurik 10 — Spec 04: DSP-Standards & SOTA-Algorithmen
 >
 > Psychoakustische Fundierung, SOTA-Entscheidungsmatrix, Pflicht-Algorithmen.
 >
@@ -174,16 +174,18 @@ def hz_to_mel(f_hz: float) -> float:
 | Musik-NR (spezialisiert) | ML: **AERO** (Richter et al., ICASSP 2024) → **MP-SENet 2023** | OMLSA/IMCRA | ~~DeepFilterNet ohne energy_bias~~ |
 | Langes Inpainting / Generativ | ML: **Consistency Models** (Song et al. 2023, < 3 s Latenz) → CQTdiff+ | DiffWave → NMF-β | ~~DDPM 1000 Schritte~~ |
 | Codec-Artefakte (Streaming) | ML: **Apollo v2** (Band-Splitting Mamba v2) → Apollo v1 | Spectral Repair + PGHI | ~~EQ-Anhebung~~ |
-| Stark degradierter Gesang (SNR < 10 dB) | ML: **MIIPHER** (Google 2023, W2v-BERT-Konditionierung) | DeepFilterNet v3.II + energy_bias=−6 dB | ~~VoiceFixer~~ |
+| Stark degradierter Gesang (SNR < 10 dB) | ML: **SGMSE+ v2** (Score-Based Diffusion, Richter 2022) | DeepFilterNet v3.II + energy_bias=−6 dB → MIIPHER¹ | ~~VoiceFixer~~ |
 | Latent-Space-Restaurierung / Codec | ML: **DAC** (Descript Audio Codec, Kumar et al. 2023) → EnCodec | CQTdiff+ → NMF-β | — |
 | Singer-Identity-Erhalt | ML: **Resemblyzer** (dvector, GE2E-Loss) → X-Vector | DSP Formant-Korrelation | — |
 | Vibrato-vs-Flutter-Diskriminierung | DSP: **F0-Autokorrelation** (Vibrato 4–7 Hz; Wow < 2 Hz) + FCPE | pYIN | — |
+
+> ¹ **MIIPHER** (Google 2023, W2v-BERT-Konditionierung): proprietär, **nicht öffentlich verfügbar**. Code-Fallback `_compensate_missing_miipher()` in `sota_vocal_model_router.py` ist aktiv; bei fehlendem Modell wird automatisch SGMSE+-Fallback-Kette aktiviert.
 
 **HTDemucs / AERO / MIIPHER Auswahllogik (Normativ):**
 
 - **HTDemucs** wird als alternative Vokal-Separation aktiviert wenn: `panns_singing_confidence ≥ 0.5` UND `material_type ∈ {cd_digital, mp3_low, mp3_high, dat}` UND MelBandRoformer SDR < 7 dB auf 30-s-Probe.
 - **AERO** (Musik-spezialisiertes NR, ICASSP 2024) wird für `mode="studio_2026"` bevorzugt gegenüber DeepFilterNet wenn `genre_label ∈ {classical, jazz, acoustic}` — diese Genres profitieren von musikalisch-bewusstem NR stärker als Vocal-Prior-basiertem NR.
-- **MIIPHER** ist Last-Resort für stark degradierten Gesang (SNR < 10 dB, `restorability_score < 30`). Es transformiert Vokal-Features in W2v-BERT-Latent-Raum — nur auf Vokal-Stem, nie auf Vollmix. Pflicht-Guard: `hallucination_guard.check_hallucination(pre, post)` nach MIIPHER-Anwendung.
+- **MIIPHER** (proprietär, nicht öffentlich verfügbar) ist Last-Resort für stark degradierten Gesang (SNR < 10 dB, `restorability_score < 30`), sofern extern bereitgestellt. Es transformiert Vokal-Features in W2v-BERT-Latent-Raum — nur auf Vokal-Stem, nie auf Vollmix. Pflicht-Guard: `hallucination_guard.check_hallucination(pre, post)` nach MIIPHER-Anwendung. Wenn nicht verfügbar: `_compensate_missing_miipher()` in `sota_vocal_model_router.py` aktiviert SGMSE+-Fallback-Kette automatisch.
 - **AERO/MIIPHER ONNX-Fallback**: `OMLSA/IMCRA` bei OOM oder Modell-Fehler — beide Modelle haben keinen eigenen DSP-Pass als Primär.
 
 **DAC / Consistency-Models Laufzeitvertrag (Normativ):**
@@ -254,6 +256,55 @@ Spec 06 §7.1d und das Evaluationsprotokoll §4.4a gemeinsam zu aktualisieren.
 ---
 
 ## §4.5 Pflicht-Algorithmus-Spezifikationen
+
+### §4.5g [RELEASE_MUST] WLPC — Noise-Robuste Formant-Extraktion (v9.15.3)
+
+**Problem**: Standard-Burg-LPC erkennt Rauschspitzen als Formanten wenn SNR < 15 dB oder
+era < 1960 (Shellac, frühe elektrische Aufnahmen). Das erzeugt falsche Formant-Korrekturen
+und kann die Stimme verfärben.
+
+**Lösung — Wiener-gain Spectral Pre-Whitening** (implementiert in `lpc_formant_tracker.py`):
+
+```python
+# WLPC-Pfad: aktiv wenn era_decade < 1960 ODER effective_snr < 15 dB
+# Pre-Whitening NUR für LPC-Koeffizienten-Schätzung — nie auf Output-Audio anwenden!
+
+def _wlpc_prewhiten_frame(frame: np.ndarray, noise_psd: np.ndarray) -> np.ndarray:
+    """Wiener-Gain Spektral-Pre-Whitening für rauschrobuste LPC-Schätzung."""
+    fft_frame = np.fft.rfft(frame)
+    signal_psd = np.abs(fft_frame) ** 2
+    gain = np.maximum(1.0 - noise_psd / (signal_psd + 1e-10), _WLPC_GAIN_FLOOR)
+    return np.fft.irfft(fft_frame * gain, n=len(frame))
+
+# Noise-PSD aus den ruhigsten 20 % der Frames (Perzentil-Filter):
+quiet_frames = [f for f in frames if rms(f) < np.percentile(rms_list, 20)]
+noise_psd = np.mean([np.abs(np.fft.rfft(f))**2 for f in quiet_frames], axis=0)
+
+# SNR-Schätzung: 75th/10th-Perzentil-Verhältnis der Frame-RMS-Werte
+snr_db = 20 * np.log10(np.percentile(rms_list, 75) / (np.percentile(rms_list, 10) + 1e-10))
+```
+
+**Wichtige Invariante**: Pre-Whitening wird AUSSCHLIESSLICH für die LPC-Polynomial-Schätzung
+verwendet. Das Output-Audio wird nicht modifiziert (§0 Primum non nocere).
+
+**API** (`backend/core/dsp/lpc_formant_tracker.py`):
+
+```python
+# lpc_formant_enhance() und _LPCFormantTracker.enhance() — neue Parameter:
+def enhance(audio, sr, era_decade: int | None = None, snr_hint_db: float | None = None):
+    ...
+    # WLPC-Pfad aktiv wenn:
+    # - era_decade is not None and era_decade < _WLPC_ERA_THRESHOLD (1960)
+    # - ODER effective_snr < _WLPC_SNR_THRESHOLD_DB (15.0 dB)
+```
+
+**VERBOTEN**: `_get_lfc().enhance(audio, sr)` ohne `era_decade` wenn der Aufrufkontext
+`era_decade < 1960` kennt — Standard-Burg-LPC würde Rausch-Formanten erkennen und korrigieren.
+
+**Pflicht-Aufrufer mit era_decade**:
+
+- `phase_42_vocal_enhancement.py`: `_get_lfc().enhance(audio, sr, era_decade=int(_era_decade) if _era_decade else None)`
+- `phase_65_vocal_naturalness_restoration.py`: `era_decade` aus `kwargs`/`_restoration_context`
 
 ### Rauschunterdrückung (Phase 03, 29)
 
@@ -1434,15 +1485,15 @@ Crossfade: Hanning 10 ms. Modul: `backend/core/adaptive_chunk_processor.py`
 
 | Modell | Version | Eingebunden seit |
 | --- | --- | --- |
-| DeepFilterNet | v3.II | Aurik 9.0 |
-| MelBandRoformer | 860 MB ONNX | Aurik 9.10.x |
-| MDX23C | Kim_Vocal_2 / Kim_Inst | Aurik 9.0 (Fallback) |
-| Apollo | v1 TorchScript | Aurik 9.0 |
-| FCPE | ONNX | Aurik 9.10.x |
-| Vocos | 48 kHz nativ ONNX | Aurik 9.10.x |
-| BEATs | iter3 ONNX 90 MB | Aurik 9.10.x |
-| VERSA | PyTorch Checkpoint (Huang et al. 2024) | Aurik 9.10.x |
-| SGMSE+ | TorchScript 251 MB | Aurik 9.10.x |
-| Flow Matching | ONNX/PT | Aurik 9.10.x |
-| Whisper-Tiny | ONNX 39 MB | Aurik 9.10.46b |
-| Resemble-Enhance | ONNX 722 MB | Aurik 9.0 (Fallback) |
+| DeepFilterNet | v3.II | Aurik 10.0 |
+| MelBandRoformer | 860 MB ONNX | Aurik 10.10.x |
+| MDX23C | Kim_Vocal_2 / Kim_Inst | Aurik 10.0 (Fallback) |
+| Apollo | v1 TorchScript | Aurik 10.0 |
+| FCPE | ONNX | Aurik 10.10.x |
+| Vocos | 48 kHz nativ ONNX | Aurik 10.10.x |
+| BEATs | iter3 ONNX 90 MB | Aurik 10.10.x |
+| VERSA | PyTorch Checkpoint (Huang et al. 2024) | Aurik 10.10.x |
+| SGMSE+ | TorchScript 251 MB | Aurik 10.10.x |
+| Flow Matching | ONNX/PT | Aurik 10.10.x |
+| Whisper-Tiny | ONNX 39 MB | Aurik 10.10.46b |
+| Resemble-Enhance | ONNX 722 MB | Aurik 10.0 (Fallback) |

@@ -161,10 +161,50 @@ class AzimuthCorrectionPhaseV2(PhaseInterface):
         return {"xcorr_window_samples": power}
 
     @staticmethod
+    def _local_event_strength(key: str, loc: tuple[float, float], event_metadata: dict[str, dict] | None) -> float:
+        """Defekttyp- und Event-adaptive Einblendstaerke fuer Azimuth-Korrektur."""
+        duration_s = max(0.0, float(loc[1]) - float(loc[0]))
+        duration_factor = float(np.clip(duration_s / 0.80, 0.30, 1.0))
+        key_factor = {
+            "azimuth_error": 1.0,
+            "phase_issues": 0.82,
+            "stereo_imbalance": 0.62,
+            "crosstalk": 0.50,
+        }.get(key, 0.70)
+        severity = 0.55
+        confidence = 0.80
+        meta_obj = (event_metadata or {}).get(key)
+        if isinstance(meta_obj, dict):
+            severity = float(np.clip(float(meta_obj.get("severity", severity)), 0.0, 1.0))
+            confidence = float(np.clip(float(meta_obj.get("confidence", confidence)), 0.0, 1.0))
+        return float(np.clip(key_factor * (0.38 + 0.42 * severity + 0.20 * confidence) * duration_factor, 0.16, 1.0))
+
+    @staticmethod
+    def _collect_protected_zones(kwargs: dict) -> list[tuple[float, float, float]]:
+        zones: list[tuple[float, float, float]] = []
+        for key, cap in (
+            ("vibrato_zones", 0.20),
+            ("frisson_zones", 0.30),
+            ("whisper_zones", 0.25),
+            ("passaggio_zones", 0.35),
+        ):
+            for zone in kwargs.get(key) or []:
+                try:
+                    start_s = float(getattr(zone, "start_s", None) or zone[0])
+                    end_s = float(getattr(zone, "end_s", None) or zone[1])
+                    if end_s > start_s:
+                        zones.append((start_s, end_s, cap))
+                except Exception:
+                    continue
+        return zones
+
+    @staticmethod
     def _build_locality_profile(
         n_samples: int,
         sample_rate: int,
         defect_locations: dict[str, list[tuple[float, float]]] | None,
+        event_metadata: dict[str, dict] | None = None,
+        protected_zones: list[tuple[float, float, float]] | None = None,
     ) -> tuple[np.ndarray, float]:
         """Erzeugt lokale Blendmaske aus scanner-locations für Azimuth-Korrektur."""
         if n_samples <= 0 or sample_rate <= 0:
@@ -189,7 +229,8 @@ class AzimuthCorrectionPhaseV2(PhaseInterface):
                 s = max(0, s - pad)
                 e = min(n_samples, e + pad)
                 if e > s:
-                    mask[s:e] = 1.0
+                    event_strength = AzimuthCorrectionPhaseV2._local_event_strength(key, loc, event_metadata)
+                    mask[s:e] = np.maximum(mask[s:e], event_strength)
 
         if float(np.mean(mask)) <= 1e-6:
             return np.ones(n_samples, dtype=np.float32), 0.0
@@ -197,7 +238,86 @@ class AzimuthCorrectionPhaseV2(PhaseInterface):
         smooth = max(16, int(0.02 * sample_rate))
         mask = np.convolve(mask, np.ones(smooth, dtype=np.float32) / float(smooth), mode="same")
         mask = np.clip(mask, 0.0, 1.0).astype(np.float32)
+        if protected_zones:
+            for start_s, end_s, cap in protected_zones:
+                s = int(max(0.0, float(start_s)) * sample_rate)
+                e = int(max(0.0, float(end_s)) * sample_rate)
+                if e > s:
+                    mask[s : min(n_samples, e)] = np.minimum(mask[s : min(n_samples, e)], float(cap))
         return mask, float(np.mean(mask))
+
+    @staticmethod
+    def _limit_envelope_modulation(
+        reference: np.ndarray,
+        candidate: np.ndarray,
+        sample_rate: int,
+        *,
+        max_delta_db: float = 1.25,
+    ) -> tuple[np.ndarray, dict[str, float]]:
+        """Begrenzt neu erzeugte Pegelmodulation durch lokale Dry/Wet-Rueckblendung."""
+        if reference.shape != candidate.shape or reference.size < 512 or sample_rate <= 0:
+            return candidate, {"envelope_guard_applied": 0.0, "max_envelope_delta_db": 0.0, "min_wet": 1.0}
+
+        ref = np.nan_to_num(reference.astype(np.float32), nan=0.0, posinf=0.0, neginf=0.0)
+        cand = np.nan_to_num(candidate.astype(np.float32), nan=0.0, posinf=0.0, neginf=0.0)
+        ref_mono = np.mean(ref, axis=1) if ref.ndim == 2 else ref
+        cand_mono = np.mean(cand, axis=1) if cand.ndim == 2 else cand
+        n_samples = int(ref_mono.shape[0])
+        frame_len = max(256, int(round(sample_rate * 0.025)))
+        hop = max(128, frame_len // 2)
+        starts = list(range(0, max(1, n_samples - frame_len + 1), hop))
+        if not starts or starts[-1] + frame_len < n_samples:
+            starts.append(max(0, n_samples - frame_len))
+
+        centers: list[float] = []
+        wet_values: list[float] = []
+        delta_values: list[float] = []
+        max_delta = 0.0
+        min_wet = 1.0
+        for start in starts:
+            end = min(n_samples, start + frame_len)
+            ref_rms = float(np.sqrt(np.mean(ref_mono[start:end].astype(np.float64) ** 2) + 1e-12))
+            cand_rms = float(np.sqrt(np.mean(cand_mono[start:end].astype(np.float64) ** 2) + 1e-12))
+            ref_db = 20.0 * np.log10(max(ref_rms, 1e-12))
+            delta_db = float(20.0 * np.log10(max(cand_rms, 1e-12) / max(ref_rms, 1e-12)))
+            max_delta = max(max_delta, abs(delta_db))
+
+            if ref_db < -55.0:
+                wet = 0.35 if abs(delta_db) > 0.5 else 1.0
+            elif abs(delta_db) > max_delta_db:
+                wet = float(np.clip(max_delta_db / max(abs(delta_db), 1e-6), 0.0, 1.0))
+            else:
+                wet = 1.0
+            min_wet = min(min_wet, wet)
+            centers.append(float((start + end - 1) * 0.5))
+            wet_values.append(wet)
+            delta_values.append(delta_db)
+
+        if min_wet >= 0.999:
+            return cand, {"envelope_guard_applied": 0.0, "max_envelope_delta_db": float(max_delta), "min_wet": 1.0}
+
+        wet_curve = np.interp(
+            np.arange(n_samples, dtype=np.float64),
+            np.asarray(centers, dtype=np.float64),
+            np.asarray(wet_values, dtype=np.float64),
+        ).astype(np.float32)
+        smooth = max(16, int(round(sample_rate * 0.050)))
+        if smooth < n_samples:
+            kernel = np.hanning(smooth).astype(np.float32)
+            kernel /= float(np.sum(kernel) + 1e-12)
+            wet_curve = np.convolve(wet_curve, kernel, mode="same").astype(np.float32)
+            wet_curve = np.clip(wet_curve, 0.0, 1.0)
+
+        wet_curve_2d = wet_curve[:, np.newaxis] if cand.ndim == 2 else wet_curve
+        limited = ref + wet_curve_2d * (cand - ref)
+        limited = np.nan_to_num(limited, nan=0.0, posinf=0.0, neginf=0.0)
+        limited = np.clip(limited, -1.0, 1.0).astype(np.float32)
+        return limited, {
+            "envelope_guard_applied": 1.0,
+            "max_envelope_delta_db": float(max_delta),
+            "min_wet": float(min_wet),
+            "mean_envelope_delta_db": float(np.mean(np.abs(np.asarray(delta_values, dtype=np.float64)))),
+        }
 
     def process(
         self,
@@ -225,7 +345,7 @@ class AzimuthCorrectionPhaseV2(PhaseInterface):
             material_enum = material_type
         else:
             _mat_norm = str(material_type or "unknown").strip().upper().replace("-", "_").replace(" ", "_")
-            material_enum = getattr(MaterialType, _mat_norm, MaterialType.CD_DIGITAL)
+            material_enum = getattr(MaterialType, _mat_norm, MaterialType.CD_DIGITAL)  # type: ignore[arg-type]
         material_name = material_enum.name
 
         self.validate_input(audio)
@@ -322,7 +442,7 @@ class AzimuthCorrectionPhaseV2(PhaseInterface):
         for i, band_audio in enumerate(bands):
             azimuth_error = self._analyze_band_azimuth(band_audio, sample_rate, i)
             band_azimuth_errors.append(azimuth_error)
-            max_phase_shift = max(max_phase_shift, abs(azimuth_error.phase_shift_samples))
+            max_phase_shift = max(max_phase_shift, int(abs(azimuth_error.phase_shift_samples)))
 
         # Step 3: Measure HF loss (secondary indicator)
         hf_loss_db = self._measure_hf_loss(left, right, sample_rate)
@@ -392,7 +512,7 @@ class AzimuthCorrectionPhaseV2(PhaseInterface):
         for i, band_audio in enumerate(corrected_bands):
             azimuth_error = self._analyze_band_azimuth(band_audio, sample_rate, i)
             corrected_azimuth_errors.append(azimuth_error)
-            max_phase_shift_after = max(max_phase_shift_after, abs(azimuth_error.phase_shift_samples))
+            max_phase_shift_after = max(max_phase_shift_after, int(abs(azimuth_error.phase_shift_samples)))
 
         phase_shift_reduction = max_phase_shift - max_phase_shift_after
 
@@ -416,6 +536,8 @@ class AzimuthCorrectionPhaseV2(PhaseInterface):
             n_samples=corrected_audio.shape[0],
             sample_rate=sample_rate,
             defect_locations=kwargs.get("defect_locations"),
+            event_metadata=kwargs.get("defect_event_metadata"),
+            protected_zones=self._collect_protected_zones(kwargs),
         )
         if _locality_profile.size > 0:
             _profile_2d = _locality_profile[:, np.newaxis]
@@ -424,6 +546,38 @@ class AzimuthCorrectionPhaseV2(PhaseInterface):
         if 0.0 < _effective_strength < 1.0:
             corrected_audio = audio + _effective_strength * (corrected_audio - audio)
             corrected_audio = np.clip(corrected_audio, -1.0, 1.0)
+
+        # §V24 Spektralfarbe-Prüfung nach Azimuth-Korrektur (§2.74, non-blocking WARNING)
+        try:
+            from backend.core.dsp.spectral_color_guard import (  # pylint: disable=import-outside-toplevel
+                check_spectral_color_preservation as _scg_25,
+            )
+
+            _sc_result_25 = _scg_25(audio, corrected_audio, sample_rate)
+            if not _sc_result_25.ok:
+                _sc_wet_25 = 0.70  # Phase-Strength −30 % (§V24)
+                corrected_audio = (_sc_wet_25 * corrected_audio + (1.0 - _sc_wet_25) * audio).astype(np.float32)
+        except Exception as _sc_exc_25:
+            logger.debug("§V24 phase_25 spectral_color non-blocking: %s", _sc_exc_25)
+
+        # V26 Onset-Guard (§2.77): Transient-Fenster nach Azimuth-Korrektur schützen (non-blocking)
+        try:
+            from backend.core.dsp.onset_guard import (  # pylint: disable=import-outside-toplevel
+                apply_onset_protection_mask as _opg25,
+            )
+
+            corrected_audio = _opg25(audio, corrected_audio, None, max_delta_db=1.5)
+        except Exception as _on25_exc:
+            logger.debug("Phase25 V26 Onset-Guard (non-blocking): %s", _on25_exc)
+
+        corrected_audio, _env_guard_stats = self._limit_envelope_modulation(audio, corrected_audio, sample_rate)
+        if float(_env_guard_stats.get("envelope_guard_applied", 0.0)) > 0.0:
+            logger.info(
+                "phase_25 Envelope-Guard: max_delta=%.2f dB min_wet=%.2f",
+                float(_env_guard_stats.get("max_envelope_delta_db", 0.0)),
+                float(_env_guard_stats.get("min_wet", 1.0)),
+            )
+
         return PhaseResult(
             success=True,
             audio=corrected_audio,
@@ -438,6 +592,9 @@ class AzimuthCorrectionPhaseV2(PhaseInterface):
                 "repair_locality_coverage": float(_locality_coverage),
                 "phase_locality_factor": phase_locality_factor,
                 "effective_strength": _effective_strength,
+                "envelope_guard_applied": bool(_env_guard_stats.get("envelope_guard_applied", 0.0)),
+                "envelope_guard_max_delta_db": float(_env_guard_stats.get("max_envelope_delta_db", 0.0)),
+                "envelope_guard_min_wet": float(_env_guard_stats.get("min_wet", 1.0)),
                 "rms_drop_db": 0.0,
                 "loudness_makeup_db": 0.0,
             },
@@ -528,7 +685,7 @@ class AzimuthCorrectionPhaseV2(PhaseInterface):
         confidence = max_corr / (mean_corr + 1e-10)
 
         return BandAzimuthAnalysis(
-            band_index=band_index, phase_shift_samples=phase_shift_samples, confidence=float(confidence)
+            band_index=band_index, phase_shift_samples=int(phase_shift_samples), confidence=float(confidence)
         )
 
     def _correct_band_azimuth(
@@ -746,7 +903,7 @@ class AzimuthCorrectionPhaseV2(PhaseInterface):
         else:
             hf_loss_db = 0.0
 
-        return hf_loss_db
+        return float(hf_loss_db)
 
     def _restore_hf_content(
         self, corrected_audio: np.ndarray, original_audio: np.ndarray, sample_rate: int, hf_loss_db: float
@@ -784,7 +941,7 @@ class AzimuthCorrectionPhaseV2(PhaseInterface):
             # Safety clip (no peak normalization)
             restored = np.clip(restored, -1.0, 1.0)
 
-            return restored
+            return restored  # type: ignore[no-any-return]
         except Exception:
             return corrected_audio
 
@@ -792,7 +949,7 @@ class AzimuthCorrectionPhaseV2(PhaseInterface):
         """
         Recombine frequency bands (simple sum).
         """
-        return sum(bands)
+        return np.asarray(sum(bands))  # type: ignore[no-any-return]
 
     def get_metadata(self) -> PhaseMetadata:
         """Gibt zurück: phase metadata."""
@@ -863,7 +1020,7 @@ def _run_standalone_test() -> None:
     logger.debug("Testing with material: TAPE")
     logger.debug("%s", "─" * 80)
 
-    result = phase.process(demo_audio, demo_sample_rate, MaterialType.TAPE)
+    result = phase.process(demo_audio, demo_sample_rate, MaterialType.TAPE)  # type: ignore[arg-type]
 
     if result.success:
         logger.debug("✅ Processing Complete!")
@@ -911,7 +1068,7 @@ def _run_standalone_test() -> None:
     logger.debug("Testing with material: VINYL (should skip)")
     logger.debug("%s", "─" * 80)
 
-    result_vinyl = phase.process(demo_audio, demo_sample_rate, MaterialType.VINYL)
+    result_vinyl = phase.process(demo_audio, demo_sample_rate, MaterialType.VINYL)  # type: ignore[arg-type]
 
     if result_vinyl.success:
         logger.debug("✅ As expected: Azimuth Correction skipped for VINYL")

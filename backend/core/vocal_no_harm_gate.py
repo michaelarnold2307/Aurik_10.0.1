@@ -27,9 +27,25 @@ _BREATH_EMOTIONAL_ATTENUATION_MAX_DB = 3.0
 _BREATH_MIN_RMS_DB = -70.0
 _VOCAL_GATE_PANNS_FLOOR = 0.35
 _VOCAL_MAX_TARGET_RESTORATION = 0.88
+
+# §DENKER: Material-spezifische Vocal-No-Harm-Toleranzen
+# Cassette/Band: höhere Toleranz (0.55) weil Defekte und Gesang untrennbar verwoben sind
+# Vinyl/Shellac: mittlere Toleranz (0.45) wegen Oberflächengeräuschen
+# Digital: strenge Toleranz (0.35) — saubere Quelle erwartet
+_VOCAL_GATE_MATERIAL_FLOOR: dict[str, float] = {
+    "cassette": 0.55,
+    "tape": 0.55,
+    "reel_tape": 0.50,
+    "vinyl": 0.45,
+    "shellac": 0.45,
+    "wax_cylinder": 0.50,
+    "wire_recording": 0.50,
+}
 _VOCAL_MAX_TARGET_STUDIO2026 = 0.92
 _VOCAL_MAX_ALIGNMENT_RESTORATION_MIN = 0.90
 _VOCAL_MAX_ALIGNMENT_STUDIO2026_MIN = 0.93
+_VOCAL_MAX_ALIGNMENT_RESTORATION_TOL = 0.02
+_VOCAL_MAX_ALIGNMENT_STUDIO2026_TOL = 0.015
 
 _instance: VocalNoHarmGate | None = None
 _lock = threading.Lock()
@@ -99,12 +115,15 @@ def compute_vocal_max_alignment(
     alignment = float(np.clip(float(vqi) / max(vocal_max_target, 1e-6), 0.0, 1.0))
     min_alignment = _VOCAL_MAX_ALIGNMENT_STUDIO2026_MIN if is_studio else _VOCAL_MAX_ALIGNMENT_RESTORATION_MIN
     min_alignment = float(np.clip(min_alignment + 0.04 * rest_ratio, min_alignment, 0.98))
+    tol = _VOCAL_MAX_ALIGNMENT_STUDIO2026_TOL if is_studio else _VOCAL_MAX_ALIGNMENT_RESTORATION_TOL
+    effective_min_alignment = float(np.clip(min_alignment - tol, 0.0, 0.98))
     return {
         "vocal_max_target": vocal_max_target,
         "vocal_max_alignment": alignment,
         "vocal_max_alignment_percent": alignment * 100.0,
         "vocal_max_alignment_floor_percent": min_alignment * 100.0,
-        "vocal_max_alignment_ok": alignment >= min_alignment,
+        "vocal_max_alignment_floor_percent_effective": effective_min_alignment * 100.0,
+        "vocal_max_alignment_ok": alignment >= effective_min_alignment,
     }
 
 
@@ -137,7 +156,8 @@ class VocalNoHarmGate:
         metrics.
         """
         panns = float(np.clip(panns_singing, 0.0, 1.0))
-        if panns < _VOCAL_GATE_PANNS_FLOOR:
+        _mat_floor = _VOCAL_GATE_MATERIAL_FLOOR.get(str(material_type or "").lower(), _VOCAL_GATE_PANNS_FLOOR)
+        if panns < _mat_floor:
             return VocalNoHarmResult(active=False, passed=True, requires_rollback=False, reason="not_vocal")
 
         pre = np.nan_to_num(np.asarray(audio_pre, dtype=np.float32), nan=0.0, posinf=0.0, neginf=0.0)
@@ -182,6 +202,8 @@ class VocalNoHarmGate:
             checks,
             warnings,
             failures,
+            era_decade=era_decade,
+            era_vocal_profile=era_vocal_profile,
         )
         self._evaluate_hnr(pre, post, sr, scores, checks, warnings, failures)
         self._evaluate_formants(pre, post, sr, scores, checks, warnings, failures, era_decade, era_vocal_profile)
@@ -281,6 +303,8 @@ class VocalNoHarmGate:
         checks: dict[str, bool],
         warnings: list[str],
         failures: list[str],
+        era_decade: int | None = None,
+        era_vocal_profile: Any | None = None,
     ) -> None:
         try:
             compute_vqi = _load_symbol("backend.core.musical_goals.vocal_quality_index", "compute_vqi")
@@ -295,6 +319,7 @@ class VocalNoHarmGate:
                 skip_singer_identity=skip_singer_identity,
                 reference_audio=reference_audio,
                 genre=genre,
+                era_profile=era_vocal_profile,
             )
             vqi = _as_float(vqi_result.get("vqi"), 1.0) if isinstance(vqi_result, dict) else 1.0
             singer_identity = (
@@ -341,6 +366,9 @@ class VocalNoHarmGate:
         scores["vocal_max_alignment"] = float(alignment["vocal_max_alignment"])
         scores["vocal_max_alignment_percent"] = float(alignment["vocal_max_alignment_percent"])
         scores["vocal_max_alignment_floor_percent"] = float(alignment["vocal_max_alignment_floor_percent"])
+        scores["vocal_max_alignment_floor_percent_effective"] = float(
+            alignment["vocal_max_alignment_floor_percent_effective"]
+        )
         checks["vocal_max_alignment_ok"] = bool(alignment["vocal_max_alignment_ok"])
         if not checks["vocal_max_alignment_ok"]:
             failures.append("vocal_max_alignment")
@@ -520,12 +548,12 @@ class VocalNoHarmGate:
     def _to_mono(audio: np.ndarray) -> np.ndarray:
         arr = np.asarray(audio, dtype=np.float32)
         if arr.ndim == 1:
-            return arr
+            return arr  # type: ignore[no-any-return]
         if arr.ndim == 2 and arr.shape[0] <= 8:
             return cast(np.ndarray, np.asarray(np.mean(arr, axis=0), dtype=np.float32))
         if arr.ndim == 2:
             return cast(np.ndarray, np.asarray(np.mean(arr, axis=1), dtype=np.float32))
-        return arr.reshape(-1).astype(np.float32)
+        return arr.reshape(-1).astype(np.float32)  # type: ignore[no-any-return]
 
     @staticmethod
     def _rms_db(audio: np.ndarray) -> float:

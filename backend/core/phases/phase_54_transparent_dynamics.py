@@ -257,6 +257,99 @@ class TransparentDynamicsV1(PhaseInterface):
 
         return {"mix_delta": float(np.clip(mix_delta, -0.20, 0.20))}
 
+    @staticmethod
+    def _local_event_strength(key: str, loc: tuple[float, float], event_metadata: dict[str, dict] | None) -> float:
+        duration_s = max(0.0, float(loc[1]) - float(loc[0]))
+        duration_factor = float(np.clip(duration_s / 0.75, 0.32, 1.0))
+        key_factor = {
+            "compression_artifacts": 1.0,
+            "dynamic_compression_excess": 0.86,
+            "nr_breathing_artifact": 0.92,
+            "pumping": 0.90,
+            "level_pumping": 0.84,
+            "transient_smearing": 0.52,
+        }.get(key, 0.65)
+        severity = 0.55
+        confidence = 0.80
+        meta_obj = (event_metadata or {}).get(key)
+        if isinstance(meta_obj, dict):
+            severity = float(np.clip(float(meta_obj.get("severity", severity)), 0.0, 1.0))
+            confidence = float(np.clip(float(meta_obj.get("confidence", confidence)), 0.0, 1.0))
+        return float(np.clip(key_factor * (0.34 + 0.44 * severity + 0.22 * confidence) * duration_factor, 0.14, 1.0))
+
+    @staticmethod
+    def _collect_protected_zones(kwargs: dict) -> list[tuple[float, float, float]]:
+        zones: list[tuple[float, float, float]] = []
+        for key, cap in (
+            ("vibrato_zones", 0.20),
+            ("frisson_zones", 0.30),
+            ("whisper_zones", 0.25),
+            ("passaggio_zones", 0.35),
+        ):
+            for zone in kwargs.get(key) or []:
+                try:
+                    start_s = float(getattr(zone, "start_s", None) or zone[0])
+                    end_s = float(getattr(zone, "end_s", None) or zone[1])
+                    if end_s > start_s:
+                        zones.append((start_s, end_s, cap))
+                except Exception:
+                    continue
+        return zones
+
+    @staticmethod
+    def _build_locality_profile(
+        n_samples: int,
+        sample_rate: int,
+        defect_locations: dict[str, list[tuple[float, float]]] | None,
+        event_metadata: dict[str, dict] | None = None,
+        protected_zones: list[tuple[float, float, float]] | None = None,
+    ) -> tuple[np.ndarray, float]:
+        if n_samples <= 0 or sample_rate <= 0:
+            return np.zeros(0, dtype=np.float32), 0.0
+        if not isinstance(defect_locations, dict) or not defect_locations:
+            return np.ones(n_samples, dtype=np.float32), 0.0
+
+        keys = (
+            "compression_artifacts",
+            "dynamic_compression_excess",
+            "nr_breathing_artifact",
+            "pumping",
+            "level_pumping",
+            "transient_smearing",
+        )
+        mask = np.zeros(n_samples, dtype=np.float32)
+        for key in keys:
+            pad = int((0.120 if key in {"nr_breathing_artifact", "pumping", "level_pumping"} else 0.070) * sample_rate)
+            for loc in defect_locations.get(key) or []:
+                if not isinstance(loc, tuple) or len(loc) != 2:
+                    continue
+                try:
+                    start = int(max(0.0, float(loc[0])) * sample_rate)
+                    end = int(max(0.0, float(loc[1])) * sample_rate)
+                except Exception:
+                    continue
+                if end <= start:
+                    continue
+                start = max(0, start - pad)
+                end = min(n_samples, end + pad)
+                if end > start:
+                    strength = TransparentDynamicsV1._local_event_strength(key, loc, event_metadata)
+                    mask[start:end] = np.maximum(mask[start:end], strength)
+
+        if float(np.mean(mask)) <= 1e-6:
+            return np.ones(n_samples, dtype=np.float32), 0.0
+
+        smooth = max(16, int(0.060 * sample_rate))
+        mask = np.convolve(mask, np.ones(smooth, dtype=np.float32) / float(smooth), mode="same")
+        mask = np.clip(mask, 0.0, 1.0).astype(np.float32)
+        if protected_zones:
+            for start_s, end_s, cap in protected_zones:
+                start = int(max(0.0, float(start_s)) * sample_rate)
+                end = int(max(0.0, float(end_s)) * sample_rate)
+                if end > start:
+                    mask[start : min(n_samples, end)] = np.minimum(mask[start : min(n_samples, end)], float(cap))
+        return mask, float(np.mean(mask))
+
     def process(
         self,
         audio: np.ndarray,
@@ -277,6 +370,16 @@ class TransparentDynamicsV1(PhaseInterface):
             PhaseResult with transparently compressed audio
         """
         sample_rate = int(kwargs.get("sample_rate", sample_rate))
+        # ── §v10 PIM: Per-Band-Intensität kalibrieren ──
+        try:
+            from backend.core.pim_phase_hook import apply_pim_intensity
+            _pim = apply_pim_intensity(kwargs, "transparent_dyn",
+                default_nr=0.3, default_de_ess=0.2, default_comp=1.3)
+            for _key in ("noise_reduction_strength", "nr_strength", "strength", "wet"):
+                if _key in kwargs:
+                    kwargs[_key] = _pim["nr_strength"]
+        except Exception:
+            pass
         assert sample_rate == 48000, f"SR muss 48000 Hz sein, erhalten: {sample_rate}"
         audio, _p54_transposed = to_channels_last(audio)
         start_time = time.time()
@@ -403,6 +506,17 @@ class TransparentDynamicsV1(PhaseInterface):
         else:
             audio_out = mix * audio_compressed + (1.0 - mix) * audio_mono
 
+        _local_profile54, _local_coverage54 = self._build_locality_profile(
+            int(audio.shape[0]),
+            sample_rate,
+            kwargs.get("defect_locations"),
+            kwargs.get("defect_event_metadata"),
+            self._collect_protected_zones(kwargs),
+        )
+        if _local_coverage54 > 0.0:
+            _wet54 = _local_profile54[:, np.newaxis] if audio_out.ndim == 2 else _local_profile54
+            audio_out = audio + _wet54 * (audio_out - audio)
+
         # Prevent clipping — §2.49 Peak-Guard: percentile(99.9)
         peak = float(np.percentile(np.abs(audio_out), 99.9))
         if peak > 0.95:
@@ -447,6 +561,29 @@ class TransparentDynamicsV1(PhaseInterface):
         except Exception as _npa54_exc:
             logger.debug("§2.46f phase_54 NPA-Guard (non-blocking): %s", _npa54_exc)
 
+        # §V24 Spektralfarbe-Prüfung nach Dynamik-Kompression (§2.74, non-blocking WARNING)
+        try:
+            from backend.core.dsp.spectral_color_guard import (  # pylint: disable=import-outside-toplevel
+                check_spectral_color_preservation as _scg_54,
+            )
+
+            _sc_result_54 = _scg_54(audio, audio_out, sample_rate)
+            if not _sc_result_54.ok:
+                _sc_wet_54 = 0.70  # Phase-Strength −30 % (§V24)
+                audio_out = (_sc_wet_54 * audio_out + (1.0 - _sc_wet_54) * audio).astype(np.float32)
+        except Exception as _sc_exc_54:
+            logger.debug("§V24 phase_54 spectral_color non-blocking: %s", _sc_exc_54)
+
+        # V26 Onset-Guard (§2.77): Transients nach Dynamik-Kompression schützen (non-blocking)
+        try:
+            from backend.core.dsp.onset_guard import (  # pylint: disable=import-outside-toplevel
+                apply_onset_protection_mask as _opg54,
+            )
+
+            audio_out = _opg54(audio, audio_out, None, max_delta_db=1.5)
+        except Exception as _on54_exc:
+            logger.debug("Phase54 V26 Onset-Guard (non-blocking): %s", _on54_exc)
+
         return PhaseResult(
             success=True,
             audio=audio_out,
@@ -465,6 +602,7 @@ class TransparentDynamicsV1(PhaseInterface):
                 "hard_intervention_active": hard_intervention_active,
                 "transparent_dynamics_profile": dict(_td_profile),
                 "mix_delta": float(_td_profile["mix_delta"]),
+                "repair_locality_coverage": round(float(_local_coverage54), 6),
                 "phase_locality_factor": phase_locality_factor,
                 "effective_strength": effective_strength,
                 "rms_drop_db": 0.0,
@@ -504,7 +642,7 @@ class TransparentDynamicsV1(PhaseInterface):
         # Clip to 0-1 range
         masking_curve = np.clip(masking_curve, 0, 1)
 
-        return masking_curve
+        return masking_curve  # type: ignore[no-any-return]
 
     def _detect_transients(self, audio: np.ndarray) -> np.ndarray:
         """
@@ -554,7 +692,7 @@ class TransparentDynamicsV1(PhaseInterface):
         # Normalize mask
         transient_mask = np.clip(transient_mask, 0, 1)
 
-        return transient_mask
+        return transient_mask  # type: ignore[no-any-return]
 
     def _apply_compression(
         self,
@@ -649,7 +787,7 @@ class TransparentDynamicsV1(PhaseInterface):
         # Apply gain reduction
         audio_compressed = audio * gain_smooth
 
-        return audio_compressed
+        return np.asarray(audio_compressed)  # type: ignore[no-any-return]
 
     def get_metadata(self) -> PhaseMetadata:
         """Gibt phase metadata zurück."""
@@ -728,7 +866,7 @@ if __name__ == "__main__":
 
     # Test first genre/material combination
     phase = TransparentDynamicsV1(sample_rate=sr, genre=genres[0])
-    result = phase.process(test_audio, material_type=materials[0])
+    result = phase.process(test_audio, material_type=str(materials[0].value))
 
     metadata = phase.get_metadata()
 
@@ -744,7 +882,7 @@ if __name__ == "__main__":
     for genre_name in genres:
         for material in materials:
             phase = TransparentDynamicsV1(sample_rate=sr, genre=genre_name)
-            result = phase.process(test_audio, material_type=material)
+            result = phase.process(test_audio, material_type=str(material.value))
 
             rt_factor = result.execution_time_seconds / duration
 

@@ -85,6 +85,7 @@ from backend.core.audio_utils import compute_signal_relative_gate_dbfs as _sig_g
 from backend.core.audio_utils import to_channels_last
 from backend.core.ml_memory_budget import release as _ml_release
 from backend.core.ml_memory_budget import try_allocate as _try_allocate
+from backend.core.restoration_policy import get_effective_song_goal_weights
 
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult, create_phase_result
 
@@ -121,7 +122,7 @@ def _get_banquet_onnx_session():
         with _BANQUET_ONNX_LOCK:
             if _BANQUET_ONNX_STATE["session"] is None:
                 try:
-                    import onnxruntime as ort  # pylint: disable=import-outside-toplevel
+                    import onnxruntime as ort
 
                     _BANQUET_SIZE_GB = 0.05  # banquet_vinyl_final.onnx ~ 50 MB
                     if not _try_allocate("BanquetVinyl", size_gb=_BANQUET_SIZE_GB):
@@ -149,7 +150,7 @@ def _get_banquet_onnx_session():
 
                         _BANQUET_ONNX_STATE["session"] = sess
                         try:
-                            from backend.core.plugin_lifecycle_manager import (  # pylint: disable=import-outside-toplevel
+                            from backend.core.plugin_lifecycle_manager import (
                                 get_plugin_lifecycle_manager,
                             )
 
@@ -333,7 +334,7 @@ class CrackleRemovalPhase(PhaseInterface):
     @staticmethod
     def _goal_hint_strength_scalar(kwargs: dict[str, object]) -> float:
         """Berechnet a bounded advisory scalar from song goal weights (§2.56a)."""
-        goal_weights = kwargs.get("song_goal_weights")
+        goal_weights = get_effective_song_goal_weights(kwargs)
         if not isinstance(goal_weights, dict):
             return 1.0
 
@@ -358,6 +359,75 @@ class CrackleRemovalPhase(PhaseInterface):
         return float(np.clip(scalar, 0.82, 1.12))
 
     @staticmethod
+    def _compute_crackle_local_strength(
+        mono_ref: np.ndarray,
+        region_start: int,
+        region_end: int,
+        sample_rate: int,
+        base_strength: float,
+        protected_zones: list | None = None,
+    ) -> float:
+        """§V38 Per-Event-Strength-Oracle für einen einzelnen Crackle-Bereich.
+
+        Berechnet lokale Korrekturstärke anhand der Energie-Anomalie im Vergleich
+        zum 250ms-Kontext-Fenster. In VFA-Schutzzonen (Vibrato, Frisson, Flüster,
+        Passaggio) wird die Stärke auf das Zone-spezifische Cap begrenzt.
+
+        Args:
+            mono_ref:      Mono-Referenz-Signal (Pre-Phase-Input) für RMS-Messung
+            region_start:  Start-Sample der Crackle-Region
+            region_end:    End-Sample der Crackle-Region
+            sample_rate:   Sample-Rate in Hz
+            base_strength: Basis-Stärke (Material/Confidence-adaptiv)
+            protected_zones: [(start_s, end_s, max_cap), ...] — VFA-Schutzzonen
+
+        Returns:
+            Individuelle Korrekturstärke ∈ [0.10, 1.0]
+        """
+        ctx_pad = int(0.250 * max(sample_rate, 1))
+        n = len(mono_ref)
+        crackle_region = mono_ref[region_start:region_end]
+        if len(crackle_region) < 4:
+            return float(np.clip(base_strength, 0.10, 1.0))
+        ctx_pre = mono_ref[max(0, region_start - ctx_pad) : region_start]
+        ctx_post = mono_ref[region_end : min(n, region_end + ctx_pad)]
+        ctx_parts = [a for a in (ctx_pre, ctx_post) if len(a) >= 4]
+        if not ctx_parts:
+            return float(np.clip(base_strength, 0.10, 1.0))
+        ctx_audio = np.concatenate(ctx_parts)
+        crackle_rms_raw = float(np.sqrt(np.mean(crackle_region**2)))
+        ctx_rms_raw = float(np.sqrt(np.mean(ctx_audio**2)))
+        # Kein messbarer Energie-Kontext (Stille oder synthetisches Signal):
+        # → Base-Strength direkt verwenden — kein Ratio ohne Information.
+        if ctx_rms_raw < 1e-5:
+            local_strength = base_strength
+        else:
+            # Crackle-Spikes sind typischerweise deutlich energiereicher als der Kontext
+            energy_ratio = crackle_rms_raw / (ctx_rms_raw + 1e-12)
+            if energy_ratio > 1.0:
+                # Energie-Spike (Crackle/Knistern): proportionale Stärke zur Anomalie
+                local_severity = float(np.clip((energy_ratio - 1.0) / 3.0, 0.0, 1.0))
+            else:
+                # Energie-Einbruch (Dropout-ähnlich): mittel stark behandeln
+                local_severity = float(np.clip(1.0 - energy_ratio, 0.0, 0.6))
+            # Magnitude-Faktor: Mindest 0.35 — auch leichte Crackles werden repariert
+            mag_factor = float(np.clip(0.35 + 0.65 * local_severity, 0.35, 1.0))
+            local_strength = base_strength * mag_factor
+        # VFA-Schutzzonen: Stärke auf Zone-spezifisches Cap begrenzen (§0p)
+        if protected_zones:
+            center_s = float(region_start + region_end) * 0.5 / float(max(sample_rate, 1))
+            for _zone in protected_zones:
+                try:
+                    _zs, _ze, _cap = float(_zone[0]), float(_zone[1]), float(_zone[2])
+                    if _zs <= center_s <= _ze:
+                        local_strength = min(local_strength, _cap)
+                        break
+                except Exception:
+                    logger.debug("_compute_crackle_local_strength: silent except suppressed", exc_info=True)
+                    pass
+        return float(np.clip(local_strength, 0.10, 1.0))
+
+    @staticmethod
     def _apply_region_selective_strength_blend(
         dry_audio: np.ndarray,
         wet_audio: np.ndarray,
@@ -365,30 +435,43 @@ class CrackleRemovalPhase(PhaseInterface):
         effective_strength: float,
         sample_rate: int,
         fallback_to_global_when_no_regions: bool = False,
+        protected_zones: list | None = None,
     ) -> np.ndarray:
         """Region-selektives Dry/Wet-Blending fuer Crackle-Processing.
 
-        Innerhalb erkannter Crackle-Regionen gilt die volle Wirksamkeit,
-        ausserhalb wird konservativer gemischt, um Musiktextur zu schonen.
+        §V38: Innerhalb erkannter Crackle-Regionen wird die Stärke per-Event
+        individuell via _compute_crackle_local_strength berechnet (250ms-Kontext-RMS).
         """
         eff = float(np.clip(effective_strength, 0.0, 1.0))
         dry = np.asarray(dry_audio, dtype=np.float32)
         wet = np.asarray(wet_audio, dtype=np.float32)
 
         if eff <= 0.0:
-            return dry.copy()
+            return dry.copy()  # type: ignore[no-any-return]
         if eff >= 1.0:
-            return np.clip(wet, -1.0, 1.0).astype(np.float32)
+            return np.clip(wet, -1.0, 1.0).astype(np.float32)  # type: ignore[no-any-return]
         if dry.shape != wet.shape:
-            return np.clip(dry + eff * (wet - dry), -1.0, 1.0).astype(np.float32)
+            return np.clip(dry + eff * (wet - dry), -1.0, 1.0).astype(np.float32)  # type: ignore[no-any-return]
 
         n = int(dry.shape[0])
         if n <= 0:
-            return dry.copy()
+            return dry.copy()  # type: ignore[no-any-return]
         if not crackle_regions:
             if fallback_to_global_when_no_regions:
-                return np.clip(dry + eff * (wet - dry), -1.0, 1.0).astype(np.float32)
-            return dry.copy()
+                return np.clip(dry + eff * (wet - dry), -1.0, 1.0).astype(np.float32)  # type: ignore[no-any-return]
+            return dry.copy()  # type: ignore[no-any-return]
+
+        # §V38: Mono-Referenz für lokale RMS-Proxy-Berechnung (Pre-Phase-Input)
+        _dry_mono_ref: np.ndarray
+        if dry.ndim == 2:
+            if dry.shape[1] == 2:
+                _dry_mono_ref = ((dry[:, 0] + dry[:, 1]) * 0.5).astype(np.float32)
+            elif dry.shape[0] == 2:
+                _dry_mono_ref = ((dry[0] + dry[1]) * 0.5).astype(np.float32)
+            else:
+                _dry_mono_ref = dry[:, 0].astype(np.float32)
+        else:
+            _dry_mono_ref = dry.astype(np.float32)
 
         outside_alpha = float(np.clip(eff * 0.35, 0.05, eff))
         alpha = np.full(n, outside_alpha, dtype=np.float32)
@@ -396,7 +479,11 @@ class CrackleRemovalPhase(PhaseInterface):
             ss = int(np.clip(s, 0, n))
             ee = int(np.clip(e, 0, n))
             if ee > ss:
-                alpha[ss:ee] = eff
+                # §V38 Per-Event-Strength-Oracle: lokale Stärke + VFA-Schutzzonen-Cap
+                _alpha_val = CrackleRemovalPhase._compute_crackle_local_strength(
+                    _dry_mono_ref, ss, ee, sample_rate, eff, protected_zones
+                )
+                alpha[ss:ee] = _alpha_val
 
         # Weiche Uebergaenge vermeiden Kantenartefakte an Regionsgrenzen.
         pad = max(1, int(0.0008 * sample_rate))
@@ -409,7 +496,7 @@ class CrackleRemovalPhase(PhaseInterface):
             out = alpha * wet + (1.0 - alpha) * dry
         else:
             out = alpha[:, np.newaxis] * wet + (1.0 - alpha)[:, np.newaxis] * dry
-        return np.clip(out, -1.0, 1.0).astype(np.float32)
+        return np.clip(out, -1.0, 1.0).astype(np.float32)  # type: ignore[no-any-return]
 
     def _apply_phoneme_protection_to_regions(
         self,
@@ -421,7 +508,7 @@ class CrackleRemovalPhase(PhaseInterface):
             return crackle_regions
 
         try:
-            from backend.core.lyrics_guided_enhancement import (  # pylint: disable=import-outside-toplevel
+            from backend.core.lyrics_guided_enhancement import (
                 get_phoneme_mask as _get_pmask_09,
             )
 
@@ -473,13 +560,13 @@ class CrackleRemovalPhase(PhaseInterface):
         """Lazy-load BANQUET Docker plugin (fallback if ONNX direct access fails)."""
         if self._banquet_plugin is None:
             try:
-                from plugins.banquet_vinyl_plugin import BanquetVinylPlugin  # pylint: disable=import-outside-toplevel
+                from plugins.banquet_vinyl_plugin import BanquetVinylPlugin
 
-                self._banquet_plugin = BanquetVinylPlugin()
+                self._banquet_plugin = BanquetVinylPlugin()  # type: ignore[assignment]
                 logger.info("BANQUET Docker plugin loaded (fallback path)")
             except Exception as e:
                 logger.warning("BANQUET Docker plugin not available: %s", e)
-                self._banquet_plugin = False  # Mark as unavailable
+                self._banquet_plugin = False  # type: ignore[assignment]  # Mark as unavailable
 
         return self._banquet_plugin if self._banquet_plugin is not False else None
 
@@ -532,13 +619,13 @@ class CrackleRemovalPhase(PhaseInterface):
         need_resample = sample_rate != _BANQUET_SR
         if need_resample:
             try:
-                import librosa  # pylint: disable=import-outside-toplevel
+                import librosa
 
                 audio_48k = librosa.resample(audio_mono, orig_sr=sample_rate, target_sr=_BANQUET_SR).astype(np.float32)
             except ImportError:
-                from math import gcd  # pylint: disable=import-outside-toplevel
+                from math import gcd
 
-                from scipy.signal import resample_poly  # pylint: disable=import-outside-toplevel
+                from scipy.signal import resample_poly
 
                 _g = gcd(int(sample_rate), _BANQUET_SR)
                 audio_48k = resample_poly(
@@ -573,7 +660,7 @@ class CrackleRemovalPhase(PhaseInterface):
 
         # PLM Active-Guard: prevents emergency-eviction during active inference (§VERBOTEN)
         try:
-            from backend.core.plugin_lifecycle_manager import (  # pylint: disable=import-outside-toplevel
+            from backend.core.plugin_lifecycle_manager import (
                 get_plugin_lifecycle_manager,
             )
 
@@ -607,20 +694,21 @@ class CrackleRemovalPhase(PhaseInterface):
                 try:
                     _plm.set_active("BanquetVinyl", False)
                 except Exception:
+                    logger.debug("_remove_crackle_onnx_direct: silent except suppressed", exc_info=True)
                     pass
 
         # --- Resample back to original SR ---
         if need_resample:
             try:
-                import librosa  # pylint: disable=import-outside-toplevel
+                import librosa
 
                 restored_mono = librosa.resample(restored_48k, orig_sr=_BANQUET_SR, target_sr=sample_rate).astype(
                     np.float32
                 )
             except ImportError:
-                from math import gcd  # pylint: disable=import-outside-toplevel
+                from math import gcd
 
-                from scipy.signal import resample_poly  # pylint: disable=import-outside-toplevel
+                from scipy.signal import resample_poly
 
                 _g = gcd(_BANQUET_SR, int(sample_rate))
                 restored_mono = resample_poly(
@@ -666,9 +754,9 @@ class CrackleRemovalPhase(PhaseInterface):
                     1.0,
                 ).astype(np.float32)
                 result = (audio * gain[:, np.newaxis]).astype(np.float32)
-            return np.clip(result, -1.0, 1.0)
+            return np.asarray(np.clip(result, -1.0, 1.0), dtype=np.float32)  # type: ignore[no-any-return]
 
-        return np.clip(restored_mono, -1.0, 1.0)
+        return np.clip(restored_mono, -1.0, 1.0)  # type: ignore[no-any-return]
 
     def _remove_crackle_ml(self, audio: np.ndarray, banquet_plugin, params: dict[str, Any]) -> np.ndarray:
         """
@@ -682,9 +770,9 @@ class CrackleRemovalPhase(PhaseInterface):
         Returns:
             Restored audio
         """
-        import tempfile  # pylint: disable=import-outside-toplevel
+        import tempfile
 
-        import soundfile as sf  # pylint: disable=import-outside-toplevel
+        import soundfile as sf
 
         try:
             # Create temp files
@@ -702,7 +790,7 @@ class CrackleRemovalPhase(PhaseInterface):
                 banquet_plugin.process(tmp_in_path, tmp_out_path)
 
                 # Read result
-                from backend.file_import import load_audio_file  # pylint: disable=import-outside-toplevel
+                from backend.file_import import load_audio_file
 
                 _res = load_audio_file(tmp_out_path, do_carrier_analysis=False)
                 _audio_loaded = _res.get("audio") if isinstance(_res, dict) else None
@@ -715,11 +803,11 @@ class CrackleRemovalPhase(PhaseInterface):
                 blend_amount = 1 - texture_preserve
                 restored = audio * texture_preserve + restored * blend_amount
 
-                return restored[: len(audio)]
+                return np.asarray(restored[: len(audio)], dtype=np.float32)  # type: ignore[no-any-return]
 
             finally:
                 # Cleanup
-                import os  # pylint: disable=import-outside-toplevel
+                import os
 
                 with contextlib.suppress(Exception):
                     os.unlink(tmp_in_path)
@@ -745,18 +833,33 @@ class CrackleRemovalPhase(PhaseInterface):
             PhaseResult with de-crackled audio
         """
         sample_rate = sample_rate or kwargs.get("sample_rate", 48000)
+        # ── §v10 PIM: Per-Band-Intensität lesen ──
+        _per_band_mask = None
+        try:
+            from backend.core.pim_phase_hook import apply_pim_intensity, compute_per_band_nr_mask
+            _pim = apply_pim_intensity(kwargs, "crackle",
+                default_nr=0.4, default_de_ess=0.3, default_comp=1.0)
+            if "noise_reduction_strength" in kwargs:
+                kwargs["noise_reduction_strength"] = _pim["nr_strength"]
+            _pim_map = kwargs.get("pim_intensity_map")
+            if _pim_map is not None:
+                _per_band_mask = compute_per_band_nr_mask(_pim_map, sample_rate)
+        except Exception:
+            logger.debug("process: silent except suppressed", exc_info=True)
+            pass
         assert sample_rate == 48000, f"SR must be 48000 Hz, got: {sample_rate}"
         audio, _p09_transposed = to_channels_last(audio)
         start_time = time.time()
 
         # §4.6b: Pre-phase eviction — free previous phase models to prevent OOM
         try:
-            from backend.core.plugin_lifecycle_manager import (  # pylint: disable=import-outside-toplevel
+            from backend.core.plugin_lifecycle_manager import (
                 get_plugin_lifecycle_manager as _get_plm_evict09,
             )
 
             _get_plm_evict09().evict_for_phase("phase_09_crackle_removal")
         except Exception:
+            logger.debug("process: silent except suppressed", exc_info=True)
             pass
 
         # Get material-specific parameters
@@ -768,10 +871,10 @@ class CrackleRemovalPhase(PhaseInterface):
         phase_locality_factor = float(np.clip(phase_locality_factor, 0.35, 1.0))
         if phase_locality_factor < 0.999:
             inv = 1.0 / max(phase_locality_factor, 1e-6)
-            params["transient_threshold"] = float(np.clip(params["transient_threshold"] * inv, 0.005, 1.0))
+            params["transient_threshold"] = float(np.clip(float(params["transient_threshold"]) * inv, 0.005, 1.0))  # type: ignore[arg-type]
             # Higher preserve value => lower global intervention outside defect locations.
             params["texture_preserve"] = float(
-                np.clip(params.get("texture_preserve", 0.85) + 0.10 * (1.0 - phase_locality_factor), 0.0, 0.99)
+                np.clip(float(params.get("texture_preserve", 0.85)) + 0.10 * (1.0 - phase_locality_factor), 0.0, 0.99)  # type: ignore[arg-type]
             )
 
         _pmgg_strength = float(kwargs.get("strength", 1.0))
@@ -797,7 +900,7 @@ class CrackleRemovalPhase(PhaseInterface):
         _defect_scores_p09 = kwargs.get("defect_scores", {})
         _crackle_sev_p09 = 0.0
         try:
-            from backend.core.defect_scanner import DefectType as _DT9  # pylint: disable=import-outside-toplevel
+            from backend.core.defect_scanner import DefectType as _DT9
 
             _ds_cr = _defect_scores_p09.get(_DT9.CRACKLE)
             if _ds_cr is not None:
@@ -805,13 +908,50 @@ class CrackleRemovalPhase(PhaseInterface):
         except Exception as _sev_exc:
             logger.debug("Crackle severity lookup failed, using default 0.0: %s", _sev_exc)
         if _crackle_sev_p09 >= 0.60:  # heavy crackle → +35 % more ML output, min preserve 0.30
-            params["texture_preserve"] = float(np.clip(params["texture_preserve"] - 0.35, 0.30, 1.0))
+            params["texture_preserve"] = float(np.clip(float(params["texture_preserve"]) - 0.35, 0.30, 1.0))  # type: ignore[arg-type]
         elif _crackle_sev_p09 >= 0.35:  # moderate crackle → +15 % more ML output, min preserve 0.40
-            params["texture_preserve"] = float(np.clip(params["texture_preserve"] - 0.15, 0.40, 1.0))
+            params["texture_preserve"] = float(np.clip(float(params["texture_preserve"]) - 0.15, 0.40, 1.0))  # type: ignore[arg-type]
+
+        # §V38 VFA-Schutzzonen für per-Region-Strength-Cap sammeln (§0p Vocal-Supremacy)
+        _p09_protected_zones: list[tuple[float, float, float]] = []
+        for _z in kwargs.get("vibrato_zones") or []:
+            try:
+                _p09_protected_zones.append((float(_z[0]), float(_z[1]), 0.20))  # §0p Vibrato-Schutz
+            except Exception:
+                logger.debug("process: silent except suppressed", exc_info=True)
+                pass
+        for _z in kwargs.get("frisson_zones") or []:
+            try:
+                _fz_s = float(getattr(_z, "start_s", None) or _z[0])
+                _fz_e = float(getattr(_z, "end_s", None) or _z[1])
+                _p09_protected_zones.append((_fz_s, _fz_e, 0.30))  # Frisson sakrosankt
+            except Exception:
+                logger.debug("process: silent except suppressed", exc_info=True)
+                pass
+        for _z in kwargs.get("whisper_zones") or []:
+            try:
+                _p09_protected_zones.append((float(_z[0]), float(_z[1]), 0.25))  # Flüsterpassagen
+            except Exception:
+                logger.debug("process: silent except suppressed", exc_info=True)
+                pass
+        for _z in kwargs.get("passaggio_zones") or []:
+            try:
+                _p09_protected_zones.append((float(_z[0]), float(_z[1]), 0.35))  # Passaggio-Übergänge
+            except Exception:
+                logger.debug("process: silent except suppressed", exc_info=True)
+                pass
+        if _p09_protected_zones:
+            logger.debug(
+                "§V38 phase_09: %d VFA-Schutzzone(n) aktiv (Vibrato/Frisson/Flüster/Passaggio)",
+                len(_p09_protected_zones),
+            )
+        _p09_pz = _p09_protected_zones or None
+
+        passthrough = np.nan_to_num(audio.copy(), nan=0.0, posinf=0.0, neginf=0.0)
+        passthrough = np.clip(passthrough, -1.0, 1.0)
 
         if _effective_strength <= 0.0:
-            passthrough = np.nan_to_num(audio.copy(), nan=0.0, posinf=0.0, neginf=0.0)
-            passthrough = np.clip(passthrough, -1.0, 1.0)
+            # Keine effektive Stärke → Passthrough mit Warnung
             return PhaseResult(
                 success=True,
                 audio=passthrough,
@@ -825,13 +965,33 @@ class CrackleRemovalPhase(PhaseInterface):
                 },
                 warnings=["Crackle removal skipped due to zero effective strength"],
             )
+            
+        # ── §v10 Per-Band-Maske NACH crackle anwenden ──
+        if _per_band_mask is not None:
+            try:
+                from backend.core.pim_phase_hook import apply_per_band_mask
+                _before = audio
+                _after = apply_per_band_mask(_before, _per_band_mask, sample_rate, mix=0.55)
+                audio = _after
+            except Exception:
+                logger.debug("process: silent except suppressed", exc_info=True)
+                pass
 
-        # ML-Hybrid Decision: BANQUET for Vinyl only
-        # §2.45a-I: Gated-RMS — only musical frames (> −50 dBFS) contribute (prevents fadeout-explosion)
+        # ML-Hybrid Decision: BANQUET for Vinyl (auch via Transferkette)
+        # §2.45a-I: Gated-RMS — only musical frames (> −50 dBFS) contribute
+        # §Chain-Aware: Aktiviert BANQUET wenn Vinyl IRGENDWO in der Kette ist
+        # (z. B. Vinyl→Cassette→MP3), nicht nur bei primary_material.
         _rms_in_09_db = _gated_rms_dbfs_09(np.asarray(audio, dtype=np.float32))
         _rms_in_09 = float(10.0 ** (_rms_in_09_db / 20.0))
 
-        use_banquet = QUALITY_MODE_AVAILABLE and material_type == "vinyl" and is_phase_ml_enabled(9)
+        _is_vinyl = material_type == "vinyl"
+        if not _is_vinyl:
+            _chain = kwargs.get("transfer_chain") or kwargs.get("chain") or []
+            _is_vinyl = any(
+                "vinyl" in str(m).lower() or "shellac" in str(m).lower()
+                for m in (_chain if isinstance(_chain, (list, tuple)) else [])
+            )
+        use_banquet = QUALITY_MODE_AVAILABLE and _is_vinyl and is_phase_ml_enabled(9)
 
         if use_banquet:
             # ----------------------------------------------------------------
@@ -853,6 +1013,7 @@ class CrackleRemovalPhase(PhaseInterface):
                         effective_strength=_effective_strength,
                         sample_rate=sample_rate,
                         fallback_to_global_when_no_regions=True,
+                        protected_zones=_p09_pz,
                     )
                 _onnx_ok = True
                 execution_time = time.time() - start_time
@@ -898,6 +1059,7 @@ class CrackleRemovalPhase(PhaseInterface):
                                 effective_strength=_effective_strength,
                                 sample_rate=sample_rate,
                                 fallback_to_global_when_no_regions=True,
+                                protected_zones=_p09_pz,
                             )
                         execution_time = time.time() - start_time
                         crackle_reduction_db = self._measure_crackle_reduction(audio, restored)
@@ -953,6 +1115,7 @@ class CrackleRemovalPhase(PhaseInterface):
                 crackle_regions=crackle_regions,
                 effective_strength=_effective_strength,
                 sample_rate=sample_rate,
+                protected_zones=_p09_pz,
             )
 
         execution_time = time.time() - start_time
@@ -1016,6 +1179,53 @@ class CrackleRemovalPhase(PhaseInterface):
                     _rms_drop_09,
                     _makeup_09,
                 )
+
+        # §V19 Noise-Textur-Invariante (VERBOTEN-V19): Residual bewahrt Materialcharakter
+        _mat09_str = str(material_type or "unknown").lower()
+        try:
+            from backend.core.dsp.noise_texture_guard import (  # pylint: disable=import-outside-toplevel
+                compute_noise_texture_distance as _nt09_fn,
+            )
+
+            # channels-last [N,2] → channels-first [2,N] für Guard
+            _a09cf = (
+                audio.T.astype(np.float32)
+                if (audio.ndim == 2 and audio.shape[1] == 2 and audio.shape[0] > 2)
+                else audio.astype(np.float32)
+            )
+            _r09cf = (
+                restored.T.astype(np.float32)
+                if (restored.ndim == 2 and restored.shape[1] == 2 and restored.shape[0] > 2)
+                else restored.astype(np.float32)
+            )
+            _nt09_d = _nt09_fn(_a09cf - _r09cf, _mat09_str, sr=sample_rate)
+            if _nt09_d > 0.25:
+                restored = (0.5 * restored + 0.5 * audio).astype(np.float32)
+                logger.warning("§V19 phase_09 noise_texture dist=%.3f > 0.25 → 50%%-Blend", _nt09_d)
+        except Exception as _nt09_exc:
+            logger.debug("§V19 phase_09 noise_texture_guard (non-blocking): %s", _nt09_exc)
+
+        # §V24 Spektralfarbe-Prüfung (VERBOTEN-V24): 1/3-Oktav-Profil darf nicht verfärbt werden
+        try:
+            from backend.core.dsp.spectral_color_guard import (  # pylint: disable=import-outside-toplevel
+                check_spectral_color_preservation as _scg09,
+            )
+
+            _a09cf2 = (
+                audio.T.astype(np.float32)
+                if (audio.ndim == 2 and audio.shape[1] == 2 and audio.shape[0] > 2)
+                else audio.astype(np.float32)
+            )
+            _r09cf2 = (
+                restored.T.astype(np.float32)
+                if (restored.ndim == 2 and restored.shape[1] == 2 and restored.shape[0] > 2)
+                else restored.astype(np.float32)
+            )
+            _sc09 = _scg09(_a09cf2, _r09cf2, sample_rate)
+            if not _sc09.ok:
+                restored = (0.70 * restored + 0.30 * audio).astype(np.float32)
+        except Exception as _sc09_exc:
+            logger.debug("§V24 phase_09 spectral_color_guard (non-blocking): %s", _sc09_exc)
 
         return create_phase_result(
             audio=restored,
@@ -1098,7 +1308,7 @@ class CrackleRemovalPhase(PhaseInterface):
         Returns:
             List of detected transient onsets (sample indices)
         """
-        from scipy.signal import butter, sosfilt  # pylint: disable=import-outside-toplevel
+        from scipy.signal import butter, sosfilt
 
         # High-pass filter (Second-Order Sections — numerically more stable than b,a)
         sos_hp = butter(4, highpass_freq, btype="high", fs=self.sample_rate, output="sos")
@@ -1112,7 +1322,7 @@ class CrackleRemovalPhase(PhaseInterface):
 
         if n_audio > AR_ORDER + 10:
             # Estimate AR coefficients from the entire signal (global estimate)
-            from scipy.signal import lfilter  # pylint: disable=import-outside-toplevel
+            from scipy.signal import lfilter
 
             try:
                 # Yule-Walker here intentionally ONLY for predictor coefficients
@@ -1155,7 +1365,7 @@ class CrackleRemovalPhase(PhaseInterface):
         diffs = np.diff(arr)
         group_starts = np.concatenate([[arr[0]], arr[1:][diffs > 1]])
 
-        return group_starts.tolist()
+        return [int(x) for x in group_starts.tolist()]
 
     def _classify_crackle_regions(
         self,
@@ -1233,9 +1443,9 @@ class CrackleRemovalPhase(PhaseInterface):
 
     def _compute_zero_crossing_rate(self, audio: np.ndarray) -> float:
         """Berechnet zero-crossing rate."""
-        zero_crossings = np.sum(np.diff(np.sign(audio)) != 0)
+        zero_crossings: int = int(np.sum(np.diff(np.sign(audio)) != 0))
         zcr = zero_crossings / len(audio)
-        return zcr
+        return float(zcr)
 
     def _compute_harmonic_ratio(self, audio: np.ndarray) -> float:
         """
@@ -1264,7 +1474,7 @@ class CrackleRemovalPhase(PhaseInterface):
             harmonic_energy += spectrum[idx] ** 2
 
         # Total energy
-        total_energy = np.sum(spectrum**2)
+        total_energy: float = float(np.sum(spectrum**2))
 
         harmonic_ratio = harmonic_energy / (total_energy + 1e-10)
         return float(harmonic_ratio)
@@ -1310,7 +1520,7 @@ class CrackleRemovalPhase(PhaseInterface):
             _f, _t, Zxx = signal.stft(clean_audio, self.sample_rate, nperseg=nperseg, boundary="even")
             avg_spectrum = np.mean(np.abs(Zxx), axis=1)
 
-            return avg_spectrum
+            return np.asarray(avg_spectrum, dtype=np.float32)  # type: ignore[no-any-return]
 
         return None
 
@@ -1451,8 +1661,8 @@ class CrackleRemovalPhase(PhaseInterface):
                 result = np.zeros((gap_len, audio.shape[1]))
                 for ch in range(audio.shape[1]):
                     result[:, ch] = audio_fill
-                return result
-            return audio_fill
+                return result  # type: ignore[no-any-return]
+            return np.asarray(audio_fill, dtype=np.float32)  # type: ignore[no-any-return]
 
         except Exception as exc:
             logger.debug("Spectral interpolation failed (%s), using linear.", exc)
@@ -1480,7 +1690,7 @@ class CrackleRemovalPhase(PhaseInterface):
                 result = np.zeros((gap_len, audio.shape[1]), dtype=audio.dtype)
                 for ch in range(audio.shape[1]):
                     result[:, ch] = self._ar_fill_channel(audio[:, ch], gap_start, gap_end, before_start, after_end)
-                return result
+                return result  # type: ignore[no-any-return]
             return self._ar_fill_channel(audio, gap_start, gap_end, before_start, after_end)
         except Exception as exc:
             logger.debug("AR interpolation failed (%s), falling back to linear.", exc)
@@ -1521,7 +1731,7 @@ class CrackleRemovalPhase(PhaseInterface):
             blended[:_cf_len] = (1.0 - t_cf) * start_val + t_cf * blended[:_cf_len]
             blended[-_cf_len:] = (1.0 - t_cf[::-1]) * end_val + t_cf[::-1] * blended[-_cf_len:]
 
-        return blended.astype(ch.dtype)
+        return np.asarray(blended, dtype=ch.dtype)  # type: ignore[no-any-return]
 
     def _ar_predict(self, context: np.ndarray, n_samples: int, order: int) -> np.ndarray:
         """One-step-ahead AR synthesis via Burg-LPC with Yule-Walker fallback.
@@ -1532,7 +1742,7 @@ class CrackleRemovalPhase(PhaseInterface):
         LPC order follows spec constraints: 30–40 @ 48 kHz (min 16).
         """
         if len(context) < order + 2:
-            return np.zeros(n_samples, dtype=np.float32)
+            return np.zeros(n_samples, dtype=np.float32)  # type: ignore[no-any-return]
         try:
             len(context)
             ctx_f64 = context.astype(np.float64)
@@ -1540,7 +1750,7 @@ class CrackleRemovalPhase(PhaseInterface):
             if a_coeffs is None:
                 a_coeffs = self._yule_walker_predictor_coeffs(ctx_f64, order)
             if a_coeffs is None:
-                return np.zeros(n_samples, dtype=np.float32)
+                return np.zeros(n_samples, dtype=np.float32)  # type: ignore[no-any-return]
 
             # ── Stability check: reflect poles inside unit circle (max |z| = 0.995) ──
             # AR polynomial: A(z) = 1 - a[0]z^{-1} - ... - a[p-1]z^{-p}
@@ -1573,11 +1783,11 @@ class CrackleRemovalPhase(PhaseInterface):
             result = out.astype(context.dtype)
             # Final NaN/Inf guard
             if not np.all(np.isfinite(result)):
-                return np.zeros(n_samples, dtype=np.float32)
-            return result
+                return np.zeros(n_samples, dtype=np.float32)  # type: ignore[no-any-return]
+            return result  # type: ignore[no-any-return]
         except Exception as exc:
             logger.debug("AR prediction failed (%s), returning zeros.", exc)
-            return np.zeros(n_samples, dtype=np.float32)
+            return np.zeros(n_samples, dtype=np.float32)  # type: ignore[no-any-return]
 
     def _burg_predictor_coeffs(self, context: np.ndarray, order: int) -> np.ndarray | None:
         """Schätzt predictor coeffs with Burg LPC (Rabiner & Schafer 1978).
@@ -1622,13 +1832,13 @@ class CrackleRemovalPhase(PhaseInterface):
             a_pred = np.pad(a_pred, (0, order - a_pred.size), mode="constant")
         if not np.isfinite(a_pred).all():
             return None
-        return a_pred.astype(np.float64)
+        return a_pred.astype(np.float64)  # type: ignore[no-any-return]
 
     @staticmethod
     def _yule_walker_predictor_coeffs(context: np.ndarray, order: int) -> np.ndarray | None:
         """Fallback predictor coefficients via Yule-Walker Toeplitz solve."""
         try:
-            from scipy.linalg import solve_toeplitz  # pylint: disable=import-outside-toplevel
+            from scipy.linalg import solve_toeplitz
 
             n = len(context)
             r = np.array([float(np.dot(context[: n - k], context[k:])) / n for k in range(order + 1)])
@@ -1636,7 +1846,7 @@ class CrackleRemovalPhase(PhaseInterface):
             a_coeffs = solve_toeplitz(r[:order], -r[1 : order + 1])
             if not np.isfinite(a_coeffs).all():
                 return None
-            return a_coeffs.astype(np.float64)
+            return np.asarray(a_coeffs, dtype=np.float64)  # type: ignore[no-any-return]
         except Exception:
             return None
 
@@ -1659,7 +1869,7 @@ class CrackleRemovalPhase(PhaseInterface):
             else:
                 interpolated = np.zeros(gap_length)
 
-        return interpolated
+        return interpolated  # type: ignore[no-any-return]
 
     def _measure_crackle_reduction(self, before: np.ndarray, after: np.ndarray) -> float:
         """
@@ -1690,7 +1900,7 @@ class CrackleRemovalPhase(PhaseInterface):
 
         reduction_db = 10 * np.log10(energy_before / energy_after)
 
-        return max(0, reduction_db)
+        return float(max(0.0, float(reduction_db)))
 
     def supports_material(self, _material_type: str) -> bool:
         """All materials supported."""

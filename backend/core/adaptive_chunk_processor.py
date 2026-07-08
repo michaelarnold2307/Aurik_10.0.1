@@ -66,7 +66,7 @@ def _is_near_silence(audio: np.ndarray, threshold_db: float = -55.0) -> bool:
     mono = audio.mean(axis=0) if audio.ndim == 2 else audio
     rms = float(np.sqrt(np.mean(mono.astype(np.float64) ** 2) + 1e-15))
     db = 20.0 * np.log10(rms + 1e-15)
-    return db < threshold_db
+    return db < threshold_db  # type: ignore[no-any-return]
 
 
 def _estimate_beat_times(audio_mono: np.ndarray, sr: int) -> list[float]:
@@ -96,7 +96,7 @@ def _estimate_beat_times(audio_mono: np.ndarray, sr: int) -> list[float]:
     try:
         import librosa
 
-        _, beat_frames = librosa.beat.beat_track(y=audio_mono, sr=sr, units="time")
+        _, beat_frames = librosa.beat.beat_track(y=audio_mono, sr=sr, units="time")  # type: ignore[attr-defined]
         return sorted(float(b) for b in beat_frames)
     except Exception as _exc:
         logger.debug("Operation failed (non-critical): %s", _exc)
@@ -182,7 +182,7 @@ def _find_safe_boundary(
             audio_window = audio[window_start:window_end].astype(np.float32)
 
         hop_length = max(1, int(sr * 0.010))  # 10 ms hop
-        oenv = librosa.onset.onset_strength(y=audio_window, sr=sr, hop_length=hop_length)
+        oenv = librosa.onset.onset_strength(y=audio_window, sr=sr, hop_length=hop_length)  # type: ignore[attr-defined]
         if oenv.size > 0 and float(np.max(oenv)) > onset_threshold:
             candidate = pos_samples + shift_samples
             if candidate < n_total:

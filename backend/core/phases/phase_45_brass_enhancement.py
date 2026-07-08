@@ -88,11 +88,11 @@ def _peaking_eq(audio: np.ndarray, sr: int, freq: float, gain_db: float, q: floa
 
     # §2.51 zero-phase: filtfilt eliminates causal group-delay → no L/R interchannel lag.
     if audio.ndim == 1:
-        return sig.filtfilt(b, a, audio)
+        return sig.filtfilt(b, a, audio)  # type: ignore[no-any-return]
     result = np.empty_like(audio)
     for ch in range(audio.shape[1]):
         result[:, ch] = sig.filtfilt(b, a, audio[:, ch])
-    return result
+    return result  # type: ignore[no-any-return]
 
 
 def _high_shelf(audio: np.ndarray, sr: int, freq: float, gain_db: float) -> np.ndarray:
@@ -114,11 +114,11 @@ def _high_shelf(audio: np.ndarray, sr: int, freq: float, gain_db: float) -> np.n
 
     # §2.51 zero-phase: filtfilt eliminates causal group-delay → no L/R interchannel lag.
     if audio.ndim == 1:
-        return sig.filtfilt(b, a, audio)
+        return sig.filtfilt(b, a, audio)  # type: ignore[no-any-return]
     result = np.empty_like(audio)
     for ch in range(audio.shape[1]):
         result[:, ch] = sig.filtfilt(b, a, audio[:, ch])
-    return result
+    return result  # type: ignore[no-any-return]
 
 
 class BrassEnhancementPhase(PhaseInterface):
@@ -174,6 +174,23 @@ class BrassEnhancementPhase(PhaseInterface):
         phase_locality_factor = float(np.clip(phase_locality_factor, 0.35, 1.0))
         _pmgg_strength: float = float(kwargs.get("strength", 1.0))
         _effective_strength: float = float(np.clip(_pmgg_strength * phase_locality_factor, 0.0, 1.0))
+
+        # §V41 ForwardMaskingGuard — Enhancement-Stärke in post-transienten Masking-Zonen erhöhen
+        _panns_s_45 = float(kwargs.get("panns_singing", 0.0))
+        if _panns_s_45 >= 0.25 and _effective_strength > 0.0:
+            try:
+                from backend.core.dsp.temporal_masking import (
+                    get_forward_masking_guard as _fmg_fn_45,
+                )
+
+                _fmz_45 = kwargs.get("forward_masking_zones") or _fmg_fn_45().compute_zones(audio, sample_rate)
+                if _fmz_45:
+                    _n_s_45 = audio.shape[-1] if audio.ndim > 1 else len(audio)
+                    _zone_s_45 = sum(z.end_sample - z.start_sample for z in _fmz_45)
+                    _zone_frac_45 = float(np.clip(_zone_s_45 / max(1, _n_s_45), 0.0, 1.0))
+                    _effective_strength = float(np.clip(_effective_strength + _zone_frac_45 * 0.15, 0.0, 1.0))  # type: ignore[no-redef]
+            except Exception as _fmg_exc_45:
+                logger.debug("Phase45 §V41 ForwardMaskingGuard non-blocking: %s", _fmg_exc_45)
 
         if _effective_strength <= 0.0:
             audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
@@ -351,6 +368,32 @@ class BrassEnhancementPhase(PhaseInterface):
 
         if 0.0 < _effective_strength < 1.0 and processed.shape == audio.shape:
             processed = audio + _effective_strength * (processed - audio)
+
+        # §2.46e HallucinationGuard: Additive Phase darf kein halluziniertes Material einführen (VERBOTEN)
+        try:
+            from backend.core.dsp.hallucination_guard import (  # pylint: disable=import-outside-toplevel
+                check_hallucination as _chk_hg45,
+            )
+
+            _hg_mode_45 = str(kwargs.get("mode", "restoration"))
+            _pre45_mono = (
+                audio.mean(axis=0)
+                if (audio.ndim == 2 and audio.shape[0] == 2 and audio.shape[1] > 2)
+                else (audio.mean(axis=1) if audio.ndim == 2 else audio)
+            )
+            _post45_mono = (
+                processed.mean(axis=0)
+                if (processed.ndim == 2 and processed.shape[0] == 2 and processed.shape[1] > 2)
+                else (processed.mean(axis=1) if processed.ndim == 2 else processed)
+            )
+            _hg45 = _chk_hg45(
+                _pre45_mono.astype(np.float32), _post45_mono.astype(np.float32), sr=sample_rate, mode=_hg_mode_45
+            )
+            if _hg45.requires_rollback:
+                processed = audio.copy()
+                logger.warning("§2.46e phase_45 HallucinationGuard: rollback (spectral_novelty > 0.15)")
+        except Exception as _hg45_exc:
+            logger.debug("§2.46e phase_45 HallucinationGuard (non-blocking): %s", _hg45_exc)
 
         return PhaseResult(
             success=True,

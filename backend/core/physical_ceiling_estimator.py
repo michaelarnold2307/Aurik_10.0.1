@@ -157,7 +157,7 @@ class PhysicalCeilingEstimator:
         """SNR pro Bark-Band (24 Baender), float32 [24]."""
         n = min(len(mono), 65536)
         if n < 512:
-            return np.full(24, 20.0, dtype=np.float32)
+            return np.full(24, 20.0, dtype=np.float32)  # type: ignore[no-any-return]
 
         spec = np.abs(np.fft.rfft(mono[:n])) ** 2
         freqs = np.fft.rfftfreq(n, d=1.0 / sr)
@@ -179,7 +179,7 @@ class PhysicalCeilingEstimator:
             snr = 10.0 * math.log10(signal_e / noise_e)
             bark_snr[b] = float(np.clip(snr, -60.0, 80.0))
 
-        return bark_snr
+        return bark_snr  # type: ignore[no-any-return]
 
     def _effective_bandwidth(self, mono: np.ndarray, _sr: int, snr_profile: np.ndarray) -> float:
         """Effektive Bandbreite: hoechstes Bark-Band mit SNR >= -10 dB."""

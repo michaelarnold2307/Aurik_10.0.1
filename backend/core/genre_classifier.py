@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import warnings
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -36,6 +37,21 @@ class SchlagerClassificationResult:
     open_set_unknown: bool = False
     key: str = ""
     reasoning: str = ""
+
+    @property
+    def primary_genre_label(self) -> str:
+        """Primäres Genre-Label — genre-unabhängig (Schlager oder Nicht-Schlager)."""
+        return self.genre_label
+
+    @property
+    def primary_genre_confidence(self) -> float:
+        """Primäre Genre-Klassifikationssicherheit — maximaler verfügbarer Score.
+
+        Für Schlager-Material: confidence (Schlager-Wahrscheinlichkeit).
+        Für Nicht-Schlager-Material: genre_family_confidence (Genre-Family-Score).
+        Immer der semantisch richtige Wert für 'wie sicher ist das Genre-Ergebnis'.
+        """
+        return max(self.confidence, self.genre_family_confidence)
 
 
 #: Backward-compatible alias — UV3 and other callsites import as ``GenreResult``
@@ -140,7 +156,10 @@ class GermanSchlagerClassifier:
         mono = self._resample(mono, sr, 22050)
         sr_a = 22050
 
-        # Tier-1: CLAP (optional)
+        # Tier-1: CLAP (optional). Das Verfügbarkeits-Flag wird vor dem Aufruf
+        # zurückgesetzt; nur die echte _compute_clap_score()-Methode setzt es auf
+        # True, wenn CLAP nicht geladen werden konnte (offline/Speicherbudget).
+        self._clap_score_is_fallback = False
         clap_score = self._compute_clap_score(mono, sr_a)
 
         # Tier-2: Akkordeon
@@ -177,7 +196,19 @@ class GermanSchlagerClassifier:
             + 0.15 * melodic_rep
             + 0.15 * hsi  # doppeltes Gewicht für HSI (wichtigstes DSP-Merkmal)
         ) / 1.0  # Normalisierung bereits 1.0
-        confidence = float(np.clip(0.30 * clap_score + 0.70 * weighted_mean, 0.0, 1.0))
+        if getattr(self, "_clap_score_is_fallback", False):
+            # CLAP nicht verfügbar (offline-Desktop/Speicherbudget/Plugin) → das für
+            # CLAP reservierte 0.30-Gewicht auf die tatsächlich GEMESSENE DSP-Evidenz
+            # umverteilen, statt einen neutralen Platzhalter (0.35) als echte Messung
+            # einzumischen. Fehlende OPTIONALE Evidenz darf die Konfidenz nicht unter
+            # das drücken, was die DSP-Merkmale belegen — sonst bleibt z. B. eindeutiges
+            # bandbegrenztes Schlager-Material künstlich unsicher (conf≈0.507 trotz
+            # konvergenter DSP-Tiers). WISSENSCHAFTLICHE INVARIANTE (§0g, §0c): rein
+            # materialunabhängig, keine Schwellwert-Absenkung, keine künstliche
+            # Inflation — die Konfidenz spiegelt exakt die verfügbare Evidenz.
+            confidence = float(np.clip(weighted_mean, 0.0, 1.0))
+        else:
+            confidence = float(np.clip(0.30 * clap_score + 0.70 * weighted_mean, 0.0, 1.0))
 
         # Sprach-Penalty: klar englischer Gesang (lang_de_score < 0.30) → confidence −15 %
         if lang_de_score < 0.30:
@@ -222,6 +253,14 @@ class GermanSchlagerClassifier:
             and alt_genre in {"Jazz", "Soul/R&B", "Gospel"}
             and (hsi >= 0.50 or lang_de_score >= 0.30)
         ):
+            is_schlager = True
+            confidence = float(max(confidence, self.SCHLAGER_CONFIDENCE_THRESHOLD))
+
+        # Latin/Reggae-Veto: Diese Genres sind bei deutschem Sprachmaterial (lang_de_score >= 0.30)
+        # und vorhandener Schlager-Evidenz (n_active >= 1) physikalisch ausgeschlossen.
+        # hsi >= 0.50 wird hier NICHT als Alternative akzeptiert, weil echte Latin-Musik
+        # ebenfalls moderate HSI-Werte aufweisen kann — nur Deutsch-Sprach-Evidenz ist sicher.
+        if not is_schlager and n_active >= 1 and alt_genre in {"Latin", "Reggae"} and lang_de_score >= 0.30:
             is_schlager = True
             confidence = float(max(confidence, self.SCHLAGER_CONFIDENCE_THRESHOLD))
 
@@ -579,7 +618,13 @@ class GermanSchlagerClassifier:
                 _n_fft = max(512, min(2048, len(audio)))
                 chroma = librosa.feature.chroma_stft(y=audio, sr=sr, hop_length=hop_len, n_fft=_n_fft)
             else:
-                chroma = librosa.feature.chroma_cqt(y=audio, sr=sr, hop_length=hop_len)
+                try:
+                    with warnings.catch_warnings():
+                        warnings.filterwarnings("error", message=".*n_fft=.*too large.*", category=UserWarning)
+                        chroma = librosa.feature.chroma_cqt(y=audio, sr=sr, hop_length=hop_len)
+                except Exception:
+                    _n_fft = max(512, min(4096, len(audio)))
+                    chroma = librosa.feature.chroma_stft(y=audio, sr=sr, hop_length=hop_len, n_fft=_n_fft)
             chroma = np.nan_to_num(chroma)
 
             if chroma.shape[1] < 2:
@@ -617,7 +662,7 @@ class GermanSchlagerClassifier:
             if len(audio) < sr:
                 return 0.35, "unknown", 120.0
 
-            tempo, _beats = librosa.beat.beat_track(y=audio, sr=sr)
+            tempo, _beats = librosa.beat.beat_track(y=audio, sr=sr)  # type: ignore[attr-defined]
             bpm = float(np.asarray(tempo, dtype=np.float64).flat[0])
             if bpm <= 0:
                 return 0.35, "unknown", 120.0
@@ -976,7 +1021,7 @@ class GermanSchlagerClassifier:
 
             if len(mono) < sr:
                 return 2.0
-            onsets = librosa.onset.onset_detect(y=mono, sr=sr, units="time")
+            onsets = librosa.onset.onset_detect(y=mono, sr=sr, units="time")  # type: ignore[attr-defined]
             duration_s = len(mono) / sr
             return float(len(onsets) / max(duration_s, 1.0))
         except Exception:
@@ -1516,9 +1561,14 @@ class GermanSchlagerClassifier:
         pure tones, bass-heavy material) that happen to have high onset density.
         """
         score = 0.0
-        # Latin gate: brass/percussion brightness is mandatory.
-        # A dark centroid (< 1800 Hz) means no brass section → not Latin.
+        # Latin gate 1: brass/percussion brightness ist Pflicht.
+        # Ein dunkles Spektrum (< 1800 Hz) bedeutet keine Blechbläser → kein Latin.
         if centroid_hz < 1800:
+            return 0.0
+        # Latin gate 2: Latin erfordert dichte synkopierte Rhythmik (Clave-Muster).
+        # Schlager-typische Onset-Dichte liegt bei 1.5–3.0; echter Latin-Groove > 2.0.
+        # Ein onset_rate < 2.0 deutet auf ruhige Begleitung hin → kein Latin.
+        if onset_rate < 2.0:
             return 0.0
         # Dense, syncopated clave-based rhythms (congas, timbales, güiro)
         if onset_rate > 3.5:
@@ -1824,18 +1874,28 @@ class GermanSchlagerClassifier:
         Lädt LAION-CLAP via ml_memory_budget.try_allocate() — identisches Muster
         wie alle anderen ML-Plugins (§2.47 ML-Failure-Degradationskaskade).
         Kein Env-Gate: CLAP wird geladen wenn Speicher verfügbar ist, sonst 0.35.
+
+        Setzt ``self._clap_score_is_fallback`` auf True, solange keine echte
+        positive CLAP-Messung vorliegt; erst eine erfolgreiche Tag-Inferenz setzt
+        das Flag auf False. Der Aufrufer nutzt das Flag, um das CLAP-Gewicht bei
+        Nichtverfügbarkeit auf die DSP-Evidenz umzuverteilen.
         """
+        # Standardannahme: kein genuiner CLAP-Score → Fallback. Erst eine
+        # erfolgreiche Tag-Inferenz (unten) setzt das Flag zurück auf False.
+        self._clap_score_is_fallback = True
         try:
             from backend.core.ml_memory_budget import release as _release_clap_genre
             from backend.core.ml_memory_budget import try_allocate as _alloc_clap_genre
-            from plugins.laion_clap_plugin import get_laion_clap as get_clap_plugin
+            from plugins.laion_clap_plugin import get_laion_clap, get_loaded_laion_clap
 
             if not _alloc_clap_genre("LAION_CLAP_genre", 2.2):
                 logger.debug("GenreClassifier CLAP: Speicherbudget nicht verfügbar — neutraler Prior 0.35")
                 return 0.35
 
             try:
-                clap = get_clap_plugin()
+                clap = get_loaded_laion_clap()
+                if clap is None:
+                    clap = get_laion_clap()
                 if clap is None:
                     logger.debug("GenreClassifier CLAP: Plugin nicht verfügbar — neutraler Prior 0.35")
                     return 0.35
@@ -1851,6 +1911,8 @@ class GermanSchlagerClassifier:
                         if key in genre_scores_dict:
                             proxy_score = max(proxy_score, genre_scores_dict[key])
                     clap_score = float(np.clip(proxy_score, 0.0, 1.0))
+                    # Genuine positive CLAP-Messung erhalten → kein Fallback.
+                    self._clap_score_is_fallback = False
                 except Exception:
                     clap_score = 0.35
 
@@ -1910,13 +1972,24 @@ class GermanSchlagerClassifier:
             if e < 1e-18:
                 break
         # Return -a_ar so that poly = [1, -lpc_coefs] = [1, a_ar] (standard all-pole filter)
-        return -a
+        return -a  # type: ignore[no-any-return]
 
     def _to_mono(self, audio: np.ndarray) -> np.ndarray:
-        """Konvertiert Stereo → Mono."""
+        """Konvertiert Stereo → Mono.
+
+        Aurik-Konvention: ``(samples, channels)`` (File-Import liefert z. B.
+        ``(1_323_000, 2)``). Der Downmix muss über die **Kanal-Achse** mitteln,
+        nicht über die Sample-Achse. Da nur Mono/Stereo unterstützt wird, ist die
+        Kanal-Achse stets die kleinere — robust gegen beide Layouts
+        (``(samples, channels)`` und ``(channels, samples)``). Spaltenvektoren
+        ``(N, 1)`` werden als Mono behandelt.
+        """
         if audio.ndim == 2:
-            return np.asarray(audio.mean(axis=0), dtype=np.float32)
-        return np.asarray(audio, dtype=np.float32)
+            if min(audio.shape) < 2:
+                return np.asarray(audio, dtype=np.float32).reshape(-1)  # type: ignore[no-any-return]
+            ch_axis = 1 if audio.shape[1] <= audio.shape[0] else 0
+            return np.asarray(audio.mean(axis=ch_axis), dtype=np.float32)  # type: ignore[no-any-return]
+        return np.asarray(audio, dtype=np.float32)  # type: ignore[no-any-return]
 
     def _resample(self, audio: np.ndarray, sr_in: int, sr_out: int) -> np.ndarray:
         """Resampelt auf Ziel-Sample-Rate."""
@@ -1925,7 +1998,7 @@ class GermanSchlagerClassifier:
         try:
             import librosa
 
-            return np.asarray(librosa.resample(audio, orig_sr=sr_in, target_sr=sr_out), dtype=np.float32)
+            return np.asarray(librosa.resample(audio, orig_sr=sr_in, target_sr=sr_out), dtype=np.float32)  # type: ignore[no-any-return]
         except Exception:
             return audio
 
@@ -1942,7 +2015,13 @@ class GermanSchlagerClassifier:
                 _n_fft = max(512, min(2048, len(audio)))
                 chroma = librosa.feature.chroma_stft(y=audio, sr=sr, n_fft=_n_fft)
             else:
-                chroma = librosa.feature.chroma_cqt(y=audio, sr=sr)
+                try:
+                    with warnings.catch_warnings():
+                        warnings.filterwarnings("error", message=".*n_fft=.*too large.*", category=UserWarning)
+                        chroma = librosa.feature.chroma_cqt(y=audio, sr=sr)
+                except Exception:
+                    _n_fft = max(512, min(4096, len(audio)))
+                    chroma = librosa.feature.chroma_stft(y=audio, sr=sr, n_fft=_n_fft)
             chroma_mean = np.nan_to_num(chroma.mean(axis=1))
             key_idx = int(np.argmax(chroma_mean))
             key_names = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "H"]

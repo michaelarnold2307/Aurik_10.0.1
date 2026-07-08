@@ -11,6 +11,13 @@ import soundfile as sf
 from backend.core.metadata_preserver import get_metadata_preserver
 
 try:
+    from backend.core.version import get_aurik_version as _get_aurik_version
+
+    _AURIK_VERSION: str = _get_aurik_version()
+except Exception:
+    _AURIK_VERSION = "unknown"
+
+try:
     import ffmpeg
 except ImportError:
     ffmpeg = None
@@ -31,7 +38,7 @@ def _transfer_metadata(source_path: str, target_path: str) -> None:
     if not source_path:
         return
     try:
-        get_metadata_preserver().transfer(source_path, target_path, aurik_version="9.12.10")
+        get_metadata_preserver().transfer(source_path, target_path, aurik_version=_AURIK_VERSION)
     except Exception as exc:
         logger.debug("metadata transfer skipped: %s", exc)
 
@@ -172,10 +179,10 @@ def _export_guard(audio: np.ndarray) -> np.ndarray:
     Entspricht der Pflicht-Invariante aus den Copilot-Instructions (§ Numerische Robustheit).
     """
     # 1. NaN / Inf bereinigen
-    audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
+    audio_clean = np.asarray(np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0), dtype=np.float32)
 
     # 2. True-Peak pr\xfcfen (Spitzenwert vor Hard-Clip)
-    peak = float(np.max(np.abs(audio)))
+    peak = float(np.max(np.abs(audio_clean)))
     if peak > _TRUE_PEAK_LIMIT:
         logger.warning(
             "Export-Guard: True-Peak %.4f dBTP \xfcberschreitet 0 dBTP — wird begrenzt.",
@@ -188,8 +195,8 @@ def _export_guard(audio: np.ndarray) -> np.ndarray:
         )
 
     # 3. Hard-Clip auf [-1.0, 1.0] (Pflicht-Invariante)
-    audio = np.clip(audio, -1.0, 1.0)
-    return audio
+    guarded = np.asarray(np.clip(audio_clean, -1.0, 1.0), dtype=np.float32)
+    return cast(np.ndarray, guarded)
 
 
 def _export_nuance_guard(audio: np.ndarray, sr: int) -> np.ndarray:
@@ -201,7 +208,7 @@ def _export_nuance_guard(audio: np.ndarray, sr: int) -> np.ndarray:
     """
     a = np.asarray(audio, dtype=np.float32)
     if a.ndim == 0:
-        return a
+        return cast(np.ndarray, np.asarray(a, dtype=np.float32))
 
     # 1) Short micro-fades to prevent boundary clicks on start/end.
     n = len(a) if a.ndim == 1 else a.shape[0]
@@ -260,7 +267,8 @@ def _export_nuance_guard(audio: np.ndarray, sr: int) -> np.ndarray:
                     a = out
                 logger.info("Export-NuanceGuard: sanfte HF-Glättung aktiv (ratio=%.3f, att=%.3f)", ratio, att)
 
-    return np.clip(np.nan_to_num(a, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0)
+    guarded = np.asarray(np.clip(np.nan_to_num(a, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0), dtype=np.float32)
+    return cast(np.ndarray, guarded)
 
 
 def validate_export_quality(result: Any) -> tuple[bool, list[str]]:
@@ -305,6 +313,60 @@ def validate_export_quality(result: Any) -> tuple[bool, list[str]]:
 
     # Musical Goals: P1/P2 hard-fail, P3–P5 warning-only
     meta = getattr(result, "metadata", {}) or {}
+    if not isinstance(meta, dict):
+        meta = {}
+
+    def _nested_float(container: dict[str, Any], *path: str) -> float | None:
+        cur: Any = container
+        for key in path:
+            if not isinstance(cur, dict):
+                return None
+            cur = cur.get(key)
+        if isinstance(cur, bool):
+            return None
+        if isinstance(cur, (float, int)):
+            return float(cur)
+        return None
+
+    def _nested_bool(container: dict[str, Any], *path: str) -> bool:
+        cur: Any = container
+        for key in path:
+            if not isinstance(cur, dict):
+                return False
+            cur = cur.get(key)
+        return bool(cur) if isinstance(cur, bool) else False
+
+    # §0h/§2.68: Export darf struktureller Stille keine Energie hinzufuegen.
+    silence_audit = meta.get("structural_silence_audit")
+    if isinstance(silence_audit, dict):
+        if _nested_bool(silence_audit, "failed") or _nested_bool(silence_audit, "violation"):
+            warnings.append("KRITISCH: Structural-Silence-Audit meldet Energieeintrag in Stille-Zonen.")
+            passed = False
+        silence_lift_db = (
+            _nested_float(silence_audit, "max_lift_db")
+            or _nested_float(silence_audit, "silence_lift_db")
+            or _nested_float(silence_audit, "max_energy_lift_db")
+        )
+        if silence_lift_db is not None and silence_lift_db > 1.0:
+            warnings.append(f"KRITISCH: Stille-Zonen-Lift {silence_lift_db:.2f} dB > 1.00 dB — Export blockiert.")
+            passed = False
+    direct_silence_lift = _nested_float(meta, "structural_silence_lift_db")
+    if direct_silence_lift is not None and direct_silence_lift > 1.0:
+        warnings.append(f"KRITISCH: Structural-Silence-Lift {direct_silence_lift:.2f} dB > 1.00 dB — Export blockiert.")
+        passed = False
+
+    # §0p: Explizite schwere Vocal-Guard-Schäden blockieren Export; VQI selbst bleibt Recovery-Trigger.
+    vocal_quality_check = meta.get("vocal_quality_check")
+    if isinstance(vocal_quality_check, dict):
+        formant_integrity = _nested_float(vocal_quality_check, "formant_integrity")
+        vibrato_depth = _nested_float(vocal_quality_check, "vibrato_depth_preservation")
+        if formant_integrity is not None and formant_integrity < 0.72:
+            warnings.append(f"KRITISCH: Formant-Integrität {formant_integrity:.3f} < 0.72 — Vokalverfärbung erkannt.")
+            passed = False
+        if vibrato_depth is not None and vibrato_depth < 0.80:
+            warnings.append(f"KRITISCH: Vibrato-Tiefe {vibrato_depth:.3f} < 0.80 — Performance-Artefakt erkannt.")
+            passed = False
+
     goals_meta = meta.get("musical_goals", {})
     goal_scores: dict = goals_meta.get("scores", {})
     # §09.2 PMGG-Blend-Invariante: adaptive_thresholds aus UV3 _effective_goal_thresholds

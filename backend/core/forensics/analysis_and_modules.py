@@ -71,7 +71,7 @@ def _k_weight_channel(channel: np.ndarray, sr: int) -> np.ndarray:
         weighted = sosfiltfilt(sos_hp, channel)
         sos_hi = butter(1, 1500.0, btype="highpass", fs=sr, output="sos")
         high = sosfiltfilt(sos_hi, weighted)
-        return weighted + high * 0.18
+        return weighted + high * 0.18  # type: ignore[no-any-return]
     except Exception:
         return channel
 
@@ -150,7 +150,7 @@ class PolicyManager:
                 "timestamp": now,
             }
         )
-        return self.policy
+        return self.policy  # type: ignore[return-value]
 
     def reset_policy(self) -> dict[str, Any]:
         """Setzt zurück: all policy gate states while preserving the policy log."""
@@ -209,7 +209,7 @@ class FeatureExtractor:
                 if len(y) >= 2048:
                     chroma = librosa.feature.chroma_stft(y=y, sr=sr, n_fft=min(2048, len(y)))
                     key = librosa.feature.chroma_cqt(y=y, sr=sr)
-                    tempo, beats = librosa.beat.beat_track(y=y, sr=sr)
+                    tempo, beats = librosa.beat.beat_track(y=y, sr=sr)  # type: ignore[attr-defined]
                     melody = librosa.feature.mfcc(y=y, sr=sr, n_fft=min(2048, len(y)))
                     return {
                         "chroma_mean": float(np.mean(chroma)),
@@ -258,7 +258,7 @@ class FeatureExtractor:
                     try:
                         sf.write(tmp_in.name, audio_for_panns, sr)
                         panns_tags = panns.tag(tmp_in.name, tmp_out.name)
-                        return panns_tags
+                        return panns_tags  # type: ignore[no-any-return]
                     finally:
                         if os.path.exists(tmp_in.name):
                             os.remove(tmp_in.name)
@@ -297,7 +297,7 @@ class FeatureExtractor:
                 key = librosa.feature.chroma_cqt(y=y, sr=sr)
                 features["key_chroma_cqt_mean"] = float(np.mean(key))
                 # Beat/Rhythmus
-                tempo, beats = librosa.beat.beat_track(y=y, sr=sr)
+                tempo, beats = librosa.beat.beat_track(y=y, sr=sr)  # type: ignore[attr-defined]
                 features["tempo_bpm"] = float(np.asarray(tempo).flat[0])
                 features["beat_count"] = len(beats)
                 # Melodie-Contour
@@ -417,10 +417,10 @@ class FeatureExtractor:
             return audio.reshape(-1)
         rows, cols = audio.shape
         if rows <= 8 and cols > rows:
-            return audio.mean(axis=0)
+            return audio.mean(axis=0)  # type: ignore[no-any-return]
         if cols <= 8 and rows > cols:
-            return audio.mean(axis=1)
-        return audio.mean(axis=0)
+            return audio.mean(axis=1)  # type: ignore[no-any-return]
+        return audio.mean(axis=0)  # type: ignore[no-any-return]
 
     @staticmethod
     def _as_channels(audio: np.ndarray) -> np.ndarray:
@@ -479,8 +479,8 @@ class FeatureExtractor:
             import librosa
 
             # Stage 1: Onset detection (transient detection)
-            onset_env = librosa.onset.onset_strength(y=audio, sr=sr)
-            librosa.onset.onset_detect(onset_envelope=onset_env, sr=sr, backtrack=True)
+            onset_env = librosa.onset.onset_strength(y=audio, sr=sr)  # type: ignore[attr-defined]
+            librosa.onset.onset_detect(onset_envelope=onset_env, sr=sr, backtrack=True)  # type: ignore[attr-defined]
 
             # Stage 2: Statistical outlier detection (5σ threshold)
             threshold = np.mean(audio) + 5 * np.std(audio)
@@ -632,7 +632,10 @@ class FeatureExtractor:
 
             # Extract pitch using pyin (more robust than crepe for modulation)
             f0, voiced_flag, _voiced_probs = librosa.pyin(
-                audio, fmin=librosa.note_to_hz("C2"), fmax=librosa.note_to_hz("C7"), sr=sr
+                audio,
+                fmin=float(librosa.note_to_hz("C2")),
+                fmax=float(librosa.note_to_hz("C7")),
+                sr=sr,
             )
 
             # Filter out unvoiced regions
@@ -661,12 +664,12 @@ class FeatureExtractor:
                 flutter = scipy_signal.sosfilt(sos_flutter, pitch_deviation)
                 flutter_score = np.std(flutter) / (np.mean(np.abs(f0_voiced)) + 1e-10)
             else:
-                wow_score = 0.0
-                flutter_score = 0.0
+                wow_score = 0.0  # type: ignore[assignment]
+                flutter_score = 0.0  # type: ignore[assignment]
 
             # Clamp to 0-1 range
-            wow_score = min(1.0, wow_score * 10)  # Scale for typical values
-            flutter_score = min(1.0, flutter_score * 10)
+            wow_score = min(1.0, wow_score * 10)  # type: ignore[arg-type]  # Scale for typical values
+            flutter_score = min(1.0, flutter_score * 10)  # type: ignore[arg-type]
 
             return float(wow_score), float(flutter_score)
 
@@ -705,7 +708,7 @@ class FeatureExtractor:
             hum_score = max(hum_50_score, hum_60_score)
 
             # Normalize (typical hum is 0.01 - 0.1 of spectrum)
-            hum_score = min(1.0, hum_score * 10)
+            hum_score = min(1.0, hum_score * 10)  # type: ignore[arg-type]
 
             return float(hum_score)
 
@@ -748,6 +751,8 @@ class AnalysisEngineAdapter:
         # Import here to avoid circular dependency
         from backend.core.data_models import (
             AnalysisProfile,
+            DefectDetection,
+            DefectType,
             DynamicsAnalysis,
             FeatureVectors,
             FormatInfo,
@@ -838,7 +843,11 @@ class AnalysisEngineAdapter:
             if genre_counter:
                 genre = genre_counter.most_common(1)[0][0]
                 # Average confidence of this genre across votes
-                genre_confidence = np.mean([conf for g, conf in genre_votes if g == genre])
+                genre_mean_conf = float(np.mean([conf for g, conf in genre_votes if g == genre]))
+                genre_consensus = float(genre_counter.get(genre, 0)) / float(max(len(genre_votes), 1))
+                # Konsens + Evidenzstärke: gleiche Votes sollen die Konfidenz spürbar
+                # erhöhen, aber nicht über die lokale Mittelung hinaus halluzinieren.
+                genre_confidence = max(genre_mean_conf, 0.5 * genre_mean_conf + 0.5 * genre_consensus)
 
                 # 🎯 CONFIDENCE THRESHOLD: Only report if >50% confident
                 if genre_confidence < 0.50:
@@ -849,7 +858,7 @@ class AnalysisEngineAdapter:
 
             # 🗳️ MAJORITY VOTING for Vocals (2 out of 3)
             has_vocals = sum(v for v, _ in vocal_votes) >= 2
-            vocal_confidence = np.mean([conf for _, conf in vocal_votes])
+            vocal_confidence = np.mean([conf for _, conf in vocal_votes])  # type: ignore[assignment]
 
             # Use first segment's tags for instruments (less critical)
             instruments = self._extract_instruments_from_panns(all_panns_tags[0])
@@ -967,8 +976,8 @@ class AnalysisEngineAdapter:
             right = audio_stereo[1]
             mid = (left + right) / 2
             side = (left - right) / 2
-            mid_energy = np.sum(mid**2)
-            side_energy = np.sum(side**2)
+            mid_energy: float = float(np.sum(mid**2))
+            side_energy: float = float(np.sum(side**2))
             mid_side_balance = side_energy / (mid_energy + 1e-10)
 
             # Guard: np.corrcoef on near-constant (silent) signals → RuntimeWarning
@@ -999,8 +1008,56 @@ class AnalysisEngineAdapter:
                 mono_compatibility_score=1.0,
             )
 
-        # 6. Defect Detection (Spec 3.1.3) - Placeholder
-        detected_defects = []
+        # 6. Defect Detection (Spec 3.1.3) - strukturierte Defektobjekte aus den Feature-Detektoren.
+        detected_defects: list[DefectDetection] = []
+        _clipping_pct = float(features.get("clipping_percentage", 0.0) or 0.0)
+        if _clipping_pct > 0.1:
+            detected_defects.append(
+                DefectDetection(
+                    defect_type=DefectType.CLIPPING,
+                    severity=float(np.clip(_clipping_pct / 10.0, 0.0, 1.0)),
+                    confidence=0.85,
+                    affected_frequency_range=None,
+                    temporal_locations=[],
+                    classification_details={"clipping_percentage": _clipping_pct},
+                )
+            )
+        _crackle_density = float(features.get("crackle_density", 0.0) or 0.0)
+        if _crackle_density > 0.05:
+            detected_defects.append(
+                DefectDetection(
+                    defect_type=DefectType.CRACKLE_POPS,
+                    severity=float(np.clip(_crackle_density * 8.0, 0.0, 1.0)),
+                    confidence=0.75,
+                    affected_frequency_range=None,
+                    temporal_locations=[],
+                    classification_details={"crackle_density": _crackle_density},
+                )
+            )
+        _dropout_count = int(features.get("dropout_count", 0) or 0)
+        if _dropout_count > 0:
+            detected_defects.append(
+                DefectDetection(
+                    defect_type=DefectType.DROPOUT,
+                    severity=float(np.clip(_dropout_count / 10.0, 0.0, 1.0)),
+                    confidence=0.75,
+                    affected_frequency_range=None,
+                    temporal_locations=[],
+                    classification_details={"dropout_count": _dropout_count},
+                )
+            )
+        _hum_score = float(features.get("hum_score", 0.0) or 0.0)
+        if _hum_score > 0.05:
+            detected_defects.append(
+                DefectDetection(
+                    defect_type=DefectType.HUM,
+                    severity=float(np.clip(_hum_score, 0.0, 1.0)),
+                    confidence=0.70,
+                    affected_frequency_range=(40.0, 300.0),
+                    temporal_locations=[],
+                    classification_details={"hum_score": _hum_score},
+                )
+            )
 
         # 7. Musical Context (Spec 3.1.4) - PANNS-based
         musical_context = MusicalContext(

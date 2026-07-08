@@ -21,7 +21,7 @@ import numpy as np
 import pytest
 
 # E2E pipeline tests are excluded from fast normative runs via marker filters.
-pytestmark = [pytest.mark.normative, pytest.mark.e2e]
+pytestmark = [pytest.mark.normative, pytest.mark.e2e, pytest.mark.timeout(180)]
 
 # ---------------------------------------------------------------------------
 # Synthetisches Vinyl-Signal
@@ -59,8 +59,9 @@ def _make_vinyl_signal(sr: int = SR, dur: float = DURATION_S) -> np.ndarray:
     # Stereo: leichte L/R Phasendifferenz (typisch für alte Vinyl-Abspielgeräte)
     l_ch = signal
     r_ch = np.roll(signal, 2) * 0.97  # minimalste Phasenverzögerung
-    stereo = np.stack([l_ch, r_ch], axis=0)
-    return stereo.astype(np.float32)
+    stereo: np.ndarray = np.stack([l_ch, r_ch], axis=0)
+    stereo_f32: np.ndarray = stereo.astype(np.float32, copy=False)
+    return stereo_f32
 
 
 # ---------------------------------------------------------------------------

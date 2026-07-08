@@ -215,7 +215,7 @@ class TapeSaturation(PhaseInterface):
         self,
         audio: np.ndarray,
         sample_rate: int = 48000,
-        material_type: MaterialType = MaterialType.VINYL,
+        material_type: MaterialType = MaterialType.VINYL,  # type: ignore[override]
         **kwargs,
     ) -> PhaseResult:
         """
@@ -241,6 +241,31 @@ class TapeSaturation(PhaseInterface):
         phase_locality_factor = float(np.clip(phase_locality_factor, 0.35, 1.0))
         _pmgg_strength = float(kwargs.get("strength", 1.0))
         _effective_strength = float(np.clip(_pmgg_strength * phase_locality_factor, 0.0, 1.0))
+
+        # §V41 ForwardMaskingGuard: Stärke in post-transienten Masking-Fenstern erhöhen.
+        _panns_s_22 = float(kwargs.get("panns_singing", 0.0))
+        if _panns_s_22 >= 0.25 and _effective_strength > 0.0:
+            try:
+                from backend.core.dsp.temporal_masking import (
+                    get_forward_masking_guard as _fmg_fn_22,
+                )
+
+                _fmg_22 = _fmg_fn_22()
+                _fmz_22 = _fmg_22.compute_zones(audio, sample_rate)
+                if _fmz_22:
+                    _n_s_22 = audio.shape[-1] if audio.ndim > 1 else len(audio)
+                    _zone_samples_22 = sum(z.end_sample - z.start_sample for z in _fmz_22)
+                    _zone_frac_22 = float(np.clip(_zone_samples_22 / max(1, _n_s_22), 0.0, 1.0))
+                    _boost_22 = _zone_frac_22 * 0.15
+                    _effective_strength = float(np.clip(_effective_strength + _boost_22, 0.0, 1.0))
+                    logger.debug(
+                        "Phase22 §V41 ForwardMasking: zone_frac=%.2f boost=%.3f → eff_str=%.3f",
+                        _zone_frac_22,
+                        _boost_22,
+                        _effective_strength,
+                    )
+            except Exception as _fmg_exc_22:
+                logger.debug("Phase22 §V41 ForwardMaskingGuard non-blocking: %s", _fmg_exc_22)
 
         if _effective_strength <= 0.0:
             audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
@@ -341,7 +366,7 @@ class TapeSaturation(PhaseInterface):
                 _mid,
                 sample_rate,
                 drive,
-                tape_speed,
+                tape_speed,  # type: ignore[arg-type]
                 hysteresis,
                 tape_saturation_profile["h2_scale"],
                 tape_saturation_profile["h3_scale"],
@@ -355,7 +380,7 @@ class TapeSaturation(PhaseInterface):
                     _side,
                     sample_rate,
                     _side_drive,
-                    tape_speed,
+                    tape_speed,  # type: ignore[arg-type]
                     hysteresis * 0.5,
                     tape_saturation_profile["h2_scale"],
                     tape_saturation_profile["h3_scale"],
@@ -378,7 +403,7 @@ class TapeSaturation(PhaseInterface):
                 audio,
                 sample_rate,
                 drive,
-                tape_speed,
+                tape_speed,  # type: ignore[arg-type]
                 hysteresis,
                 tape_saturation_profile["h2_scale"],
                 tape_saturation_profile["h3_scale"],
@@ -413,6 +438,21 @@ class TapeSaturation(PhaseInterface):
 
         mixed = np.nan_to_num(mixed, nan=0.0, posinf=0.0, neginf=0.0)
         mixed = np.clip(mixed, -1.0, 1.0)
+
+        # §V24 Spektralfarbe-Prüfung (§2.74, non-blocking): EQ-ähnliche Sättigungs-Änderung muss Spektralfarbe bewahren
+        try:
+            from backend.core.dsp.spectral_color_guard import (  # pylint: disable=import-outside-toplevel
+                check_spectral_color_preservation as _scg22,
+            )
+
+            _sc22 = _scg22(audio, mixed, sample_rate)
+            if not _sc22.ok:
+                _sc22_wet = 0.70
+                mixed = (_sc22_wet * mixed + (1.0 - _sc22_wet) * audio).astype(np.float32)
+                logger.warning("§V24 phase_22 spectral_color non-ok → strength −30%%")
+        except Exception as _sc22_exc:
+            logger.debug("§V24 phase_22 spectral_color (non-blocking): %s", _sc22_exc)
+
         return PhaseResult(
             success=True,
             audio=mixed,
@@ -476,7 +516,7 @@ class TapeSaturation(PhaseInterface):
                 env[i] = a_att * env[i - 1] + (1.0 - a_att) * e
             else:
                 env[i] = a_rel * env[i - 1]
-        return env
+        return env  # type: ignore[no-any-return]
 
     def _saturate_multi_band(
         self,
@@ -566,7 +606,7 @@ class TapeSaturation(PhaseInterface):
         if peak > 0.95:
             saturated = saturated * (0.95 / peak)
 
-        return saturated
+        return np.asarray(saturated, dtype=np.float32)  # type: ignore[no-any-return]
 
     @staticmethod
     def _tanh_adaa(x0: np.ndarray, x1: np.ndarray) -> np.ndarray:
@@ -584,11 +624,11 @@ class TapeSaturation(PhaseInterface):
 
         def _log_cosh(x: np.ndarray) -> np.ndarray:
             ax = np.abs(x)
-            return ax + np.log1p(np.exp(-2.0 * ax)) - np.log(2.0)
+            return np.asarray(ax + np.log1p(np.exp(-2.0 * ax)) - np.log(2.0), dtype=np.float32)  # type: ignore[no-any-return]
 
         midpoint = np.tanh(0.5 * (x0 + x1))
         adaa = (_log_cosh(x0) - _log_cosh(x1)) / np.where(close, 1.0, dX)
-        return np.where(close, midpoint, adaa)
+        return np.where(close, midpoint, adaa)  # type: ignore[no-any-return]
 
     def _saturate_band(
         self,
@@ -644,7 +684,7 @@ class TapeSaturation(PhaseInterface):
         if peak > 1.0:
             saturated_with_harmonics /= peak
 
-        return saturated_with_harmonics
+        return np.asarray(saturated_with_harmonics, dtype=np.float32)  # type: ignore[no-any-return]
 
     def _estimate_thd(self, original: np.ndarray, processed: np.ndarray) -> float:
         """
@@ -686,7 +726,7 @@ class TapeSaturation(PhaseInterface):
 
         harmonic_energy = np.mean(spectrum[harmonic_band]) if np.any(harmonic_band) else 0.0
 
-        return harmonic_energy
+        return harmonic_energy  # type: ignore[return-value]
 
 
 # Test

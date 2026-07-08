@@ -134,7 +134,7 @@ class HybridDereverb:
         try:
             from plugins.sgmse_plugin import get_sgmse_plus_plugin
 
-            self.dccrn = get_sgmse_plus_plugin()
+            self.dccrn = get_sgmse_plus_plugin()  # type: ignore[assignment]
             self._sgmse_active = True
             logger.info("✅ SGMSE+ geladen als Dereverb-Primärmodul (§4.4) — ResembleEnhance als Fallback bereit")
             return
@@ -147,7 +147,7 @@ class HybridDereverb:
         try:
             from plugins.resemble_enhance_plugin import ResembleEnhancePlugin
 
-            self.dccrn = ResembleEnhancePlugin()
+            self.dccrn = ResembleEnhancePlugin()  # type: ignore[assignment]
             self._sgmse_active = False
             logger.info("ResembleEnhance ML-Stufe für Dereverb geladen (§4.4 Fallback 1)")
         except ImportError as e:
@@ -188,7 +188,7 @@ class HybridDereverb:
 
             # Re-estimate reverb after DSP
             reverb_after_dsp = self._estimate_reverb_level(audio, sample_rate)
-            metadata["reverb_after_dsp"] = reverb_after_dsp
+            metadata["reverb_after_dsp"] = reverb_after_dsp  # type: ignore[assignment]
 
             logger.info("DSP complete: reverb %.3f → %.3f", reverb_estimate, reverb_after_dsp)
 
@@ -229,7 +229,7 @@ class HybridDereverb:
                 logger.info("ML-Dereverb nicht verfügbar — WPE-DSP-Ergebnis wird verwendet")
 
         processing_time = time.time() - start_time
-        metadata["processing_time"] = processing_time
+        metadata["processing_time"] = processing_time  # type: ignore[assignment]
 
         return DereverbResult(
             audio=audio,

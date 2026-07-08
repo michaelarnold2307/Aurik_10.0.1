@@ -25,6 +25,7 @@ Invarianten (§3.1, §3.2, §3.7 Aurik-Spec):
     - providers=["CPUExecutionProvider"] — kein GPU (§9.5 Aurik-Spec)
     - Alle öffentlichen Methoden vollständig typisiert (PEP 484)
 """
+# pylint: disable=import-outside-toplevel
 
 import hashlib
 import logging
@@ -119,9 +120,15 @@ class CrepePlugin:
     def __init__(self) -> None:
         self._session: object | None = None
         self._model_used: str = "dsp_pyin"
-        self._result_cache: dict = {}  # SHA256-Cache (§3.8)
+        self._result_cache: dict[str, CrepeResult] = {}  # SHA256-Cache (§3.8)
         self._cache_lock: threading.Lock = threading.Lock()
         self._load_model()
+
+    def unload(self) -> None:
+        """Gibt Model-Session und Cache frei."""
+        self._session = None
+        with self._cache_lock:
+            self._result_cache.clear()
 
     def _load_model(self) -> None:
         """ONNX-Session laden oder stumm auf DSP-Fallback wechseln."""
@@ -168,6 +175,7 @@ class CrepePlugin:
             # Ein Dummy-Run mit kleinem Batch eliminiert den 13s→6s Kaltstart-Nachteil.
             try:
                 _dummy = np.zeros((1, _FRAME_LENGTH), dtype=np.float32)
+                assert isinstance(self._session, ort.InferenceSession)
                 self._session.run(["classifier"], {"input": _dummy})
                 logger.debug("CREPE ONNX warmup inference completed")
             except Exception as _exc:
@@ -175,10 +183,14 @@ class CrepePlugin:
             try:
                 from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm
 
+                def _unload_crepe() -> None:
+                    self._session = None
+                    self._model_used = "pyin"
+
                 _reg_plm(
                     "CREPE",
                     size_gb=0.10,
-                    unload_fn=lambda s=self: setattr(s, "_session", None) or setattr(s, "_model_used", "pyin"),
+                    unload_fn=_unload_crepe,
                 )
             except Exception as _exc:
                 logger.debug("Plugin operation failed (non-critical): %s", _exc)
@@ -263,9 +275,10 @@ class CrepePlugin:
             audio_padded = np.pad(audio_16k, pad, mode="constant")
             n_frames = max(1, (n_samples + hop - 1) // hop)
             # Strides für Zero-Copy Frame-Erzeugung
+            sample_stride = int(audio_padded.dtype.itemsize)
             strides = (
-                audio_padded.strides[0] * hop,
-                audio_padded.strides[0],
+                sample_stride * hop,
+                sample_stride,
             )
             frames = np.lib.stride_tricks.as_strided(
                 audio_padded,
@@ -417,7 +430,7 @@ class CrepePlugin:
 # ---------------------------------------------------------------------------
 # Thread-sicherer Singleton (Double-Checked Locking §3.2 Aurik-Spec)
 # ---------------------------------------------------------------------------
-_instance: CrepePlugin | None = None
+_INSTANCE_HOLDER: list[CrepePlugin | None] = [None]
 _lock = threading.Lock()
 
 
@@ -427,12 +440,13 @@ def get_crepe_plugin() -> CrepePlugin:
     Returns:
         Initialisierte :class:`CrepePlugin`-Instanz (lazy init).
     """
-    global _instance
-    if _instance is None:  # Schnellpfad ohne Lock
+    if _INSTANCE_HOLDER[0] is None:  # Schnellpfad ohne Lock
         with _lock:
-            if _instance is None:  # Zweiter Check unter Lock (Race-Condition-sicher)
-                _instance = CrepePlugin()
-    return _instance
+            if _INSTANCE_HOLDER[0] is None:  # Zweiter Check unter Lock (Race-Condition-sicher)
+                _INSTANCE_HOLDER[0] = CrepePlugin()
+    plugin = _INSTANCE_HOLDER[0]
+    assert plugin is not None
+    return plugin
 
 
 def unload_crepe() -> None:
@@ -440,16 +454,14 @@ def unload_crepe() -> None:
 
     Safe to call multiple times.
     """
-    global _instance
     with _lock:
-        if _instance is not None:
+        plugin = _INSTANCE_HOLDER[0]
+        if plugin is not None:
             try:
-                _instance._session = None
-                with _instance._cache_lock:
-                    _instance._result_cache.clear()
+                plugin.unload()
             except Exception as _exc:
                 logger.debug("Plugin operation failed (non-critical): %s", _exc)
-            _instance = None
+            _INSTANCE_HOLDER[0] = None
     try:
         from backend.core.ml_memory_budget import release as _release
 

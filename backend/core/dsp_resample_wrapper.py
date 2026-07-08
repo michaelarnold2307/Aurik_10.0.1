@@ -28,7 +28,7 @@ class DSPResampleWrapper:
 
     @property
     def name(self) -> str:
-        return self.dsp_module.__class__.__name__
+        return self.dsp_module.__class__.__name__  # type: ignore[no-any-return]
 
     def process(self, audio: np.ndarray, sr: int) -> np.ndarray:
         # Vorverarbeitung: Resample auf 48 kHz, falls nötig
@@ -47,4 +47,4 @@ class DSPResampleWrapper:
             out, _ = resample_to_48k(out, sr_48k)
         out = np.asarray(out)
         out = np.nan_to_num(out, nan=0.0, posinf=0.0, neginf=0.0)
-        return np.clip(out, -1.0, 1.0)
+        return np.clip(out, -1.0, 1.0)  # type: ignore[no-any-return]

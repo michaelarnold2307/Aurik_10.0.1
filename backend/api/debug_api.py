@@ -1,6 +1,10 @@
 """
 debug_api.py — Hochrangige Debug-API für Aurik Pipeline-Telemetrie.
 
+LEGACY_NON_RELEASE: Debug-/Forensik-API für Telemetrie-Auswertung. Diese Datei
+ist kein Release-Einstieg und darf den kanonischen Bridge/Denker/Exporter-
+Vertrag der Desktop-Produktpfade nicht umgehen.
+
 Einheitlicher Zugriffspunkt für alle Debug-Daten aus einem RestorationResult.
 
 Usage:
@@ -15,6 +19,7 @@ Usage:
 from __future__ import annotations
 
 import logging
+import math
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -96,7 +101,7 @@ def get_goals_timeline(result: Any) -> dict[str, list[float]]:
         from backend.core.pipeline_trace import build_from_result
 
         trace = build_from_result(result)
-        return trace.goal_timeline
+        return trace.goal_timeline  # type: ignore[no-any-return]
     except Exception as e:
         logger.debug("get_goals_timeline fehlgeschlagen: %s", e)
         return {}
@@ -128,7 +133,7 @@ def format_goals_table(result: Any) -> str:
         from backend.core.pipeline_trace import format_goals_table as _fmt
 
         trace = build_from_result(result)
-        return _fmt(trace)
+        return _fmt(trace)  # type: ignore[no-any-return]
     except Exception as e:
         return f"(format_goals_table fehlgeschlagen: {e})"
 
@@ -146,7 +151,7 @@ def format_full_report(result: Any) -> str:
 
         trace = build_from_result(result)
         store_trace(trace)  # Für get_last_trace() Zugriff
-        return _fmt(trace)
+        return _fmt(trace)  # type: ignore[no-any-return]
     except Exception as e:
         return f"(format_full_report fehlgeschlagen: {e})"
 
@@ -209,6 +214,7 @@ def get_goal_fails(result: Any, mode: str | None = None) -> list[dict[str, Any]]
         mode: "restoration" oder "studio_2026" (auto-detektiert wenn None)
     """
     try:
+        from backend.api.bridge import normalize_user_mode
         from backend.core.pipeline_trace import (
             CANONICAL_GOALS,
             RESTORATION_THRESHOLDS,
@@ -217,8 +223,8 @@ def get_goal_fails(result: Any, mode: str | None = None) -> list[dict[str, Any]]
         )
 
         trace = build_from_result(result)
-        _mode = mode or trace.mode or "restoration"
-        thresholds = STUDIO_THRESHOLDS if "studio" in _mode else RESTORATION_THRESHOLDS
+        _canonical_mode = normalize_user_mode(mode or trace.mode or "restoration")
+        thresholds = STUDIO_THRESHOLDS if _canonical_mode == "Studio 2026" else RESTORATION_THRESHOLDS
         fails = []
         for g in CANONICAL_GOALS:
             val = trace.final_goals.get(g)
@@ -251,7 +257,7 @@ def _get_meta(result: Any) -> dict[str, Any]:
 def _safe_float(v: Any, default: float = 0.0) -> float:
     try:
         f = float(v)
-        return 0.0 if (f != f or f == float("inf") or f == float("-inf")) else round(f, 4)
+        return 0.0 if not math.isfinite(f) else round(f, 4)
     except (TypeError, ValueError):
         return default
 

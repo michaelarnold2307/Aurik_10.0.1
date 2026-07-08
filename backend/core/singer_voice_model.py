@@ -92,11 +92,11 @@ def _to_mono(audio: np.ndarray) -> np.ndarray:
     """Konvertiert any channel layout to mono float32 (channels_last or leading)."""
     arr = np.asarray(audio, dtype=np.float32)
     if arr.ndim == 1:
-        return arr
+        return arr  # type: ignore[no-any-return]
     # (channels, samples) when channels <= 2 and samples >> channels
     if arr.shape[0] <= 2 and arr.shape[0] < arr.shape[1]:
-        return np.mean(arr, axis=0)
-    return np.mean(arr, axis=-1)
+        return np.mean(arr, axis=0)  # type: ignore[no-any-return]
+    return np.mean(arr, axis=-1)  # type: ignore[no-any-return]
 
 
 def _frame_rms_dbfs(frame: np.ndarray) -> float:
@@ -122,7 +122,7 @@ def _burg_lpc(x: np.ndarray, order: int) -> np.ndarray:
         a = a_new
         f_new, b_new = f[m:] + k * b[: n - m], b[: n - m] + k * f[m:]
         f, b = f_new, b_new
-    return a
+    return a  # type: ignore[no-any-return]
 
 
 def _lpc_to_formants(a: np.ndarray, sr: int) -> dict[str, float]:
@@ -177,10 +177,10 @@ def _mel_filterbank(sr: int, n_fft: int, n_mels: int, fmin: float, fmax: float) 
     n_freqs = n_fft // 2 + 1
 
     def hz_to_mel(f: np.ndarray) -> np.ndarray:
-        return 2595.0 * np.log10(1.0 + f / 700.0)
+        return 2595.0 * np.log10(1.0 + f / 700.0)  # type: ignore[no-any-return]
 
     def mel_to_hz(m: np.ndarray) -> np.ndarray:
-        return 700.0 * (10.0 ** (m / 2595.0) - 1.0)
+        return 700.0 * (10.0 ** (m / 2595.0) - 1.0)  # type: ignore[no-any-return]
 
     mel_pts = np.linspace(hz_to_mel(np.array([fmin]))[0], hz_to_mel(np.array([fmax]))[0], n_mels + 2)
     hz_pts = mel_to_hz(mel_pts)
@@ -197,7 +197,7 @@ def _mel_filterbank(sr: int, n_fft: int, n_mels: int, fmin: float, fmax: float) 
             k = np.arange(center, hi)
             k = k[(k >= 0) & (k < n_freqs)]
             fb[m - 1, k] = (hi - k) / max(1, hi - center)
-    return fb
+    return fb  # type: ignore[no-any-return]
 
 
 def _compute_mel_spectrum(mono: np.ndarray, sr: int) -> np.ndarray:
@@ -209,7 +209,7 @@ def _compute_mel_spectrum(mono: np.ndarray, sr: int) -> np.ndarray:
     try:
         import librosa  # pylint: disable=import-outside-toplevel
 
-        return librosa.feature.melspectrogram(
+        return librosa.feature.melspectrogram(  # type: ignore[no-any-return]
             y=mono,
             sr=sr,
             n_fft=_N_FFT,
@@ -234,7 +234,7 @@ def _compute_mel_spectrum(mono: np.ndarray, sr: int) -> np.ndarray:
             seg = np.pad(seg, (0, _N_FFT - len(seg)))
         power[:, i] = np.abs(np.fft.rfft(seg.astype(np.float64) * window)) ** 2
     fb = _mel_filterbank(sr, _N_FFT, _N_MELS, _MEL_FMIN_HZ, _MEL_FMAX_HZ)
-    return (fb @ power).astype(np.float32)
+    return (fb @ power).astype(np.float32)  # type: ignore[no-any-return]
 
 
 def _estimate_f0_dsp(mono: np.ndarray, sr: int) -> np.ndarray:
@@ -255,14 +255,14 @@ def _estimate_f0_dsp(mono: np.ndarray, sr: int) -> np.ndarray:
         f0 = np.nan_to_num(f0, nan=0.0).astype(np.float32)
         if voiced is not None:
             f0[~voiced] = 0.0
-        return f0
+        return f0  # type: ignore[no-any-return]
     except Exception:  # pylint: disable=broad-except
         pass
 
     # DSP fallback: autocorrelation pitch per hop frame
     frame_len = min(len(mono), int(0.04 * sr))
     if frame_len < 64:
-        return np.zeros(1, dtype=np.float32)
+        return np.zeros(1, dtype=np.float32)  # type: ignore[no-any-return]
     n_frames = max(1, (len(mono) - frame_len) // _HOP_LENGTH + 1)
     f0_arr = np.zeros(n_frames, dtype=np.float32)
     t_min = max(1, int(sr / 800.0))
@@ -279,7 +279,7 @@ def _estimate_f0_dsp(mono: np.ndarray, sr: int) -> np.ndarray:
         idx = t_min + int(np.argmax(acf_n[t_min:t_max]))
         if acf_n[idx] > 0.30:
             f0_arr[i] = float(sr) / float(idx)
-    return f0_arr
+    return f0_arr  # type: ignore[no-any-return]
 
 
 def _estimate_vibrato(f0_arr: np.ndarray, sr: int) -> tuple[float, float]:
@@ -380,7 +380,7 @@ def _apply_spectral_tilt(
     freq_axis = np.linspace(1.0, float(sr) / 2.0, mag.shape[0])
     gain_lin = 10.0 ** (tilt * np.log2(freq_axis / 1000.0) / 20.0)
     gain_lin = np.nan_to_num(gain_lin, nan=1.0).reshape(-1, 1)
-    return (mag * gain_lin).astype(mag.dtype)
+    return (mag * gain_lin).astype(mag.dtype)  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------
@@ -514,15 +514,44 @@ class SingerVoiceModel:
         spectral_envelope = np.mean(mel_spec[:, valid_idx], axis=1)
         spectral_envelope = np.nan_to_num(spectral_envelope, nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32)
 
-        # Step 6: LPC formant estimation on concatenated clean frames (capped at 200)
-        clean_audio = np.concatenate(
-            [mono[i * _HOP_LENGTH : (i + 1) * _HOP_LENGTH] for i in valid_idx[: min(len(valid_idx), 200)]]
-        )
-        formant_targets = _estimate_formants_lpc(clean_audio, sr)
+        # Step 6: Formants — VFA-Daten bevorzugen falls verfügbar
+        _vfa_f1 = _vfa_result.get("formant_f1_mean", 0.0) if _vfa_result else 0.0
+        _vfa_f2 = _vfa_result.get("formant_f2_mean", 0.0) if _vfa_result else 0.0
+        if _vfa_f1 > 0 and _vfa_f2 > 0:
+            # VFA hat Formanten aus dem Gesamtsignal — zuverlässiger als
+            # LPC auf den kurzen Clean-Segmenten (die oft zu kurz/leise sind)
+            formant_targets = {
+                "F1": float(_vfa_f1),
+                "F2": float(_vfa_f2),
+                "F3": float(_vfa_result.get("formant_f3_mean", 0.0) if _vfa_result else 0.0),
+                "F4": 0.0,
+            }
+        else:
+            clean_audio = np.concatenate(
+                [mono[i * _HOP_LENGTH : (i + 1) * _HOP_LENGTH] for i in valid_idx[: min(len(valid_idx), 200)]]
+            )
+            formant_targets = _estimate_formants_lpc(clean_audio, sr)
 
-        # Step 7: Vibrato via pYIN F0 trajectory
-        f0_arr = _estimate_f0_dsp(mono, sr)
-        vibrato_rate_hz, vibrato_depth_cents = _estimate_vibrato(f0_arr, sr)
+        # Step 7: Vibrato — VFA-Daten bevorzugen, sonst selbst schätzen
+        # §FIX v9.20.3: VocalFocusAnalyzer hat bereits Vibrato aus dem
+        # Gesamtsignal analysiert (robuster gegen Bandbreitenbegrenzung).
+        # Nur wenn VFA keine Daten liefert, DSP-Eigenberechnung nutzen.
+        vibrato_rate_hz = 0.0
+        vibrato_depth_cents = 0.0
+        _vfa_vibrato_zones = _vfa_result.get("vibrato_zones", []) if _vfa_result else []
+        _vfa_vibrato_count = _vfa_result.get("vibrato_zones_count", len(_vfa_vibrato_zones)) if _vfa_result else 0
+        if _vfa_vibrato_zones and _vfa_vibrato_count >= 3:
+            # VFA hat Vibrato gefunden → typische Rate 4-7 Hz, Tiefe 50-200 cents
+            vibrato_rate_hz = 5.0  # Mittelwert für ausgebildete Sänger
+            vibrato_depth_cents = 150.0
+            # Versuche genauere Werte aus VocalStyle zu extrahieren
+            _vs = _vfa_result.get("vocal_style", {}) if _vfa_result else {}
+            if isinstance(_vs, dict):
+                vibrato_rate_hz = float(_vs.get("vibrato_rate_hz", 5.0))
+                vibrato_depth_cents = float(_vs.get("vibrato_depth_cents", 150.0))
+        else:
+            f0_arr = _estimate_f0_dsp(mono, sr)
+            vibrato_rate_hz, vibrato_depth_cents = _estimate_vibrato(f0_arr, sr)
 
         # Step 8: Spectral tilt
         spectral_tilt = _compute_spectral_tilt(spectral_envelope)
@@ -677,9 +706,9 @@ def _restore_shape(mono_out: np.ndarray, original_shape: tuple) -> np.ndarray:
         return mono_out
     # (channels, samples)
     if original_shape[0] <= 2 and original_shape[0] < original_shape[1]:
-        return np.tile(mono_out[np.newaxis, :], (original_shape[0], 1)).astype(np.float32)
+        return np.tile(mono_out[np.newaxis, :], (original_shape[0], 1)).astype(np.float32)  # type: ignore[no-any-return]
     # (samples, channels)
-    return np.tile(mono_out[:, np.newaxis], (1, original_shape[-1])).astype(np.float32)
+    return np.tile(mono_out[:, np.newaxis], (1, original_shape[-1])).astype(np.float32)  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------

@@ -24,7 +24,7 @@ from dataclasses import asdict, dataclass, field
 from dataclasses import replace as dc_replace
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 
@@ -270,7 +270,7 @@ def _bark_band_energies(audio_mono: np.ndarray, sr: int) -> np.ndarray:
         frame_fft = np.abs(np.fft.rfft(frame)) ** 2
         frames.append(frame_fft)
     if not frames:
-        return np.ones(24) / 24.0
+        return np.ones(24) / 24.0  # type: ignore[no-any-return]
     psd = np.mean(np.array(frames), axis=0)
     freqs = np.fft.rfftfreq(n_fft, 1.0 / sr)
 
@@ -281,8 +281,9 @@ def _bark_band_energies(audio_mono: np.ndarray, sr: int) -> np.ndarray:
 
     total = energies.sum()
     if total < 1e-12:
-        return np.ones(24, dtype=np.float32) / 24.0
-    return np.nan_to_num(energies / total)
+        return np.ones(24, dtype=np.float32) / 24.0  # type: ignore[no-any-return]
+    normalized: np.ndarray = np.nan_to_num(energies / total).astype(np.float32)
+    return normalized
 
 
 # ---------------------------------------------------------------------------
@@ -1020,6 +1021,35 @@ def _dsp_fingerprint_decade(
             agreement_count += 1
         conf = min(0.92, conf + agreement_count * 0.04)
 
+    # Confidence boost for pre-1950 acoustic/electrical-shellac material.
+    # Symmetrisch zum 1960–1980-Agreement-Boost oben: Pre-1950-Aufnahmen tragen
+    # mehrere UNABHÄNGIGE physikalische Signaturen, die — wenn sie konvergieren —
+    # eine eindeutige Era-Zuordnung belegen. Ohne diesen Zweig blieb der Classifier
+    # bei zweifelsfreiem Shellac-Material künstlich unsicher (z. B. conf≈0.42 trotz
+    # Mono + niedrigem SNR + hoher Oberflächen-Modulation + fehlendem Sub-Bass).
+    # WISSENSCHAFTLICHE INVARIANTE (§0g, §0c): Der Boost ändert NIEMALS die Dekade
+    # (nur die Konfidenz), ist vollständig materialgetrieben (keine song-spezifische
+    # Regel) und feuert nur bei echter Evidenz-Konvergenz — bleibt die Evidenz
+    # mehrdeutig, bleibt die Unsicherheit erhalten (ehrliche §0g-Unsicherheit).
+    elif decade <= 1940:
+        agreement_count = 0
+        # (1) Mono: kommerzielle Stereofonie erst ~1958 → starker Pre-1950-Indikator.
+        if not is_stereo:
+            agreement_count += 1
+        # (2) Shellac/akustische Oberflächen-/Trichter-Aufnahme → niedriger SNR.
+        if snr_db < 30.0:
+            agreement_count += 1
+        # (3) Mechanische Oberflächen-Modulation (Crackle/Rumble/Gleichlauf).
+        if noise_modulation > 0.20:
+            agreement_count += 1
+        # (4) Akustische/früh-elektrische Ketten ohne Sub-Bass-Energie.
+        if lf_presence < 0.30:
+            agreement_count += 1
+        # (5) Steiler HF-Roll-off konsistent mit bandbegrenztem Träger.
+        if spectral_tilt <= -5.0:
+            agreement_count += 1
+        conf = min(0.90, conf + agreement_count * 0.035)
+
     # Confidence fine-tuning for the 1960/1970 transition evidence.
     if decade in (1960, 1970):
         # Score certainty around the transition boundary:
@@ -1184,6 +1214,27 @@ def _microphone_type_decade(bark_energies: np.ndarray) -> tuple[int, float]:
 # ---------------------------------------------------------------------------
 
 
+# §2.13 Multi-Generation Era Ceiling (v9.20.3): Analog-Träger haben
+# Produktionszeiträume. Wenn die Kette einen analogen Ursprungsträger
+# enthält (z. B. vinyl→cassette→mp3), darf die erkannte Ära NICHT
+# jünger sein als das Ende der kommerziellen Produktion dieses Trägers.
+# Dies verhindert, dass der letzte Codec in der Kette (mp3=1990er)
+# den ursprünglichen Aufnahmezeitpunkt überschreibt.
+_ANALOG_ERA_CEILING: dict[str, int] = {
+    "shellac": 1955,  # Schellack: letzte kommerzielle Pressungen ~1955
+    "wax_cylinder": 1930,  # Wachswalze: Ende ~1929
+    "vinyl": 1989,  # Vinyl: CD verdrängt Vinyl ~1989 (Nischenproduktion danach)
+    "lacquer_disc": 1970,  # Lacquer-Disc (Acetat): Ende ~1970
+    "wire_recording": 1950,  # Drahtaufnahme: Ende ~1950
+    "cassette": 2005,  # Kassette: letzte große Produktionen ~2005
+    "tape": 1995,  # Tonband: Ende ~1995 (Nischen bis heute)
+    "reel_tape": 1995,  # Tonband (Spule): Ende ~1995
+    "8track": 1985,  # 8-Track: Ende ~1985
+    "dat": 2005,  # DAT: Ende ~2005
+    "minidisc": 2005,  # MiniDisc: Ende ~2005
+}
+
+
 class EraClassifier:
     """Erkennt Aufnahme-Ära (1890–2025) und leitet epochenspezifische Priors ab.
 
@@ -1217,7 +1268,7 @@ class EraClassifier:
     # Öffentliche API
     # ------------------------------------------------------------------
 
-    def classify(self, audio: np.ndarray, sr: int) -> EraResult:
+    def classify(self, audio: np.ndarray, sr: int, transfer_chain: list[str] | None = None) -> EraResult:
         """Erkennt Aufnahme-Ära (Cascaded Tier-1 → Tier-2 → Tier-3).
 
         Args:
@@ -1282,22 +1333,59 @@ class EraClassifier:
         #    originate from a pre-1958 decade regardless of CLAP confidence.
         #  • Significant high-band energy above 8 kHz is incompatible with a decade
         #    that nominally had ≤ 8 kHz recording bandwidth (pre-1940s equipment).
-        # When either constraint is violated, Tier-1 is discarded and Tier-2 DSP
+        #  • §2.13 Analog-Era-Plausibilität: Wenn die Chain analoge Medien enthält
+        #    (vinyl, cassette, shellac), kann die Aufnahme nicht NACH dem Ende der
+        #    Analog-Ära entstanden sein. CLAP > 1989 + analog chain → Tier-2.
+        # When any constraint is violated, Tier-1 is discarded and Tier-2 DSP
         # (which implements these guards natively) is used instead.
         if result is not None and result.tier_used == 1:
             _clap_decade = result.decade
             _stereo_violation = is_stereo and _clap_decade < 1960
             _hf_violation = (highband_presence > 0.20) and (_clap_decade < 1940)
-            if _stereo_violation or _hf_violation:
+            _analog_era_violation = (
+                transfer_chain is not None
+                and any(
+                    m
+                    in (
+                        "vinyl",
+                        "cassette",
+                        "shellac",
+                        "lacquer_disc",
+                        "wax_cylinder",
+                        "tape",
+                        "reel_tape",
+                        "wire_recording",
+                        "8track",
+                    )
+                    for m in (str(t).lower().replace(" ", "_").replace("-", "_") for t in transfer_chain)
+                )
+                and _clap_decade > 1989
+            )
+            if _stereo_violation or _hf_violation or _analog_era_violation:
+                _violations = []
+                if _stereo_violation:
+                    _violations.append("stereo")
+                if _hf_violation:
+                    _violations.append("hf_presence")
+                if _analog_era_violation:
+                    _violations.append("analog_chain")
                 logger.info(
                     "EraClassifier: Tier-1 Plausibilitätsverletzung ("
-                    "CLAP-Jahrzehnt=%d, stereo=%s, hf_presence=%.2f"
-                    ") → Tier-2 DSP-Override (Eargle 2004)",
+                    "CLAP-Jahrzehnt=%d, violations=%s) → Tier-2 DSP-Override",
                     _clap_decade,
-                    is_stereo,
-                    highband_presence,
+                    ",".join(_violations),
                 )
                 result = None  # force Tier-2
+
+        # §2.13 CLAP-Confidence-Gate: CLAP ist ein general-purpose Audio-Modell,
+        # kein Era-Spezialist. Bei confidence < 0.50 ist die Vorhersage nicht
+        # besser als Raten → Tier-1 verwerfen, Tier-2 DSP direkt nutzen.
+        if result is not None and result.tier_used == 1 and result.confidence < 0.50:
+            logger.info(
+                "EraClassifier: CLAP confidence %.2f < 0.50 — Tier-1 verworfen, Tier-2 DSP",
+                result.confidence,
+            )
+            result = None
 
         # Tier-2: DSP-Fingerprint (multi-factor)
         if result is None or result.confidence < 0.40:
@@ -1313,6 +1401,43 @@ class EraClassifier:
                 lf_presence=lf_presence,
                 highband_presence=highband_presence,
             )
+
+        # §2.13 Multi-Generation Era Ceiling: Wenn die Kette einen analogen
+        # Ursprungsträger enthält, darf die erkannte Ära nicht jünger sein
+        # als das Produktionsende dieses Trägers.
+        # Beispiel: vinyl→cassette→mp3 → vinyl ceiling=1989. Auch wenn CLAP/DSP
+        # 1990er erkennen (wegen mp3-Artefakten), wird auf 1989 geklemmt.
+        if transfer_chain and result is not None:
+            _ceiling = 9999
+            _ceiling_source = None
+            for _mat in transfer_chain:
+                _mat_lower = str(_mat).lower().replace(" ", "_").replace("-", "_")
+                _c = _ANALOG_ERA_CEILING.get(_mat_lower)
+                if _c is not None and _c < _ceiling:
+                    _ceiling = _c
+                    _ceiling_source = _mat_lower
+            if _ceiling < 9999 and result.decade > _ceiling:
+                _original_decade = result.decade
+                result = EraResult(
+                    decade=_ceiling,
+                    confidence=result.confidence * 0.85,  # leichte Unsicherheit
+                    material_prior=result.material_prior,
+                    noise_profile=result.noise_profile,
+                    tier_used=result.tier_used,
+                    tier1_used=result.tier1_used,
+                    regression_snr=result.regression_snr,
+                    regression_mos=result.regression_mos,
+                )
+                logger.info(
+                    "🕰️ §2.13 Era-Ceiling: chain=%s → %s ceiling=%d → "
+                    "decade %d→%d (CLAP/DSP said %d, corrected for analog source)",
+                    transfer_chain,
+                    _ceiling_source,
+                    _ceiling,
+                    _original_decade,
+                    result.decade,
+                    _original_decade,
+                )
 
         # Tier-3: Mikrofon-Heuristik (letzter Fallback)
         if result.confidence < 0.30:
@@ -1429,8 +1554,11 @@ class EraClassifier:
                 except Exception as _rs_exc:
                     logger.debug("EraClassifier Tier-1: resample failed (%s) — skip CLAP tier", _rs_exc)
                     return None
-            # CLAP-Embedding → Cosinus-Ähnlichkeit zu Ära-Ankern
-            embedding = self._clap_plugin.embed_audio(_audio_clap, _sr_clap)  # type: ignore[union-attr]
+            # CLAP-Embedding → Cosinus-Ähnlichkeit zu Ära-Ankern.
+            # _clap_plugin ist als object|None typisiert (lazy importiertes Plugin);
+            # embed_audio() existiert erst zur Laufzeit — cast(Any) statt type-ignore,
+            # damit mypy UND Pyright konsistent durchlaufen.
+            embedding = cast(Any, self._clap_plugin).embed_audio(_audio_clap, _sr_clap)
             decade, conf = self._clap_nearest_neighbor(embedding)
             if conf < 0.35:
                 return None
@@ -1638,7 +1766,7 @@ def _apply_codec_bw_plausibility_gate(
     return era_result
 
 
-def classify_era(audio: np.ndarray, sr: int) -> EraResult:
+def classify_era(audio: np.ndarray, sr: int, transfer_chain: list[str] | None = None) -> EraResult:
     """Convenience-Funktion: Erkennt Aufnahme-Ära ohne explizite Instanz.
 
     Args:
@@ -1660,6 +1788,22 @@ _CODEC_CONTAINERS: frozenset[str] = frozenset(
         "mp3_high",
         "aac",
         "streaming",
+    }
+)
+
+# Analoge Material-Priors — eine Era-Zuweisung auf diese Träger ist bei reinen
+# Codec-Ketten (ohne analoge Vorstufe) mit hoher Wahrscheinlichkeit eine
+# Fehldeutung des Codec-Tiefpasses als historische Aufnahme-Bandbreite.
+_ANALOG_ERA_PRIORS: frozenset[str] = frozenset(
+    {
+        "shellac",
+        "wax_cylinder",
+        "vinyl",
+        "wire_recording",
+        "lacquer_disc",
+        "tape",
+        "reel_tape",
+        "cassette",
     }
 )
 
@@ -1691,6 +1835,43 @@ def constrain_era_to_medium(era_result: EraResult, medium: str) -> EraResult:
     """
     medium_lower = medium.strip().lower()
     if medium_lower in _CODEC_CONTAINERS:
+        # §Fix9-Spiegelung (UV3-Pfad): Reine Codec-Klassifikation OHNE analoge
+        # Vorstufe + prä-digitale Dekade, die primär aus dem HF-Rolloff stammt,
+        # ist codec-kontaminiert — ein MP3/AAC-Tiefpass ist kein Aufnahme-Ära-
+        # Indikator. Ein echtes Analog-Original in einer Codec-Kette erreicht
+        # diese Funktion nie mit medium=codec, weil der MediumDetector dann den
+        # letzten Analog-Träger als primary meldet (§6.1b Letzter-Analog-Träger-
+        # Primärprinzip). Daher ist die Korrektur hier sicher und generisch (§0c).
+        _prior_lower = str(era_result.material_prior or "").lower()
+        if (
+            era_result.decade < 1975
+            and _prior_lower in _ANALOG_ERA_PRIORS
+            and 0.0 < float(era_result.hf_rolloff_hz) <= 16_500.0
+        ):
+            corrected_codec_decade = min(d for d in VALID_DECADES if d >= 1980)
+            codec_conf = float(np.clip(max(era_result.confidence * 0.65, 0.55), 0.25, 0.80))
+            logger.info(
+                "EraClassifier Lossy-Codec-Korrektur (§Fix9/UV3): %der → %der "
+                "(medium=%s, rolloff=%.0f Hz codec-bedingt, prior %s → %s, conf %.2f → %.2f)",
+                era_result.decade,
+                corrected_codec_decade,
+                medium,
+                era_result.hf_rolloff_hz,
+                _prior_lower,
+                medium_lower,
+                era_result.confidence,
+                codec_conf,
+            )
+            return EraResult(
+                decade=corrected_codec_decade,
+                era_label=f"{corrected_codec_decade}er",
+                confidence=codec_conf,
+                material_prior=medium_lower,
+                noise_profile=era_result.noise_profile,
+                tier_used=era_result.tier_used,
+                hf_rolloff_hz=era_result.hf_rolloff_hz,
+                is_remaster_suspected=era_result.is_remaster_suspected,
+            )
         return era_result
     floor = MEDIUM_DECADE_FLOOR.get(medium_lower, 0)
     if floor == 0 or era_result.decade >= floor:

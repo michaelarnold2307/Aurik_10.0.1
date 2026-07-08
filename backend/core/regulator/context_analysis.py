@@ -22,7 +22,7 @@ class ContextAnalyzer:
 
                 self._medium_detector = MediumDetector()
             except ImportError:
-                self._medium_detector = False  # dauerhaft deaktiviert
+                self._medium_detector = False  # type: ignore[assignment]  # dauerhaft deaktiviert
         return self._medium_detector if self._medium_detector is not False else None
 
     # ------------------------------------------------------------------

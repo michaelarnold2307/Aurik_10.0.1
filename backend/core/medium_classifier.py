@@ -14,10 +14,13 @@ from typing import Any
 
 import numpy as np
 
+# pylint: disable=import-outside-toplevel
+
 logger = logging.getLogger(__name__)
 
 
 def _get_material_type():
+    """Lädt MaterialType lazy, um Import-Zyklen im Core zu vermeiden."""
     try:
         from backend.core.defect_scanner import MaterialType
 
@@ -28,12 +31,15 @@ def _get_material_type():
 
 @dataclass
 class MaterialEvidence:
+    """Begründungsdaten für ein klassifiziertes Trägermedium."""
+
     material: Any
     confidence: float
     features_matched: list[str] = field(default_factory=list)
     features_against: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
+        """Serialisiert den Evidenzsatz als JSON-kompatibles Dict."""
         mt = self.material
         return {
             "material": mt.value if hasattr(mt, "value") else str(mt),
@@ -45,6 +51,8 @@ class MaterialEvidence:
 
 @dataclass
 class ClassificationResult:
+    """Strukturiertes Ergebnis der Materialklassifikation."""
+
     material: Any
     confidence: float
     evidence: list[MaterialEvidence] = field(default_factory=list)
@@ -61,14 +69,17 @@ class ClassificationResult:
     infrasonic_rms: float = 0.0  # sub-20 Hz normalised RMS (vinyl rumble indicator)
     codec_type: str = ""  # 'mp3' | 'aac' | 'lossy' | 'clean' | '' (unknown)
 
-    @property
-    def material_type(self) -> str:
+    def _material_type(self) -> str:
+        """Gibt den Materialtyp als stringifizierten Wert zurück."""
         mt = self.material
         if hasattr(mt, "value"):
             return str(mt.value)
         return str(mt)
 
+    material_type = property(_material_type)
+
     def as_dict(self) -> dict[str, Any]:
+        """Serialisiert das Ergebnis als JSON-kompatibles Dict."""
         mt = self.material
         return {
             "material": mt.value if hasattr(mt, "value") else str(mt),
@@ -90,10 +101,13 @@ class ClassificationResult:
 
 
 class _SpectralFingerprinter:
+    """Extrahiert spektrale Kennwerte für die Trägermedien-Erkennung."""
+
     _FRAME_SIZE = 1024
     _HOP_SIZE = 512
 
     def extract(self, audio: np.ndarray, sr: int) -> dict[str, float]:
+        """Berechnet den vollständigen Merkmalsvektor für die Materialklassifikation."""
         mono = self._to_mono(audio)
         if mono.size < self._FRAME_SIZE:
             return self._null_features()
@@ -120,7 +134,15 @@ class _SpectralFingerprinter:
     def _to_mono(audio: np.ndarray) -> np.ndarray:
         arr = np.nan_to_num(np.asarray(audio, dtype=np.float32), nan=0.0, posinf=0.0, neginf=0.0)
         arr = np.clip(arr, -1.0, 1.0)
-        return arr.mean(axis=0) if arr.ndim == 2 else arr
+        if arr.ndim != 2:
+            return arr  # type: ignore[no-any-return]
+        # Aurik-Konvention: ``(samples, channels)``. Über die Kanal-Achse (die
+        # kleinere, da nur Mono/Stereo) mitteln — robust gegen beide Layouts.
+        # Spaltenvektoren ``(N, 1)`` als Mono behandeln.
+        if min(arr.shape) < 2:
+            return arr.reshape(-1)  # type: ignore[no-any-return]
+        ch_axis = 1 if arr.shape[1] <= arr.shape[0] else 0
+        return arr.mean(axis=ch_axis)  # type: ignore[no-any-return]
 
     @staticmethod
     def _null_features() -> dict[str, float]:
@@ -205,9 +227,12 @@ class _SpectralFingerprinter:
         """FCPE F₀ → modulation spectrum → IEC dominant frequency + depth."""
         if len(mono) < sr:  # at least 1 second
             raise ValueError("too short for FCPE wow/flutter")
-        from plugins.fcpe_plugin import get_fcpe_plugin  # type: ignore[import]
+        from plugins.fcpe_plugin import get_fcpe_plugin, get_loaded_fcpe_plugin  # type: ignore[import]
 
-        result = get_fcpe_plugin().analyze(mono, sr)
+        fcpe = get_loaded_fcpe_plugin()
+        if fcpe is None:
+            fcpe = get_fcpe_plugin()
+        result = fcpe.analyze(mono, sr)
         f0_hz = result.f0_hz
         times_s = result.times_s
         voiced = result.voiced_prob > 0.45
@@ -708,6 +733,7 @@ class _MaterialScorer:
     ]
 
     def score(self, features: dict[str, float], MaterialType: Any) -> ClassificationResult:
+        """Bewertet Merkmale probabilistisch gegen alle Materialmodelle."""
         # Extract feature vector
         bw = features.get("bandwidth_hz", 0.0)
         snr = features.get("snr_db", 0.0)
@@ -822,13 +848,16 @@ class MediumClassifier:
     """Automatische Trägermedien-Erkennung (Aurik Spec §2.1)."""
 
     def __init__(self) -> None:
+        """Initialisiert Fingerprinter und probabilistischen Material-Scorer."""
         self._fp = _SpectralFingerprinter()
         self._sc = _MaterialScorer()
 
     def classify_medium(self, audio: np.ndarray, sr: int) -> ClassificationResult:
+        """Klassifiziert ein Signal ausschließlich per DSP-Pfad."""
         return self.classify(audio, sr, use_ml=False)
 
     def classify(self, audio: np.ndarray, sr: int, use_ml: bool = True) -> ClassificationResult:
+        """Klassifiziert ein Signal via ML-Versuch mit DSP-Fallback."""
         key = self._cache_key(audio, sr)
         with _sha_cache_lock:
             if key in _sha_cache:
@@ -855,11 +884,19 @@ class MediumClassifier:
         try:
             from plugins.laion_clap_plugin import get_laion_clap
 
-            plugin = get_laion_clap()
-            r = plugin.classify_medium(audio, sr)
-            if r is not None and r.confidence >= 0.35:
-                r.classifier_source = "clap_ml"
-                return r
+            plugin: Any = get_laion_clap()
+            tagged = plugin.tag(audio, sr)
+            material_tags = getattr(tagged, "material_tags", None)
+            if isinstance(material_tags, dict) and material_tags:
+                best_material, best_conf = max(material_tags.items(), key=lambda item: float(item[1]))
+                confidence = max(float(best_conf), float(getattr(tagged, "confidence", 0.0)))
+                if confidence >= 0.35:
+                    return ClassificationResult(
+                        material=best_material,
+                        confidence=confidence,
+                        evidence=[MaterialEvidence(best_material, confidence)],
+                        classifier_source="clap_ml",
+                    )
         except Exception as _exc:
             logger.debug("Operation failed (non-critical): %s", _exc)
         return None
@@ -867,7 +904,7 @@ class MediumClassifier:
     @staticmethod
     def _cache_key(audio: np.ndarray, sr: int) -> str:
         h = hashlib.sha256()
-        h.update(audio.ravel().view(np.uint8)[:65536])
+        h.update(audio.ravel().view(np.uint8)[:65536].tobytes())
         h.update(sr.to_bytes(4, "little"))
         return h.hexdigest()[:16]
 
@@ -879,20 +916,23 @@ class MediumClassifier:
             _sha_cache[key] = result
 
 
-_instance: MediumClassifier | None = None
+_INSTANCE_HOLDER: list[MediumClassifier | None] = [None]
 _lock = threading.Lock()
 
 
 def get_medium_classifier() -> MediumClassifier:
-    global _instance
-    if _instance is None:
+    """Liefert den thread-sicheren MediumClassifier-Singleton."""
+    if _INSTANCE_HOLDER[0] is None:
         with _lock:
-            if _instance is None:
-                _instance = MediumClassifier()
-    return _instance
+            if _INSTANCE_HOLDER[0] is None:
+                _INSTANCE_HOLDER[0] = MediumClassifier()
+    classifier = _INSTANCE_HOLDER[0]
+    assert classifier is not None
+    return classifier
 
 
 def classify_medium(audio: np.ndarray, sr: int, use_ml: bool = True) -> ClassificationResult:
+    """Bequemer Top-Level-Zugang zur Medium-Klassifikation."""
     return get_medium_classifier().classify(audio, sr, use_ml=use_ml)
 
 

@@ -239,19 +239,19 @@ class DamageAnalyzer:
         - High zero-crossing rate (noise indicator)
         """
         # Clipping
-        clipped_samples = np.sum(np.abs(audio) > 0.99)
+        clipped_samples: int = int(np.sum(np.abs(audio) > 0.99))
         clipping_ratio = clipped_samples / len(audio)
 
         # Silence (sehr small values)
-        silent_samples = np.sum(np.abs(audio) < 1e-6)
+        silent_samples: int = int(np.sum(np.abs(audio) < 1e-6))
         silence_ratio = silent_samples / len(audio)
 
         # Abnormal values
-        abnormal_samples = np.sum(~np.isfinite(audio))
+        abnormal_samples: int = int(np.sum(~np.isfinite(audio)))
         abnormal_ratio = abnormal_samples / len(audio)
 
         # Zero-crossing rate (normalized)
-        zero_crossings = np.sum(np.diff(np.sign(audio)) != 0)
+        zero_crossings: int = int(np.sum(np.diff(np.sign(audio)) != 0))
         zcr_normalized = zero_crossings / len(audio)
 
         # Weighted corruption estimate (corrected formula)
@@ -281,7 +281,7 @@ class DamageAnalyzer:
         elif zcr_normalized > 0.3:
             corruption_score += 10
 
-        return min(corruption_score, 100.0)
+        return min(corruption_score, 100.0)  # type: ignore[no-any-return]
 
     def _analyze_frequency_bands(self, audio: np.ndarray, sample_rate: int) -> list[FrequencyBand]:
         """
@@ -584,7 +584,7 @@ class EmergencyRestorationEngine:
 
         restored = uniform_filter1d(restored, size=3, mode="nearest")
 
-        return restored
+        return restored  # type: ignore[no-any-return]
 
     def _generate_report(
         self, assessment: DamageAssessment, restored_audio: np.ndarray, sample_rate: int

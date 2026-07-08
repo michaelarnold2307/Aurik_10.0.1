@@ -244,9 +244,9 @@ def get_blind_internal_reference() -> BlindInternalReference:
 
 def _to_mono(audio: np.ndarray) -> np.ndarray:
     if audio.ndim == 1:
-        return audio.astype(np.float32)
+        return audio.astype(np.float32)  # type: ignore[no-any-return]
     if audio.ndim == 2:
         if audio.shape[0] == 2 and audio.shape[1] > 2:
-            return audio.mean(axis=0).astype(np.float32)
-        return audio.mean(axis=-1).astype(np.float32)
-    return audio.flatten().astype(np.float32)
+            return audio.mean(axis=0).astype(np.float32)  # type: ignore[no-any-return]
+        return audio.mean(axis=-1).astype(np.float32)  # type: ignore[no-any-return]
+    return audio.flatten().astype(np.float32)  # type: ignore[no-any-return]

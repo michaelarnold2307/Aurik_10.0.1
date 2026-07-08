@@ -296,7 +296,120 @@ class SpectralRepairPhase(PhaseInterface):
             "side_multiplier": float(np.clip(side_multiplier, 1.60, 2.40)),
         }
 
-    def process(self, audio: np.ndarray, sample_rate: int, **kwargs) -> PhaseResult:  # pylint: disable=arguments-differ  # type: ignore[override]
+    @staticmethod
+    def _local_event_strength(key: str, loc: tuple[float, float], event_metadata: dict[str, dict] | None) -> float:
+        duration_s = max(0.0, float(loc[1]) - float(loc[0]))
+        duration_factor = float(np.clip(duration_s / 0.42, 0.30, 1.0))
+        key_factor = {
+            "pre_echo": 0.90,
+            "aliasing": 0.86,
+            "codec_artifact": 0.78,
+            "mp3_artifact": 0.78,
+            "spectral_spike": 1.0,
+            "spectral_gap": 0.84,
+            "spectral_hole": 0.84,
+            "digital_glitch": 0.92,
+            "dropout": 0.70,
+            "jitter_artifacts": 0.74,
+        }.get(key, 0.66)
+        severity = 0.55
+        confidence = 0.78
+        meta_obj = (event_metadata or {}).get(key)
+        if isinstance(meta_obj, dict):
+            severity = float(np.clip(float(meta_obj.get("severity", severity)), 0.0, 1.0))
+            confidence = float(np.clip(float(meta_obj.get("confidence", confidence)), 0.0, 1.0))
+        return float(np.clip(key_factor * (0.34 + 0.46 * severity + 0.20 * confidence) * duration_factor, 0.12, 1.0))
+
+    @staticmethod
+    def _collect_protected_zones(kwargs: dict) -> list[tuple[float, float, float]]:
+        zones: list[tuple[float, float, float]] = []
+        for key, cap in (
+            ("vibrato_zones", 0.20),
+            ("frisson_zones", 0.30),
+            ("whisper_zones", 0.25),
+            ("passaggio_zones", 0.35),
+        ):
+            for zone in kwargs.get(key) or []:
+                try:
+                    start_s = float(getattr(zone, "start_s", None) or zone[0])
+                    end_s = float(getattr(zone, "end_s", None) or zone[1])
+                    if end_s > start_s:
+                        zones.append((start_s, end_s, cap))
+                except Exception:
+                    continue
+        return zones
+
+    @staticmethod
+    def _build_locality_profile(
+        n_samples: int,
+        sample_rate: int,
+        defect_locations: dict[str, list[tuple[float, float]]] | None,
+        event_metadata: dict[str, dict] | None = None,
+        protected_zones: list[tuple[float, float, float]] | None = None,
+    ) -> tuple[np.ndarray, float]:
+        if n_samples <= 0 or sample_rate <= 0:
+            return np.zeros(0, dtype=np.float32), 0.0
+        if not isinstance(defect_locations, dict) or not defect_locations:
+            return np.ones(n_samples, dtype=np.float32), 0.0
+
+        keys = (
+            "pre_echo",
+            "aliasing",
+            "codec_artifact",
+            "mp3_artifact",
+            "spectral_spike",
+            "spectral_gap",
+            "spectral_hole",
+            "digital_glitch",
+            "dropout",
+            "jitter_artifacts",
+        )
+        pad_by_key = {
+            "pre_echo": 0.020,
+            "aliasing": 0.030,
+            "codec_artifact": 0.045,
+            "mp3_artifact": 0.045,
+            "spectral_spike": 0.018,
+            "spectral_gap": 0.055,
+            "spectral_hole": 0.055,
+            "digital_glitch": 0.020,
+            "dropout": 0.060,
+            "jitter_artifacts": 0.030,
+        }
+        mask = np.zeros(n_samples, dtype=np.float32)
+        for key in keys:
+            pad = int(pad_by_key.get(key, 0.035) * sample_rate)
+            for loc in defect_locations.get(key) or []:
+                if not isinstance(loc, tuple) or len(loc) != 2:
+                    continue
+                try:
+                    start = int(max(0.0, float(loc[0])) * sample_rate)
+                    end = int(max(0.0, float(loc[1])) * sample_rate)
+                except Exception:
+                    continue
+                if end <= start:
+                    continue
+                start = max(0, start - pad)
+                end = min(n_samples, end + pad)
+                if end > start:
+                    strength = SpectralRepairPhase._local_event_strength(key, loc, event_metadata)
+                    mask[start:end] = np.maximum(mask[start:end], strength)
+
+        if float(np.mean(mask)) <= 1e-6:
+            return np.ones(n_samples, dtype=np.float32), 0.0
+
+        smooth = max(16, int(0.018 * sample_rate))
+        mask = np.convolve(mask, np.ones(smooth, dtype=np.float32) / float(smooth), mode="same")
+        mask = np.clip(mask, 0.0, 1.0).astype(np.float32)
+        if protected_zones:
+            for start_s, end_s, cap in protected_zones:
+                start = int(max(0.0, float(start_s)) * sample_rate)
+                end = int(max(0.0, float(end_s)) * sample_rate)
+                if end > start:
+                    mask[start : min(n_samples, end)] = np.minimum(mask[start : min(n_samples, end)], float(cap))
+        return mask, float(np.mean(mask))
+
+    def process(self, audio: np.ndarray, sample_rate: int, **kwargs) -> PhaseResult:  # type: ignore[override]  # pylint: disable=arguments-differ
         """
         Repariert spektrale Artefakte via STFT Inpainting.
 
@@ -306,6 +419,16 @@ class SpectralRepairPhase(PhaseInterface):
             **kwargs:     threshold_factor (float, default 4.0)
         """
         sample_rate = kwargs.get("sample_rate", 48000)
+        # ── §v10 PIM: Per-Band-Intensität kalibrieren ──
+        try:
+            from backend.core.pim_phase_hook import apply_pim_intensity
+            _pim = apply_pim_intensity(kwargs, "spectral_repair2",
+                default_nr=0.45, default_de_ess=0.25, default_comp=1.0)
+            for _key in ("noise_reduction_strength", "nr_strength", "strength", "wet"):
+                if _key in kwargs:
+                    kwargs[_key] = _pim["nr_strength"]
+        except Exception:
+            pass
         assert sample_rate == 48000, f"SR muss 48000 Hz sein, erhalten: {sample_rate}"
         audio, _p50_transposed = to_channels_last(audio)
         self.validate_input(audio)
@@ -315,6 +438,23 @@ class SpectralRepairPhase(PhaseInterface):
         phase_locality_factor = float(np.clip(phase_locality_factor, 0.35, 1.0))
         effective_strength = float(kwargs.get("strength", 1.0)) * phase_locality_factor
         effective_strength = float(np.clip(effective_strength, 0.0, 1.0))
+
+        # §V41 ForwardMaskingGuard — Enhancement-Stärke in post-transienten Masking-Zonen erhöhen
+        _panns_s_50 = float(kwargs.get("panns_singing", 0.0))
+        if _panns_s_50 >= 0.25 and effective_strength > 0.0:
+            try:
+                from backend.core.dsp.temporal_masking import (
+                    get_forward_masking_guard as _fmg_fn_50,
+                )
+
+                _fmz_50 = kwargs.get("forward_masking_zones") or _fmg_fn_50().compute_zones(audio, sample_rate)
+                if _fmz_50:
+                    _n_s_50 = audio.shape[-1] if audio.ndim > 1 else len(audio)
+                    _zone_s_50 = sum(z.end_sample - z.start_sample for z in _fmz_50)
+                    _zone_frac_50 = float(np.clip(_zone_s_50 / max(1, _n_s_50), 0.0, 1.0))
+                    effective_strength = float(np.clip(effective_strength + _zone_frac_50 * 0.15, 0.0, 1.0))
+            except Exception as _fmg_exc_50:
+                logger.debug("Phase50 §V41 ForwardMaskingGuard non-blocking: %s", _fmg_exc_50)
 
         if effective_strength <= 1e-6:
             dry = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
@@ -408,8 +548,51 @@ class SpectralRepairPhase(PhaseInterface):
 
                 _ped50 = _get_ped50()
                 _audio_pre_pre_echo = audio.copy()
+                # §V38 VFA-Schutzzonen für per-Event-Blend-Cap (Vibrato 0.20, Frisson 0.30 etc.)
+                _p50_vfa_zones: list[tuple[float, float, float]] = []
+
+                def _append_vfa_zone_50(_zone: object, _cap: float) -> None:
+                    try:
+                        if isinstance(_zone, dict):
+                            _start = float(_zone.get("start_s", _zone.get("start", 0.0)) or 0.0)
+                            _end = float(_zone.get("end_s", _zone.get("end", 0.0)) or 0.0)
+                        else:
+                            _start = float(_zone[0])  # type: ignore[index]
+                            _end = float(_zone[1])  # type: ignore[index]
+                        if _end > _start:
+                            _p50_vfa_zones.append((_start, _end, _cap))
+                    except (TypeError, ValueError, IndexError):
+                        pass
+
+                _p50_vfa = kwargs.get("vfa_result") or {}
+                if isinstance(_p50_vfa, dict):
+                    for _z in _p50_vfa.get("vibrato_zones", []):
+                        _append_vfa_zone_50(_z, 0.20)
+                    for _z in _p50_vfa.get("frisson_zones", []):
+                        _append_vfa_zone_50(_z, 0.30)
+                    for _z in _p50_vfa.get("whisper_zones", []):
+                        _append_vfa_zone_50(_z, 0.25)
+                    for _z in _p50_vfa.get("passaggio_zones", []):
+                        _append_vfa_zone_50(_z, 0.35)
+                for _z in kwargs.get("vibrato_zones", []) or []:
+                    _append_vfa_zone_50(_z, 0.20)
+                for _z in kwargs.get("frisson_zones", []) or []:
+                    _append_vfa_zone_50(_z, 0.30)
+                for _z in kwargs.get("whisper_zones", []) or []:
+                    _append_vfa_zone_50(_z, 0.25)
+                for _z in kwargs.get("passaggio_zones", []) or []:
+                    _append_vfa_zone_50(_z, 0.35)
                 for _evt50 in _pre_echo_events_50:
+                    _audio_evt_pre50 = audio.copy() if _p50_vfa_zones else None
                     audio = _ped50.repair_region(audio, _evt50, sample_rate)
+                    # §V38 In VFA-Schutzzone: Repair-Stärke auf Zone-Cap blend-limitieren
+                    if _p50_vfa_zones and _audio_evt_pre50 is not None:
+                        _pec_s_t50 = float(_evt50.get("pre_echo_start", 0)) / sample_rate
+                        _pec_e_t50 = float(_evt50.get("pre_echo_end", _evt50.get("onset_sample", 0))) / sample_rate
+                        for _pz_s50, _pz_e50, _pz_cap50 in _p50_vfa_zones:
+                            if _pec_s_t50 < _pz_e50 and _pec_e_t50 > _pz_s50:
+                                audio = _audio_evt_pre50 * (1.0 - _pz_cap50) + audio * _pz_cap50
+                                break
                 logger.info(
                     "Phase50 §4.11 pre_echo_repair: n_events=%d, material=%s",
                     len(_pre_echo_events_50),
@@ -458,6 +641,17 @@ class SpectralRepairPhase(PhaseInterface):
 
         if 0.0 < effective_strength < 1.0:
             repaired_audio = audio + effective_strength * (repaired_audio - audio)
+
+        _local_profile50, _local_coverage50 = self._build_locality_profile(
+            int(audio.shape[0]),
+            sample_rate,
+            kwargs.get("defect_locations"),
+            kwargs.get("defect_event_metadata"),
+            self._collect_protected_zones(kwargs),
+        )
+        if _local_coverage50 > 0.0:
+            _local_wet50 = _local_profile50[:, np.newaxis] if repaired_audio.ndim == 2 else _local_profile50
+            repaired_audio = audio + _local_wet50 * (repaired_audio - audio)
 
         total_bins_possible = int((_FFT_SIZE // 2 + 1) * (len(audio) // _HOP + 1) * n_channels)
         repair_ratio = total_bins / max(1, total_bins_possible)
@@ -571,12 +765,22 @@ class SpectralRepairPhase(PhaseInterface):
                 from backend.core.dsp.mikrodynamik_guard import (  # pylint: disable=import-outside-toplevel
                     frame_energy_correlation as _fec50,
                 )
+                from backend.core.dsp.mikrodynamik_guard import (
+                    recommend_mikrodynamik_wet as _recommend_mkk_wet,
+                )
 
                 _corr50 = _fec50(audio, repaired_audio, sample_rate, frame_ms=10.0)
                 if _corr50 < 0.97:
-                    _wet50 = float(np.clip((_corr50 - 0.90) / 0.07, 0.0, 1.0))
-                    repaired_audio = (_wet50 * repaired_audio + (1.0 - _wet50) * audio).astype(np.float32)
-                    logger.warning("§V20 phase_50: mikrodynamik_corr=%.4f < 0.97 → wet=%.3f", _corr50, _wet50)
+                    _need50 = float(kwargs.get("mikrodynamik_global_need", kwargs.get("global_need", 0.0)) or 0.0)
+                    mikrodynamik_wet_scalar: float = float(_recommend_mkk_wet(_corr50, _p50_panns, global_need=_need50))
+                    repaired_audio = (
+                        mikrodynamik_wet_scalar * repaired_audio + (1.0 - mikrodynamik_wet_scalar) * audio
+                    ).astype(np.float32)
+                    logger.warning(
+                        "§V20 phase_50: mikrodynamik_corr=%.4f < 0.97 → wet=%.3f",
+                        _corr50,
+                        mikrodynamik_wet_scalar,
+                    )
             except Exception as _v20_50_exc:
                 logger.debug("§V20 phase_50 mikrodynamik non-blocking: %s", _v20_50_exc)
 
@@ -645,6 +849,7 @@ class SpectralRepairPhase(PhaseInterface):
                 "stereo_mode": "ms_domain" if is_stereo else "mono",
                 "phase_locality_factor": phase_locality_factor,
                 "effective_strength": effective_strength,
+                "repair_locality_coverage": round(float(_local_coverage50), 6),
                 "hf_protected_bin_start": _hf_protected_bin_start,
                 "hf_protection_rolloff_hz": round(_rolloff_protection_hz, 1),
                 "rms_drop_db": round(float(min(0.0, _rms_drop_50)), 3),

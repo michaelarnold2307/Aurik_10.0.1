@@ -151,7 +151,7 @@ class MpSenetPlugin:
                 _reg_plm(
                     "MP-SENet",
                     size_gb=0.04,
-                    unload_fn=lambda s=self: setattr(s, "_session", None) or setattr(s, "_model_loaded", False),
+                    unload_fn=lambda s=self: setattr(s, "_session", None) or setattr(s, "_model_loaded", False),  # type: ignore[func-returns-value,misc]
                 )
             except Exception as _exc:
                 logger.debug("Operation failed (non-critical): %s", _exc)
@@ -263,7 +263,7 @@ class MpSenetPlugin:
             x = x[:n_orig]
         elif len(x) < n_orig:
             x = np.pad(x, (0, n_orig - len(x)))
-        return x
+        return x  # type: ignore[no-any-return]
 
     def _validate_and_pad_shapes(self, amp: np.ndarray, pha: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """Validiert core STFT frequency dimensions before ONNX inference."""
@@ -513,10 +513,10 @@ class MpSenetPlugin:
                 x = x[:n_orig]
             elif len(x) < n_orig:
                 x = np.pad(x, (0, n_orig - len(x)))
-            return np.clip(np.nan_to_num(x, nan=0.0), -1.0, 1.0)
+            return np.clip(np.nan_to_num(x, nan=0.0), -1.0, 1.0)  # type: ignore[no-any-return]
         except Exception as exc:
             logger.error("OMLSA-DSP-Fallback fehlgeschlagen: %s — Audio unverändert.", exc)
-            return np.clip(np.nan_to_num(mono.copy(), nan=0.0), -1.0, 1.0)
+            return np.clip(np.nan_to_num(mono.copy(), nan=0.0), -1.0, 1.0)  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------

@@ -352,7 +352,7 @@ class ConsonantEnhancement:
             det = get_phoneme_detector()
             result = det.detect(mono, sr)
             if result.sibilant_mask is not None and result.sibilant_mask.shape[0] == mono.shape[0]:
-                return result.sibilant_mask.astype(bool)
+                return result.sibilant_mask.astype(bool)  # type: ignore[no-any-return]
         except Exception as exc:
             logger.debug("PhonemeDetector nicht verfügbar, weiter mit ConsonantDetector: %s", exc)
 
@@ -367,12 +367,12 @@ class ConsonantEnhancement:
                     cd_result.n_fricative_frames,
                     cd_result.fricative_ratio,
                 )
-                return cd_result.mask
+                return cd_result.mask  # type: ignore[no-any-return]
         except Exception as exc:
             logger.debug("ConsonantDetector nicht verfügbar, leere Maske: %s", exc)
 
         # Stufe 3: Notfall-Fallback (kein Daten-Verlust, Pipeline läuft weiter)
-        return np.zeros(len(mono), dtype=bool)
+        return np.zeros(len(mono), dtype=bool)  # type: ignore[no-any-return]
 
     def _boost_segment(
         self,
@@ -402,7 +402,7 @@ class ConsonantEnhancement:
             Verarbeiteter Mono-Kanal.
         """
         if boost_db < 0.01:
-            return channel.astype(np.float32)
+            return channel.astype(np.float32)  # type: ignore[no-any-return]
 
         n = len(channel)
         boost_lin = float(10.0 ** (boost_db / 20.0)) - 1.0  # Additive Gain (0 wenn 0 dB)
@@ -412,7 +412,7 @@ class ConsonantEnhancement:
         f_lo_norm = max(f_lo, 20.0) / nyq
         f_hi_norm = min(f_hi, nyq * 0.99) / nyq
         if f_lo_norm >= f_hi_norm or f_lo_norm <= 0.0:
-            return channel.astype(np.float32)
+            return channel.astype(np.float32)  # type: ignore[no-any-return]
 
         try:
             sos = sig.butter(4, [f_lo_norm, f_hi_norm], btype="band", output="sos")
@@ -420,7 +420,7 @@ class ConsonantEnhancement:
             fric_band = sig.sosfiltfilt(sos, channel)
         except Exception as exc:
             logger.debug("ConsonantEnhancement Butterworth fehlgeschlagen: %s", exc)
-            return channel.astype(np.float32)
+            return channel.astype(np.float32)  # type: ignore[no-any-return]
 
         # ── Gain-Maske aus sib_mask ─────────────────────────────────── #
         gain_mask = sib_mask.astype(np.float32)
@@ -446,7 +446,7 @@ class ConsonantEnhancement:
 
         # ── Boost anwenden: nur additive Komponente in Frikativband ─── #
         out = channel + fric_band * (boost_lin * gain_mask)
-        return out.astype(np.float32)
+        return out.astype(np.float32)  # type: ignore[no-any-return]
 
 
 # ── Modul-Hilfsfunktionen ────────────────────────────────────────────────── #
@@ -760,4 +760,4 @@ class PlosiveBurstPreserver:
             rms = float(np.sqrt(np.mean(frame**2))) if len(frame) > 0 else 0.0
             frames.append(rms if np.isfinite(rms) else 0.0)
             pos += hop_n
-        return np.array(frames, dtype=np.float32)
+        return np.array(frames, dtype=np.float32)  # type: ignore[no-any-return]

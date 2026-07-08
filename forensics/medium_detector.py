@@ -175,6 +175,11 @@ class MediumDetectionResult:
     classification_result: object | None = None
     """ClassificationResult aus MediumClassifier (für cached_medium_result)."""
 
+    # §6.8 (v9.20.3): Physikalische Analog-Quellen für Durchreichung an Phasen
+    physical_analog_sources: list[tuple[str, float]] = field(default_factory=list)
+    """Physisch erkannte Analog-Quellen: [(material, confidence), ...] z. B. [("vinyl",0.58), ("cassette",0.42)].
+    Wird als kwargs an Phasen durchgereicht für Vinyl-spezifische Restaurierung (RIAA, Rumble, Knistern)."""
+
     dolby_nr_type: str = "none"
     """Erkannter Dolby/DBX NR-Typ: 'dolby_b'|'dolby_c'|'dolby_s'|'dbx_i'|'dbx_ii'|'none'."""
 
@@ -305,13 +310,19 @@ class MediumDetector:
     #           wow_depth, block_artifact, pre_echo_ms,
     #           rotation_strength, infrasonic_rms, codec_type_code
     _MATERIAL_MODELS: dict[str, dict[str, tuple[float, float]]] = {
+        # ── Analog-Materialien ────────────────────────────────────────────────────
+        # block_artifact σ=0.12 (statt 0.05): Schmalband-Rauschen und Hiss auf analogen
+        # Trägern kann MDCT-Block-Detektor aktivieren (false-positive ~0.10–0.15).
+        # σ=0.05 erzeugt exponentielle Strafe (–4.5) bei Score=0.15; σ=0.12 → –0.78.
+        # pre_echo_ms wird immer auf 0.0 gesetzt (Feature nicht implementiert) und ist
+        # daher im Bayesian-Scorer maskiert (→ _masked_features).
         "shellac": {
             "bandwidth_hz": (5500.0, 1500.0),
             "snr_db": (10.0, 5.0),
             "noise_color": (2.2, 0.5),
             "crackle_density": (0.02, 0.02),
             "wow_depth": (0.3, 0.3),
-            "block_artifact": (0.0, 0.05),
+            "block_artifact": (0.0, 0.12),
             "pre_echo_ms": (0.0, 2.0),
             "rotation_strength": (0.40, 0.20),
             "infrasonic_rms": (0.06, 0.04),
@@ -323,7 +334,7 @@ class MediumDetector:
             "noise_color": (2.8, 0.6),
             "crackle_density": (0.04, 0.03),
             "wow_depth": (1.0, 0.8),
-            "block_artifact": (0.0, 0.05),
+            "block_artifact": (0.0, 0.12),
             "pre_echo_ms": (0.0, 2.0),
             "rotation_strength": (0.0, 0.10),
             "infrasonic_rms": (0.02, 0.03),
@@ -335,7 +346,7 @@ class MediumDetector:
             "noise_color": (1.5, 0.4),
             "crackle_density": (0.004, 0.005),
             "wow_depth": (0.15, 0.15),
-            "block_artifact": (0.0, 0.05),
+            "block_artifact": (0.0, 0.12),
             "pre_echo_ms": (0.0, 2.0),
             "rotation_strength": (0.45, 0.20),
             "infrasonic_rms": (0.08, 0.05),
@@ -347,7 +358,7 @@ class MediumDetector:
             "noise_color": (1.6, 0.4),
             "crackle_density": (0.0, 0.001),
             "wow_depth": (1.2, 0.8),
-            "block_artifact": (0.0, 0.05),
+            "block_artifact": (0.0, 0.12),
             "pre_echo_ms": (0.0, 2.0),
             "rotation_strength": (0.0, 0.08),
             "infrasonic_rms": (0.01, 0.02),
@@ -359,7 +370,7 @@ class MediumDetector:
             "noise_color": (1.3, 0.3),
             "crackle_density": (0.0, 0.001),
             "wow_depth": (0.3, 0.3),
-            "block_artifact": (0.0, 0.05),
+            "block_artifact": (0.0, 0.12),
             "pre_echo_ms": (0.0, 2.0),
             "rotation_strength": (0.0, 0.08),
             "infrasonic_rms": (0.01, 0.02),
@@ -371,7 +382,7 @@ class MediumDetector:
             "noise_color": (2.0, 0.5),
             "crackle_density": (0.0001, 0.0002),
             "wow_depth": (3.0, 1.5),
-            "block_artifact": (0.0, 0.05),
+            "block_artifact": (0.0, 0.12),
             "pre_echo_ms": (0.0, 2.0),
             "rotation_strength": (0.0, 0.10),
             "infrasonic_rms": (0.01, 0.02),
@@ -383,19 +394,22 @@ class MediumDetector:
             "noise_color": (1.7, 0.4),
             "crackle_density": (0.008, 0.008),
             "wow_depth": (0.2, 0.2),
-            "block_artifact": (0.0, 0.05),
+            "block_artifact": (0.0, 0.12),
             "pre_echo_ms": (0.0, 2.0),
             "rotation_strength": (0.30, 0.20),
             "infrasonic_rms": (0.04, 0.04),
             "codec_type_code": (0.0, 0.3),
         },
+        # Compact Cassette IEC 60094-1 — kalibriert auf reale Digitalisierungen:
+        # SNR 14–26 dB (Type I schlechter als Reel-Tape, abhängig von Dekaufnahme),
+        # BW ≤ 12 kHz (Type I), wow/flutter 0.05–0.3 % WRMS @ 4.75 cm/s (variiert).
         "cassette": {
-            "bandwidth_hz": (10000.0, 3000.0),
-            "snr_db": (22.0, 7.0),
-            "noise_color": (1.5, 0.4),
+            "bandwidth_hz": (9500.0, 2500.0),
+            "snr_db": (18.0, 9.0),
+            "noise_color": (1.6, 0.4),
             "crackle_density": (0.0, 0.001),
-            "wow_depth": (1.5, 1.0),
-            "block_artifact": (0.0, 0.05),
+            "wow_depth": (0.8, 0.9),
+            "block_artifact": (0.0, 0.12),
             "pre_echo_ms": (0.0, 2.0),
             "rotation_strength": (0.0, 0.08),
             "infrasonic_rms": (0.01, 0.02),
@@ -776,7 +790,8 @@ class MediumDetector:
                     idx = int(np.searchsorted(cum, 0.95 * total))
                     rolloffs.append(float(freqs[min(idx, len(freqs) - 1)]))
             rolloff_95 = float(np.median(rolloffs)) if rolloffs else 0.0
-        except Exception:
+        except (ValueError, IndexError, TypeError, ZeroDivisionError) as _exc:
+            logger.debug("MediumDetector: rolloff computation failed: %s", _exc)
             rolloff_95 = 0.0
 
         # ── 2. Wow/Flutter-Index ────────────────────────────────────────
@@ -791,7 +806,8 @@ class MediumDetector:
                 if mean_e > 1e-6:
                     pitches.append(mean_e)
             wow_flutter = float(np.std(np.diff(pitches))) if len(pitches) > 2 else 0.0
-        except Exception:
+        except (ValueError, IndexError, TypeError, ZeroDivisionError) as _exc:
+            logger.debug("MediumDetector: computation failed in spectral fingerprint: %s", _exc)
             wow_flutter = 0.0
 
         # ── 3. HF-Energie > 16 kHz ─────────────────────────────────────
@@ -802,7 +818,8 @@ class MediumDetector:
             total_e = float(np.sum(spec_full**2))
             hf_e = float(np.sum(spec_full[mask_hf] ** 2))
             hf_fraction = hf_e / max(total_e, 1e-12)
-        except Exception:
+        except (ValueError, IndexError, TypeError, ZeroDivisionError) as _exc:
+            logger.debug("MediumDetector: computation failed in spectral fingerprint: %s", _exc)
             hf_fraction = 0.0
 
         # ── 4. Rauschpegel (5. Perzentil PSD) ──────────────────────────
@@ -814,7 +831,8 @@ class MediumDetector:
                     frame_energies.append(10 * math.log10(e))
             noise_floor = float(np.percentile(frame_energies, 5)) if frame_energies else -60.0
             noise_floor = max(-120.0, min(0.0, noise_floor))
-        except Exception:
+        except (ValueError, IndexError, TypeError, ZeroDivisionError) as _exc:
+            logger.debug("MediumDetector: computation failed in spectral fingerprint: %s", _exc)
             noise_floor = -60.0
 
         # ── 5. Effektive Bandbreite (Rolloff −60 dBFS, Multi-Segment) ──────────────
@@ -876,7 +894,8 @@ class MediumDetector:
                 eff_bw = float(np.percentile(bw_candidates, 80))
             else:
                 eff_bw = 0.0
-        except Exception:
+        except (ValueError, IndexError, TypeError, ZeroDivisionError) as _exc:
+            logger.debug("MediumDetector: computation failed in spectral fingerprint: %s", _exc)
             eff_bw = 0.0
 
         # ── 6. Erweiterte Features (§6.7.3) ────────────────────────────
@@ -891,32 +910,38 @@ class MediumDetector:
 
         try:
             rotation_hz, rotation_strength = self._rotation_periodicity(mono, sr)
-        except Exception:
+        except (ValueError, IndexError, TypeError, ZeroDivisionError) as _exc:
+            logger.debug("MediumDetector: computation failed in spectral fingerprint: %s", _exc)
             pass
 
         try:
             infrasonic_rms = self._infrasonic_rms(mono, sr)
-        except Exception:
+        except (ValueError, IndexError, TypeError, ZeroDivisionError) as _exc:
+            logger.debug("MediumDetector: computation failed in spectral fingerprint: %s", _exc)
             pass
 
         try:
             codec_artifact_score, codec_type_code = self._codec_artifact_score(mono, sr)
-        except Exception:
+        except (ValueError, IndexError, TypeError, ZeroDivisionError) as _exc:
+            logger.debug("MediumDetector: computation failed in spectral fingerprint: %s", _exc)
             pass
 
         try:
             crackle_density = self._crackle_density(mono, sr)
-        except Exception:
+        except (ValueError, IndexError, TypeError, ZeroDivisionError) as _exc:
+            logger.debug("MediumDetector: computation failed in spectral fingerprint: %s", _exc)
             pass
 
         try:
             snr_db = self._snr(mono, sr)
-        except Exception:
+        except (ValueError, IndexError, TypeError, ZeroDivisionError) as _exc:
+            logger.debug("MediumDetector: computation failed in spectral fingerprint: %s", _exc)
             pass
 
         try:
             noise_color = self._noise_color(mono, sr)
-        except Exception:
+        except (ValueError, IndexError, TypeError, ZeroDivisionError) as _exc:
+            logger.debug("MediumDetector: computation failed in spectral fingerprint: %s", _exc)
             pass
 
         return SpectralFingerprint(
@@ -1044,7 +1069,8 @@ class MediumDetector:
                 spec_disco = float(np.percentile(log_diffs, 75))
                 # Score is nonzero above 0.5; saturates around 2.0 (strong codec)
                 spec_disco_score = float(np.clip((spec_disco - 0.5) / 1.5, 0.0, 1.0))
-            except Exception:
+            except (ValueError, TypeError, ImportError) as _exc:
+                logger.debug("MediumDetector: optional feature failed: %s", _exc)
                 pass
 
             # Müller & Ewert (2011): spectral discontinuity is the reliable codec
@@ -1255,7 +1281,13 @@ class MediumDetector:
                 duration_s,
                 self._MIN_ROTATION_ANALYSIS_DURATION_S,
             )
-        _masked_features: frozenset[str] = frozenset({"rotation_strength"}) if _short_clip else frozenset()
+        # pre_echo_ms ist in _compute_fingerprint IMMER 0.0 (feature nicht implementiert).
+        # Wird es im Scorer mit 0.0 eingesetzt, erhalten mp3_low/mp3_high eine dauerhafte
+        # Strafe (μ=12/6 ms ≠ 0), während Analog-Materialien (μ=0) ungestraft bleiben.
+        # Das erzeugt einen systematischen Bias Richtung Analog → immer maskieren.
+        _masked_features: frozenset[str] = (
+            frozenset({"rotation_strength", "pre_echo_ms"}) if _short_clip else frozenset({"pre_echo_ms"})
+        )
 
         feature_vals = {
             "bandwidth_hz": fp.effective_bandwidth_hz,
@@ -1352,8 +1384,15 @@ class MediumDetector:
         if _ext_lower and not _ext_lower.startswith("."):
             _ext_lower = f".{_ext_lower}"
         if _ext_lower in _DIGITAL_FILE_EXTS:
+            # §FIX: Statt analoge Posteriors auf 0.0 zu nullen (falsch — .mp3 kann
+            # von Vinyl stammen), wenden wir einen Penalty-Faktor an (×0.25).
+            # Die physikalischen Features (crackle, wow, flutter, rotation) sind
+            # stärkere Evidenz als die Dateiendung. Ein rip von Vinyl→Cassette→.mp3
+            # hat echte analoge Defekte, die nicht ignoriert werden dürfen.
+            _ANALOG_PENALTY = 0.25
             _adjusted: dict[str, float] = {
-                mat: (0.0 if mat in self._ANALOG_MATERIALS else score) for mat, score in posteriors.items()
+                mat: (score * _ANALOG_PENALTY if mat in self._ANALOG_MATERIALS else score)
+                for mat, score in posteriors.items()
             }
             _total = sum(_adjusted.values()) + 1e-12
             posteriors = dict(
@@ -1363,11 +1402,37 @@ class MediumDetector:
                     reverse=True,
                 )
             )
+            # Zeige, welche analogen Träger in den Posteriors enthalten sind
+            # (werden via Penalty bewahrt, nicht genullt — physikalische Features
+            # entscheiden später über den tatsächlichen analogen Ursprung).
+            _analog_in_posteriors = [
+                f"{m}={s:.3f}" for m, s in posteriors.items() if m in self._ANALOG_MATERIALS and s >= 0.001
+            ]
+            _non_analog_top = [
+                f"{m}={s:.3f}" for m, s in list(posteriors.items())[:3] if m not in self._ANALOG_MATERIALS
+            ]
             logger.info(
-                "MediumDetector: file_ext=%s → analog posteriors zeroed; top-3 adjusted: %s",
+                "MediumDetector: file_ext=%s → analog posteriors PENALIZED (×%.2f, NOT zeroed); "
+                "analog candidates preserved: [%s]; top non-analog: [%s]",
                 _ext_lower,
-                ", ".join(f"{m}={s:.3f}" for m, s in list(posteriors.items())[:3]),
+                _ANALOG_PENALTY,
+                ", ".join(_analog_in_posteriors) if _analog_in_posteriors else "none",
+                ", ".join(_non_analog_top) if _non_analog_top else "none",
             )
+        elif not _ext_lower:
+            # §2.59 Canary: Kein file_ext → kein Digital-Prior → analoge Materialien
+            # könnten fälschlich als Primärmedium klassifiziert werden.
+            # Diese Log-Meldung hilft, fehlende input_path-Call-Sites zu identifizieren.
+            _analog_top3 = [
+                (m, s) for m, s in list(posteriors.items())[:3] if m in self._ANALOG_MATERIALS
+            ]
+            if _analog_top3:
+                logger.info(
+                    "MediumDetector: NO file_ext — Digital-Prior fehlt (kein ×0.25 Analog-Penalty). "
+                    "Top-3 analog candidates: [%s]. Bei .mp3/.aac/.ogg wäre korrekte Material-Erkennung möglich. "
+                    "→ Prüfen, ob input_path korrekt durchgereicht wird.",
+                    ", ".join(f"{m}={s:.3f}" for m, s in _analog_top3),
+                )
 
         # Flag: analog Bayesian posteriors wurden durch file_ext genullt
         _analog_zeroed: bool = _ext_lower in _DIGITAL_FILE_EXTS
@@ -1458,12 +1523,32 @@ class MediumDetector:
                         elif _cand_analog != "vinyl":
                             # Spätere Nicht-Vinyl-Kandidaten heben vinyl-Force zurück.
                             pass
+                        # Baue eine menschenlesbare Beschreibung des Erkennungswegs
+                        _detection_method: str
+                        if _via_rotation_gate:
+                            _detection_method = "Vinyl-Rotation-Gate (rotation={:.3f}≥0.30, infrasonic={:.4f}≥0.008)".format(
+                                fp.rotation_strength,
+                                fp.infrasonic_rms,
+                            )
+                        elif _cand_analog == "cassette":
+                            _detection_method = "Cassette wow/flutter+bandwidth (wow=%.3f, conf≥0.35)" % (
+                                fp.wow_flutter_index
+                            )
+                        elif _cand_analog == "vinyl":
+                            _detection_method = "Vinyl crackle+infrasonic (crackle={:.4f}, infrasonic={:.4f})".format(
+                                fp.crackle_density,
+                                fp.infrasonic_rms,
+                            )
+                        else:
+                            _detection_method = "codec-adaptive gate (conf={:.3f}≥{:.3f})".format(_cand_conf, _pa_conf_thresh)
                         logger.info(
-                            "MediumDetector: physical-feature analog inference — "
-                            "primary=%s (conf=%.3f) chain=%s "
-                            "[crackle=%.4f infrasonic=%.4f rotation=%.3f wow_flutter=%.3f]",
+                            "MediumDetector: ✅ PHYSICAL ANALOG DETECTED — "
+                            "primary=%s (confidence=%.3f) via %s; "
+                            "full chain=%s; "
+                            "features [crackle=%.4f infrasonic=%.4f rotation=%.3f wow_flutter=%.3f]",
                             best_analog,
                             best_analog_score,
+                            _detection_method,
                             [m for m, _ in _physical_analog_sources],
                             fp.crackle_density,
                             fp.infrasonic_rms,
@@ -1475,14 +1560,44 @@ class MediumDetector:
                         # Ausnahme: vinyl via Rotation-Gate bleibt Primary (_primary_vinyl_forced_by_rotation_gate).
 
                 if best_analog is None:
+                    _sources_detail = (
+                        ", ".join(f"{m}(conf={c:.3f})" for m, c in _physical_analog_sources)
+                        if _physical_analog_sources
+                        else "none"
+                    )
                     logger.info(
-                        "MediumDetector: weak physical analog evidence suppressed for digital file_ext=%s "
-                        "(all %d sources failed gate; rotation=%.3f wow=%.3f)",
+                        "MediumDetector: ❌ NO physical analog confirmed for digital file_ext=%s — "
+                        "%d candidate(s) [%s] failed gate; "
+                        "features [rotation=%.3f wow=%.3f crackle=%.4f infrasonic=%.4f]",
                         _ext_lower,
                         len(_physical_analog_sources),
+                        _sources_detail,
                         fp.rotation_strength,
                         fp.wow_flutter_index,
+                        fp.crackle_density,
+                        fp.infrasonic_rms,
                     )
+
+        # §6.8 Bayesian-Physical-Fusion (v9.20.3): Wenn der Bayesian-Klassifikator
+        # "unknown > 0.9" sagt (kein Material erkannt), aber physikalische Features
+        # Analog-Quellen gefunden haben → physikalische Evidenz als Primary übernehmen.
+        # Bayesian-Scoring versagt bei stark codec-degradierten Mehrgenerationen-Ketten
+        # (z. B. vinyl→kassette→mp3), weil alle analogen Signaturen durch Encoding
+        # gedämpft sind. Physikalische Merkmale (rotation, infrasonic, crackle, wow)
+        # sind robuster gegen Codec-Artefakte.
+        if best_analog is None and _physical_analog_sources and posteriors.get("unknown", 0.0) > 0.90:
+            # Nimm die stärkste physikalische Analog-Quelle als Primary
+            _best_phys = max(_physical_analog_sources, key=lambda x: x[1])
+            best_analog, best_analog_score = _best_phys[0], _best_phys[1]
+            _best_analog_set_by_physical_gate = True
+            logger.info(
+                "MediumDetector: 🔄 Bayesian-Physical-Fusion — Bayesian unknown=%.3f, "
+                "physical found %d source(s) → overriding primary=%s (conf=%.3f)",
+                posteriors.get("unknown", 0.0),
+                len(_physical_analog_sources),
+                best_analog,
+                best_analog_score,
+            )
 
         # Best digital lossless
         best_digital: str | None = None
@@ -1600,10 +1715,14 @@ class MediumDetector:
                         or (
                             # Vinyl-Vorläufer durch Kassetten-Transfer: Rillenrauschen bleibt erhalten,
                             # Rumble wird teilweise durch Kassetten-HPF gefiltert → niedrigere Schwellen.
+                            # §FIX v9.20.3: crackle auf 0.001 gesenkt (vorher 0.002) — gut gepflegte
+                            # Vinyl→Kassette-Überspielungen haben sehr geringes Rillenrauschen.
+                            # infrasonic auf 0.003 gesenkt (vorher 0.004) — Kassetten-HPF bei 30-40 Hz
+                            # lässt einen schwachen Rumble-Rest durch.
                             _pre_mat == "vinyl"
-                            and _pre_conf >= 0.18
-                            and fp.crackle_density >= 0.002  # Rillenrauschen überlebt Kassetten-Transfer
-                            and fp.infrasonic_rms >= 0.004  # Schwaches Residual trotz Kassetten-HPF
+                            and _pre_conf >= 0.15
+                            and fp.crackle_density >= 0.001
+                            and fp.infrasonic_rms >= 0.003
                         )
                     )
                     if _pre_strong:
@@ -1666,10 +1785,10 @@ class MediumDetector:
                     codec_conf = best_codec_score
                 elif fp.effective_bandwidth_hz < 14_000:
                     codec_name = "mp3_low"
-                    codec_conf = 0.40
+                    codec_conf = self._codec_stage_confidence(fp)
                 else:
                     codec_name = "mp3_high"
-                    codec_conf = 0.35
+                    codec_conf = self._codec_stage_confidence(fp)
 
                 # Conservative guard for analog transfer chains:
                 # If an analog source stage is present but HF bandwidth is limited,
@@ -1738,10 +1857,35 @@ class MediumDetector:
             if not _best_analog_set_by_physical_gate:
                 primary = _analog_in_chain[-1]
         is_multi = len(chain) > 1
-        # Weakest-link principle: a transfer chain is only as confident as its
-        # least certain component.  Using sum() caused multi-link chains (e.g.
-        # vinyl → mp3_low with 0.65 + 0.40 = 1.05) to always clip at 1.0 → 5 stars.
-        confidence = float(np.clip(min(chain_confidences) if chain_confidences else 0.0, 0.0, 1.0))
+        # Confidence wird aus Minimum, Mittelwert und Primärposterior geblendet:
+        # der schwächste Link bleibt wichtig, aber solide Mehrfach-Evidenz darf
+        # die Kette sichtbar stärken.
+        _chain_min = float(min(chain_confidences) if chain_confidences else 0.0)
+        _chain_mean = float(np.mean(chain_confidences)) if chain_confidences else 0.0
+        _chain_max = float(max(chain_confidences)) if chain_confidences else 0.0
+        _primary_post = float(posteriors.get(primary, _chain_mean)) if isinstance(posteriors, dict) else _chain_mean
+        # Codec-Primaries haben im analog-zentrierten Bayesian-Modell keinen
+        # Posterior (≈ 0.0) — der Posterior-Term darf direkte Codec-Evidenz
+        # (BW-Beschneidung, Artefakt-Score, Encoder-Signatur) nicht künstlich
+        # bestrafen. Stütze ihn dann auf die gemessene Codec-Stufen-Konfidenz.
+        if primary in self._CODEC_MATERIALS and primary in chain:
+            _primary_post = max(_primary_post, float(chain_confidences[chain.index(primary)]))
+        # Adaptives SNR-Gewicht: Bei niedrigem SNR (kurze/stark degradierte Clips) ist
+        # chain_min weniger zuverlässig (Detektor-Scores unstabil bei < 5 s oder SNR < 20 dB).
+        # → Reduziere chain_min-Einfluss und erhöhe primary_post-Gewicht.
+        # Übergang: SNR ≤ 10 dB → w_min=0.20, w_post=0.35
+        #           SNR ≥ 30 dB → w_min=0.35, w_post=0.20 (klassisches Verhalten)
+        _snr_fp = float(getattr(fp, "snr_db", 30.0) or 30.0)
+        _snr_factor = float(np.clip((_snr_fp - 10.0) / 20.0, 0.0, 1.0))
+        _w_min = 0.20 + 0.15 * _snr_factor
+        _w_post = 0.35 - 0.15 * _snr_factor
+        confidence = float(
+            np.clip(
+                _w_min * _chain_min + 0.25 * _chain_mean + 0.20 * _chain_max + _w_post * _primary_post,
+                0.0,
+                1.0,
+            )
+        )
 
         # ── ClassificationResult für Passthrough bauen ───────────────
         try:
@@ -1781,6 +1925,7 @@ class MediumDetector:
             confidence=confidence,
             spectral_fingerprint=fp,
             evidence=evidence,
+            physical_analog_sources=_physical_analog_sources if _physical_analog_sources else [],
             medium_confidences=chain_confidences,
             bayesian_scores=posteriors,
             classification_result=classification_result,
@@ -1846,6 +1991,30 @@ class MediumDetector:
         return result
 
     # ── Hilfsmethoden ────────────────────────────────────────────────────
+
+    @staticmethod
+    def _codec_stage_confidence(fp: SpectralFingerprint) -> float:
+        """Evidenzbasierte Konfidenz für eine heuristisch erkannte Codec-Stufe.
+
+        Statt einer Platzhalterkonstante (historisch 0.40/0.35) wird die
+        Konfidenz aus drei messbaren Evidenzquellen abgeleitet (§0m
+        Maximal-Ausbaustufe Defektintelligenz — Kausalpräzision statt
+        Aggregat-Konstante):
+
+        1. **BW-Beschneidungs-Klarheit** — wie deutlich die effektive
+           Bandbreite unter der 17.5-kHz-Vollband-Schwelle liegt (je tiefer
+           der Codec-Tiefpass, desto eindeutiger die Lossy-Signatur),
+        2. **Codec-Artefakt-Score** — Spektralloch-/Blocking-Evidenz,
+        3. **Codec-Typ-Code** — direkte Encoder-Signatur.
+
+        Returns:
+            Konfidenz in [0.35, 0.90] — nie unter dem historischen Boden,
+            aber bei klarer Evidenz ehrlich höher.
+        """
+        _bw_cut = float(np.clip((17_500.0 - float(fp.effective_bandwidth_hz)) / 7_500.0, 0.0, 1.0))
+        _artifact = float(np.clip(float(fp.codec_artifact_score) / 0.30, 0.0, 1.0))
+        _type = float(np.clip(float(fp.codec_type_code), 0.0, 1.0))
+        return float(np.clip(0.35 + 0.30 * _bw_cut + 0.20 * _artifact + 0.15 * _type, 0.35, 0.90))
 
     @staticmethod
     def _normalize_material_key(key: str) -> str:

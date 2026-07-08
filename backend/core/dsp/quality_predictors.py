@@ -73,7 +73,7 @@ def _safe_stft(audio: np.ndarray) -> np.ndarray:
     hop = min(_HOP_LEN, max(1, n_fft // 4))
     num_frames = max(1, (len(audio) - n_fft) // hop + 1)
     frames = np.stack([audio[i * hop : i * hop + n_fft] * np.hanning(n_fft) for i in range(num_frames)], axis=0)
-    return np.abs(np.fft.rfft(frames, n=n_fft, axis=1))  # (T, F)
+    return np.abs(np.fft.rfft(frames, n=n_fft, axis=1))  # type: ignore[no-any-return]  # (T, F)
 
 
 def _estimate_snr_db(audio: np.ndarray) -> float:

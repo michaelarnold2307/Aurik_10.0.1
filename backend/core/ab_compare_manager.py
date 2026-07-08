@@ -324,7 +324,7 @@ class ABCompareManager:
                 frames = np.stack([signal[i * hop : i * hop + n_fft] * window for i in range(n_frames)])
                 spec = np.abs(np.fft.rfft(frames, axis=-1))
                 spec = np.clip(spec, 1e-8, None)
-                return 20.0 * np.log10(spec)
+                return 20.0 * np.log10(spec)  # type: ignore[no-any-return]
 
             lm_orig = log_mel_approx(orig_m)
             lm_rest = log_mel_approx(rest_m)

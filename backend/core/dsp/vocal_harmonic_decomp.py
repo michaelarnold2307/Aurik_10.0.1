@@ -96,7 +96,7 @@ def _estimate_f0_zcpa(mono: np.ndarray, sr: int, hop: int) -> np.ndarray:
 
         f0_frames[i] = float(f0)
 
-    return f0_frames
+    return f0_frames  # type: ignore[no-any-return]
 
 
 def _estimate_f0_crepe(mono: np.ndarray, sr: int, hop: int) -> np.ndarray | None:
@@ -105,10 +105,10 @@ def _estimate_f0_crepe(mono: np.ndarray, sr: int, hop: int) -> np.ndarray | None
         from plugins.crepe_plugin import get_crepe_plugin  # pylint: disable=import-outside-toplevel
 
         plugin = get_crepe_plugin()
-        if not plugin.is_available():
+        if not plugin.is_available():  # type: ignore[attr-defined]
             return None
 
-        result = plugin.estimate_f0(mono, sr=sr, hop_length=hop, model_capacity="tiny")
+        result = plugin.estimate_f0(mono, sr=sr, hop_length=hop, model_capacity="tiny")  # type: ignore[attr-defined]
         if result is None:
             return None
 
@@ -218,7 +218,7 @@ class VocalHarmonicMask:
                     hard = (np.abs(self._freqs - center) <= self._partial_width_hz).astype(np.float32)
                     mask[:, t] = np.minimum(1.0, mask[:, t] + hard)
 
-        return mask
+        return mask  # type: ignore[no-any-return]
 
     def nonharmonic_mask(self, *, soft: bool = True) -> np.ndarray:
         """
@@ -227,7 +227,7 @@ class VocalHarmonicMask:
         Returns:
             np.ndarray, shape (n_freq, n_frames), Werte ∈ [0, 1].
         """
-        return 1.0 - self.harmonic_mask(soft=soft)
+        return 1.0 - self.harmonic_mask(soft=soft)  # type: ignore[no-any-return]
 
     def apply_g_floor_adjustment(
         self,
@@ -270,7 +270,7 @@ class VocalHarmonicMask:
         adjusted = h_mask * harm_g_floor + (1.0 - h_mask) * nonharm_g_floor
         # Nie unter dem übergebenen g_floor_map (konservativ — nimm das Maximum)
         adjusted = np.maximum(adjusted, g_floor_map).astype(np.float32)
-        return adjusted
+        return adjusted  # type: ignore[no-any-return]
 
     @property
     def voiced_fraction(self) -> float:

@@ -135,21 +135,23 @@ class PresenceBoost(PhaseInterface):
             description="Mid-range clarity and vocal/instrument presence enhancement",
         )
 
-    # pylint: disable-next=arguments-renamed
-    def process(
-        self, audio: np.ndarray, sample_rate: int, material: MaterialType = MaterialType.CD_DIGITAL, **kwargs
-    ) -> PhaseResult:
+    def process(self, audio: np.ndarray, sample_rate: int, material_type: str = "unknown", **kwargs) -> PhaseResult:  # type: ignore[override]
         """
         Wendet an: presence boost to audio.
 
         Args:
             audio: Input audio (mono or stereo)
             sample_rate: Sample rate in Hz
-            material: Material type for adaptive processing
+            material_type: Material type for adaptive processing
 
         Returns:
             PhaseResult with enhanced audio
         """
+        try:
+            _mat_38 = MaterialType(material_type)
+        except Exception:
+            _mat_38 = MaterialType.CD_DIGITAL
+        material = _mat_38
         sample_rate = kwargs.get("sample_rate", 48000)
         assert sample_rate == 48000, f"SR muss 48000 Hz sein, erhalten: {sample_rate}"
         start_time = time.time()
@@ -159,6 +161,32 @@ class PresenceBoost(PhaseInterface):
         phase_locality_factor = float(np.clip(phase_locality_factor, 0.35, 1.0))
         _pmgg_strength = float(kwargs.get("strength", 1.0))
         _effective_strength = float(np.clip(_pmgg_strength * phase_locality_factor, 0.0, 1.0))
+
+        # §V41 ForwardMaskingGuard: Stärke in post-transienten Masking-Fenstern erhöhen.
+        # Optimierung v9.12.9: UV3 berechnet Zonen vor der Phase und übergibt sie via kwargs;
+        # nur wenn keine pre-computed Zonen vorhanden, werden sie neu berechnet (spart CPU).
+        _panns_s_38 = float(kwargs.get("panns_singing", 0.0))
+        if _panns_s_38 >= 0.25 and _effective_strength > 0.0:
+            try:
+                from backend.core.dsp.temporal_masking import (
+                    get_forward_masking_guard as _fmg_fn_38,
+                )
+
+                _fmz_38 = kwargs.get("forward_masking_zones") or _fmg_fn_38().compute_zones(audio, sample_rate)
+                if _fmz_38:
+                    _n_s_38 = audio.shape[-1] if audio.ndim > 1 else len(audio)
+                    _zone_samples_38 = sum(z.end_sample - z.start_sample for z in _fmz_38)
+                    _zone_frac_38 = float(np.clip(_zone_samples_38 / max(1, _n_s_38), 0.0, 1.0))
+                    _boost_38 = _zone_frac_38 * 0.15
+                    _effective_strength = float(np.clip(_effective_strength + _boost_38, 0.0, 1.0))
+                    logger.debug(
+                        "Phase38 §V41 ForwardMasking: zone_frac=%.2f boost=%.3f → eff_str=%.3f",
+                        _zone_frac_38,
+                        _boost_38,
+                        _effective_strength,
+                    )
+            except Exception as _fmg_exc_38:
+                logger.debug("Phase38 §V41 ForwardMaskingGuard non-blocking: %s", _fmg_exc_38)
 
         if _effective_strength <= 0.0:
             audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
@@ -335,7 +363,7 @@ class PresenceBoost(PhaseInterface):
         # §V22 Pre-Echo-Prevention — Additive Presence-Boost auf Transient-Shifts prüfen (§2.73, non-blocking)
         try:
             from backend.core.dsp.transient_guard import (
-                detect_transient_shifts as _dts_38,  # pylint: disable=import-outside-toplevel
+                detect_transient_shifts as _dts_38,
             )
 
             _ax_v22_38 = -1 if audio.ndim == 2 and audio.shape[-1] <= 8 else 0
@@ -466,4 +494,4 @@ class PresenceBoost(PhaseInterface):
         else:
             filtered = signal.lfilter(b, a, audio)
 
-        return filtered
+        return np.asarray(filtered, dtype=np.float32)  # type: ignore[no-any-return]

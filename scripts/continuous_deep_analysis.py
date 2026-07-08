@@ -97,6 +97,8 @@ class ContinuousDeepAnalyzer:
         self._last_phase_audio = None
         self._final_musical_goals: dict[str, float] = {}
         self._final_vocal_metrics: dict[str, float] = {}
+        self._final_hpg: dict[str, object] = {}
+        self._final_carrier_chain_recovery_ratio: float = 0.0
         self._last_progress_pct: int = -1
         self._last_progress_phase: str = ""
         self._last_progress_elapsed_s: float = 0.0
@@ -175,6 +177,8 @@ class ContinuousDeepAnalyzer:
         self.anomalies_detected = []
         self._final_musical_goals = {}
         self._final_vocal_metrics = {}
+        self._final_hpg = {}
+        self._final_carrier_chain_recovery_ratio = 0.0
 
         pre_transfer_chain: list[str] = []
         pipeline_transfer_chain: list[str] = []
@@ -266,6 +270,8 @@ class ContinuousDeepAnalyzer:
             _hpg = _meta.get("holistic_perceptual_gate", {}) or {}
             _afg = _meta.get("artifact_freedom", {}) or {}
             self._final_vocal_metrics = self._extract_vocal_metrics_from_metadata(_meta)
+            self._final_hpg = dict(_hpg) if _hpg else {}
+            self._final_carrier_chain_recovery_ratio = float(_meta.get("carrier_chain_recovery_ratio", 0.0) or 0.0)
             pipeline_transfer_chain = self._extract_transfer_chain_from_obj(_meta)
             if pre_era_decade is None:
                 _meta_era = self._extract_era_decade_from_obj(_meta)
@@ -304,6 +310,8 @@ class ContinuousDeepAnalyzer:
             "checkpoints": [cp.to_dict() for cp in self.checkpoints],
             "final_musical_goals": dict(self._final_musical_goals),
             "final_vocal_metrics": dict(self._final_vocal_metrics),
+            "holistic_perceptual_gate": dict(self._final_hpg),
+            "carrier_chain_recovery_ratio": self._final_carrier_chain_recovery_ratio,
             "anomalies": self.anomalies_detected,
             "summary": self._generate_summary(),
         }
@@ -713,6 +721,20 @@ class ContinuousDeepAnalyzer:
             ("singer_identity_cosine", "score", "value"),
         )
 
+        _hpg_components: dict[str, object] = {}
+        if self._final_hpg:
+            for _hpg_key in (
+                "mert_similarity",
+                "timbral_fidelity",
+                "artifact_freedom",
+                "emotional_arc_preservation",
+                "vqi",
+                "mert_proxy_used",
+                "is_studio_mode",
+            ):
+                if _hpg_key in self._final_hpg:
+                    _hpg_components[_hpg_key] = self._final_hpg[_hpg_key]
+
         return {
             "total_phases": len(self.checkpoints),
             "total_anomalies": len(self.anomalies_detected),
@@ -724,6 +746,8 @@ class ContinuousDeepAnalyzer:
             "p1_source": "final_musical_goals" if self._final_musical_goals else "pmgg_debug_trace",
             "quality_status": quality_status,
             "quality_gate_reasons": quality_gate_reasons,
+            "carrier_chain_recovery_ratio": self._final_carrier_chain_recovery_ratio,
+            **_hpg_components,
         }
 
 

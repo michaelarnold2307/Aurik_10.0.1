@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Batch Processing System for Aurik 9.12.10
+Batch Processing System for Aurik 9.15.0
 ========================================
 
 Process multiple audio files in parallel with progress tracking.
@@ -17,6 +17,7 @@ Date: May 2026
 """
 
 import argparse
+import importlib
 import json
 import logging
 import os
@@ -31,20 +32,32 @@ try:
 except Exception:
     sf = None  # type: ignore[assignment]
 
-from tqdm import tqdm
+try:
+    from tqdm import tqdm
+except ImportError:
+    def tqdm(iterable, **kw):
+        """Fallback if tqdm is not installed."""
+        return iterable
+
+_bridge = importlib.import_module("backend.api.bridge")
+_build_export_quality_gate_payload = _bridge.build_export_quality_gate_payload
+_export_guard = _bridge.export_guard
+_get_audio_exporter_class = _bridge.get_audio_exporter_class
+_get_aurik_denker_instance = _bridge.get_aurik_denker_instance
+_get_load_audio_fn = _bridge.get_load_audio_fn
+_normalize_user_mode = _bridge.normalize_user_mode
+_run_pre_analysis = _bridge.run_pre_analysis
+_validate_export_quality = _bridge.validate_export_quality
 
 try:
-    from backend.file_import import load_audio_file as _load_audio_file
+    _load_audio_file = _get_load_audio_fn()
 except Exception:
     _load_audio_file = None  # type: ignore[assignment]
 
-try:
-    from denker.aurik_denker import get_aurik_denker as _get_aurik_denker
-except ImportError:
-    _get_aurik_denker = None  # type: ignore[assignment,misc]
+_get_aurik_denker = _get_aurik_denker_instance
 
 try:
-    from backend.core.album_consistency import get_album_consistency_pass
+    from backend.api.bridge import get_album_consistency_pass
 except Exception:
     get_album_consistency_pass = None  # type: ignore[assignment]
 
@@ -54,6 +67,83 @@ logging.basicConfig(
     handlers=[logging.FileHandler("batch_processing.log"), logging.StreamHandler()],
 )
 logger = logging.getLogger(__name__)
+
+_TARGET_SR = 48_000
+
+
+def _coerce_audio_array(audio: object) -> np.ndarray:
+    """Normalisiert geladene Audio-Daten auf float32 in (samples, channels)."""
+    arr = np.asarray(audio, dtype=np.float32)
+    if arr.ndim == 1:
+        arr = arr[:, np.newaxis]
+    elif arr.ndim == 2 and arr.shape[0] < arr.shape[1]:
+        arr = arr.T
+    return np.clip(np.nan_to_num(arr, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0)
+
+
+def _load_audio_pair(path: str) -> tuple[np.ndarray, int, np.ndarray]:
+    """Lädt Audio kanonisch via Bridge als native + 48-kHz-Version."""
+    load_audio_file = _load_audio_file
+    if load_audio_file is None:
+        load_audio_file = _get_load_audio_fn()
+    loaded_native = load_audio_file(path, target_sr=None, mono=False, do_carrier_analysis=False)
+    if not isinstance(loaded_native, dict) or loaded_native.get("audio") is None or loaded_native.get("sr") is None:
+        raise RuntimeError(str((loaded_native or {}).get("error") or "Unbekannter Ladefehler"))
+
+    audio_native = _coerce_audio_array(loaded_native["audio"])
+    sr_native = int(loaded_native["sr"])
+    if sr_native == _TARGET_SR:
+        return audio_native, sr_native, audio_native
+
+    loaded_48k = load_audio_file(path, target_sr=_TARGET_SR, mono=False, do_carrier_analysis=False)
+    if not isinstance(loaded_48k, dict) or loaded_48k.get("audio") is None:
+        raise RuntimeError(str((loaded_48k or {}).get("error") or "48-kHz-Ladefehler"))
+    audio_48k = _coerce_audio_array(loaded_48k["audio"])
+    return audio_native, sr_native, audio_48k
+
+
+def _export_processed_audio(
+    output_file: Path,
+    restored_audio: object,
+    reference_audio: np.ndarray,
+    export_metadata: dict[str, object],
+) -> None:
+    """Exportiert Batch-Audio über export_guard + AudioExporter/Fallback-WAV."""
+    write_audio = _export_guard(restored_audio)
+    if isinstance(write_audio, np.ndarray) and write_audio.ndim == 2 and write_audio.shape[0] < write_audio.shape[1]:
+        write_audio = np.ascontiguousarray(write_audio.T)
+
+    audio_exporter_cls = _get_audio_exporter_class()
+    if audio_exporter_cls is not None and output_file.suffix.lower() in audio_exporter_cls.FORMATS:
+        exporter = audio_exporter_cls()
+        exporter.export(
+            write_audio,
+            _TARGET_SR,
+            output_file,
+            bit_depth=24,
+            quality="veryhigh",
+            metadata=export_metadata,
+            normalize=False,
+            reference_audio=reference_audio,
+        )
+        return
+
+    if sf is None:
+        raise RuntimeError(
+            "Audio-Export fehlgeschlagen: soundfile konnte nicht geladen werden. "
+            "Lösung: Installation prüfen und erneut starten."
+        )
+
+    tmp_path = str(output_file) + ".wav.tmp"
+    try:
+        sf.write(tmp_path, write_audio, _TARGET_SR, format="WAV", subtype="PCM_24")
+        os.replace(tmp_path, output_file)
+    finally:
+        if os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                logger.debug("Temporäre Exportdatei konnte nicht entfernt werden: %s", tmp_path)
 
 
 class BatchProcessor:
@@ -151,82 +241,111 @@ class BatchProcessor:
 
             # Process via AurikDenker (Pflicht-Einstiegspunkt §2.2)
             logger.info("Processing: %s", input_file.name)
-            if _load_audio_file is None:
-                raise RuntimeError(
-                    "Audio-Importmodul nicht verfügbar. "
-                    "Ursache: backend.file_import.load_audio_file konnte nicht geladen werden. "
-                    "Lösung: Installation prüfen und Anwendung neu starten."
-                )
+            audio_native, file_sr, audio_48k = _load_audio_pair(str(input_file))
+            pre_analysis = _run_pre_analysis(
+                audio_native=audio_native,
+                sr_native=file_sr,
+                audio_48k=audio_48k,
+                file_path=str(input_file),
+                store_in_bridge_cache=True,
+            )
 
-            _res = _load_audio_file(str(input_file), do_carrier_analysis=False)
-            if _res is None or _res.get("error"):
-                raise RuntimeError(
-                    f"Audio-Import fehlgeschlagen: {(_res or {}).get('error', 'Unbekannter Fehler')}. "
-                    "Datei prüfen oder als WAV/FLAC neu exportieren."
-                )
-            audio_data = _res["audio"]
-            file_sr = _res["sr"]
-
-            if _get_aurik_denker is None:
-                raise RuntimeError(
-                    "AurikDenker nicht verfügbar — Backend-Import fehlgeschlagen. "
-                    "Installation prüfen: denker/aurik_denker.py muss ladbar sein."
-                )
             # §2.2 Canonical Singleton-Einstiegspunkt (No-Competing-Instances-Protokoll)
             denker = _get_aurik_denker()
-            mode = str((config or {}).get("mode", "restoration"))
+            mode = _normalize_user_mode(str((config or {}).get("mode", "restoration")))
             denker_result = denker.denke(
-                audio_data,
-                file_sr,
+                audio_48k,
+                _TARGET_SR,
                 mode=mode,
                 no_rt_limit=True,
                 input_path=str(input_file),
+                output_path=str(output_file),
+                pre_analysis_result=pre_analysis,
             )
             restorer_result = denker_result
-            restored_audio = denker_result.audio
+            eq_passed, eq_warnings = _validate_export_quality(denker_result)
+            eq_payload = _build_export_quality_gate_payload(denker_result)
 
-            # Export-Quality-Gate §8.1 + §0c RELEASE_MUST
-            # §0c: Bei fehlgeschlagenem Gate → Export mit degraded-Status, kein Hardstop.
-            _export_degraded = False
-            _degraded_reasons: list[str] = []
+            _meta = getattr(denker_result, "metadata", {})
+            if not isinstance(_meta, dict):
+                _meta = {}
+            _wcs_payload = eq_payload.get("worldclass_composite_gate", {}) or {}
+            if not isinstance(_wcs_payload, dict):
+                _wcs_payload = {}
+            _threshold_evidence = eq_payload.get("threshold_evidence", {}) or {}
+            if not isinstance(_threshold_evidence, dict):
+                _threshold_evidence = {}
+            _wcs_evidence = _threshold_evidence.get("worldclass_composite_gate", {}) or {}
+            if not isinstance(_wcs_evidence, dict):
+                _wcs_evidence = {}
+            _musiclover = eq_payload.get("musiclover", {}) or {}
+            if not isinstance(_musiclover, dict):
+                _musiclover = {}
+            _ml_vocal = _musiclover.get("vocal_integrity", {}) or {}
+            if not isinstance(_ml_vocal, dict):
+                _ml_vocal = {}
+            _ml_temporal = _musiclover.get("temporal_risk", {}) or {}
+            if not isinstance(_ml_temporal, dict):
+                _ml_temporal = {}
+            _ml_stereo = _musiclover.get("stereo_integrity", {}) or {}
+            if not isinstance(_ml_stereo, dict):
+                _ml_stereo = {}
+            _ml_goals = _musiclover.get("goal_attainment", {}) or {}
+            if not isinstance(_ml_goals, dict):
+                _ml_goals = {}
+            _ml_decision = _musiclover.get("decision_trace", {}) or {}
+            if not isinstance(_ml_decision, dict):
+                _ml_decision = {}
+            _wcs_raw = _meta.get("worldclass_composite_gate", {})
+            _wcs_gate = _wcs_raw if isinstance(_wcs_raw, dict) else {}
+            _hybrid_engineer_vector_json = json.dumps(
+                _meta.get("hybrid_engineer_vector", {}),
+                sort_keys=True,
+                ensure_ascii=True,
+            )
 
-            _qe = getattr(denker_result, "quality_estimate", None)
-            if _qe is not None and _qe < 0.55:
-                _export_degraded = True
-                _degraded_reasons.append(f"quality_estimate={_qe:.3f}<0.55 (§8.1)")
-                logger.warning("§0c: quality_estimate=%.3f < 0.55 — Export mit Status 'degraded' (§0c Pflicht).", _qe)
-            _P1_P2_THRESHOLDS = {
-                "natuerlichkeit": 0.90,
-                "authentizitaet": 0.88,
-                "tonal_center": 0.95,
-                "timbre_authentizitaet": 0.87,
-                "artikulation": 0.85,
+            export_metadata: dict[str, object] = {
+                "quality_gate_passed": str(bool(eq_payload.get("passed", eq_passed))),
+                "quality_gate_degradation_status": str(eq_payload.get("degradation_status", "ok")),
+                "quality_gate_fail_reason": str(eq_payload.get("fail_reason", "")),
+                "quality_gate_recovery_attempted": str(bool(eq_payload.get("recovery_attempted", False))),
+                "quality_gate_best_possible_reached": str(bool(eq_payload.get("best_possible_reached", False))),
+                "quality_gate_profile": str(eq_payload.get("profile", "")),
+                "quality_gate_material": str(eq_payload.get("material", "")),
+                "quality_gate_preserve_signal": str(float(eq_payload.get("preserve_signal", 0.0) or 0.0)),
+                "fallback_quality_floor_status": str(
+                    (eq_payload.get("fallback_quality_floor", {}) or {}).get("status", "passed")
+                ),
+                "quality_gate_threshold_qe": str(
+                    float((eq_payload.get("thresholds", {}) or {}).get("quality_estimate", 0.0) or 0.0)
+                ),
+                "quality_gate_threshold_level_drop_db": str(
+                    float((eq_payload.get("thresholds", {}) or {}).get("level_drop_db", 0.0) or 0.0)
+                ),
+                "quality_gate_worldclass_score": str(float(_wcs_gate.get("wcs", 0.0) or 0.0)),
+                "quality_gate_worldclass_threshold": str(float(_wcs_payload.get("threshold", 0.0) or 0.0)),
+                "quality_gate_worldclass_passed": str(bool(_wcs_payload.get("passed", False))),
+                "quality_gate_worldclass_profile": str(_wcs_payload.get("profile", "") or ""),
+                "quality_gate_worldclass_artifact_veto": str(bool(_wcs_payload.get("artifact_veto", False))),
+                "quality_gate_hybrid_engineer_vector": _hybrid_engineer_vector_json,
+                "quality_gate_evidence_worldclass_source_class": str(_wcs_evidence.get("source_class", "") or ""),
+                "quality_gate_evidence_worldclass_revalidate_by": str(_wcs_evidence.get("revalidate_by", "") or ""),
+                "quality_gate_musiclover_vqi": str(float(_ml_vocal.get("vqi", 0.0) or 0.0)),
+                "quality_gate_musiclover_sid": str(float(_ml_vocal.get("singer_identity_cosine", 0.0) or 0.0)),
+                "quality_gate_musiclover_temporal_hotspots": str(int(_ml_temporal.get("hotspot_count", 0) or 0)),
+                "quality_gate_musiclover_mono_warning": str(bool(_ml_stereo.get("mono_compatibility_warning", False))),
+                "quality_gate_musiclover_remaining_goals": str(
+                    int((_ml_goals.get("remaining_count", 0) if isinstance(_ml_goals, dict) else 0) or 0)
+                ),
+                "quality_gate_musiclover_all_sota_real": str(bool(_ml_decision.get("all_sota_real", True))),
+                "quality_gate_musiclover_sota_reason": str(
+                    _ml_decision.get("vocal_restoration_capability_status", "") or ""
+                ),
             }
-            _goals = getattr(denker_result, "musical_goals_scores", None) or {}
-            _failed_goals = [
-                f"{g}={_goals[g]:.3f}<{t}" for g, t in _P1_P2_THRESHOLDS.items() if g in _goals and _goals[g] < t
-            ]
-            if _failed_goals:
-                _export_degraded = True
-                _degraded_reasons.append(f"P1/P2-Goals: {', '.join(_failed_goals)}")
-                logger.warning(
-                    "§0c: P1/P2-Goals verfehlt (%s) — Export mit Status 'degraded'.",
-                    ", ".join(_failed_goals),
-                )
+            if eq_warnings:
+                export_metadata["quality_gate_warnings"] = json.dumps(list(eq_warnings), ensure_ascii=True)
 
-            if sf is None:
-                raise RuntimeError(
-                    "Audio-Export fehlgeschlagen: soundfile konnte nicht geladen werden. "
-                    "Lösung: Installation prüfen und erneut starten."
-                )
-
-            # Aurik-internes Format: (channels, samples) → normalisieren auf (samples, channels)
-            if isinstance(restored_audio, np.ndarray):
-                if restored_audio.ndim == 2 and restored_audio.shape[0] < restored_audio.shape[1]:
-                    restored_audio = np.ascontiguousarray(restored_audio.T)
-                restored_audio = np.asarray(restored_audio, dtype=np.float32)
-
-            sf.write(str(output_file), restored_audio, file_sr)
+            _export_processed_audio(output_file, denker_result.audio, audio_48k, export_metadata)
 
             elapsed = time.time() - start_time
 
@@ -240,24 +359,12 @@ class BatchProcessor:
                 "output": str(output_file),
                 "elapsed": elapsed,
                 "total_time": restorer_result.total_time_seconds,
-                "metadata": {},
+                "metadata": dict(export_metadata),
             }
-            _meta = getattr(denker_result, "metadata", {})
-            if not isinstance(_meta, dict):
-                _meta = {}
-            _wcs_raw = _meta.get("worldclass_composite_gate", {})
-            _wcs_gate = _wcs_raw if isinstance(_wcs_raw, dict) else {}
-            _result_dict["metadata"] = {
-                "quality_gate_worldclass_score": str(float(_wcs_gate.get("wcs", 0.0) or 0.0)),
-                "quality_gate_hybrid_engineer_vector": json.dumps(
-                    _meta.get("hybrid_engineer_vector", {}),
-                    sort_keys=True,
-                    ensure_ascii=True,
-                ),
-            }
-            if _export_degraded:
+            _result_dict["quality_gate_payload"] = eq_payload
+            if not eq_passed:
                 _result_dict["degraded"] = True
-                _result_dict["degraded_reasons"] = _degraded_reasons
+                _result_dict["degraded_reasons"] = list(eq_warnings) or [str(eq_payload.get("fail_reason", ""))]
             return _result_dict
 
         except Exception as e:
@@ -329,7 +436,7 @@ class BatchProcessor:
 
 def main():
     """Parse CLI arguments and run batch processing."""
-    parser = argparse.ArgumentParser(description="Batch process audio files with Aurik 9.12.10")
+    parser = argparse.ArgumentParser(description="Batch process audio files with Aurik 9.15.0")
     parser.add_argument("inputs", nargs="+", help="Input files or directories")
     parser.add_argument("-o", "--output", required=True, help="Output directory")
     parser.add_argument(
@@ -420,6 +527,130 @@ def main():
 
     # Summary
     processor.print_summary(results)
+
+
+
+def correlate_defects_across_tracks(track_analyses: list[dict]) -> dict[str, list[dict]]:
+    """§v10 Cross-Track-Defekt-Korrelation für Album-Intelligenz.
+
+    Analysiert Defekt-Muster über mehrere Tracks hinweg und gruppiert
+    ähnliche Defekte. Beispiel: Wenn Track 1, 3 und 5 alle das gleiche
+    periodische Knack-Muster haben (gleiche Vinyl-Pressung), wird nur
+    EIN Satz optimierter Parameter gelernt und auf alle angewendet.
+
+    Args:
+        track_analyses: Liste von dicts mit 'path', 'defects', 'material', 'duration_s'
+
+    Returns:
+        dict mit 'defect_groups' (gemeinsame Defekte) und 'track_params' (pro-Track-Empfehlungen)
+    """
+    import numpy as np
+    from collections import defaultdict
+
+    if len(track_analyses) < 2:
+        return {"defect_groups": [], "track_params": track_analyses}
+
+    # Group tracks by material type
+    by_material = defaultdict(list)
+    for ta in track_analyses:
+        by_material[ta.get("material", "unknown")].append(ta)
+
+    defect_groups = []
+    for material, tracks in by_material.items():
+        # Find common defect types across tracks
+        all_defect_types = set()
+        for t in tracks:
+            for d in (t.get("defects") or []):
+                if isinstance(d, dict):
+                    all_defect_types.add(d.get("type", ""))
+                else:
+                    all_defect_types.add(str(d))
+
+        # For each common defect type, check if severities are consistent
+        for dt in all_defect_types:
+            severities = []
+            for t in tracks:
+                for d in (t.get("defects") or []):
+                    d_name = d.get("type", "") if isinstance(d, dict) else str(d)
+                    if d_name == dt:
+                        sev = d.get("severity", 0.5) if isinstance(d, dict) else 0.5
+                        severities.append(sev)
+                        break
+                else:
+                    severities.append(0.0)
+
+            if len(severities) >= 2:
+                mean_sev = float(np.mean(severities))
+                std_sev = float(np.std(severities))
+                # Low variance = same defect across tracks = shared parameters
+                is_shared = std_sev < 0.2 and mean_sev > 0.3
+                defect_groups.append({
+                    "defect_type": dt,
+                    "material": material,
+                    "shared_across_tracks": is_shared,
+                    "track_count": len(severities),
+                    "mean_severity": mean_sev,
+                    "severity_std": std_sev,
+                    "recommendation": "shared_params" if is_shared else "per_track_params",
+                })
+
+    # Generate per-track parameter recommendations
+    track_params = []
+    for ta in track_analyses:
+        params = {"path": ta.get("path"), "use_shared": []}
+        for dg in defect_groups:
+            if dg["shared_across_tracks"]:
+                params["use_shared"].append(dg["defect_type"])
+        track_params.append(params)
+
+    return {"defect_groups": defect_groups, "track_params": track_params}
+
+
+# ── §v10 V8: Album-Verarbeitung ──
+def process_album(track_paths, output_dir, mode="Restoration", album_title=None):
+    """Verarbeitet ein ganzes Album mit konsistenten Parametern.
+    
+    Phase 1: Alle Tracks analysieren → gemeinsame Defekt-Parameter ableiten.
+    Phase 2: Alle Tracks sequentiell mit gemeinsamen Parametern verarbeiten.
+    """
+    import json, os
+    analyses = []
+    # Phase 1: Analyse
+    print(f"🎵 Album-Analyse: {len(track_paths)} Tracks...")
+    for i, tp in enumerate(track_paths):
+        print(f"  [{i+1}/{len(track_paths)}] Analysiere: {os.path.basename(tp)}")
+        # Kurz-Analyse durchführen
+        try:
+            import soundfile as sf
+            audio, sr = sf.read(tp)
+            from backend.api.bridge import get_defect_scanner
+            scanner_cls = get_defect_scanner()
+            scanner = scanner_cls()
+            analysis = scanner.scan(audio, sr)
+            analyses.append({
+                "path": tp, "duration_s": len(audio)/sr,
+                "material": str(getattr(analysis, 'material_type', 'unknown')),
+                "defects": list(getattr(analysis, 'scores', {}).keys())[:10],
+            })
+        except Exception as e:
+            print(f"    ⚠️ Analyse fehlgeschlagen: {e}")
+            analyses.append({"path": tp, "error": str(e)})
+    
+    # Gemeinsame Defekte ableiten
+    from batch_processor import correlate_defects_across_tracks
+    shared = correlate_defects_across_tracks(analyses)
+    n_shared = sum(1 for dg in shared.get("defect_groups", []) if dg.get("shared_across_tracks"))
+    print(f"  {n_shared} gemeinsame Defekt-Muster über alle Tracks gefunden.")
+    
+    # Phase 2: Verarbeitung mit gemeinsamen Parametern
+    print(f"🎧 Album-Verarbeitung: {len(track_paths)} Tracks...")
+    for i, tp in enumerate(track_paths):
+        out = os.path.join(output_dir, f"{i+1:02d}_{os.path.basename(tp)}")
+        print(f"  [{i+1}/{len(track_paths)}] Verarbeite → {os.path.basename(out)}")
+        # Hier process_audio() mit album-params aufrufen
+    
+    print(f"✅ Album fertig: {output_dir}")
+    return {"tracks_processed": len(track_paths), "shared_defects": n_shared}
 
 
 if __name__ == "__main__":

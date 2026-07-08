@@ -44,6 +44,11 @@ class SourceMedium(Enum):
     AAC = "aac"  # AAC/M4A (efficient compression, better than MP3)
     MINIDISC = "minidisc"  # MiniDisc ATRAC (90s/2000s, aggressive compression)
     STREAMING = "streaming"  # Streaming (glitches, packet loss)
+    WAX_CYLINDER = "wax_cylinder"  # Wachszylinder
+    WIRE_RECORDING = "wire_recording"  # Drahtaufnahme
+    LACQUER_DISC = "lacquer_disc"  # Lackfolien-Disc
+    TAPE = "tape"  # Generic tape
+    CD_DIGITAL = "cd_digital"  # Compact Disc
 
 
 @dataclass
@@ -186,8 +191,8 @@ class DefectAnalyzer:
         if librosa is None:
             return 0
         # Use onset detection with high threshold
-        onset_env = librosa.onset.onset_strength(y=audio, sr=sr)
-        onset_frames = librosa.onset.onset_detect(
+        onset_env = librosa.onset.onset_strength(y=audio, sr=sr)  # type: ignore[attr-defined]
+        onset_frames = librosa.onset.onset_detect(  # type: ignore[attr-defined]
             onset_envelope=onset_env,
             sr=sr,
             delta=0.5,  # High threshold for clicks
@@ -206,7 +211,7 @@ class DefectAnalyzer:
 
                 # Clicks have very rapid attack
                 if len(envelope) > 1:
-                    max_gradient = np.max(np.abs(np.gradient(envelope)))
+                    max_gradient: float = float(np.max(np.abs(np.gradient(envelope))))
                     if max_gradient > 0.2:  # Very sharp
                         click_count += 1
 
@@ -275,7 +280,7 @@ class DefectAnalyzer:
 
         if total_energy > 0:
             ratio = high_freq_energy / total_energy
-            return ratio > 0.1  # More than 10% high-freq energy
+            return ratio > 0.1  # type: ignore[return-value]  # More than 10% high-freq energy
 
         return False
 
@@ -290,7 +295,7 @@ class DefectAnalyzer:
         def check_frequency(target_hz, tolerance=5):
             mask = (freqs >= target_hz - tolerance) & (freqs <= target_hz + tolerance)
             if np.any(mask):
-                peak = np.max(magnitudes[mask])
+                peak: float = float(np.max(magnitudes[mask]))
                 median = np.median(magnitudes)
                 return peak > median * 10  # 10x above median
             return False
@@ -298,7 +303,7 @@ class DefectAnalyzer:
         has_50hz = check_frequency(50)
         has_60hz = check_frequency(60)
 
-        return has_50hz or has_60hz
+        return has_50hz or has_60hz  # type: ignore[no-any-return]
 
     def _detect_medium(self, analysis: DefectAnalysis) -> tuple[SourceMedium, float]:
         """Erkennt source medium based on defect patterns."""

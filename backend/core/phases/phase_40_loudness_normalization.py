@@ -68,7 +68,12 @@ import time
 import numpy as np
 from scipy import signal
 
-from backend.core.audio_utils import apply_musical_gain_envelope, limit_quiet_edge_boost, to_channels_last
+from backend.core.audio_utils import (
+    apply_musical_gain_envelope,
+    limit_quiet_edge_boost,
+    restore_layout,
+    to_channels_last,
+)
 from backend.core.defect_scanner import MaterialType
 
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult
@@ -113,6 +118,91 @@ class LoudnessNormalizationPhase(PhaseInterface):
     # Gating thresholds (ITU-R BS.1770-4)
     ABSOLUTE_GATE_LUFS = -70.0  # Absolute gate (silence)
     RELATIVE_GATE_LU = -10.0  # Relative gate (below integrated)
+
+    @staticmethod
+    def _local_drift_event_strength(
+        key: str, loc: tuple[float, float], event_metadata: dict[str, dict] | None
+    ) -> float:
+        duration_s = max(0.0, float(loc[1]) - float(loc[0]))
+        duration_factor = float(np.clip(duration_s / 3.0, 0.35, 1.0))
+        key_factor = {
+            "amplitude_drift": 1.0,
+            "level_drift": 0.90,
+            "gain_sag": 0.82,
+            "tape_level_drift": 0.88,
+        }.get(str(key).strip().lower(), 0.80)
+        severity = 0.60
+        confidence = 0.80
+        meta_obj = (event_metadata or {}).get(key) or (event_metadata or {}).get(str(key).strip().lower())
+        if isinstance(meta_obj, dict):
+            severity = float(np.clip(float(meta_obj.get("severity", severity)), 0.0, 1.0))
+            confidence = float(np.clip(float(meta_obj.get("confidence", confidence)), 0.0, 1.0))
+        return float(np.clip(key_factor * (0.30 + 0.50 * severity + 0.20 * confidence) * duration_factor, 0.15, 1.0))
+
+    @staticmethod
+    def _collect_protected_zones(kwargs: dict) -> list[tuple[float, float, float]]:
+        zones: list[tuple[float, float, float]] = []
+        for key, cap in (
+            ("vibrato_zones", 0.20),
+            ("frisson_zones", 0.30),
+            ("whisper_zones", 0.25),
+            ("passaggio_zones", 0.35),
+        ):
+            for zone in kwargs.get(key) or []:
+                try:
+                    start_s = float(getattr(zone, "start_s", None) or zone[0])
+                    end_s = float(getattr(zone, "end_s", None) or zone[1])
+                    if end_s > start_s:
+                        zones.append((start_s, end_s, cap))
+                except Exception:
+                    continue
+        return zones
+
+    @staticmethod
+    def _build_drift_locality_profile(
+        n_samples: int,
+        sample_rate: int,
+        defect_locations: dict[str, list[tuple[float, float]]] | None,
+        event_metadata: dict[str, dict] | None = None,
+        protected_zones: list[tuple[float, float, float]] | None = None,
+    ) -> tuple[np.ndarray, float]:
+        if n_samples <= 0:
+            return np.zeros(0, dtype=np.float32), 0.0
+        if not defect_locations:
+            return np.ones(n_samples, dtype=np.float32), 1.0
+
+        allowed = {"amplitude_drift", "level_drift", "gain_sag", "tape_level_drift"}
+        mask = np.zeros(n_samples, dtype=np.float32)
+        pad = int(0.75 * sample_rate)
+        for key, locations in defect_locations.items():
+            norm_key = str(key).strip().lower()
+            if norm_key not in allowed:
+                continue
+            for loc in locations or []:
+                try:
+                    start_s, end_s = float(loc[0]), float(loc[1])
+                except Exception:
+                    continue
+                s = int(max(0.0, start_s) * sample_rate)
+                e = int(max(0.0, end_s) * sample_rate)
+                s = max(0, s - pad)
+                e = min(n_samples, e + pad)
+                if e > s:
+                    strength = LoudnessNormalizationPhase._local_drift_event_strength(norm_key, loc, event_metadata)
+                    mask[s:e] = np.maximum(mask[s:e], strength)
+        if not np.any(mask):
+            return np.ones(n_samples, dtype=np.float32), 1.0
+
+        smooth = max(16, int(0.50 * sample_rate))
+        mask = np.convolve(mask, np.ones(smooth, dtype=np.float32) / float(smooth), mode="same")
+        mask = np.clip(mask, 0.0, 1.0).astype(np.float32)
+        if protected_zones:
+            for start_s, end_s, cap in protected_zones:
+                s = int(max(0.0, float(start_s)) * sample_rate)
+                e = int(max(0.0, float(end_s)) * sample_rate)
+                if e > s:
+                    mask[s : min(n_samples, e)] = np.minimum(mask[s : min(n_samples, e)], float(cap))
+        return mask, float(np.mean(mask))
 
     def __init__(self):
         super().__init__()
@@ -159,7 +249,7 @@ class LoudnessNormalizationPhase(PhaseInterface):
             peak_db = float(20.0 * np.log10(np.percentile(np.abs(audio), 99.9) + 1e-10))
             return PhaseResult(
                 success=True,
-                audio=audio.copy(),
+                audio=restore_layout(audio.copy(), _p40_transposed),
                 execution_time_seconds=time.time() - start_time,
                 metadata={
                     "algorithm": "skipped_zero_strength",
@@ -209,6 +299,7 @@ class LoudnessNormalizationPhase(PhaseInterface):
         # (only when DefectType.AMPLITUDE_DRIFT is detected AND not artistic).
         _drift_correction_applied = False
         _drift_gain_range_db = 0.0
+        _drift_locality_coverage = 0.0
         if kwargs.get("amplitude_drift_correction", False):
             try:
                 _drift_slope = float(kwargs.get("drift_slope_db_per_minute", 0.0))
@@ -220,7 +311,7 @@ class LoudnessNormalizationPhase(PhaseInterface):
                     _n = len(audio)
                     _mono_ref = audio[:, 0] if audio.ndim == 2 else audio
                     _gate_lin = 10 ** (-40.0 / 20.0)
-                    _n_windows = max(1, _n // _hop)
+                    _n_windows = max(2, int(np.ceil(_n / max(_hop, 1))))
                     # Build inverse trend: if slope > 0 (rising), apply attenuating gain
                     # Hard cap: max ±6 dB total correction over entire track
                     _total_correction_db = float(np.clip(-_drift_slope * (_n / sample_rate / 60.0), -6.0, 6.0))
@@ -235,7 +326,7 @@ class LoudnessNormalizationPhase(PhaseInterface):
                     # Upsample envelope to sample-level
                     _full_gain_db = np.interp(
                         np.arange(_n),
-                        np.arange(_n_windows) * _hop + _hop // 2,
+                        np.linspace(0, max(_n - 1, 1), _n_windows),
                         _gain_envelope_db,
                     ).astype(np.float32)
                     _full_gain_lin = np.float32(10.0) ** (_full_gain_db / np.float32(20.0))
@@ -248,9 +339,27 @@ class LoudnessNormalizationPhase(PhaseInterface):
                             _rms_g = float(np.sqrt(np.mean(_chunk**2)))
                             if _rms_g < _gate_lin:
                                 _gate_mask[_gi : _gi + _rms_frame] = 0.0
-                    _full_gain_lin = np.where(_gate_mask > 0.5, _full_gain_lin, np.float32(1.0))
+                    # Das Gate darf keine 100-ms-Stufen in die Lautstärkehüllkurve schreiben.
+                    # Smooth-Fade über ca. 1 s verhindert hörbares Pumpen/Springen an Musik/Stille-Grenzen.
+                    _kernel_len = min(max(3, int(sample_rate)), max(1, _n))
+                    if _kernel_len % 2 == 0:
+                        _kernel_len -= 1
+                    if _kernel_len >= 3:
+                        _gate_kernel = np.hanning(_kernel_len).astype(np.float32)
+                        _gate_kernel /= float(np.sum(_gate_kernel) + 1e-12)
+                        _gate_mask = np.convolve(_gate_mask, _gate_kernel, mode="same").astype(np.float32)
+                        _gate_mask = np.clip(_gate_mask[:_n], 0.0, 1.0)
+                    _drift_profile, _drift_locality_coverage = self._build_drift_locality_profile(
+                        n_samples=_n,
+                        sample_rate=sample_rate,
+                        defect_locations=kwargs.get("defect_locations"),
+                        event_metadata=kwargs.get("defect_event_metadata"),
+                        protected_zones=self._collect_protected_zones(kwargs),
+                    )
+                    _gate_mask = np.minimum(_gate_mask, _drift_profile)
+                    _full_gain_lin = 1.0 + _gate_mask * (_full_gain_lin - 1.0)
                     if audio.ndim == 2:
-                        audio = audio * _full_gain_lin[np.newaxis, :]
+                        audio = audio * _full_gain_lin[:, np.newaxis]
                     else:
                         audio = audio * _full_gain_lin
                     audio = np.clip(audio, -1.0, 1.0)
@@ -268,12 +377,36 @@ class LoudnessNormalizationPhase(PhaseInterface):
         integrated_lufs, lra, momentary_max, short_term_max = self._measure_loudness_full(audio, sample_rate)
 
         # Calculate gain adjustment
+        # §v9.20.3 Genre-adaptive LUFS: Schlager/Klassik brauchen unterschiedliche Targets
+        _genre_lufs = str(kwargs.get("genre_label", "")).strip().lower()
+        _genre_targets = {
+            "klassik": -23.0,
+            "oper": -23.0,  # EBU R128
+            "jazz": -18.0,  # Dynamisch
+            "schlager": -14.0,
+            "pop": -14.0,  # Streaming-Standard
+            "rock": -12.0,
+            "metal": -11.0,  # Lauter
+        }
+        _genre_target = _genre_targets.get(_genre_lufs)
+        if _genre_target is not None:
+            target_lufs = _genre_target
+            logger.debug("Phase 40: genre=%s → LUFS target=%.0f", _genre_lufs, target_lufs)
         gain_db = (target_lufs - integrated_lufs) * _effective_strength
 
         # §v9.10.113: §8.2 Restoration/balanced — LUFS-Δ ≤ 1 LU (archive material retains original loudness)
-        # QualityMode.QUALITY.value == "quality" is the Restoration mode in UV3 (§performance_guard.py)
+        # §FIX v9.20.3: Analoges Material + Vocals braucht mehr Gain-Headroom. Die Einschränkung
+        # auf ±1 dB führt zu -9 dBFS Peaks. Für analoges Vokalmaterial: ±8 dB erlauben,
+        # aber uniformen Gain ohne Gate-Envelope anwenden (verhindert Jump-Artefakte).
+        _is_analog_vocal = (
+            quality_mode in ("restoration", "balanced", "quality")
+            and str(kwargs.get("vocal_register", "")).strip() != ""
+        )
         if quality_mode in ("restoration", "balanced", "quality"):
-            gain_db = float(np.clip(gain_db, -1.0, 1.0))
+            if _is_analog_vocal:
+                gain_db = float(np.clip(gain_db, -8.0, 8.0))
+            else:
+                gain_db = float(np.clip(gain_db, -1.0, 1.0))
 
         # Dynamic Range Preservation: Limit gain to preserve DR
         if preserve_dynamics:
@@ -308,16 +441,24 @@ class LoudnessNormalizationPhase(PhaseInterface):
         # Uniform `audio * gain_linear` amplifies "silent" sections with vinyl/shellac
         # surface noise (at -35 to -45 dBFS) by the full target-LUFS correction (+16 to
         # +31 dB in Studio 2026 mode) → Pegelexplosion in fade-out / silence sections.
+        # §FIX v9.20.3: Für analoges Vokalmaterial uniformen Gain verwenden. Die Gate-
+        # Envelope erzeugt bei hohem Rauschflor (SNR < 20 dB) Sprünge an den
+        # Gate-Grenzen, weil Rausch-Passagen fälschlich als „Stille" erkannt werden.
         if gain_linear > 1.0005:
-            # §2.45a-II v9.12.2: reference_for_gate=audio → signal-relative gate (P15+9 dB)
-            normalized = apply_musical_gain_envelope(
-                audio,
-                gain_linear,
-                gate_dbfs=-36.0,
-                crossfade_ms=10.0,
-                sr=sample_rate,
-                reference_for_gate=audio,
-            )
+            if _is_analog_vocal:
+                # Uniformer Gain — keine Gate-Artefakte auf analogem Material
+                normalized = audio * gain_linear
+                logger.debug("Phase 40: uniform gain applied (analog+vocal, no gate envelope)")
+            else:
+                # §2.45a-II v9.12.2: reference_for_gate=audio → signal-relative gate (P15+9 dB)
+                normalized = apply_musical_gain_envelope(
+                    audio,
+                    gain_linear,
+                    gate_dbfs=-36.0,
+                    crossfade_ms=10.0,
+                    sr=sample_rate,
+                    reference_for_gate=audio,
+                )
             normalized = limit_quiet_edge_boost(audio, normalized, sr=sample_rate)
         else:
             normalized = audio * gain_linear
@@ -362,6 +503,7 @@ class LoudnessNormalizationPhase(PhaseInterface):
 
         normalized = np.nan_to_num(normalized, nan=0.0, posinf=0.0, neginf=0.0)
         normalized = np.clip(normalized, -1.0, 1.0)
+        normalized = restore_layout(normalized, _p40_transposed)
         return PhaseResult(
             success=True,
             audio=normalized,
@@ -382,6 +524,7 @@ class LoudnessNormalizationPhase(PhaseInterface):
                 "loudness_makeup_db": 0.0,
                 "amplitude_drift_correction_applied": _drift_correction_applied,
                 "amplitude_drift_gain_range_db": _drift_gain_range_db,
+                "amplitude_drift_locality_coverage": float(_drift_locality_coverage),
             },
             metrics={
                 "integrated_lufs_before": float(integrated_lufs),
@@ -572,7 +715,7 @@ class LoudnessNormalizationPhase(PhaseInterface):
         p10 = np.percentile(short_term_loudness, 10)
         lra = p95 - p10
 
-        return lra  # type: ignore[no-any-return]
+        return float(lra)
 
     def _measure_momentary_max(self, audio_weighted: np.ndarray, sample_rate: int) -> float:
         """Maximum Momentary Loudness (400ms window)."""

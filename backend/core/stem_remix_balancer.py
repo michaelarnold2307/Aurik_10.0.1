@@ -128,7 +128,7 @@ class StemRemixBalancer:
 
         n = min(v.shape[-1], i.shape[-1], o.shape[-1])
         if n <= 0:
-            return np.zeros(1, dtype=np.float32)
+            return np.zeros(1, dtype=np.float32)  # type: ignore[no-any-return]
         v = v[..., :n]
         i = i[..., :n]
         o = o[..., :n]
@@ -162,7 +162,7 @@ class StemRemixBalancer:
         L_mix = _k_weighted_lufs(_mono_mix, sr)
         g_final = float(10.0 ** ((L_orig - L_mix) / 20.0))
         out = np.clip(mix * g_final, -1.0, 1.0).astype(np.float32)
-        return out
+        return out  # type: ignore[no-any-return]
 
 
 _instance: StemRemixBalancer | None = None

@@ -87,7 +87,7 @@ def _try_get_apollo_instance() -> Any | None:
     ohnehin nicht nutzen.
     """
     try:
-        from plugins.apollo_plugin import get_apollo  # pylint: disable=import-outside-toplevel
+        from plugins.apollo_plugin import get_apollo
 
         return get_apollo()
     except Exception as _apollo_import_exc:  # pragma: no cover - environment/ABI dependent
@@ -218,6 +218,92 @@ class SpectralRepair(PhaseInterface):
             "clip_floor": clip_floor,
             "side_clip_multiplier": side_clip_multiplier,
         }
+
+    @staticmethod
+    def _build_defect_locality_profile(
+        n_samples: int,
+        sample_rate: int,
+        defect_locations: dict[str, list[tuple[float, float]]] | None,
+        defect_event_metadata: dict[str, Any] | None = None,
+    ) -> tuple[np.ndarray, float]:
+        """Zeitlokale Blendmaske fuer Pre-Echo/Aliasing/Codec-Spektralreparaturen."""
+        if n_samples <= 0 or sample_rate <= 0:
+            return np.zeros(0, dtype=np.float32), 0.0
+        if not isinstance(defect_locations, dict) or not defect_locations:
+            return np.ones(n_samples, dtype=np.float32), 0.0
+
+        keys = (
+            "pre_echo",
+            "aliasing",
+            "codec_artifact",
+            "mp3_artifact",
+            "spectral_gap",
+            "spectral_hole",
+            "dropout",
+            "digital_glitch",
+            "jitter_artifacts",
+        )
+        key_factor = {
+            "pre_echo": 0.95,
+            "aliasing": 0.88,
+            "codec_artifact": 0.78,
+            "mp3_artifact": 0.78,
+            "spectral_gap": 0.86,
+            "spectral_hole": 0.86,
+            "dropout": 0.82,
+            "digital_glitch": 0.90,
+            "jitter_artifacts": 0.74,
+        }
+        pad_by_key = {
+            "pre_echo": 0.020,
+            "aliasing": 0.030,
+            "codec_artifact": 0.045,
+            "mp3_artifact": 0.045,
+            "spectral_gap": 0.060,
+            "spectral_hole": 0.060,
+            "dropout": 0.040,
+            "digital_glitch": 0.025,
+            "jitter_artifacts": 0.035,
+        }
+        mask = np.zeros(n_samples, dtype=np.float32)
+        for key in keys:
+            for loc in defect_locations.get(key) or []:
+                if not isinstance(loc, tuple) or len(loc) != 2:
+                    continue
+                try:
+                    start_s = max(0.0, float(loc[0]))
+                    end_s = max(start_s, float(loc[1]))
+                except Exception:
+                    logger.debug("_build_defect_locality_profile: silent except suppressed", exc_info=True)
+                    continue
+                if end_s <= start_s:
+                    continue
+                severity = 0.5
+                confidence = 0.8
+                meta_obj = (defect_event_metadata or {}).get(key)
+                if isinstance(meta_obj, dict):
+                    severity = float(np.clip(float(meta_obj.get("severity", severity)), 0.0, 1.0))
+                    confidence = float(np.clip(float(meta_obj.get("confidence", confidence)), 0.0, 1.0))
+                duration_factor = float(np.clip((end_s - start_s) / 0.20, 0.35, 1.0))
+                event_strength = float(
+                    np.clip(
+                        key_factor.get(key, 0.75) * (0.40 + 0.40 * severity + 0.20 * confidence) * duration_factor,
+                        0.16,
+                        1.0,
+                    )
+                )
+                pad = float(pad_by_key.get(key, 0.04))
+                s = int(max(0.0, start_s - pad) * sample_rate)
+                e = int(min(float(n_samples) / float(sample_rate), end_s + pad) * sample_rate)
+                if e > s:
+                    mask[s:e] = np.maximum(mask[s:e], event_strength)
+
+        if float(np.mean(mask)) <= 1e-6:
+            return np.ones(n_samples, dtype=np.float32), 0.0
+        smooth = max(16, int(0.008 * sample_rate))
+        mask = np.convolve(mask, np.ones(smooth, dtype=np.float32) / float(smooth), mode="same")
+        mask = np.clip(mask, 0.0, 1.0).astype(np.float32)
+        return mask, float(np.mean(mask))
 
     # STFT Parameters (material-adaptive)
     STFT_CONFIG = {
@@ -516,7 +602,7 @@ class SpectralRepair(PhaseInterface):
         """Lädt beim ersten Zugriff: AudioSR plugin for ML-based repair."""
         if self._audiosr_plugin is None:
             try:
-                from plugins.audiosr_plugin import AudioSRPlugin  # pylint: disable=import-outside-toplevel
+                from plugins.audiosr_plugin import AudioSRPlugin
 
                 self._audiosr_plugin = AudioSRPlugin()
                 logger.info("AudioSR plugin loaded successfully")
@@ -553,6 +639,17 @@ class SpectralRepair(PhaseInterface):
             PhaseResult with repaired audio
         """
         material = kwargs.pop("material", material_type)
+        # ── §v10 PIM: Per-Band-Intensität kalibrieren ──
+        try:
+            from backend.core.pim_phase_hook import apply_pim_intensity
+            _pim = apply_pim_intensity(kwargs, "spectral_repair",
+                default_nr=0.45, default_de_ess=0.25, default_comp=1.0)
+            for _key in ("noise_reduction_strength", "nr_strength", "strength", "wet"):
+                if _key in kwargs:
+                    kwargs[_key] = _pim["nr_strength"]
+        except Exception:
+            logger.debug("process: silent except suppressed", exc_info=True)
+            pass
         sample_rate = kwargs.get("sample_rate", 48000)
         assert sample_rate == 48000, f"SR muss 48000 Hz sein, erhalten: {sample_rate}"
 
@@ -560,6 +657,7 @@ class SpectralRepair(PhaseInterface):
         try:
             get_plugin_lifecycle_manager().evict_for_phase("phase_23_spectral_repair")
         except Exception:
+            logger.debug("process: silent except suppressed", exc_info=True)
             pass
 
         start_time = time.time()
@@ -570,12 +668,13 @@ class SpectralRepair(PhaseInterface):
                 try:
                     _progress_cb(float(np.clip(pct, 0.0, 100.0)), label, time.time() - start_time)
                 except Exception:
+                    logger.debug("_report_progress: silent except suppressed", exc_info=True)
                     pass
 
         _report_progress(2.0, "Spektralreparatur: Vorbereitung")
         self._ml_guard_events = []
         # Store material as lowercase string value for guard comparison (handles both str and MaterialType enum)
-        self._current_material = str(getattr(material, "value", material)).lower()
+        self._current_material = str(getattr(material, "value", material)).lower()  # type: ignore[assignment]
         self.validate_input(audio)
         _audio_for_tilt_p23 = audio.copy()  # §2.46b: tilt reference before any processing (incl. Apollo)
 
@@ -609,6 +708,34 @@ class SpectralRepair(PhaseInterface):
         _pmgg_strength = float(kwargs.get("strength", 1.0))
         _effective_strength = float(np.clip(_pmgg_strength * phase_locality_factor, 0.0, 1.0))
         repair_strength = float(np.clip(repair_strength * _effective_strength, 0.0, 1.0))
+
+        # §V41 ForwardMaskingGuard: Additive/Inpainting-Phase → Stärke in post-transienten
+        # Masking-Fenstern erhöhen (psychoakustische Maskierung schützt vor hörbaren Artefakten).
+        # Nur bei panns_singing ≥ 0.25 und tatsächlich aktivem Repair.
+        _panns_s_23 = float(kwargs.get("panns_singing", 0.0))
+        if _panns_s_23 >= 0.25 and repair_strength > 0.0:
+            try:
+                from backend.core.dsp.temporal_masking import (
+                    get_forward_masking_guard as _fmg_fn_23,
+                )
+
+                _fmg_23 = _fmg_fn_23()
+                _fmz_23 = _fmg_23.compute_zones(audio, sample_rate)
+                if _fmz_23:
+                    _n_s_23 = audio.shape[-1] if audio.ndim > 1 else len(audio)
+                    _zone_samples_23 = sum(z.end_sample - z.start_sample for z in _fmz_23)
+                    _zone_frac_23 = float(np.clip(_zone_samples_23 / max(1, _n_s_23), 0.0, 1.0))
+                    # Inpainting: konservativer Boost als BW-Erweiterungs-Phasen (max +0.10)
+                    _boost_23 = _zone_frac_23 * 0.10
+                    repair_strength = float(np.clip(repair_strength + _boost_23, 0.0, 1.0))
+                    logger.debug(
+                        "Phase23 §V41 ForwardMasking: zone_frac=%.2f boost=%.3f → repair_str=%.3f",
+                        _zone_frac_23,
+                        _boost_23,
+                        repair_strength,
+                    )
+            except Exception as _fmg_exc_23:
+                logger.debug("Phase23 §V41 ForwardMaskingGuard non-blocking: %s", _fmg_exc_23)
 
         if _effective_strength <= 0.0:
             passthrough = np.nan_to_num(audio.copy(), nan=0.0, posinf=0.0, neginf=0.0)
@@ -663,7 +790,7 @@ class SpectralRepair(PhaseInterface):
         _ssip_zones_p23: list[tuple[int, int]] = []
         _mat23_ssip_key = str(getattr(material, "value", str(material_type) or "unknown") or "unknown").lower()
         try:
-            from backend.core.dsp.structural_silence_isolation import (  # pylint: disable=import-outside-toplevel
+            from backend.core.dsp.structural_silence_isolation import (
                 _get_structural_silence_zones as _ssip_get_zones_p23,
             )
 
@@ -736,8 +863,9 @@ class SpectralRepair(PhaseInterface):
                             # Audio is normalized to (N, 2) at method start — safe to use [:, 0]
                             if _plm23 is not None:
                                 try:
-                                    _plm23.touch_plugin("Apollo")
+                                    _plm23.touch_plugin("Apollo")  # type: ignore[attr-defined]
                                 except Exception:
+                                    logger.debug("_report_progress: silent except suppressed", exc_info=True)
                                     pass
                             _ap_l = _apollo_inst.repair(audio[:, 0], sample_rate, material=self._current_material)
                             _ap_l_audio = _ap_l.audio
@@ -747,8 +875,9 @@ class SpectralRepair(PhaseInterface):
                             gc.collect(0)
                             if _plm23 is not None:
                                 try:
-                                    _plm23.touch_plugin("Apollo")
+                                    _plm23.touch_plugin("Apollo")  # type: ignore[attr-defined]
                                 except Exception:
+                                    logger.debug("_report_progress: silent except suppressed", exc_info=True)
                                     pass
                             _ap_r = _apollo_inst.repair(audio[:, 1], sample_rate, material=self._current_material)
                             # §2.51 L/R-Zeitversatz-Guard: Apollo kann je Kanal minimal
@@ -779,6 +908,7 @@ class SpectralRepair(PhaseInterface):
                         try:
                             _plm23.set_active("Apollo", False)
                         except Exception:
+                            logger.debug("_report_progress: silent except suppressed", exc_info=True)
                             pass
 
         # --- ADMM Declipping path (spec §4.5a) ---
@@ -1064,6 +1194,85 @@ class SpectralRepair(PhaseInterface):
         except Exception as _npa23_exc:
             logger.debug("§2.46f Phase23 NPA-Guard (non-blocking): %s", _npa23_exc)
 
+        _defect_locality_coverage23 = 0.0
+        try:
+            _locality_profile23, _defect_locality_coverage23 = self._build_defect_locality_profile(
+                int(repaired_audio.shape[0]),
+                int(sample_rate),
+                kwargs.get("defect_locations"),
+                kwargs.get("defect_event_metadata"),
+            )
+            if _locality_profile23.size > 0 and _defect_locality_coverage23 > 0.0:
+                if repaired_audio.ndim == 2:
+                    _profile23 = _locality_profile23[:, np.newaxis]
+                    repaired_audio = np.clip(audio + _profile23 * (repaired_audio - audio), -1.0, 1.0).astype(
+                        np.float32
+                    )
+                else:
+                    repaired_audio = np.clip(audio + _locality_profile23 * (repaired_audio - audio), -1.0, 1.0).astype(
+                        np.float32
+                    )
+        except Exception as _locality23_exc:
+            logger.debug("phase_23 defect-locality blend (non-blocking): %s", _locality23_exc)
+
+        # §V38/§0p VFA-Zonen-Blend-Back — VocalFocusAnalyzer-Zonen aus kwargs:
+        # Vibrato (cap 0.20), Frisson (cap 0.30), Flüster (cap 0.25), Passaggio (cap 0.35).
+        # repair_strength wird in geschützten Zonen effektiv gedeckelt — schützt vor
+        # unbeabsichtigter Veränderung vokal-kritischer Bereiche durch Spektralinpainting.
+        try:
+            _vfa_zones_p23: list[tuple[float, float, float]] = []
+            for _vz in kwargs.get("vibrato_zones") or []:
+                try:
+                    _vfa_zones_p23.append((float(_vz[0]), float(_vz[1]), 0.20))
+                except Exception:
+                    logger.debug("_waerme_proxy_p23: silent except suppressed", exc_info=True)
+                    pass
+            for _fz in kwargs.get("frisson_zones") or []:
+                try:
+                    _vfa_zones_p23.append((float(_fz[0]), float(_fz[1]), 0.30))
+                except Exception:
+                    logger.debug("_waerme_proxy_p23: silent except suppressed", exc_info=True)
+                    pass
+            for _wz in kwargs.get("whisper_zones") or []:
+                try:
+                    _vfa_zones_p23.append((float(_wz[0]), float(_wz[1]), 0.25))
+                except Exception:
+                    logger.debug("_waerme_proxy_p23: silent except suppressed", exc_info=True)
+                    pass
+            for _pz in kwargs.get("passaggio_zones") or []:
+                try:
+                    _vfa_zones_p23.append((float(_pz[0]), float(_pz[1]), 0.35))
+                except Exception:
+                    logger.debug("_waerme_proxy_p23: silent except suppressed", exc_info=True)
+                    pass
+            if _vfa_zones_p23:
+                _n_p23 = repaired_audio.shape[0] if repaired_audio.ndim == 1 else repaired_audio.shape[-1]
+                _blend_p23 = np.ones(_n_p23, dtype=np.float32) * float(repair_strength)
+                for _zs, _ze, _cap in _vfa_zones_p23:
+                    _ss_p23 = int(np.clip(round(_zs * sample_rate), 0, _n_p23))
+                    _se_p23 = int(np.clip(round(_ze * sample_rate), 0, _n_p23))
+                    if _se_p23 > _ss_p23:
+                        _blend_p23[_ss_p23:_se_p23] = np.minimum(_blend_p23[_ss_p23:_se_p23], float(_cap))
+                # Nur Zonen mit tatsächlich niedrigerem Cap als repair_strength korrigieren
+                if np.any(_blend_p23 < repair_strength - 1e-4):
+                    _audio_ref_p23 = audio  # Pre-Phase-Input
+                    if repaired_audio.ndim == 2:
+                        _b = _blend_p23[np.newaxis, :] if audio.shape[0] <= 2 else _blend_p23[:, np.newaxis]
+                        repaired_audio = np.clip(_b * repaired_audio + (1.0 - _b) * _audio_ref_p23, -1.0, 1.0).astype(
+                            np.float32
+                        )
+                    else:
+                        repaired_audio = np.clip(
+                            _blend_p23 * repaired_audio + (1.0 - _blend_p23) * _audio_ref_p23, -1.0, 1.0
+                        ).astype(np.float32)
+                    logger.debug(
+                        "phase_23 VFA-Blend-Back: %d Schutzzonen, repair_strength=%.2f",
+                        len(_vfa_zones_p23),
+                        repair_strength,
+                    )
+        except Exception as _vfa23_exc:
+            logger.debug("phase_23 VFA-Blend-Back (non-blocking): %s", _vfa23_exc)
+
         _mode23 = str(kwargs.get("mode", "restoration")).lower()
         _bw_ceiling_applied23 = False
         _bw_ceiling_hz23: float | None = None
@@ -1092,12 +1301,20 @@ class SpectralRepair(PhaseInterface):
                 _mono_rep23 = repaired_audio.mean(axis=-1) if repaired_audio.ndim == 2 else repaired_audio
                 _mono_orig23 = _mono_orig23 if _mono_orig23.ndim == 1 else _mono_orig23.ravel()
                 _mono_rep23 = _mono_rep23 if _mono_rep23.ndim == 1 else _mono_rep23.ravel()
+                # §6.2c BW-Ceiling-Guard-Interaktion: Wenn _apply_material_bw_ceiling bereits
+                # angewendet wurde, ist eine erneute harmonic_ceiling_violation-Prüfung ein
+                # False-Positive. Der 6th-Order-Butterworth liefert kein Brick-Wall-Rolloff
+                # (−36 dB an Nyquist); AudioSR erzeugt vor dem Ceiling deutlich mehr Energie
+                # über dem Ceiling, sodass Restenergie nach Filterung dennoch ceiling_band_ratio
+                # > 8× ergibt → vollständiger Rollback obwohl das Signal korrekt gedeckelt ist.
+                # Lösung: material_bw_ceiling_hz nur übergeben wenn Ceiling noch NICHT aktiv war.
+                _hg_ceiling_hz23 = None if _bw_ceiling_applied23 else _bw23
                 _hg_result23 = check_hallucination(
                     _mono_orig23,
                     _mono_rep23,
                     sr=sample_rate,
                     mode=_mode23,
-                    material_bw_ceiling_hz=_bw23,
+                    material_bw_ceiling_hz=_hg_ceiling_hz23,
                 )
                 if _hg_result23.requires_rollback:
                     _salvaged23 = False
@@ -1114,8 +1331,9 @@ class SpectralRepair(PhaseInterface):
                         _candidate23 = np.nan_to_num(_candidate23, nan=0.0, posinf=0.0, neginf=0.0)
                         _candidate23 = np.clip(_candidate23, -1.0, 1.0)
 
+                        _blend_ceiling_applied23 = False
                         try:
-                            _candidate23, _, _ = self._apply_material_bw_ceiling(
+                            _candidate23, _blend_ceiling_applied23, _ = self._apply_material_bw_ceiling(
                                 _candidate23,
                                 sample_rate,
                                 material,
@@ -1127,12 +1345,13 @@ class SpectralRepair(PhaseInterface):
 
                         _cand_mono23 = _candidate23.mean(axis=-1) if _candidate23.ndim == 2 else _candidate23
                         _cand_mono23 = _cand_mono23 if _cand_mono23.ndim == 1 else _cand_mono23.ravel()
+                        _cand_hg_ceiling_hz23 = None if _blend_ceiling_applied23 else _bw23
                         _cand_hg23 = check_hallucination(
                             _mono_orig23,
                             _cand_mono23,
                             sr=sample_rate,
                             mode=_mode23,
-                            material_bw_ceiling_hz=_bw23,
+                            material_bw_ceiling_hz=_cand_hg_ceiling_hz23,
                         )
                         if not _cand_hg23.requires_rollback:
                             repaired_audio = _candidate23
@@ -1205,7 +1424,7 @@ class SpectralRepair(PhaseInterface):
         # Muss nach channels-first-Restore laufen damit Layout-Format korrekt ist.
         if _ssip_zones_p23:
             try:
-                from backend.core.dsp.structural_silence_isolation import (  # pylint: disable=import-outside-toplevel
+                from backend.core.dsp.structural_silence_isolation import (
                     get_structural_silence_isolator as _get_ssip_audit23,
                 )
 
@@ -1225,7 +1444,7 @@ class SpectralRepair(PhaseInterface):
         # §V22 Pre-Echo-Prevention — Generative Spektralreparatur auf Transient-Shifts prüfen (§2.73, non-blocking)
         try:
             from backend.core.dsp.transient_guard import (
-                detect_transient_shifts as _dts_23,  # pylint: disable=import-outside-toplevel
+                detect_transient_shifts as _dts_23,
             )
 
             _pre_v22_23 = (
@@ -1251,6 +1470,22 @@ class SpectralRepair(PhaseInterface):
         except Exception as _v22_23_exc:
             logger.debug("§V22 phase_23 transient_guard non-blocking: %s", _v22_23_exc)
 
+        # §V24 Spektralfarbe-Prüfung (§2.74, non-blocking): Reparatur darf Spektralfarbe nicht verändern
+        try:
+            from backend.core.dsp.spectral_color_guard import (  # pylint: disable=import-outside-toplevel
+                check_spectral_color_preservation as _scg23,
+            )
+
+            _orig23_v24 = audio.T if (_was_channels_first and audio.ndim == 2) else audio
+            _rep23_v24 = repaired_audio
+            _sc23 = _scg23(_orig23_v24, _rep23_v24, sample_rate)
+            if not _sc23.ok:
+                _sc23_wet = 0.70
+                repaired_audio = (_sc23_wet * repaired_audio + (1.0 - _sc23_wet) * _orig23_v24).astype(np.float32)
+                logger.warning("§V24 phase_23 spectral_color non-ok → strength −30%%")
+        except Exception as _sc23_exc:
+            logger.debug("§V24 phase_23 spectral_color (non-blocking): %s", _sc23_exc)
+
         _result = PhaseResult(
             success=True,
             audio=repaired_audio,
@@ -1262,6 +1497,7 @@ class SpectralRepair(PhaseInterface):
                 "repair_strength": float(repair_strength),
                 "phase_locality_factor": phase_locality_factor,
                 "effective_strength": _effective_strength,
+                "defect_locality_coverage": float(_defect_locality_coverage23),
                 "rt_factor": float(rt_factor),
                 "nperseg": stft_cfg["nperseg"],
                 "apollo_preproc_applied": _apollo_preproc_applied,
@@ -1335,7 +1571,7 @@ class SpectralRepair(PhaseInterface):
             pywt = importlib.import_module("pywt")
         except ModuleNotFoundError:
             logger.warning("pywt not available — ADMM declipping skipped, returning original")
-            return np.asarray(audio, dtype=np.float32)
+            return np.asarray(audio, dtype=np.float32)  # type: ignore[no-any-return]
 
         # float32 throughout: 2× faster wavelet ops, 2× less RAM vs float64;
         # precision is > 140 dB below the noise floor even for 24-bit audio.
@@ -1389,13 +1625,13 @@ class SpectralRepair(PhaseInterface):
                 chunk_idx,
                 self._ADMM_CHUNK_S,
             )
-            return result
+            return result  # type: ignore[no-any-return]
 
         # --- Reliable vs clipped mask ---
         reliable_mask = np.abs(y) < clip_level * 0.99
         clipped_mask = ~reliable_mask
         if not np.any(clipped_mask):
-            return y.astype(np.float32)
+            return y.astype(np.float32)  # type: ignore[no-any-return]
 
         # --- Onset detection for TransientGuard (§4.5a) ---
         onset_win = max(1, int(sr * 0.005))  # ±5 ms
@@ -1494,7 +1730,7 @@ class SpectralRepair(PhaseInterface):
 
         # Hard-clamp residual excursions > clip_level as safety net
         x = np.clip(x, -1.0, 1.0)
-        return x.astype(np.float32)
+        return x.astype(np.float32)  # type: ignore[no-any-return]
 
     def _repair_channel(
         self,
@@ -1513,6 +1749,7 @@ class SpectralRepair(PhaseInterface):
                 try:
                     progress_cb(float(np.clip(pct, 0.0, 100.0)), label)
                 except Exception:
+                    logger.debug("_report: silent except suppressed", exc_info=True)
                     pass
 
         _report(8.0, "STFT")
@@ -1773,7 +2010,7 @@ class SpectralRepair(PhaseInterface):
             audio_repaired = audio.astype(np.float64)  # passthrough
         _report(98.0, "Rekonstruktion")
 
-        return audio_repaired[: len(audio)]
+        return audio_repaired[: len(audio)]  # type: ignore[no-any-return]
 
     def _repair_channel_mrsa(
         self,
@@ -1820,11 +2057,34 @@ class SpectralRepair(PhaseInterface):
         _mrsa_t0 = time.monotonic()
         _mrsa_budget_exceeded = False
 
+        # §Spec04b Intra-Zone-Budget-Guard — außerhalb der Schleife definiert (B023-sicher).
+        # Wird VOR jeder teuren Intra-Zone-Operation aufgerufen um sicherzustellen,
+        # dass ein hängender Einzelschritt nie unbemerkt das Gesamtbudget reißt.
+        def _intra_zone_budget_exceeded(zone_name: str, op_label: str) -> bool:
+            """True wenn MRSA-Gesamtbudget überschritten — setzt _mrsa_budget_exceeded."""
+            nonlocal _mrsa_budget_exceeded
+            if _mrsa_budget_exceeded:
+                return True
+            _elapsed = time.monotonic() - _mrsa_t0
+            if _elapsed > _mrsa_wall_budget_s:
+                _mrsa_budget_exceeded = True
+                logger.warning(
+                    "phase_23 MRSA: intra-zone budget %.0fs überschritten vor '%s'"
+                    " in Zone '%s' (elapsed=%.1fs) — Zone als Passthrough",
+                    _mrsa_wall_budget_s,
+                    op_label,
+                    zone_name,
+                    _elapsed,
+                )
+                return True
+            return False
+
         for _zi, name in enumerate(ZONE_ORDER):
             if callable(progress_cb):
                 try:
                     progress_cb(5.0 + 90.0 * (_zi / _n_zones), f"Zone {name}")
                 except Exception:
+                    logger.debug("_intra_zone_budget_exceeded: silent except suppressed", exc_info=True)
                     pass
             logger.info(
                 "phase_23 MRSA: zone %d/%d '%s' elapsed=%.1fs budget=%.0fs",
@@ -1886,12 +2146,21 @@ class SpectralRepair(PhaseInterface):
             # §OOM-Guard: compute ONLY this zone's STFT (lazy — not all 5 at once).
             # Peak RAM per zone = ~172 MB (STFT) + ~4× (processing intermediaries) ≈ 850 MB max.
             # vs. old approach: all 5 STFTs in memory simultaneously ≈ 863 MB + processing.
+            if _intra_zone_budget_exceeded(name, "analyze_zones"):
+                zone_audios[name] = audio_f32
+                continue
             _single = analyze_zones(audio_f32, sample_rate, zones={name: _z_cfg})
             zone = _single[name]
             del _single  # release dict wrapper immediately
 
             magnitude = np.abs(zone.stft)
             phase_arr = np.angle(zone.stft)
+
+            if _intra_zone_budget_exceeded(name, "_detect_defects"):
+                zone_audios[name] = synthesize_zone(zone, zone.stft, len(audio_f32))
+                del zone, magnitude, phase_arr
+                gc.collect(0)
+                continue
             defect_mask = self._detect_defects(magnitude, phase_arr, thresholds)
 
             if np.sum(defect_mask) == 0:
@@ -1901,6 +2170,11 @@ class SpectralRepair(PhaseInterface):
                 gc.collect(0)
                 continue
 
+            if _intra_zone_budget_exceeded(name, "_inpaint_magnitude"):
+                zone_audios[name] = synthesize_zone(zone, zone.stft, len(audio_f32))
+                del zone, magnitude, phase_arr, defect_mask
+                gc.collect(0)
+                continue
             repaired_mag = self._inpaint_magnitude(magnitude, defect_mask)
             Zxx_repaired = repaired_mag * np.exp(1j * phase_arr)
             blend_mask = defect_mask * repair_strength
@@ -1915,6 +2189,7 @@ class SpectralRepair(PhaseInterface):
             try:
                 progress_cb(100.0, "Zonen-Merge")
             except Exception:
+                logger.debug("_intra_zone_budget_exceeded: silent except suppressed", exc_info=True)
                 pass
         result = merge_zones(zone_audios, zone_meta, sample_rate, len(audio_f32))
         # §0h Music-Death-Shield: MRSA output must not exceed +3 dB of input RMS.
@@ -1931,7 +2206,7 @@ class SpectralRepair(PhaseInterface):
                 _mrsa_gain_db,
                 _mrsa_gain_db - 3.0,
             )
-        return result
+        return result  # type: ignore[no-any-return]
 
     def _repair_with_audiosr(
         self,
@@ -1969,6 +2244,7 @@ class SpectralRepair(PhaseInterface):
             _plm23_asr = get_plugin_lifecycle_manager()
             _plm23_asr.set_active("AudioSR", True)
         except Exception:
+            logger.debug("_repair_with_audiosr: silent except suppressed", exc_info=True)
             pass
         try:
             if not self._has_sufficient_ml_headroom(audio, sample_rate):
@@ -2034,7 +2310,7 @@ class SpectralRepair(PhaseInterface):
                     channel_audio * (1 - repair_strength)
                     + repaired_channel.astype(channel_audio.dtype) * repair_strength
                 )
-                return audio_final[: len(channel_audio)]
+                return audio_final[: len(channel_audio)]  # type: ignore[no-any-return]
 
             audio_arr = np.asarray(audio)
             if audio_arr.ndim == 1:
@@ -2050,7 +2326,7 @@ class SpectralRepair(PhaseInterface):
                     mid_repaired = _repair_single_channel(mid)
                     l_out = np.clip(mid_repaired + side, -1.0, 1.0)
                     r_out = np.clip(mid_repaired - side, -1.0, 1.0)
-                    return np.stack([l_out, r_out], axis=0)
+                    return np.stack([l_out, r_out], axis=0)  # type: ignore[no-any-return]
 
                 # UV3 uses channels-first stereo (2, N). Preserve incoming orientation.
                 if audio_arr.shape[0] == 2 and audio_arr.shape[1] > 2:
@@ -2120,6 +2396,7 @@ class SpectralRepair(PhaseInterface):
                 try:
                     _plm23_asr.set_active("AudioSR", False)
                 except Exception:
+                    logger.debug("_repair_stereo_ms_channels_first: silent except suppressed", exc_info=True)
                     pass
 
     def _estimate_noise_floor_imcra(self, magnitude: np.ndarray) -> np.ndarray:
@@ -2158,7 +2435,7 @@ class SpectralRepair(PhaseInterface):
         b_min = 1.66
         noise_floor = np.sqrt(np.maximum(b_min * min_smoothed, 1e-20))
         noise_floor = np.nan_to_num(noise_floor, nan=1e-10, posinf=1.0, neginf=1e-10)
-        return noise_floor
+        return np.asarray(noise_floor, dtype=np.float32)  # type: ignore[no-any-return]
 
     # §2.57 BW-Ceiling pro analogem Material (Hz): restaurierte HF über diesem
     # Schwellwert darf nicht als Codec-Spike erkannt werden (Phase_06-Restaurierung schützen).
@@ -2239,7 +2516,7 @@ class SpectralRepair(PhaseInterface):
         defect_mask = ndimage.binary_opening(defect_mask, structure=np.ones((3, 3)))
         defect_mask = ndimage.binary_closing(defect_mask, structure=np.ones((5, 3)))
 
-        return defect_mask
+        return np.asarray(defect_mask)  # type: ignore[no-any-return]
 
     def _inpaint_magnitude(self, magnitude: np.ndarray, defect_mask: np.ndarray) -> np.ndarray:
         """Vektorisiertes Spectral Inpainting — O(F+T) statt O(F×T).
@@ -2302,7 +2579,7 @@ class SpectralRepair(PhaseInterface):
         blended = 0.6 * mag_h + 0.4 * mag_v
         repaired[defect_mask] = blended[defect_mask]
 
-        return np.maximum(repaired, 0.0)
+        return np.maximum(repaired, 0.0)  # type: ignore[no-any-return]
 
     def _inpaint_phase(self, phase: np.ndarray, defect_mask: np.ndarray) -> np.ndarray:
         """Phase-Inpainting via Phasen-Geschwindigkeits-Fortsetzung.
@@ -2345,7 +2622,7 @@ class SpectralRepair(PhaseInterface):
 
         reduction = max(0, min(1, (noise_orig - noise_rep) / noise_orig)) if noise_orig > 1e-10 else 0.0
 
-        return reduction
+        return reduction  # type: ignore[return-value]
 
     def _calculate_spectral_coherence(self, audio: np.ndarray, sample_rate: int) -> float:
         """Calculate spectral coherence (smoothness) score."""

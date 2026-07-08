@@ -34,7 +34,7 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-_instance: PhaseConductor | None = None
+_INSTANCE_HOLDER: list[PhaseConductor | None] = [None]
 _lock = threading.Lock()
 
 
@@ -51,7 +51,7 @@ class PhaseState:
 
     def as_vec(self) -> np.ndarray:
         """4D-Merkmals-Vektor für Nearest-Neighbor-Lookup."""
-        return np.array(
+        return np.array(  # type: ignore[no-any-return]
             [
                 float(np.clip((self.noise_floor_db + 80.0) / 80.0, 0.0, 1.0)),  # 0=sauber, 1=laut
                 float(np.clip(self.hf_energy_ratio, 0.0, 1.0)),
@@ -210,6 +210,8 @@ class PhaseConductor:
         goal_weights: dict[str, float] | None = None,
         song_goal_targets: dict[str, float] | None = None,
         current_goal_scores: dict[str, float] | None = None,
+        current_phase_id: str | None = None,
+        active_phase_coalitions: dict[str, tuple[str, ...]] | None = None,
     ) -> ConductorRecommendation:
         """Empfehle Stärke / Skip-Entscheidung für die nächste Phase.
 
@@ -231,6 +233,11 @@ class PhaseConductor:
             Stopp-Signal: wenn aktuelle Scores ≥ Targets − 0.03 → Strength 0.0.
         current_goal_scores : dict[str, float] | None
             Aktuelle Musical-Goal-Scores (nach letzter Phase).
+        current_phase_id : str | None
+            Zuletzt abgeschlossene Phase; ermöglicht Koalitions-Kontinuität.
+        active_phase_coalitions : dict[str, tuple[str, ...]] | None
+            Aktive Phase-Koalitionen aus dem Restorer; verhindert vorzeitige
+            Skip- oder Dämpfungs-Empfehlungen innerhalb zusammengehöriger Gruppen.
 
         Returns
         -------
@@ -246,6 +253,10 @@ class PhaseConductor:
                 confidence=1.0,
                 state_snapshot=current_state,
             )
+
+        current_coalition = _coalition_name_for_phase(current_phase_id, active_phase_coalitions)
+        next_coalition = _coalition_name_for_phase(next_phase_id, active_phase_coalitions)
+        coalition_continuation = bool(current_coalition and current_coalition == next_coalition)
 
         grid_key = _canonical_material(material_type)
         grid = _REFERENCE_GRID.get(grid_key, _REFERENCE_GRID["unknown"])
@@ -335,6 +346,13 @@ class PhaseConductor:
             except Exception:
                 pass  # Non-blocking — Stopp-Signal-Fehler nie pipeline-blockierend
 
+        if coalition_continuation:
+            # Koalitions-Mitglieder dürfen nicht von einem einzelnen State-Snapshot
+            # auf Skip oder zu starke Dämpfung gedrückt werden; Gruppe wird erst
+            # nach Abschluss der Koalition beurteilt.
+            recommended_strength = float(np.clip(max(recommended_strength, 0.55), 0.0, 1.0))
+            confidence = float(np.clip(max(confidence, 0.75), 0.0, 1.0))
+
         # Mindest-Stärke aus Invariante
         min_str = _MIN_STRENGTH.get(next_phase_id, _DEFAULT_MIN_STRENGTH)
         recommended_strength = max(recommended_strength, min_str)
@@ -347,6 +365,7 @@ class PhaseConductor:
             and current_state.hf_energy_ratio > 0.55
             and current_state.harmonic_coherence > 0.88
             and recommended_strength < 0.12
+            and not coalition_continuation
         ):
             # Signal bereits sehr sauber — Phase bringt kaum Gewinn
             skip = True
@@ -359,7 +378,7 @@ class PhaseConductor:
         return ConductorRecommendation(
             next_phase_id=next_phase_id,
             recommended_strength=recommended_strength,
-            skip_recommended=skip,
+            skip_recommended=skip and not coalition_continuation,
             skip_reason=skip_reason,
             confidence=confidence,
             state_snapshot=current_state,
@@ -379,15 +398,15 @@ def _to_mono(audio: np.ndarray) -> np.ndarray:
         mono = np.mean(audio, axis=1) if audio.shape[1] <= 8 else np.mean(audio, axis=0)
     else:
         mono = audio
-    return np.asarray(mono, dtype=np.float64)
+    return np.asarray(mono, dtype=np.float64)  # type: ignore[no-any-return]
 
 
 def _rms_db(mono: np.ndarray) -> float:
     rms = float(np.sqrt(np.mean(mono**2) + 1e-12))
-    return 20.0 * np.log10(max(rms, 1e-9))
+    return float(20.0 * np.log10(max(rms, 1e-9)))
 
 
-def _estimate_noise_floor(mono: np.ndarray, sr: int, n_frames: int = 20) -> float:
+def _estimate_noise_floor(mono: np.ndarray, sr: int) -> float:
     """5. Perzentil der Frame-RMS als Rauschboden-Schätzung [dBFS]."""
     frame_len = max(256, sr // 100)  # ~10 ms
     n = len(mono) // frame_len
@@ -469,14 +488,27 @@ def _canonical_material(material_type: str) -> str:
     return "unknown"
 
 
+def _coalition_name_for_phase(
+    phase_id: str | None,
+    active_phase_coalitions: dict[str, tuple[str, ...]] | None,
+) -> str:
+    if not phase_id or not active_phase_coalitions:
+        return ""
+    for coalition_name, members in active_phase_coalitions.items():
+        if phase_id in members:
+            return str(coalition_name)
+    return ""
+
+
 # ── Singleton ──────────────────────────────────────────────────────────
 
 
 def get_phase_conductor() -> PhaseConductor:
     """Gibt die globale PhaseConductor-Instanz zurück (thread-sicher)."""
-    global _instance
-    if _instance is None:
+    if _INSTANCE_HOLDER[0] is None:
         with _lock:
-            if _instance is None:
-                _instance = PhaseConductor()
-    return _instance
+            if _INSTANCE_HOLDER[0] is None:
+                _INSTANCE_HOLDER[0] = PhaseConductor()
+    conductor = _INSTANCE_HOLDER[0]
+    assert conductor is not None
+    return conductor

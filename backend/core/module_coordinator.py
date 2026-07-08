@@ -371,7 +371,7 @@ class ModuleCoordinator:
             that can be executed in parallel.
         """
         # Build subgraph for selected modules
-        graph = {mod: set() for mod in modules}
+        graph: dict[str, set[str]] = {mod: set() for mod in modules}
         for mod in modules:
             if mod in self._dependency_graph:
                 graph[mod] = self._dependency_graph[mod] & set(modules)
@@ -557,10 +557,10 @@ class ModuleCoordinator:
             detected_medium = map_forensic_to_medium_type(forensic_analysis)
 
         if self._mqa_system and detected_medium:
-            self._quality_baseline = self._mqa_system.establish_baseline(
+            self._quality_baseline = self._mqa_system.establish_baseline(  # type: ignore[assignment]
                 audio, sample_rate, detected_medium, quality_mode
             )
-            logger.info("✓ Quality baseline established: %.1f/100", self._quality_baseline.overall_score)
+            logger.info("✓ Quality baseline established: %.1f/100", self._quality_baseline.overall_score)  # type: ignore[attr-defined]
 
         # Initialize execution state
         current_audio = audio.copy()
@@ -736,7 +736,7 @@ class ModuleCoordinator:
             f"Execution complete: {report['successful_modules']}/{report['num_modules_executed']} modules successful in {total_time:.2f}s"
         )
         if quality_guaranteed:
-            logger.info("✓ Quality Guaranteed: %+.1f improvement", mqa_report.musical_improvement)
+            logger.info("✓ Quality Guaranteed: %+.1f improvement", mqa_report.musical_improvement)  # type: ignore[union-attr]
 
         return report
 

@@ -4,26 +4,27 @@ applyTo: "backend/core/musical_goals/*.py"
 
 # Musical Goals — Regeln (normativ, Aurik 9.12.x)
 
-## 14 Goals — Prioritäten und kanonische Böden
+## 15 Goals — Prioritäten und kanonische Böden
 
 | Prio | Goal | Restoration-Boden | Studio-2026-Boden |
 |---|---|---|---|
-| **P0** ⚠️ | **vocal_quality** | ≥ 0.85 (wenn `panns_singing ≥ 0.35`); VQI-Recovery-Trigger < 0.72 | ≥ 0.90; VQI-Recovery-Trigger < 0.87 |
+| **P0** ⚠️ | **vocal_quality** | ≥ 0.85 (wenn `panns_singing ≥ 0.35`); VQI-Recovery-Trigger < `material_vqi_floor` (Shellac 0.62 / Vinyl 0.72 / CD 0.82) | ≥ 0.90; VQI-Recovery-Trigger < `material_vqi_floor` |
 | **P0** ⚠️ | **formant_fidelity** | ≥ 0.88 (F1–F4 LPC-Track); Überschreitung `resolve_formant_tolerance_db()` → Rollback | ≥ 0.92 |
 | **P1** | natuerlichkeit | ≥ 0.90 | ≥ 0.92 |
 | **P1** | authentizitaet | ≥ 0.88 | ≥ 0.90 |
 | **P2** | tonal_center | ≥ 0.95 | ≥ 0.96 |
-| **P2** | timbre | ≥ 0.87 | ≥ 0.89 |
+| **P2** | timbre_authentizitaet (`timbre`) | ≥ 0.87 | ≥ 0.89 |
 | **P2** | artikulation | ≥ 0.88 | ≥ 0.90 |
 | **P3** | emotionalitaet | ≥ 0.84 | ≥ 0.87 |
-| **P3** | mikrodynamik | ≥ 0.88 (Frame-Energie-Korrelation voiced-Zonen ≥ 0.97; V20 §2.75) | ≥ 0.90 |
+| **P3** | micro_dynamics (`mikrodynamik`) | ≥ 0.88 (Frame-Energie-Korrelation voiced-Zonen ≥ 0.97; V20 §2.75) | ≥ 0.90 |
+| **P3** | transient_energie | ≥ 0.80 (§1.4.6 V26: HPSS-Onset-Fenster 0–20 ms nach Transient geschützt) | ≥ 0.83 |
 | **P3** | groove | ≥ 0.83 | ≥ 0.85 |
 | **P4** | transparenz | ≥ 0.82 | ≥ 0.85 |
-| **P4** | waerme | ≥ 0.77 (war: 0.75; v9.5 Wärmeband-Guard V25: 200–800 Hz kumulativer Verlust ≤ 2.5 dB) | ≥ 0.79 |
+| **P4** | waerme | ≥ 0.77 (war: 0.75; v9.5 Wärmeband-Guard V25: 200–800 Hz kumulativer Verlust ≤ 2.5 dB) | ≥ 0.78 |
 | **P4** | bass_kraft | ≥ 0.78 | ≥ 0.80 |
-| **P4** | sep_fidelity | ≥ 0.80 | ≥ 0.83 |
+| **P4** | separation_fidelity (`sep_fidelity`) | ≥ 0.80 | ≥ 0.83 |
 | **P5** | brillanz | ≥ 0.78 | ≥ 0.82 |
-| **P5** | raumtiefe | ≥ 0.70 | ≥ 0.74 |
+| **P5** | spatial_depth (`raumtiefe`) | ≥ 0.70 | ≥ 0.74 |
 
 > **P0-Goals sind Vokal-exklusiv**: Nur aktiv wenn `panns_singing ≥ 0.35`. P0-Unterschreitung → Recovery-Kaskade (**nicht** gleichwertig zu `artifact_freedom < 0.95`: VQI ist Recovery-Trigger, kein harter Export-Block).  
 > **VERBOTEN**: Böden hardcoden. **RICHTIG**: `calibration_matrix.get_material_floor(material_type, goal)` — material-adaptive Böden: Shellac ~0.72, Vinyl ~0.82, CD ~0.90.
@@ -32,7 +33,7 @@ applyTo: "backend/core/musical_goals/*.py"
 
 ```python
 def measure_all(audio: np.ndarray, sr: int, **kwargs) -> dict[str, float]:
-    """Misst alle 14 Goals. MUSS immer dict[str, float] zurückgeben — niemals None."""
+    """Misst alle 15 Goals. MUSS immer dict[str, float] zurückgeben — niemals None."""
     results: dict[str, float] = {}
     for goal_name, metric in self._metrics.items():
         try:

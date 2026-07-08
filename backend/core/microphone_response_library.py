@@ -262,7 +262,7 @@ class MicrophoneResponseLibrary:
                 spectrum = np.fft.rfft(ch.astype(np.float64))
                 spectrum_eq = spectrum * gains_interp.astype(np.float64)
                 result = np.fft.irfft(spectrum_eq, n=n)
-                return result.astype(np.float32)
+                return result.astype(np.float32)  # type: ignore[no-any-return]
 
             if audio.ndim == 1:
                 eq_audio = _apply_to_channel(audio)
@@ -288,7 +288,7 @@ class MicrophoneResponseLibrary:
             blended = (1.0 - wet_mix) * audio + wet_mix * eq_audio
             blended = np.nan_to_num(blended, nan=0.0, posinf=0.0, neginf=0.0)
             blended = np.clip(blended, -1.0, 1.0)
-            return blended.astype(np.float32)
+            return blended.astype(np.float32)  # type: ignore[no-any-return]
 
         except Exception as exc:
             logger.warning("MicrophoneResponseLibrary.apply_eq_curve failed: %s", exc)

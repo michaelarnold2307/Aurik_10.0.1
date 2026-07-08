@@ -90,6 +90,7 @@ _PSYCHO_RELAX_FACTOR: float = 1.10
 _PSYCHO_AUDIBILITY_DELTA_TRIGGER: float = 0.05
 _PSYCHO_HARSHNESS_DELTA_TRIGGER: float = 0.05
 _PSYCHO_BURSTINESS_DELTA_TRIGGER: float = 0.04
+_PSYCHO_MODULATION_DELTA_TRIGGER: float = 0.04
 
 
 def _norm_goal_key(name: str) -> str:
@@ -175,8 +176,8 @@ def _compute_goal_adaptive_threshold_scale(
 def _as_mono(audio: np.ndarray) -> np.ndarray:
     arr = np.asarray(audio, dtype=np.float32)
     if arr.ndim == 2:
-        return np.asarray(np.mean(arr, axis=0, dtype=np.float32), dtype=np.float32)
-    return arr
+        return np.asarray(np.mean(arr, axis=0, dtype=np.float32), dtype=np.float32)  # type: ignore[no-any-return]
+    return arr  # type: ignore[no-any-return]
 
 
 def _proxy_impulse_ratio(audio: np.ndarray) -> float:
@@ -337,6 +338,40 @@ def _compute_quasi_peak_burstiness(audio: np.ndarray, sr: int) -> float:
         return 0.0
 
 
+def _compute_modulation_roughness(audio: np.ndarray, sr: int) -> float:
+    """Schaetzt stoerende Modulationsrauhigkeit im Kurzzeitverlauf (0..1).
+
+    Hohe Werte deuten auf unruhige, pumpende Pegelmodulationen hin, die
+    psychoakustisch schnell als kuenstlich wahrgenommen werden.
+    """
+    try:
+        mono = _as_mono(audio)
+        frame = max(64, int(0.010 * sr))
+        hop = max(32, int(0.005 * sr))
+        if len(mono) < frame:
+            return 0.0
+
+        env: list[float] = []
+        for i in range(0, len(mono) - frame + 1, hop):
+            chunk = mono[i : i + frame]
+            env.append(float(np.sqrt(np.mean(chunk**2) + 1e-12)))
+
+        if len(env) < 4:
+            return 0.0
+
+        e = np.asarray(env, dtype=np.float32)
+        d = np.abs(np.diff(e))
+        if d.size == 0:
+            return 0.0
+
+        ref = float(np.percentile(e, 50) + 1e-9)
+        jitter = float(np.percentile(d, 90))
+        ratio = jitter / ref
+        return float(np.clip(ratio / 0.35, 0.0, 1.0))
+    except Exception:
+        return 0.0
+
+
 def _select_reweight_alphas_for_defect(worst_defect: str) -> tuple[float, ...]:
     """Defektspezifische Reweight-Staffel fuer intelligentere Recovery-Pfade."""
     d = str(worst_defect or "").upper()
@@ -363,12 +398,12 @@ def _frequency_selective_blend(
     """
     d = str(worst_defect or "").upper()
     if d not in {"HUM", "LOW_FREQ_RUMBLE", "DC_OFFSET", "CLICKS", "CRACKLE"}:
-        return np.clip(alpha * audio_after + (1.0 - alpha) * audio_before, -1.0, 1.0).astype(np.float32)
+        return np.clip(alpha * audio_after + (1.0 - alpha) * audio_before, -1.0, 1.0).astype(np.float32)  # type: ignore[no-any-return]
 
     arr_b = np.asarray(audio_before, dtype=np.float32)
     arr_a = np.asarray(audio_after, dtype=np.float32)
     if arr_b.shape != arr_a.shape:
-        return np.clip(alpha * arr_a + (1.0 - alpha) * arr_b, -1.0, 1.0).astype(np.float32)
+        return np.clip(alpha * arr_a + (1.0 - alpha) * arr_b, -1.0, 1.0).astype(np.float32)  # type: ignore[no-any-return]
 
     was_mono = arr_b.ndim == 1
     if was_mono:
@@ -378,7 +413,7 @@ def _frequency_selective_blend(
     n = int(arr_b.shape[-1])
     if n < 16:
         out = np.clip(alpha * arr_a + (1.0 - alpha) * arr_b, -1.0, 1.0).astype(np.float32)
-        return out[0] if was_mono else out
+        return out[0] if was_mono else out  # type: ignore[no-any-return]
 
     local_alpha = float(np.clip(alpha - 0.28, 0.05, 0.98))
 
@@ -400,7 +435,7 @@ def _frequency_selective_blend(
             out_td[ch] = alpha_curve * arr_a[ch] + (1.0 - alpha_curve) * arr_b[ch]
 
         out_td = np.clip(out_td, -1.0, 1.0).astype(np.float32)
-        return out_td[0] if was_mono else out_td
+        return out_td[0] if was_mono else out_td  # type: ignore[no-any-return]
 
     freqs = np.fft.rfftfreq(n, d=1.0 / float(max(1, sr)))
     alpha_map = np.full(freqs.shape, float(alpha), dtype=np.float32)
@@ -427,7 +462,7 @@ def _frequency_selective_blend(
         out[ch] = np.fft.irfft(spec_mix, n=n).astype(np.float32)
 
     out = np.clip(out, -1.0, 1.0).astype(np.float32)
-    return out[0] if was_mono else out
+    return out[0] if was_mono else out  # type: ignore[no-any-return]
 
 
 def _proxy_hum_energy(audio: np.ndarray, sr: int) -> float:
@@ -553,35 +588,8 @@ def _compute_proxy(proxy_name: str, audio: np.ndarray, sr: int) -> float:
 # ---------------------------------------------------------------------------
 
 
-@dataclass
-class DefectVerificationResult:
-    """Result of one phase's post-defect check."""
-
-    phase_id: str
-    """Phase that was verified."""
-
-    targeted_defects: list[str]
-    """DefectType names for which a proxy was available."""
-
-    proxies_before: dict[str, float]
-    """Proxy values measured before the phase."""
-
-    proxies_after: dict[str, float]
-    """Proxy values measured after the phase."""
-
-    worst_defect: str
-    """DefectType name with the worst relative change (worsening)."""
-
-    worst_relative_change: float
-    """Relative change of the worst defect.
-    Positive = worsening (proxy increased for lower-is-better, or decreased for higher).
-    """
-
-    rollback_triggered: bool
-    """True if current_audio was reverted to pre-phase state."""
-
-    skipped_defects: list[str] = field(default_factory=list)
-    """DefectTypes that had no proxy and were skipped."""
+# canonical import — keep for backward compatibility
+from backend.core.cassette_defect_verifier import DefectVerificationResult
 
 
 # ---------------------------------------------------------------------------
@@ -713,6 +721,8 @@ class PhaseDefectVerifier:
                 _harsh_after = _compute_transient_harshness(candidate_audio, sr)
                 _burst_before = _compute_quasi_peak_burstiness(audio_before, sr)
                 _burst_after = _compute_quasi_peak_burstiness(candidate_audio, sr)
+                _mod_before = _compute_modulation_roughness(audio_before, sr)
+                _mod_after = _compute_modulation_roughness(candidate_audio, sr)
 
                 for dname, val_before in proxies_before.items():
                     val_after = _proxies_after.get(dname, val_before)
@@ -755,6 +765,12 @@ class PhaseDefectVerifier:
                         if (_burst_after - _burst_before) > _PSYCHO_BURSTINESS_DELTA_TRIGGER:
                             threshold *= _PSYCHO_STRICTEN_FACTOR
                         elif (_burst_before - _burst_after) > _PSYCHO_BURSTINESS_DELTA_TRIGGER:
+                            threshold *= _PSYCHO_RELAX_FACTOR
+
+                    if pname in {"impulse_ratio", "hf_noise_floor"}:
+                        if (_mod_after - _mod_before) > _PSYCHO_MODULATION_DELTA_TRIGGER:
+                            threshold *= _PSYCHO_STRICTEN_FACTOR
+                        elif (_mod_before - _mod_after) > _PSYCHO_MODULATION_DELTA_TRIGGER:
                             threshold *= _PSYCHO_RELAX_FACTOR
 
                     abs_delta = abs(float(val_after) - float(val_before))

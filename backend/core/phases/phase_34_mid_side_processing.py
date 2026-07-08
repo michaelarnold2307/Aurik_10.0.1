@@ -558,7 +558,7 @@ class MidSideProcessing(PhaseInterface):
             {
                 "processing": "applied",
                 "bands": 4,
-                "band_metrics": band_metrics,
+                "band_metrics": band_metrics,  # type: ignore[dict-item]
                 "mid_change_db": round(float(mid_change_db), 2),
                 "side_change_db": round(float(side_change_db), 2),
                 "mono_compatibility": round(mono_compat, 3),
@@ -572,8 +572,8 @@ class MidSideProcessing(PhaseInterface):
         # §V26 Onset-Schutz: M/S-Dynamik darf Transient-Frames nicht mehr als 1.5 dB dämpfen.
         # Verhindert transient_energie-Verlust durch M/S-Kompression an Onset-Positionen.
         try:
-            from backend.core.dsp.onset_guard import (
-                apply_onset_protection_mask as _opm34,  # pylint: disable=import-outside-toplevel
+            from backend.core.dsp.onset_guard import (  # pylint: disable=import-outside-toplevel
+                apply_onset_protection_mask as _opm34,
             )
 
             audio_processed = _opm34(audio, audio_processed, None, max_delta_db=1.5)
@@ -620,7 +620,7 @@ class MidSideProcessing(PhaseInterface):
 
     def _combine_bands(self, bands: list[np.ndarray]) -> np.ndarray:
         """Kombiniert frequency bands back together."""
-        return sum(bands)
+        return np.asarray(sum(bands), dtype=bands[0].dtype)  # type: ignore[no-any-return]
 
     def _ms_decode(self, audio: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """Dekodiert L/R to Mid/Side."""
@@ -637,10 +637,10 @@ class MidSideProcessing(PhaseInterface):
         """Kodiert Mid/Side to L/R."""
         if template.ndim == 1:
             # Mono-Zielsignal: L/R-Encoder auf Mid kollabieren, keine Stereo-Template-Erwartung.
-            return np.asarray(mid, dtype=template.dtype)
+            return np.asarray(mid, dtype=template.dtype)  # type: ignore[no-any-return]
         left = mid + side
         right = mid - side
-        return stereo_like(left, right, template)
+        return np.asarray(stereo_like(left, right, template), dtype=template.dtype)  # type: ignore[no-any-return]
 
     def _detect_transients(self, audio: np.ndarray) -> np.ndarray:
         """Erkennt transients using fast envelope follower."""
@@ -661,7 +661,7 @@ class MidSideProcessing(PhaseInterface):
         threshold = np.percentile(derivative, 85)
         transient_mask = derivative > threshold
 
-        return transient_mask
+        return transient_mask  # type: ignore[no-any-return]
 
     def _apply_dynamics(
         self, signal_in: np.ndarray, sr: int, params: list, transient_mask: np.ndarray
@@ -726,17 +726,17 @@ class MidSideProcessing(PhaseInterface):
         Returns:
             Compatibility ratio (0-1, higher is better mono compatibility)
         """
-        stereo_energy = np.sum(audio**2)
+        stereo_energy: float = float(np.sum(audio**2))
 
         # Create mono fold-down
         mono = safe_to_mono(audio)
         mono_stereo = stereo_like(mono, mono, audio)
-        mono_energy = np.sum(mono_stereo**2)
+        mono_energy: float = float(np.sum(mono_stereo**2))
 
         # Ratio of mono to stereo energy (should be close to 1.0 for good compatibility)
         ratio = mono_energy / (stereo_energy + 1e-10)
 
-        return min(ratio, 1.0)
+        return float(min(float(ratio), 1.0))
 
 
 # Test harness
@@ -797,7 +797,7 @@ if __name__ == "__main__":
 
         # Process
         start = time.time()
-        result = processor.process(demo_audio, demo_sr, demo_material)
+        result = processor.process(demo_audio, demo_sr, demo_material.value)
         meta = result.metadata or {}
         _elapsed_demo = time.time() - start
 

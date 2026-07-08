@@ -153,7 +153,7 @@ class BassEnhancement(PhaseInterface):
         )
 
     # pylint: disable-next=arguments-renamed
-    def process(
+    def process(  # type: ignore[override]
         self, audio: np.ndarray, sample_rate: int, material: MaterialType = MaterialType.CD_DIGITAL, **kwargs
     ) -> PhaseResult:
         """
@@ -176,6 +176,32 @@ class BassEnhancement(PhaseInterface):
         phase_locality_factor = float(np.clip(phase_locality_factor, 0.35, 1.0))
         _pmgg_strength = float(kwargs.get("strength", 1.0))
         _effective_strength = float(np.clip(_pmgg_strength * phase_locality_factor, 0.0, 1.0))
+
+        # §V41 ForwardMaskingGuard: Stärke in post-transienten Masking-Fenstern erhöhen.
+        # Optimierung v9.12.9: UV3 berechnet Zonen vor der Phase und übergibt sie via kwargs;
+        # nur wenn keine pre-computed Zonen vorhanden, werden sie neu berechnet (spart CPU).
+        _panns_s_37 = float(kwargs.get("panns_singing", 0.0))
+        if _panns_s_37 >= 0.25 and _effective_strength > 0.0:
+            try:
+                from backend.core.dsp.temporal_masking import (
+                    get_forward_masking_guard as _fmg_fn_37,  # pylint: disable=import-outside-toplevel
+                )
+
+                _fmz_37 = kwargs.get("forward_masking_zones") or _fmg_fn_37().compute_zones(audio, sample_rate)
+                if _fmz_37:
+                    _n_s_37 = audio.shape[-1] if audio.ndim > 1 else len(audio)
+                    _zone_samples_37 = sum(z.end_sample - z.start_sample for z in _fmz_37)
+                    _zone_frac_37 = float(np.clip(_zone_samples_37 / max(1, _n_s_37), 0.0, 1.0))
+                    _boost_37 = _zone_frac_37 * 0.15
+                    _effective_strength = float(np.clip(_effective_strength + _boost_37, 0.0, 1.0))
+                    logger.debug(
+                        "Phase37 §V41 ForwardMasking: zone_frac=%.2f boost=%.3f → eff_str=%.3f",
+                        _zone_frac_37,
+                        _boost_37,
+                        _effective_strength,
+                    )
+            except Exception as _fmg_exc_37:  # pylint: disable=broad-except
+                logger.debug("Phase37 §V41 ForwardMaskingGuard non-blocking: %s", _fmg_exc_37)
 
         if _effective_strength <= 0.0:
             audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
@@ -313,7 +339,8 @@ class BassEnhancement(PhaseInterface):
             if not _ts_37.ok:
                 _wet_ts_37 = max(0.0, 1.0 - _ts_37.blend_reduction)
                 enhanced_audio = (_wet_ts_37 * enhanced_audio + (1.0 - _wet_ts_37) * audio).astype(np.float32)
-                logger.warning(
+                _log_v22_37 = logger.warning if _wet_ts_37 > 0.0 else logger.info
+                _log_v22_37(
                     "§V22 phase_37: onset_shift=%.2f ms → blend_reduction=%.2f",
                     _ts_37.max_shift_ms,
                     _ts_37.blend_reduction,
@@ -330,6 +357,7 @@ class BassEnhancement(PhaseInterface):
                 "harmonic_2_gain": float(config["harmonic_2_gain"]),
                 "harmonic_3_gain": float(config["harmonic_3_gain"]),
                 "sub_harmonic_gain": float(config["sub_harmonic_gain"]),
+                "onset_guard_wet": float(locals().get("_wet_ts_37", 1.0)),
                 "rt_factor": float(rt_factor),
                 "virtual_pitch_active": True,
                 "phase_locality_factor": phase_locality_factor,
@@ -365,7 +393,7 @@ class BassEnhancement(PhaseInterface):
         # §2.51 Anti-Zeitversatz: sosfiltfilt — Ausgabe wird nicht zu Original addiert (V11).
         enhanced = signal.sosfiltfilt(cached["hp"], enhanced)
 
-        return enhanced
+        return enhanced  # type: ignore[no-any-return]
 
     def _generate_harmonics(self, bass: np.ndarray, config: dict[str, float]) -> np.ndarray:
         """Generiert harmonic content from bass."""
@@ -385,13 +413,13 @@ class BassEnhancement(PhaseInterface):
         # Combine
         harmonics = harmonic_2 + harmonic_3 + sub_harmonic + saturated * 0.3
 
-        return harmonics
+        return harmonics  # type: ignore[no-any-return]
 
     def _generate_sub_harmonic(self, bass: np.ndarray) -> np.ndarray:
         """Generiert sub-harmonic (octave down)."""
         # Vectorized octave-down via sample-and-hold (avoids Python for-loop)
         sub = np.repeat(bass[::2], 2)[: len(bass)]
-        return sub
+        return sub  # type: ignore[no-any-return]
 
     def _virtual_pitch_bass(self, bass: np.ndarray, sr: int) -> np.ndarray:
         """Virtual Pitch / Missing Fundamental (Moore et al. 2006, JASA).
@@ -405,18 +433,18 @@ class BassEnhancement(PhaseInterface):
         Loudness, and Partial Loudness" — Virtual Pitch via Harmonic Template Matching.
         """
         if len(bass) < 1024:
-            return self._generate_sub_harmonic(bass) * 0.25
+            return self._generate_sub_harmonic(bass) * 0.25  # type: ignore[no-any-return]
 
         # Bandpass 120–500 Hz: Zone der Missing-Fundamental-Wahrnehmung
         try:
             sos_vp = signal.butter(4, [120.0 / (sr / 2), min(500.0 / (sr / 2), 0.99)], btype="band", output="sos")
             vp_band = signal.sosfiltfilt(sos_vp, bass)
         except Exception:
-            return self._generate_sub_harmonic(bass) * 0.25
+            return self._generate_sub_harmonic(bass) * 0.25  # type: ignore[no-any-return]
 
         _rms = float(np.sqrt(np.mean(vp_band.astype(np.float64) ** 2) + 1e-12))
         if _rms < 1e-5:
-            return np.zeros_like(bass)
+            return np.zeros_like(bass)  # type: ignore[no-any-return]
 
         # Moore-style harmonic template matching:
         # estimate virtual fundamental f0 from harmonics (2f0..5f0 in 120–500 Hz).
@@ -473,7 +501,7 @@ class BassEnhancement(PhaseInterface):
         sub_result = sub_result * _gain
         sub_result = np.nan_to_num(sub_result, nan=0.0, posinf=0.0, neginf=0.0)
         sub_result = np.clip(sub_result, -1.0, 1.0)
-        return sub_result
+        return sub_result  # type: ignore[no-any-return]
 
     def _measure_bass_energy(self, audio: np.ndarray, sample_rate: int) -> float:
         """Misst bass energy (20-250 Hz RMS)."""

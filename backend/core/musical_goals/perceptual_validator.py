@@ -181,8 +181,8 @@ class PerceptualValidator:
 
         # Statistics
         self.validation_count = 0
-        self.listening_test_requests = []
-        self.ab_test_samples = []
+        self.listening_test_requests: list[ListeningTestRequest] = []
+        self.ab_test_samples: list[ABTestSample] = []
 
     def _try_load_onnx_model(self) -> bool:
         """Try loading bundled AST ONNX model (models/ast/ast_model.onnx)."""
@@ -390,7 +390,7 @@ class PerceptualValidator:
 
         # Check ob overall Listening Test nötig
         if any(score.requires_human for score in results.values()):
-            self._create_listening_test_request(audio, technical_scores, results, metadata)
+            self._create_listening_test_request(audio, technical_scores, results, metadata)  # type: ignore[arg-type]
 
         return results
 
@@ -524,7 +524,7 @@ class PerceptualValidator:
         mean = float(np.mean(feat))
         std = float(np.std(feat) + 1e-6)
         feat = (feat - mean) / std
-        return feat[np.newaxis, :, :].astype(np.float32)
+        return feat[np.newaxis, :, :].astype(np.float32)  # type: ignore[no-any-return]
 
     def _map_onnx_output_to_goal(self, logits: np.ndarray, goal_name: str) -> tuple[float, float]:
         """Map AST ONNX logits [1, 527] to (score, confidence)."""
@@ -780,7 +780,7 @@ class PerceptualValidator:
 
         return requests[:limit]
 
-    def submit_listening_test_result(
+    def submit_listening_test_result(  # type: ignore[return,return-value]
         self, session_id: str, human_scores: dict[str, float], comments: str | None = None
     ) -> dict[str, Any]:
         """
@@ -796,7 +796,7 @@ class PerceptualValidator:
 
         if not request:
             logger.warning("No listening test request found for session %s", session_id)
-            return
+            return  # type: ignore[return-value]
 
         # Store result
         result_file = self.ab_test_storage_path / f"listening_test_{session_id}.json"

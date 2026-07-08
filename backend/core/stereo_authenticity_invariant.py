@@ -313,7 +313,7 @@ class StereoAuthenticitiyInvariant:
         """
         result = self.check(original, audio, era_result, sr)
         if result.passed:
-            return np.clip(audio, -1.0, 1.0)
+            return np.clip(audio, -1.0, 1.0)  # type: ignore[no-any-return]
 
         decade = getattr(era_result, "decade", 1970)
         _compute_ms_correlation(original)
@@ -365,11 +365,11 @@ class StereoAuthenticitiyInvariant:
                 out = np.clip(audio, -1.0, 1.0)
 
             logger.info("🔧 StereoAuth enforce: Mono-Kollaps angewendet (Ära %d)", decade)
-            return out
+            return out  # type: ignore[no-any-return]
 
         # Für Decca-Wide + Abbey-Road: unverändert zurückgeben (kein Eingriff implementiert)
         logger.debug("StereoAuth enforce: Kein Eingriff für Typ '%s'", result.original_type)
-        return np.clip(audio, -1.0, 1.0)
+        return np.clip(audio, -1.0, 1.0)  # type: ignore[no-any-return]
 
     # ------------------------------------------------------------------
     # Interne Hilfsmethoden

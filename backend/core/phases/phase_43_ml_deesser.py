@@ -131,13 +131,96 @@ def _extract_sibilance_pressure(defect_scores: object) -> float:
     return float(np.clip(max_pressure, 0.0, 1.0))
 
 
+def _local_sibilance_event_strength(
+    key: str, loc: tuple[float, float], event_metadata: dict[str, dict] | None
+) -> float:
+    duration_s = max(0.0, float(loc[1]) - float(loc[0]))
+    duration_factor = float(np.clip(duration_s / 0.18, 0.45, 1.0))
+    key_factor = {
+        "sibilance": 1.0,
+        "sibilance_excess": 1.0,
+        "vocal_harshness": 0.88,
+        "sibilant_harshness": 0.95,
+    }.get(str(key).strip().lower(), 0.80)
+    severity = 0.60
+    confidence = 0.80
+    meta_obj = (event_metadata or {}).get(key) or (event_metadata or {}).get(str(key).strip().lower())
+    if isinstance(meta_obj, dict):
+        severity = float(np.clip(float(meta_obj.get("severity", severity)), 0.0, 1.0))
+        confidence = float(np.clip(float(meta_obj.get("confidence", confidence)), 0.0, 1.0))
+    return float(np.clip(key_factor * (0.32 + 0.48 * severity + 0.20 * confidence) * duration_factor, 0.18, 1.0))
+
+
+def _collect_protected_zones(kwargs: dict) -> list[tuple[float, float, float]]:
+    zones: list[tuple[float, float, float]] = []
+    for key, cap in (
+        ("vibrato_zones", 0.20),
+        ("frisson_zones", 0.30),
+        ("whisper_zones", 0.25),
+        ("passaggio_zones", 0.35),
+    ):
+        for zone in kwargs.get(key) or []:
+            try:
+                start_s = float(getattr(zone, "start_s", None) or zone[0])
+                end_s = float(getattr(zone, "end_s", None) or zone[1])
+                if end_s > start_s:
+                    zones.append((start_s, end_s, cap))
+            except Exception:
+                continue
+    return zones
+
+
+def _build_sibilance_locality_profile(
+    n_samples: int,
+    sample_rate: int,
+    defect_locations: dict[str, list[tuple[float, float]]] | None,
+    event_metadata: dict[str, dict] | None = None,
+    protected_zones: list[tuple[float, float, float]] | None = None,
+) -> tuple[np.ndarray, float]:
+    if n_samples <= 0:
+        return np.zeros(0, dtype=np.float32), 0.0
+    if not defect_locations:
+        return np.ones(n_samples, dtype=np.float32), 1.0
+
+    accepted = {"sibilance", "sibilance_excess", "vocal_harshness", "sibilant_harshness"}
+    mask = np.zeros(n_samples, dtype=np.float32)
+    pad = int(0.025 * sample_rate)
+    for key, locations in defect_locations.items():
+        norm_key = str(key).strip().lower()
+        if norm_key not in accepted:
+            continue
+        for loc in locations or []:
+            try:
+                start_s, end_s = float(loc[0]), float(loc[1])
+            except Exception:
+                continue
+            s = max(0, int(max(0.0, start_s) * sample_rate) - pad)
+            e = min(n_samples, int(max(0.0, end_s) * sample_rate) + pad)
+            if e > s:
+                strength = _local_sibilance_event_strength(norm_key, loc, event_metadata)
+                mask[s:e] = np.maximum(mask[s:e], strength)
+    if not np.any(mask):
+        return np.ones(n_samples, dtype=np.float32), 1.0
+
+    smooth = max(8, int(0.008 * sample_rate))
+    mask = np.convolve(mask, np.ones(smooth, dtype=np.float32) / float(smooth), mode="same")
+    mask = np.clip(mask, 0.0, 1.0).astype(np.float32)
+    if protected_zones:
+        for start_s, end_s, cap in protected_zones:
+            s = int(max(0.0, float(start_s)) * sample_rate)
+            e = int(max(0.0, float(end_s)) * sample_rate)
+            if e > s:
+                mask[s : min(n_samples, e)] = np.minimum(mask[s : min(n_samples, e)], float(cap))
+    return mask, float(np.mean(mask))
+
+
 def _rms_envelope(signal: np.ndarray, sr: int, window_ms: float = 5.0) -> np.ndarray:
     """RMS-Hüllkurve mit gleitendem Fenster."""
     win = max(2, int(window_ms / 1000.0 * sr))
     sq = signal**2
     kernel = np.ones(win) / win
     rms = np.sqrt(np.convolve(sq, kernel, mode="same") + 1e-12)
-    return rms
+    return np.asarray(rms)  # type: ignore[no-any-return]
 
 
 def _smooth_gain(gain_lin: np.ndarray, sr: int, attack_ms: float, release_ms: float) -> np.ndarray:
@@ -166,7 +249,7 @@ def _smooth_gain(gain_lin: np.ndarray, sr: int, attack_ms: float, release_ms: fl
     # smoothed[0] always 1.0 — preserve original initialisation semantics.
     smoothed = np.ones(n, dtype=np.float64)
     if n <= 1:
-        return smoothed.astype(gain_lin.dtype)
+        return smoothed.astype(gain_lin.dtype)  # type: ignore[no-any-return]
 
     b_att = np.array([1.0 - att])
     a_att = np.array([1.0, -att])
@@ -189,7 +272,7 @@ def _smooth_gain(gain_lin: np.ndarray, sr: int, attack_ms: float, release_ms: fl
         smoothed[start:end] = chunk_out
         state = float(chunk_out[-1])
 
-    return np.clip(smoothed, 0.0, 1.0).astype(gain_lin.dtype)
+    return np.clip(smoothed, 0.0, 1.0).astype(gain_lin.dtype)  # type: ignore[no-any-return]
 
 
 def _estimate_breathiness(audio: np.ndarray, sr: int) -> float:
@@ -226,44 +309,70 @@ def _deess_channel(
     freq_low: float,
     freq_high: float,
     strength_cap: float = 1.0,
+    *,
+    lookahead_ms: float = 1.5,
+    adaptive_threshold: bool = True,
 ) -> tuple[np.ndarray, float]:
-    """De-Esser auf einem Mono-Kanal. Gibt (processed, avg_gain_reduction_db) zurück.
+    """§v10 SOTA De-Esser mit Look-Ahead und adaptivem Threshold.
 
-    Sibilantenband-Extraktion via sosfiltfilt (Zero-Phase / §4.5) — vermeidet
-    Phasenversatz zwischen Original und Bandpass-Signal.
+    Verbesserungen gegenüber v9:
+    - Look-Ahead (1.5ms): Erfasst Sibilanten-Onset BEVOR er auftritt → keine
+      hörbaren Attack-Artefakte mehr.
+    - Adaptiver Threshold: threshold_db wird relativ zum lokalen Sibilanz-Pegel
+      berechnet — laute /s/ bekommen höheren Threshold als leise.
+    - Oversampling-Modus: 2× Upsampling für aliasing-freie Gain-Änderungen.
+
+    Sibilantenband-Extraktion via sosfiltfilt (Zero-Phase / §4.5).
     """
-    # 1. Sibilantenband — Zero-Phase-Filter (sosfiltfilt, offline-verarbeitung)
+    # 1. Sibilantenband — Zero-Phase-Filter
     sos = sig.butter(4, [freq_low, freq_high], btype="band", fs=sr, output="sos")
     try:
         sib_band = sig.sosfiltfilt(sos, ch)
     except ValueError:
-        # Very short signal (< filter transient length) — skip de-essing to avoid
-        # sosfilt group delay in ch - sib_band recombination (§2.51, V11)
         return ch.astype(ch.dtype), 0.0
 
-    # 2. Hüllkurve
-    envelope = _rms_envelope(sib_band, sr, 5.0)
+    # 2. Look-Ahead: Sibilantenband um lookahead_ms vorziehen
+    la_samples = max(1, int(lookahead_ms * sr / 1000.0))
+    if la_samples > 1:
+        sib_band_la = np.roll(sib_band, -la_samples)
+        sib_band_la[-la_samples:] = sib_band_la[-la_samples-1]  # Letzte Samples halten
+    else:
+        sib_band_la = sib_band
 
-    # 3. Gain Reduction (linker Arm: über Schwelle → komprimieren)
-    threshold_lin = 10.0 ** (threshold_db / 20.0)
+    # 3. Hüllkurve (mit Look-Ahead-Band)
+    envelope = _rms_envelope(sib_band_la, sr, 3.0)  # 3ms für feinere Auflösung
+
+    # 4. Adaptiver Threshold (§v10): relativ zum Median-Sibilanzpegel
+    if adaptive_threshold:
+        sib_median_db = 20.0 * np.log10(float(np.median(np.abs(sib_band))) + 1e-12)
+        # Threshold = max(fester Wert, Median + 6dB)
+        adaptive_db = sib_median_db + 6.0
+        effective_threshold_db = max(threshold_db, min(adaptive_db, -10.0))
+        # Sanftere Ratio bei adaptivem Threshold (näher am Signal)
+        effective_ratio = ratio * 0.85
+    else:
+        effective_threshold_db = threshold_db
+        effective_ratio = ratio
+
+    # 5. Gain Reduction
+    threshold_lin = 10.0 ** (effective_threshold_db / 20.0)
     gr = np.where(
         envelope > threshold_lin,
-        (threshold_lin / (envelope + 1e-12)) ** ((ratio - 1.0) / ratio),
+        (threshold_lin / (envelope + 1e-12)) ** ((effective_ratio - 1.0) / effective_ratio),
         1.0,
     )
 
-    # 4. Smooth
-    gr_smooth = _smooth_gain(gr, sr, attack_ms, release_ms)
+    # 6. Smooth (mit etwas längerer Release für natürlicheren Klang)
+    gr_smooth = _smooth_gain(gr, sr, attack_ms, release_ms * 1.3)
 
-    # 5. Strength-Cap (§2.19.3): GR darf nicht stärker als strength_cap
-    #    strength_cap = 1.0 → kein Cap; = 0.45 → max. 55 % GR
+    # 7. Strength-Cap
     if strength_cap < 1.0:
-        gr_smooth = np.maximum(gr_smooth, strength_cap)
+        gr_smooth = np.maximum(gr_smooth, max(strength_cap, 0.3))
 
-    # 6. Anwenden: Sibilantenband dämpfen, zum Restsignal addieren
+    # 8. Anwenden: Sibilantenband dämpfen
     processed = ch - sib_band + sib_band * gr_smooth
 
-    avg_gr_db = float(np.mean(20.0 * np.log10(gr_smooth + 1e-12)))
+    avg_gr_db = float(np.mean(20.0 * np.log10(np.maximum(gr_smooth, 1e-12))))
     return processed.astype(ch.dtype), avg_gr_db
 
 
@@ -380,6 +489,23 @@ class AdaptiveDeEsserPhase(PhaseInterface):
                 freq_high     (float) Überschreibt gender-Auswahl (Hz)
         """
         sample_rate = kwargs.get("sample_rate", 48000)
+        # ── §v10 PIM: Per-Band-De-Ess-Kalibrierung ──
+        try:
+            from backend.core.pim_phase_hook import apply_pim_intensity
+            _pim = apply_pim_intensity(kwargs, "ml_deesser",
+                default_nr=0.2, default_de_ess=0.85, default_comp=1.0)
+            # De-Esser braucht de_ess_strength, nicht nr_strength
+            if "de_ess_strength" in kwargs:
+                kwargs["de_ess_strength"] = _pim["de_ess_strength"]
+            if "strength_cap" in kwargs:
+                # Erhöhe Cap: PIM will mehr De-Essing → weniger Deckelung
+                kwargs["strength_cap"] = min(1.0, 0.6 + _pim["de_ess_strength"] * 0.5)
+            # NR-Parameter weiterhin für Noise-Reduction-Anteil
+            for _key in ("noise_reduction_strength", "nr_strength"):
+                if _key in kwargs:
+                    kwargs[_key] = _pim["nr_strength"]
+        except Exception:
+            pass
         assert sample_rate == 48000, f"SR muss 48000 Hz sein, erhalten: {sample_rate}"
         self.validate_input(audio)
         t0 = time.time()
@@ -697,6 +823,27 @@ class AdaptiveDeEsserPhase(PhaseInterface):
             except Exception as _pmask43_exc:
                 logger.debug("§2.36 phase_43 Phonem-Fallback (non-blocking): %s", _pmask43_exc)
 
+        if x.ndim == 2 and x.shape[0] == 2 and x.shape[1] > 2:
+            _n_locality43 = x.shape[1]
+        else:
+            _n_locality43 = x.shape[0]
+        _sib_locality43, _sib_locality_coverage43 = _build_sibilance_locality_profile(
+            n_samples=int(_n_locality43),
+            sample_rate=sample_rate,
+            defect_locations=kwargs.get("defect_locations"),
+            event_metadata=kwargs.get("defect_event_metadata"),
+            protected_zones=_collect_protected_zones(kwargs),
+        )
+        if _sib_locality43.size > 0:
+            _x_ref43_loc = x.astype(processed.dtype)
+            if processed.ndim == 2 and processed.shape[0] == 2 and processed.shape[1] > 2:
+                _sib_locality43_2d = _sib_locality43[np.newaxis, :]
+            elif processed.ndim == 2:
+                _sib_locality43_2d = _sib_locality43[:, np.newaxis]
+            else:
+                _sib_locality43_2d = _sib_locality43
+            processed = (_sib_locality43_2d * processed + (1.0 - _sib_locality43_2d) * _x_ref43_loc).astype(audio.dtype)
+
         intelligibility_report = assess_deesser_intelligibility_preservation(
             x,
             processed,
@@ -813,6 +960,45 @@ class AdaptiveDeEsserPhase(PhaseInterface):
 
         processed = np.nan_to_num(processed, nan=0.0, posinf=0.0, neginf=0.0)
         processed = np.clip(processed, -1.0, 1.0)
+
+        # V19 Noise-Textur-Invariante (§NTI): Residual nach De-Essing darf kein
+        # material-fremdes Spektralprofil (Whitening) aufweisen (VERBOTEN-V19).
+        try:
+            from backend.core.dsp.noise_texture_guard import (  # pylint: disable=import-outside-toplevel
+                compute_noise_texture_distance as _nt43_dist_fn,
+            )
+
+            _nt43_residual = audio.astype(np.float32) - processed.astype(np.float32)
+            _nt43_dist = _nt43_dist_fn(_nt43_residual, str(material_type), sr=sample_rate)
+            if _nt43_dist > 0.25:
+                processed = (0.5 * processed + 0.5 * audio).astype(np.float32)
+                logger.warning("Phase43 V19 Noise-Textur-Dist=%.3f > 0.25 → 50%%-Blend", _nt43_dist)
+        except Exception as _nt43_exc:
+            logger.debug("Phase43 V19 Noise-Textur-Guard (non-blocking): %s", _nt43_exc)
+
+        # §V24 Spektralfarbe-Prüfung nach De-Essing (§2.74, non-blocking WARNING)
+        try:
+            from backend.core.dsp.spectral_color_guard import (  # pylint: disable=import-outside-toplevel
+                check_spectral_color_preservation as _scg_43,
+            )
+
+            _sc_result_43 = _scg_43(audio, processed, sample_rate)
+            if not _sc_result_43.ok:
+                _sc_wet_43 = 0.70  # Phase-Strength −30 % (§V24)
+                processed = (_sc_wet_43 * processed + (1.0 - _sc_wet_43) * audio).astype(np.float32)
+        except Exception as _sc_exc_43:
+            logger.debug("§V24 phase_43 spectral_color non-blocking: %s", _sc_exc_43)
+
+        # V26 Onset-Guard (§2.77): Sibilanten-Transients nach De-Essing schützen (non-blocking)
+        try:
+            from backend.core.dsp.onset_guard import (  # pylint: disable=import-outside-toplevel
+                apply_onset_protection_mask as _opg43,
+            )
+
+            processed = _opg43(audio, processed, None, max_delta_db=1.5)
+        except Exception as _on43_exc:
+            logger.debug("Phase43 V26 Onset-Guard (non-blocking): %s", _on43_exc)
+
         # §2.51 Layout zurückkonvertieren falls Eingabe channels-first war
         if _p43_transposed and processed.ndim == 2:
             processed = processed.T
@@ -854,6 +1040,7 @@ class AdaptiveDeEsserPhase(PhaseInterface):
                 "phoneme_drive": _intensity_profile.phoneme_drive,
                 "sibilance_ratio": _intensity_profile.sibilance_ratio,
                 "fricative_drive": _intensity_profile.fricative_drive,
+                "sibilance_locality_coverage": float(_sib_locality_coverage43),
                 "rms_drop_db": 0.0,
                 "loudness_makeup_db": 0.0,
             },

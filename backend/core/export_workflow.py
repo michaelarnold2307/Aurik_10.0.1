@@ -52,13 +52,13 @@ def _evaluate_export_quality_gate(
         if isinstance(quality_gate.get("fallback_quality_floor"), dict)
         else {}
     )
-    _fqf_triggered = bool(_fqf.get("triggered", False))
-    _fqf_status = str(_fqf.get("status", "")).strip().lower()
+    _fqf_triggered = bool(_fqf.get("triggered", False))  # type: ignore[union-attr]
+    _fqf_status = str(_fqf.get("status", "")).strip().lower()  # type: ignore[union-attr]
 
     # Deterministic coupling: fallback_quality_floor is authoritative for degraded/recovered
     # export states when triggered.
     if _fqf_triggered and _fqf_status in {"recovered", "degraded", "failed", "fail"}:
-        _fqf_reason = str(_fqf.get("reason", "fallback_quality_floor_triggered") or "fallback_quality_floor_triggered")
+        _fqf_reason = str(_fqf.get("reason", "fallback_quality_floor_triggered") or "fallback_quality_floor_triggered")  # type: ignore[union-attr]
         _fqf_failed = _fqf_status in {"degraded", "failed", "fail"}
         _severity = "failed" if _fqf_failed else "degraded"
         _error_code = "FALLBACK_QUALITY_FLOOR_FAILED" if _fqf_failed else "FALLBACK_QUALITY_FLOOR_RECOVERED"
@@ -180,8 +180,8 @@ def _resolve_export_strategy(quality_gate: dict | None, gate_passed: bool | None
             if isinstance(quality_gate.get("fallback_quality_floor"), dict)
             else {}
         )
-        if bool(_fqf.get("triggered", False)):
-            _fqf_status = str(_fqf.get("status", "")).strip().lower()
+        if bool(_fqf.get("triggered", False)):  # type: ignore[union-attr]
+            _fqf_status = str(_fqf.get("status", "")).strip().lower()  # type: ignore[union-attr]
             if _fqf_status == "recovered":
                 return "recovered"
             if _fqf_status in {"degraded", "failed", "fail"}:
@@ -263,8 +263,18 @@ def export_audio(
     metadata.export_strategy = export_strategy
 
     try:
+        audio = np.asarray(audio, dtype=np.float32)
+        audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
+        audio = np.clip(audio, -1.0, 1.0)
+
         # Write audio file
-        sf.write(export_path, audio, sr, format=format.upper(), subtype=fmt_info["subtype"])
+        tmp_export_path = export_path + ".tmp"
+        try:
+            sf.write(tmp_export_path, audio, sr, format=format.upper(), subtype=fmt_info["subtype"])
+            os.replace(tmp_export_path, export_path)
+        finally:
+            if os.path.exists(tmp_export_path):
+                os.remove(tmp_export_path)
 
         # Write sidecar metadata (JSON) for formats that don't support embedded tags
         if metadata:
@@ -324,7 +334,7 @@ def export_multi_version(
             results[fmt] = path
         except Exception as e:
             logger.debug("⚠️ Export failed for format '%s': %s", fmt, e)
-            results[fmt] = None
+            results[fmt] = None  # type: ignore[assignment]
 
     logger.debug(
         "✓ Multi-version export complete: %s / %s formats", len([p for p in results.values() if p]), len(formats)
@@ -451,7 +461,7 @@ def export_stems(
             logger.debug("  ✓ %s → %s", stem_name, os.path.basename(path))
         except Exception as e:
             logger.debug("  ⚠️  %s export failed: %s", stem_name, e)
-            results[stem_name] = None
+            results[stem_name] = None  # type: ignore[assignment]
 
     # Print summary
     successful = len([p for p in results.values() if p])

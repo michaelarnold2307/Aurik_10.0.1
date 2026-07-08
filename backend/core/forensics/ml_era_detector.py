@@ -82,7 +82,7 @@ class EraFeatures:
 
     def to_array(self) -> np.ndarray:
         """Konvertiert to numpy array for ML."""
-        return np.array(
+        return np.array(  # type: ignore[no-any-return]
             [
                 self.bandwidth_low_hz,
                 self.bandwidth_high_hz,
@@ -169,13 +169,13 @@ class EraFeatureExtractor:
         era_features.loudness_range_lu = era_features.dynamic_range_db * 0.7  # Approximation
 
         # 4. Limiting detection
-        peak = np.max(np.abs(audio_mono))
+        peak: float = float(np.max(np.abs(audio_mono)))
         if peak > 0.95:
             era_features.peak_limiting_detected = True
             era_features.limiting_threshold_dbfs = 20 * np.log10(peak)
 
         # Check for brick-wall limiting (many samples near peak)
-        near_peak = np.sum(np.abs(audio_mono) > 0.95 * peak)
+        near_peak: int = int(np.sum(np.abs(audio_mono) > 0.95 * peak))
         if near_peak > len(audio_mono) * 0.001:  # >0.1% of samples
             era_features.brick_wall_limiting_detected = True
 
@@ -196,7 +196,7 @@ class EraFeatureExtractor:
         low_noise = np.mean(psd[f < 1000])
         high_noise = np.mean(psd[f > 5000])
         if low_noise > 0:
-            era_features.noise_spectrum_shape = high_noise / low_noise
+            era_features.noise_spectrum_shape = high_noise / low_noise  # type: ignore[assignment]
 
         # 7. Compression characteristics (simplified estimation)
         # Look at envelope variations
@@ -210,7 +210,7 @@ class EraFeatureExtractor:
         envelope_std = np.std(envelope_smooth)
         envelope_mean = np.mean(envelope_smooth)
         if envelope_mean > 0:
-            era_features.compression_ratio_estimate = 1.0 / (envelope_std / envelope_mean + 0.1)
+            era_features.compression_ratio_estimate = 1.0 / (envelope_std / envelope_mean + 0.1)  # type: ignore[assignment]
 
         # Attack/release times (simplified)
         era_features.attack_time_ms = (
@@ -296,7 +296,7 @@ class MLEraDetector:
 
         # State
         self.is_trained = False
-        self.feature_names = []
+        self.feature_names: list[str] = []
         self.n_classes = 0
         self.training_accuracy = 0.0
         self.cv_accuracy = 0.0
@@ -448,7 +448,7 @@ class MLEraDetector:
         )
 
         if return_features:
-            return result, base_features, era_features
+            return result, base_features, era_features  # type: ignore[return-value]
 
         return result
 

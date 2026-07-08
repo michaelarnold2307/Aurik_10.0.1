@@ -171,7 +171,7 @@ CANONICAL_THRESHOLDS_RESTORATION: dict[str, float] = {
     "micro_dynamics": 0.88,
     "groove": 0.83,
     "transparenz": 0.82,
-    "waerme": 0.75,
+    "waerme": 0.77,  # §V25 Wärmeband-Guard v9.5 (200–800 Hz, ≤2.5 dB kumulativer Verlust)
     "bass_kraft": 0.78,
     "basskraft": 0.78,
     "separation_fidelity": 0.80,  # §09.1 Spec P4 (v9.12.6: 0.78→0.80)
@@ -307,6 +307,40 @@ _ERA_BIAS: dict[str, dict[str, float]] = {
         "artikulation": +0.10,  # Modern digital: excellent transient precision (24-bit/96 kHz)
         "waerme": -0.02,  # Slightly clinical but less extreme than 1980s
         "spatial_depth": +0.04,  # Spatial audio (Dolby Atmos, binaural) growing standard
+    },
+}
+
+# ---------------------------------------------------------------------------
+# §R4 [RELEASE_MUST] Per-Material-Goal-Overrides — überschreiben bias-basierten Floor-Wert.
+# Für physikalisch begrenzte Träger, die kein realistisches Ziel über dem Bias-Wert erreichen.
+# Wird in get_material_floor() vor der Bias-Berechnung geprüft — normativ bindend.
+# ---------------------------------------------------------------------------
+_MATERIAL_GOAL_FLOOR_OVERRIDES: dict[str, dict[str, float]] = {
+    # §R4: spatial_depth für Lossy-Material (MP3/AAC Joint-Stereo-Coding reduziert IACC deutlich).
+    # MP3 128 kbps Stereo: IACC typisch 0.35–0.50 (psychoakustisches Stereo-Masking → räuml. Info verloren).
+    # Ohne Override wäre Floor 0.70 (Canonical) — physikalisch unerreichbar für 128 kbps MP3.
+    # IEC 11172-3 §8: MP3 Joint-Stereo-Coding erlaubt Phasencancellung in Mid/Side-Kanälen.
+    "mp3_low": {"spatial_depth": 0.38},
+    "mp3_high": {"spatial_depth": 0.44},
+    "aac": {"spatial_depth": 0.44},
+    "streaming": {"spatial_depth": 0.44},
+    "minidisc": {"spatial_depth": 0.36},  # ATRAC Stereo-Masking aggressiver als MP3
+    # §09.19 Kassette — IEC 60094-1 Type I physikalische Grenzen (v9.19.0):
+    # brillanz:          12-kHz-BW-Ceiling (IEC Type I) begrenzt HF-Restaurierung auf ~0.68;
+    #                    tape_analog-Bias -0.22 ergibt ~0.721 — zu optimistisch nach phase_06.
+    # spatial_depth:     Kassetten-Stereo: L/R-Übersprechen ~40 dB (IEC 60094-1 §5.4);
+    #                    physikalisches Ceiling ~0.55 (tape_analog-Bias -0.04 ergibt ~0.689).
+    # separation_fidelity: Kassetten-Bleed: SDR < 15 dB; Ceiling ~0.60
+    #                    (tape_analog-Bias -0.22 ergibt ~0.741 — deutlich zu hoch).
+    "cassette": {
+        "brillanz": 0.68,
+        "spatial_depth": 0.55,
+        "separation_fidelity": 0.60,
+    },
+    "kassette": {
+        "brillanz": 0.68,
+        "spatial_depth": 0.55,
+        "separation_fidelity": 0.60,
     },
 }
 
@@ -917,6 +951,7 @@ def get_material_floor(
     material_type: str,
     goal: str,
     is_studio_2026: bool = False,
+    transfer_chain: list[str] | None = None,
 ) -> float:
     """Gibt the minimum achievable goal floor for a given material type (§09.1) zurück.
 
@@ -942,6 +977,25 @@ def get_material_floor(
     floor = float(canonical.get(goal, 0.70))
 
     mat = str(material_type or "").strip().lower()
+
+    # §R4: Physikalisch begrenzte Material-Goal-Overrides prüfen (VOR Bias-Berechnung).
+    # Diese Overrides ersetzen den bias-basierten Floor für trägerphysikalisch unlösbare Goals.
+    _mat_override = _MATERIAL_GOAL_FLOOR_OVERRIDES.get(mat)
+    if _mat_override and goal in _mat_override:
+        return float(np.clip(_mat_override[goal], 0.30, 0.99))
+
+    # §R4/S4: Chain-End-Codec-Override — falls primäres Material kein Override hat,
+    # aber die Transfer-Chain mit einem Codec endet, dessen Override greift.
+    # Typischer Fall: Kassette→mp3_low (primary='cassette', chain=['mp3_low']).
+    # MP3-Joint-Stereo begrenzt spatial_depth unabhängig vom analogen Primärträger.
+    _CODEC_CHAIN_ENDINGS_CM = frozenset({"mp3_low", "mp3_high", "aac", "streaming", "minidisc"})
+    if transfer_chain:
+        _chain_last_cm = str(transfer_chain[-1]).lower().replace(" ", "_")
+        if _chain_last_cm in _CODEC_CHAIN_ENDINGS_CM and _chain_last_cm != mat:
+            _chain_override = _MATERIAL_GOAL_FLOOR_OVERRIDES.get(_chain_last_cm)
+            if _chain_override and goal in _chain_override:
+                return float(np.clip(_chain_override[goal], 0.30, 0.99))
+
     mat_class = _MATERIAL_CLASS.get(mat, "analog")
 
     # Apply material bias at minimum restorability kappa (worst-case → lowest floor).
@@ -1122,6 +1176,9 @@ _CHAIN_END_GOAL_CEILINGS: dict[str, dict[str, float]] = {
         "transient_energie": 0.70,
         "transparenz": 0.60,
         "separation_fidelity": 0.62,
+        # §R4/S4: MP3-Joint-Stereo begrenzt IACC-basierte Raumtiefe physikalisch.
+        # Ceiling = get_material_floor("mp3_low", "spatial_depth") = 0.38.
+        "spatial_depth": 0.38,
     },
     "mp3_high": {
         "natuerlichkeit": 0.82,
@@ -1134,6 +1191,7 @@ _CHAIN_END_GOAL_CEILINGS: dict[str, dict[str, float]] = {
         "transient_energie": 0.76,
         "transparenz": 0.70,
         "separation_fidelity": 0.70,
+        "spatial_depth": 0.44,  # §R4/S4: MP3 320kbps joint-stereo noch aktiv, aber schwächer.
     },
     "aac": {
         "natuerlichkeit": 0.84,
@@ -1146,6 +1204,7 @@ _CHAIN_END_GOAL_CEILINGS: dict[str, dict[str, float]] = {
         "transient_energie": 0.79,
         "transparenz": 0.74,
         "separation_fidelity": 0.74,
+        "spatial_depth": 0.44,  # §R4/S4: AAC HE-v2 parametric stereo → IACC-Limit.
     },
     "minidisc": {
         "natuerlichkeit": 0.80,
@@ -1158,6 +1217,7 @@ _CHAIN_END_GOAL_CEILINGS: dict[str, dict[str, float]] = {
         "transient_energie": 0.74,
         "transparenz": 0.68,
         "separation_fidelity": 0.68,
+        "spatial_depth": 0.36,  # §R4/S4: ATRAC joint-stereo/parametric stereo → IACC-Limit.
     },
     "dat": {
         "natuerlichkeit": 0.88,
@@ -1218,7 +1278,9 @@ def resolve_effective_goal_targets(
         goal = str(raw_goal or "").strip().lower()
         if not goal:
             continue
-        floor_eff = get_effective_material_floor(mat, goal, restorability_score, is_studio_2026=is_studio_2026)
+        floor_eff = get_effective_material_floor(
+            mat, goal, restorability_score=restorability_score, is_studio_2026=is_studio_2026
+        )
         target = max(floor_eff, float(song_targets.get(goal, canonical.get(goal, 0.70))))
         target = min(target, float(physical.get(goal, 0.99)), float(chain_cap.get(goal, 0.99)))
         resolved[goal] = float(np.clip(target, 0.20, 0.99))
@@ -1509,6 +1571,9 @@ _GOAL_TO_RECOVERY_PHASES_RESTORATION: dict[str, list[str]] = {
         "phase_23_spectral_repair",  # codec/pre-echo spectral smear recovery before harmonic lift
         "phase_07_harmonic_restoration",  # harmonic HF reconstruction for material where HF was
         # never captured (era guards handle 1900–1925 exclusion)
+        "phase_39_air_band_enhancement",  # DSP air band (>12 kHz psychoacoustic shimmer) — safe
+        # fallback when AudioSR/harmonic rollback leaves brillanz below floor;
+        # §0a: NOT forbidden in Restoration (only phase_21/35/42 are forbidden)
     ],
     "spatial_depth": [
         "phase_46_spatial_enhancement",  # low spatial_depth = INSUFFICIENT spatial cues;

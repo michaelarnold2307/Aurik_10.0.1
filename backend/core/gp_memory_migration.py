@@ -89,7 +89,7 @@ def migrate_gp_memory_file(path: pathlib.Path) -> dict[str, Any]:
 
     raw["observations"] = valid_obs
     raw["version"] = GP_MEMORY_SCHEMA_VERSION
-    return raw
+    return raw  # type: ignore[no-any-return]
 
 
 def _migrate_v1_to_v2(data: dict[str, Any]) -> dict[str, Any]:

@@ -146,8 +146,8 @@ class BeatsPlugin:
             # Detect embedding-only models (rank-3 fbank input, 768-dim output).
             # These cannot produce AudioSet-527 scores without a classification head.
             # Route to DSP fallback silently rather than triggering INVALID_ARGUMENT errors.
-            _inp = self._session.get_inputs()[0]
-            _out = self._session.get_outputs()[0]
+            _inp = self._session.get_inputs()[0]  # type: ignore[attr-defined]
+            _out = self._session.get_outputs()[0]  # type: ignore[attr-defined]
             _inp_rank = len(_inp.shape)
             _inp.shape[-1] if _inp.shape else 0
             _out_last_dim_out = _out.shape[-1] if _out.shape else 0
@@ -169,7 +169,7 @@ class BeatsPlugin:
                 _reg_plm(
                     "BEATs",
                     size_gb=0.09,
-                    unload_fn=lambda s=self: setattr(s, "_session", None) or setattr(s, "_model_loaded", False),
+                    unload_fn=lambda s=self: setattr(s, "_session", None) or setattr(s, "_model_loaded", False),  # type: ignore[func-returns-value,misc]
                 )
             except Exception as _exc:
                 logger.debug("Operation failed (non-critical): %s", _exc)
@@ -205,7 +205,7 @@ class BeatsPlugin:
         else:
             mono = np.pad(mono, (0, self._MODEL_SAMPLES - len(mono)))
 
-        return mono[np.newaxis].astype(np.float32)  # [1, 160000]
+        return mono[np.newaxis].astype(np.float32)  # type: ignore[no-any-return]  # [1, 160000]
 
     def get_tags(self, audio: np.ndarray, sr: int, top_k: int = 10) -> BeatsResult:
         """Klassifiziert Audio via BEATs ONNX oder PANNs-Fallback.

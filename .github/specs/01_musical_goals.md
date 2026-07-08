@@ -1,4 +1,4 @@
-# Aurik 9 — Spec 01: 15 Musikalische Ziele
+# Aurik 10 — Spec 01: 15 Musikalische Ziele
 
 > **Einzige normative Quelle** für alle Goal-Schwellwerte, Prioritäten, Adaptive Thresholds
 > und Applicability-Regeln. Alle anderen Dateien **referenzieren** hierher.
@@ -22,6 +22,16 @@ sondern auf den vollständigen Importraum von Aurik (Material × Ära × Genre �
     globalem Qualitätsverlust).
 
 Diese Invariante konkretisiert §0 Klangwahrheit für den gesamten Produktbetrieb.
+
+---
+
+## §v10 Pleasantness-First (2026-07-05)
+
+> **HPE ist oberste Instanz.** PMGG darf Phasen ueberspringen, wenn sie
+> den Klang fuer menschliche Ohren verschlechtern (§2.29 v10).
+> Siehe backend/core/per_phase_musical_goals_gate.py, 
+> backend/core/human_pleasantness_estimator.py.
+> **Kein Rollback-Verbot mehr.** CausalDefectReasoner kann irren — das Ohr nicht.
 
 ---
 
@@ -202,6 +212,32 @@ REGRESSION_EPSILON: float = 0.001
 # Die Routine-Steuerung läuft über den iterativen Messen→Handeln→Validieren-Zyklus
 # pro Phase (PMGG + PhaseConductor + SongCalibration).
 ```
+
+### §2.34b [RELEASE_MUST] Cross-Goal-Balancevertrag fuer Waerme und Raumtiefe (v9.12.16)
+
+Bei Goal-Recovery darf `waerme` nicht isoliert maximiert werden, wenn dadurch
+`spatial_depth` hoerbar kollabiert. Beide Goals sind als gekoppeltes Paar zu behandeln.
+
+Pflichtregeln:
+
+1. Waerme-Rettung nur bei nachweisbarer Defizitreduktion (`waerme_deficit` sinkt).
+2. `spatial_depth`-Einbruch ueber Guard-Cap ist ein Hard-Negativsignal fuer Candidate-Ranking.
+3. Bei Konflikt gilt Teamwork-Prinzip: kein Einzelziel darf die Endentscheidung dominieren.
+4. Ranking muss konservative Kandidaten bevorzugen, wenn kritische Goals nahe Baseline bleiben.
+
+Normativer Entscheidungsrahmen:
+
+```python
+if waerme_deficit_reduced and spatial_depth_drop <= cap:
+    candidate_allowed = True
+else:
+    candidate_allowed = False
+```
+
+VERBOTEN:
+
+- Waerme-Boost ohne gleichzeitige Raumtiefen-Pruefung.
+- Akzeptanz eines Kandidaten nur aufgrund eines Einzelgoal-Gewinns.
 
 **§2.29 Priority-Aware PMGG Retries (v9.10.77)**:
 
@@ -431,15 +467,19 @@ ALWAYS_APPLICABLE: frozenset[str] = frozenset({
 
 | Ziel | Deaktiviert wenn |
 | --- | --- |
-| `SpatialDepthMetric` | EraResult.decade ≤ 1950 UND M/S-Korrelation ≥ 0.95 (Mono-Aufnahme) |
+| `SpatialDepthMetric` | EraResult.decade ≤ 1950 UND M/S-Korrelation ≥ 0.95 (Mono-Aufnahme) **ODER** Transfer-Chain-Ende ist Lossy-Codec (`mp3_low`, `mp3_high`, `aac`, `streaming`) UND L/R-Korrelation ≥ **0.83** (Near-Mono-Codec: Joint-Stereo-Kompression kollabiert Raumcues physikalisch — bestätigt cassette+mp3_low corr=0.8507, v9.15.1) |
+| `SeparationFidelityMetric` | Mono-Quelle ODER PANNs < 2 Instrumente mit confidence ≥ 0.4 **ODER** Transfer-Chain-Ende ist Lossy-Codec UND L/R-Korrelation ≥ 0.83 (Joint-Stereo-Kodierung zerstört Stereo-Separation physikalisch — V52-Fix S7: parallele Regel zu `spatial_depth`; gleiches `_CODEC_JOINT_STEREO_MATS`-Set) |
 | `BrillanzMetric` | Quell-Bandbreite < 8 kHz UND AudioSR nicht geladen |
-| `TonalCenterMetric` | MaterialType = WAX_CYLINDER (Fix K, v9.10.100: SNR-Bedingung entfernt — K-S-Key-Detection ist SNR-invariant gemäß §9.7.11; Deaktivierung bei SNR < −5 dB war inkonsistent mit der K-S-Invarianz-Aussage und hätte tonal_center auf stark degradiertem Material blind abgeschaltet) |
+| `TonalCenterMetric` | MaterialType = WAX_CYLINDER (Fix K, v9.10.100: SNR-Bedingung entfernt — K-S-Key-Detection ist SNR-invariant gemäß §9.7.11) |
 | `GrooveMetric` | Dateilänge < 10 s ODER PANNs Percussion confidence < 0.15 |
 | `MicroDynamicsMetric` | Dateilänge < 20 s ODER Original-LUFS-Varianz < 0.5 LU |
-| `SeparationFidelityMetric` | Mono-Quelle ODER PANNs < 2 Instrumente mit confidence ≥ 0.4 |
 
 Filter läuft EINMAL pro Restaurierung (nach MediumClassifier + EraClassifier).
-Inapplicable Goals: im UI grau ausgeblendet, in RestorationResult.goal_applicability gespeichert.
+Inapplicable Goals: im UI grau ausgeblendet, in `RestorationResult.goal_applicability` gespeichert.
+
+**Chain-End-Codec-Ausschluss** (§2.32a, v9.15.1): `evaluate_goal_applicability()` empfängt `transfer_chain: list[str] | None`. Wenn das Ketten-Ende ein Lossy-Codec ist und der primäre Träger analog ist, gelten die erweiterten Deaktivierungs-Regeln. Schwellwert für Near-Mono-Erkennung: L/R-Korrelation ≥ **0.83** (nicht 0.88 — cassette/analoges Stereo-Tape hat typisch corr ≈ 0.85–0.87; mit 0.88 würde Ausschluss nie feuern). `evaluate_goal_applicability()` übergibt dazu `transfer_chain` auch an `calibration_matrix.get_material_floor()` für korrekte Bodenberechnung (§09.13).
+
+**Invariante (§2.32b)**: Inapplicable Goals aus UV3 (`RestorationResult.goal_applicability`) MÜSSEN über `RestaurierErgebnis.goal_applicability` (V51) vollständig an AurikDenker und weiter an `ExzellenzDenker.messe_und_repariere(inapplicable_goals=...)` propagiert werden — sonst zählen physikalisch unmögliche Scores als Violations und triggern Over-Processing (V49). `AurikErgebnis` muss ebenfalls `goal_applicability`-Feld für externe Caller besitzen (V51).
 
 ---
 
@@ -574,9 +614,9 @@ Nutzer-Meldung wenn Decke erreicht (Deutsch):
 6. **Groove**: Event-Onset-DTW ≤ 8 ms RMS — kein Begradigen von Swing/Rubato
 7. **Pass-Through-Invariante** (SNR > 40 dB): PQS-MOS-Verlust ≤ 0.05, alle 15 Goals ±0.02, LUFS ≤ 0.3 LU, Chroma ≥ 0.99
 8. **Rauschboden** (modus-differenziert):
-   - **Restoration**: Material-adaptiv — Rauschboden des originalen Aufnahmemediums anstreben. Ein Studio-Tape von 1965 hatte ≈ −60 dBFS; erzwungene −72 dBFS entfernt Studio-Ambience und zerstört Raumklang. Richtgrößen: Shellac ≤ −45 dBFS, Vinyl ≤ −55 dBFS, Tape ≤ −60 dBFS, Digital ≤ −72 dBFS.
-   - **Studio 2026**: ≤ −72 dBFS, A-gew. ≤ −75 dB(A), 0 Musical-Noise-Events in Stille
-   - **Beide Modi**: 0 Musical-Noise-Events in Stille-Segmenten (Musical Noise ist immer ein Artefakt)
+    - **Restoration**: Analoge Tonträger-Rauschböden werden als reparierbare Trägerdefekte behandelt. Der Export zielt für `shellac`, `wax_cylinder`, `lacquer_disc`, `wire_recording`, `vinyl`, `tape`, `reel_tape` und `cassette` auf CD-ähnlichen Rauschboden statt analogem Hiss-/Oberflächenrauschen. Bei nötiger Resttextur-Auffüllung: Zielprofil `cd_digital`, ca. −74 dBFS, Testanker ≤ −68 dBFS; keine analoge Mindestboden-Reinjektion.
+    - **Studio 2026**: ≤ −72 dBFS, A-gew. ≤ −75 dB(A), 0 Musical-Noise-Events in Stille
+    - **Beide Modi**: 0 Musical-Noise-Events in Stille-Segmenten (Musical Noise ist immer ein Artefakt)
 9. **Mikro-Dynamik**: Pearson des 400 ms LUFS-Profils ≥ 0.92, Crest-Faktor ≤ 1.5 dB
 10. **Vintage Aesthetics** (automatisch via EraClassifier):
     - 1920–1940: Rolloff ≤ 7 kHz nicht künstlich erweitern

@@ -10,7 +10,7 @@ def compute_rms(audio: np.ndarray) -> float:
 def compute_loudness(audio: np.ndarray) -> float:
     """Berechnet eine einfache Lautheitsschätzung (LUFS-Approximation)."""
     rms = compute_rms(audio)
-    return 20 * np.log10(rms + 1e-8)
+    return float(20 * np.log10(rms + 1e-8))
 
 
 def safe_peak_amplitude(audio: np.ndarray) -> float:
@@ -39,7 +39,7 @@ def fft_autocorr(x: np.ndarray, max_lag: int | None = None) -> np.ndarray:
     ac_full = irfft(X * np.conj(X), n=fft_len)[:n]
     if max_lag is not None:
         ac_full = ac_full[: max_lag + 1]
-    return np.asarray(ac_full, dtype=np.float64)
+    return np.asarray(ac_full, dtype=np.float64)  # type: ignore[no-any-return]
 
 
 def fft_crosscorr(a: np.ndarray, b: np.ndarray) -> np.ndarray:
@@ -61,7 +61,7 @@ def fft_crosscorr(a: np.ndarray, b: np.ndarray) -> np.ndarray:
     shift = len(b) - 1
     out[shift:] = cc[: len(a)]
     out[:shift] = cc[fft_len - shift : fft_len]
-    return out
+    return out  # type: ignore[no-any-return]
 
 
 def audio_stats(audio: np.ndarray) -> dict:
@@ -75,5 +75,5 @@ def audio_stats(audio: np.ndarray) -> dict:
 
 def log_message(msg: str, logfile: str = "aurik6.log"):
     """Schreibt eine Lognachricht in eine Datei."""
-    with open(logfile, "a") as f:
+    with open(logfile, "a", encoding="utf-8") as f:
         f.write(msg + "\n")

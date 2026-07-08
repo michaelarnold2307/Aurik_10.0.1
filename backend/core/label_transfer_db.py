@@ -95,7 +95,7 @@ class LabelProfile:
             [self.interpolate_eq_gain_db(float(f)) for f in freq_bins],
             dtype=np.float32,
         )
-        return np.power(10.0, gains_db / 20.0, dtype=np.float32)
+        return np.power(10.0, gains_db / 20.0, dtype=np.float32)  # type: ignore[no-any-return]
 
 
 @dataclass
@@ -475,7 +475,7 @@ class LabelTransferDB:
         """
         result = self.lookup(era_year=era_year, material=material, label_hint=label_hint)
         if result.profile is None or result.confidence < 0.50:
-            return np.ones(len(freq_bins), dtype=np.float32)
+            return np.ones(len(freq_bins), dtype=np.float32)  # type: ignore[no-any-return]
 
         return result.profile.get_eq_curve(freq_bins)
 
@@ -547,7 +547,7 @@ class LabelTransferDB:
 
             _out = np.nan_to_num(_out, nan=0.0, posinf=0.0, neginf=0.0)
             _out = np.clip(_out, -1.0, 1.0)
-            return _out
+            return _out  # type: ignore[no-any-return]
 
         except Exception as exc:  # pylint: disable=broad-except
             logger.debug("§LTD-1 apply_label_eq non-blocking: %s", exc)

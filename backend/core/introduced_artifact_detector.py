@@ -86,7 +86,7 @@ class IntroducedArtifactDetector:
         """Konvertiert input to finite float32 safely without overflow warnings."""
         arr64 = np.asarray(audio, dtype=np.float64)
         arr64 = np.nan_to_num(arr64, nan=0.0, posinf=0.0, neginf=0.0)
-        return np.clip(arr64, -1.0, 1.0).astype(np.float32, copy=False)
+        return np.clip(arr64, -1.0, 1.0).astype(np.float32, copy=False)  # type: ignore[no-any-return]
 
     def detect(self, original: np.ndarray, restored: np.ndarray, sr: int) -> IADResult:
         """Erkennt durch Restaurierung eingebrachte Artefakte."""
@@ -132,10 +132,10 @@ class IntroducedArtifactDetector:
 
     def get_artifact_mask(self, iad_result: IADResult, n_samples: int) -> np.ndarray:
         if iad_result.artifact_mask is None:
-            return np.zeros(n_samples, dtype=bool)
+            return np.zeros(n_samples, dtype=bool)  # type: ignore[no-any-return]
         mask = iad_result.artifact_mask
         if len(mask) < n_samples:
-            return np.pad(mask, (0, n_samples - len(mask)))
+            return np.pad(mask, (0, n_samples - len(mask)))  # type: ignore[no-any-return]
         return mask[:n_samples]
 
     def _detect_nmf_clicks(self, orig: np.ndarray, residuum: np.ndarray, sr: int) -> list[ArtifactRegion]:
@@ -259,7 +259,7 @@ class IntroducedArtifactDetector:
             )
             if len(_energies) >= 2:
                 _diff = np.diff(_energies)
-                _transient_frames = np.sum(_diff > 0.20 * float(np.max(_energies) + 1e-12))
+                _transient_frames: int = int(np.sum(_diff > 0.20 * float(np.max(_energies) + 1e-12)))
                 _duration_s = max(len(orig) / sr, 1e-3)
                 _transient_density = float(_transient_frames) / _duration_s  # events/s
             else:
@@ -291,7 +291,7 @@ class IntroducedArtifactDetector:
         smear = max(1, int(_smear_ms / 1000.0 * sr))
 
         def frames(sig: np.ndarray) -> np.ndarray:
-            return np.array([float(np.sqrt(np.mean(sig[i : i + hop] ** 2))) for i in range(0, len(sig) - hop, hop)])
+            return np.array([float(np.sqrt(np.mean(sig[i : i + hop] ** 2))) for i in range(0, len(sig) - hop, hop)])  # type: ignore[no-any-return]
 
         eo = frames(orig)
         er = frames(rest)

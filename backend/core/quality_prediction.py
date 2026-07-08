@@ -37,6 +37,7 @@ class QualityMetric(Enum):
     BRIGHTNESS = "brightness"  # High Frequency Energy (0-1)
     NATURALNESS = "naturalness"  # Natural Sound (0-1)
     AUTHENTICITY = "authenticity"  # Period Authenticity (0-1)
+    PLEASANTNESS = "pleasantness"  # §v10 Human Pleasantness (0-1) — PRIMÄR
 
 
 class QualityLevel(Enum):
@@ -242,7 +243,7 @@ class QualityAnalyzer:
         """
         Misst dynamic range (peak to noise floor).
         """
-        peak = np.max(np.abs(audio))
+        peak: float = float(np.max(np.abs(audio)))
         noise_floor = np.percentile(np.abs(audio), 10)
 
         dr_db = 20 * np.log10(peak / noise_floor) if noise_floor > 1e-10 else 100.0
@@ -264,11 +265,11 @@ class QualityAnalyzer:
 
         # Fundamental (200-2000 Hz)
         fundamental_mask = (freqs >= 200) & (freqs <= 2000)
-        fundamental_power = np.sum(power[fundamental_mask])
+        fundamental_power: float = float(np.sum(power[fundamental_mask]))
 
         # Harmonics (2000-10000 Hz)
         harmonic_mask = (freqs > 2000) & (freqs <= 10000)
-        harmonic_power = np.sum(power[harmonic_mask])
+        harmonic_power: float = float(np.sum(power[harmonic_mask]))
 
         # THD
         thd = 100 * harmonic_power / fundamental_power if fundamental_power > 0 else 0.0
@@ -286,10 +287,10 @@ class QualityAnalyzer:
 
         # HF energy (4-16 kHz)
         hf_mask = (freqs >= 4000) & (freqs <= 16000)
-        hf_power = np.sum(power[hf_mask])
+        hf_power: float = float(np.sum(power[hf_mask]))
 
         # Total energy
-        total_power = np.sum(power)
+        total_power: float = float(np.sum(power))
 
         # Clarity = HF ratio (well-balanced).
         # The original formula  1 - |0.20 - r| / 0.20  goes negative whenever
@@ -313,7 +314,7 @@ class QualityAnalyzer:
 
     def _measure_warmth(self, audio: np.ndarray, sr: int) -> float:
         """
-        Misst tonal warmth (low-frequency richness).
+        Misst tonal warmth (vocal/instrument body, not only bass weight).
         """
         # Probe-runs and ultra-low-energy snippets should not fail warmth gates.
         # They do not contain enough spectral evidence for a meaningful warmth score.
@@ -325,16 +326,23 @@ class QualityAnalyzer:
         freqs = np.fft.rfftfreq(len(audio), 1 / sr)
         power = np.abs(fft) ** 2
 
-        # LF energy (60-250 Hz)
-        lf_mask = (freqs >= 60) & (freqs <= 250)
-        lf_power = np.sum(power[lf_mask])
+        # Psychoakustische Wärme liegt bei Musik/Gesang im Körperband. Der alte
+        # 60-250-Hz-Proxy wertete historische oder vokal-dominierte Quellen ohne
+        # Bassfundament fälschlich als eiskalt, obwohl 200-800 Hz intakt waren.
+        body_mask = (freqs >= 120) & (freqs <= 800)
+        presence_mask = (freqs > 800) & (freqs <= 3000)
+        broad_mask = (freqs >= 60) & (freqs <= min(6000, sr / 2))
 
-        total_power = np.sum(power)
+        body_power: float = float(np.sum(power[body_mask]))
+        presence_power: float = float(np.sum(power[presence_mask]))
+        broad_power: float = float(np.sum(power[broad_mask]))
 
-        if total_power > 0:
-            lf_ratio = lf_power / total_power
-            # Optimal around 0.10-0.20
-            warmth = min(lf_ratio / 0.15, 1.0)
+        if broad_power > 0:
+            body_ratio = body_power / broad_power
+            body_to_presence = body_power / (body_power + presence_power + 1e-20)
+            ratio_score = float(np.clip(body_ratio / 0.35, 0.0, 1.0))
+            balance_score = float(np.exp(-0.5 * ((body_to_presence - 0.55) / 0.35) ** 2))
+            warmth = 0.65 * ratio_score + 0.35 * balance_score
         else:
             # Silence / 2-sample probe → return neutral pass value.
             # Returning 0.0 falsely triggers warmth gates during multi-pass
@@ -353,9 +361,9 @@ class QualityAnalyzer:
 
         # HF energy (8-16 kHz)
         hf_mask = (freqs >= 8000) & (freqs <= 16000)
-        hf_power = np.sum(power[hf_mask])
+        hf_power: float = float(np.sum(power[hf_mask]))
 
-        total_power = np.sum(power)
+        total_power: float = float(np.sum(power))
 
         if total_power > 0:
             hf_ratio = hf_power / total_power
@@ -397,12 +405,12 @@ class QualityAnalyzer:
             else:
                 band_powers.append(0.0)
 
-        band_powers = np.array(band_powers)
-        if np.sum(band_powers) <= 0:
+        _band_powers_arr = np.array(band_powers)
+        if np.sum(_band_powers_arr) <= 0:
             return 0.75
 
         # Log-domain (safe): natural spectra are roughly linear in log-power
-        log_powers = np.log10(band_powers + 1e-20)
+        log_powers = np.log10(_band_powers_arr + 1e-20)
 
         # Linear fit (1/f tilt removal): residual = deviations from expected slope
         x = np.arange(n_bands, dtype=np.float64)
@@ -573,7 +581,7 @@ class QualityAnalyzer:
 
         # Stability confidence (low variance = more confident)
         variance = np.var(audio)
-        stability_confidence = 1.0 - min(variance, 1.0)
+        stability_confidence = 1.0 - min(variance, 1.0)  # type: ignore[operator]
 
         confidence = (snr_confidence + length_confidence + stability_confidence) / 3
 

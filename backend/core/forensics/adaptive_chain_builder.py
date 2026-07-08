@@ -204,7 +204,7 @@ class AdaptiveChainBuilder:
 
         for defect_type, detected in detected_defects.items():
             if defect_type in template["defect_modules"]:
-                module_name = template["defect_modules"][defect_type]
+                module_name = template["defect_modules"][defect_type]  # type: ignore[index]
 
                 # Check severity
                 severity = forensic_analysis.defect_severities.get(defect_type, "LOW")
@@ -231,7 +231,7 @@ class AdaptiveChainBuilder:
             logger.info("\n   [3/4] Adding enhancement...")
 
         enhancement_module = template.get("enhancement", "Enhancement")
-        module = self._create_module(enhancement_module, forensic_analysis, reason="Final enhancement")
+        module = self._create_module(enhancement_module, forensic_analysis, reason="Final enhancement")  # type: ignore[arg-type]
         modules.append(module)
         if verbose:
             logger.info("         + %s", enhancement_module)
@@ -326,17 +326,17 @@ class AdaptiveChainBuilder:
                 "fundamental_hz": 50,  # Or 60 for North America
                 "harmonics": 5,
                 "bandwidth_hz": 2,
-                "strength": strength,
+                "strength": strength,  # type: ignore[dict-item]
             }
 
         elif module_name == "ClickRemover":
-            params = {"sensitivity": strength, "max_click_length_ms": 3.0, "interpolation": "cubic"}
+            params = {"sensitivity": strength, "max_click_length_ms": 3.0, "interpolation": "cubic"}  # type: ignore[dict-item]
 
         elif module_name == "ImpulseNoiseRemover":
-            params = {"threshold_db": 15 - (strength * 5), "window_ms": 10}  # Lower threshold = more aggressive
+            params = {"threshold_db": 15 - (strength * 5), "window_ms": 10}  # type: ignore[dict-item]  # Lower threshold = more aggressive
 
         elif module_name == "DropoutCorrector":
-            params = {"threshold_db": -40, "min_dropout_ms": 5, "interpolation": "linear"}
+            params = {"threshold_db": -40, "min_dropout_ms": 5, "interpolation": "linear"}  # type: ignore[dict-item]
 
         elif module_name == "TapeCorrector":
             # Tape speed correction, azimuth, etc.
@@ -354,26 +354,26 @@ class AdaptiveChainBuilder:
             }
 
         elif module_name == "DistortionReducer":
-            params = {"threshold": 0.9, "strength": strength, "harmonic_restoration": True}
+            params = {"threshold": 0.9, "strength": strength, "harmonic_restoration": True}  # type: ignore[dict-item]
 
         elif module_name == "NoiseReducer":
             # Cassette noise reduction
-            params = {"strength": strength, "preserve_transients": True, "noise_profile": "tape_hiss"}
+            params = {"strength": strength, "preserve_transients": True, "noise_profile": "tape_hiss"}  # type: ignore[dict-item]
 
         elif module_name == "NoiseGate":
-            params = {"threshold_db": -50 + (strength * 10), "attack_ms": 5, "release_ms": 50}
+            params = {"threshold_db": -50 + (strength * 10), "attack_ms": 5, "release_ms": 50}  # type: ignore[dict-item]
 
         elif module_name == "DeNoiser":
-            params = {"strength": strength, "algorithm": "spectral_subtraction"}
+            params = {"strength": strength, "algorithm": "spectral_subtraction"}  # type: ignore[dict-item]
 
         elif "Enhancement" in module_name:
             # Era-specific enhancement
             if forensic_analysis.era in ["1950s", "1960s", "1970s"]:
                 # Vintage enhancement
-                params = {"brightness": 0.3, "warmth": 0.4, "stereo_enhancement": 0.2, "vintage_character": True}
+                params = {"brightness": 0.3, "warmth": 0.4, "stereo_enhancement": 0.2, "vintage_character": True}  # type: ignore[dict-item]
             else:
                 # Modern enhancement
-                params = {"brightness": 0.2, "clarity": 0.3, "stereo_enhancement": 0.3, "modern_character": True}
+                params = {"brightness": 0.2, "clarity": 0.3, "stereo_enhancement": 0.3, "modern_character": True}  # type: ignore[dict-item]
 
         return params
 

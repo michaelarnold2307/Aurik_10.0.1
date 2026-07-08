@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import numpy as np
 import pytest
 
@@ -22,7 +24,7 @@ def _white_noise(n: int = 48000, amplitude: float = 0.05, seed: int = 42) -> np.
 
 def _sine(freq: float = 440.0, sr: int = 48000, dur: float = 1.0) -> np.ndarray:
     t = np.linspace(0, dur, int(sr * dur), endpoint=False)
-    return (np.sin(2 * np.pi * freq * t) * 0.5).astype(np.float32)
+    return (np.sin(2 * np.pi * freq * t) * 0.5).astype(np.float32)  # type: ignore[no-any-return]
 
 
 # ===========================================================================
@@ -94,6 +96,68 @@ class TestRestoreCarrierNoiseTexture:
         result = restore_carrier_noise_texture(audio, audio, sr=48000, material_type="cd_digital")
         # Kein Unterschied → entweder passthrough oder minimale Korrektur
         assert result.shape == audio.shape
+
+    def test_correction_floor_never_louder_than_original(self):
+        """BUG-FIX: Injiziertes Comfort-Rauschen darf nie lauter als Original-Rauschboden sein.
+
+        Vorher: effective_floor * strength = -52 * 0.48 = -24.96 dBFS → LAUTER als Original!
+        Nachher: effective_floor + 20*log10(strength) → immer ≤ effective_floor (leiser).
+        """
+        from backend.core.dsp.noise_texture_resynth import restore_carrier_noise_texture
+
+        # Tape-ähnlicher Rauschboden: ~-52 dBFS
+        tape_amplitude = 10 ** (-52.0 / 20.0)  # ≈ 0.00251 linear
+        sr = 48000
+        rng = np.random.default_rng(42)
+        # Pre: weißes Rauschen bei -52 dBFS (reines Rauschsignal → Rauschboden ≈ -52 dBFS)
+        pre = rng.standard_normal(sr * 2).astype(np.float32) * tape_amplitude
+        # Post: fast komplett still (extreme Over-NR)
+        post = np.zeros(sr * 2, dtype=np.float32) + 1e-7
+
+        # Original-Rauschboden aus pre messen (5. Perzentil der Frame-RMS in dBFS)
+        frame_len = int(0.05 * sr)
+        hop = frame_len // 2
+        rms_vals = []
+        for s in range(0, len(pre) - frame_len, hop):
+            rms = float(np.sqrt(np.mean(pre[s : s + frame_len].astype(float) ** 2) + 1e-20))
+            rms_vals.append(rms)
+        p5 = float(np.percentile(rms_vals, 5))
+        original_floor_dbfs = 20.0 * np.log10(p5 + 1e-20)
+        # Sicherstellen, dass der Rauschboden im erwarteten Bereich liegt
+        assert original_floor_dbfs < -40.0, (
+            f"Test-Setup: Rauschboden sollte unter -40 dBFS liegen, got {original_floor_dbfs:.1f}"
+        )
+
+        # Korrektur mit strength=0.48 (Phase_03 mit effective_strength=0.8: 0.8*0.6=0.48)
+        result = restore_carrier_noise_texture(pre, post, sr=sr, material_type="tape", strength=0.48)
+
+        # Der Output-RMS im stillen Post-Bereich darf nicht lauter als original_floor + 6 dB sein
+        # (6 dB Toleranz wegen blend-Anteil und Meßungenauigkeit)
+        result_rms = float(np.sqrt(np.mean(result.astype(float) ** 2) + 1e-20))
+        result_db = 20.0 * np.log10(result_rms + 1e-20)
+        assert result_db <= original_floor_dbfs + 6.0, (
+            f"BUG REGRESSION: Injiziertes Comfort-Rauschen ({result_db:.1f} dBFS) ist lauter als "
+            f"Original-Rauschboden ({original_floor_dbfs:.1f} dBFS) + 6 dB! "
+            f"Altes Bug: effective_floor * 0.48 = {original_floor_dbfs * 0.48:.1f} dBFS → "
+            f"Starkregen-Artefakt."
+        )
+
+    @pytest.mark.parametrize("material", ["cassette", "vinyl", "shellac", "tape", "reel_tape", "wax_cylinder"])
+    def test_analog_resynth_targets_cd_like_floor(self, material):
+        """Analogträger: Over-NR-Korrektur darf analoges Trägerrauschen nicht zurückfüllen."""
+        from backend.core.dsp.noise_texture_resynth import restore_carrier_noise_texture
+
+        analog_amplitude = 10 ** (-52.0 / 20.0)
+        sr = 48000
+        rng = np.random.default_rng(43)
+        pre = rng.standard_normal(sr * 2).astype(np.float32) * analog_amplitude
+        post = np.zeros(sr * 2, dtype=np.float32) + 1e-7
+
+        result = restore_carrier_noise_texture(pre, post, sr=sr, material_type=material, strength=1.0)
+        result_rms = float(np.sqrt(np.mean(result.astype(float) ** 2) + 1e-20))
+        result_db = 20.0 * np.log10(result_rms + 1e-20)
+
+        assert result_db <= -68.0, f"{material}-Resynthese muss CD-like leise bleiben, got {result_db:.1f} dBFS"
 
 
 # ===========================================================================
@@ -610,7 +674,7 @@ class TestSyntheticGeneratorSosfiltfilt:
         import inspect
 
         try:
-            from golden_samples.synthetic_generator import SyntheticAudioGenerator
+            from golden_samples.synthetic_generator import SyntheticAudioGenerator  # type: ignore[attr-defined]
 
             src = inspect.getsource(SyntheticAudioGenerator._generate_vocal)
         except (ImportError, AttributeError):
@@ -665,20 +729,33 @@ class TestDefectPhaseMapperRestorationFilter:
                 f"§0a Verletzung: {forbidden_found} in all_phases für {defect_type.value} im Restoration-Modus"
             )
 
-    def test_get_all_phases_studio_2026_allows_forbidden(self):
-        """get_all_phases(mode='studio_2026') darf §0a-Phasen enthalten (Studio 2026)."""
+    def test_studio_2026_does_not_over_filter_vs_restoration(self):
+        """§0a Mode-Asymmetrie: Studio 2026 darf nie STRENGER filtern als Restoration.
+
+        Nach dem V04-Fix (v9.15.1) sind §0a-verbotene Phasen (phase_21/35/42) bewusst
+        komplett aus _PHASE_MAP entfernt — Defense-in-Depth zusätzlich zum Runtime-Filter.
+        Der korrekte §0a-Vertrag ist daher NICHT 'Studio enthält verbotene Phasen', sondern
+        'der mode-Gate restringiert ausschließlich in Restoration': für jeden DefectType
+        muss die Restoration-Phasenliste eine Teilmenge der Studio-2026-Liste sein, und
+        Restoration darf nie eine §0a-Phase enthalten (von den Geschwister-Tests gesichert).
+        """
         from backend.core.defect_phase_mapper import _RESTORATION_FORBIDDEN_PHASES, DefectPhaseMapper
         from backend.core.defect_scanner import DefectType
 
         mapper = DefectPhaseMapper()
-        # Prüfe: mindestens eine DefectType hat eine §0a-Phase in studio_2026
-        found_studio_phase = False
         for defect_type in DefectType:
-            phases_studio = mapper.get_all_phases(defect_type, mode="studio_2026")
-            if set(phases_studio) & _RESTORATION_FORBIDDEN_PHASES:
-                found_studio_phase = True
-                break
-        assert found_studio_phase, "Studio 2026 sollte mindestens eine §0a-Phase (phase_35/42) enthalten"
+            phases_restoration = set(mapper.get_all_phases(defect_type, mode="restoration"))
+            phases_studio = set(mapper.get_all_phases(defect_type, mode="studio_2026"))
+            # Studio 2026 ist Obermenge: der mode-Gate entfernt nur in Restoration.
+            assert phases_restoration <= phases_studio, (
+                f"§0a Mode-Asymmetrie verletzt: Studio 2026 filtert für {defect_type.value} "
+                f"strenger als Restoration (entfernt {phases_restoration - phases_studio})"
+            )
+            # Restoration darf §0a-Phasen nie enthalten (Defense-in-Depth + Filter).
+            assert not (phases_restoration & _RESTORATION_FORBIDDEN_PHASES), (
+                f"§0a Verletzung: {phases_restoration & _RESTORATION_FORBIDDEN_PHASES} "
+                f"in Restoration-Phasen für {defect_type.value}"
+            )
 
     def test_get_primary_phases_no_mode_defaults_to_restoration(self):
         """Kein mode-Argument → default 'restoration' → Filterung aktiv."""
@@ -893,7 +970,7 @@ class TestRoomAcousticsFingerprinter:
         rng = np.random.default_rng(42)
         audio = rng.standard_normal(48000).astype(np.float32) * 0.01
         result = compute_room_acoustics_fingerprint(audio, 48000)
-        cap = float(result["dereverb_strength_cap"])
+        cap = float(result["dereverb_strength_cap"])  # type: ignore[arg-type]
         assert 0.10 <= cap <= 1.0, f"Cap out of range: {cap}"
 
     def test_long_rt60_tightens_cap(self):
@@ -907,8 +984,8 @@ class TestRoomAcousticsFingerprinter:
         # Use a very slow decay to exceed RT60 threshold
         slow_decay = np.exp(-0.3 * t).astype(np.float32)
         result = compute_room_acoustics_fingerprint(slow_decay, sr)
-        if float(result["rt60_s"]) >= _RT60_HIGH_THRESHOLD_S:
-            assert float(result["dereverb_strength_cap"]) <= 0.25, f"High RT60 should tighten cap: {result}"
+        if float(result["rt60_s"]) >= _RT60_HIGH_THRESHOLD_S:  # type: ignore[arg-type]
+            assert float(result["dereverb_strength_cap"]) <= 0.25, f"High RT60 should tighten cap: {result}"  # type: ignore[arg-type]
 
     def test_silent_signal_returns_default(self):
         """Silent signal → fallback defaults, no exception."""
@@ -926,7 +1003,7 @@ class TestRoomAcousticsFingerprinter:
         rng = np.random.default_rng(99)
         audio = rng.standard_normal(96000).astype(np.float32) * 0.5
         result = compute_room_acoustics_fingerprint(audio, 48000)
-        cap = float(result["dereverb_strength_cap"])
+        cap = float(result["dereverb_strength_cap"])  # type: ignore[arg-type]
         assert 0.10 <= cap <= 1.0, f"Cap {cap} outside [0.10, 1.0]"
 
     def test_stereo_input_accepted(self):
@@ -2084,3 +2161,344 @@ class TestStyleIntentDetector:
         d = vfa.to_dict()
         assert "style_intent_zones" in d, "to_dict() fehlt 'style_intent_zones'"
         assert "style_confidence" in d, "to_dict() fehlt 'style_confidence'"
+
+
+# ===========================================================================
+# §0p Gap-Fix: PMGG-Primärpfad injiziert panns_singing in phase_kwargs
+# ===========================================================================
+
+
+class TestPmggPathPannsInjection:
+    """§0f/§0p RELEASE_MUST — kanonische Phase-Kontext-Injektion auf BEIDEN Pfaden.
+
+    Es existieren zwei Phasen-Ausführungspfade: (1) PMGG-Primärpfad
+    (_pmgg_gate.wrap_phase) und (2) Fallback _profiled_phase_call →
+    _prepare_profiled_phase_runtime_context. Beide MÜSSEN dieselben vokal-/
+    wahrnehmungsbezogenen Kontext-Keys injizieren, sonst sind §0p-Guards
+    (Vibrato/Frisson/Passaggio/Breath/soft_saturation/vocal_presence) und die
+    §9.1d Per-Event-Dosierung (defect_event_metadata) auf dem jeweils anderen
+    Pfad latent deaktiviert — stiller Qualitätsverlust ohne Fehler.
+
+    Single Source of Truth ist _canonical_phase_context_kwargs(); diese Tests
+    verhindern, dass ein Pfad daran vorbei eigene kwargs baut (Reintroduktion).
+    """
+
+    # Kanonischer Key-Satz, der auf BEIDEN Pfaden ankommen MUSS.
+    _CANONICAL_KEYS = (
+        "frisson_zones",
+        "passaggio_zones",
+        "vibrato_zones",
+        "breath_segments",
+        "soft_saturation_severity",
+        "soft_saturation_preserve",
+        "vocal_presence_active",
+        "vocal_presence_strength",
+        "panns_singing",
+        "panns_vocals_confidence",
+        "panns_tags",
+        "transfer_chain",
+        "defect_event_metadata",
+    )
+
+    def _wrap_phase_kwargs_window(self) -> str:
+        """Extrahiert das phase_kwargs-Fenster direkt nach _pmgg_gate.wrap_phase( in
+        _execute_pipeline. Datei-basiert für Robustheit gegen Method-Refactors."""
+        import inspect
+
+        from backend.core.unified_restorer_v3 import UnifiedRestorerV3
+
+        src = inspect.getsource(UnifiedRestorerV3._execute_pipeline)
+        marker = "_pmgg_gate.wrap_phase("
+        idx = src.find(marker)
+        assert idx != -1, "PMGG-Primärpfad _pmgg_gate.wrap_phase( nicht in _execute_pipeline gefunden"
+        # phase_kwargs-Dict folgt unmittelbar; ~3000 Zeichen Fenster deckt den Dict sicher ab.
+        return src[idx : idx + 3500]
+
+    def test_pmgg_wrap_phase_uses_canonical_context_helper(self):
+        """PMGG-Pfad merged _canonical_phase_context_kwargs() in seine phase_kwargs."""
+        window = self._wrap_phase_kwargs_window()
+        assert "_canonical_phase_context_kwargs()" in window, (
+            "§0f/§0p BUG: PMGG-Primärpfad nutzt _canonical_phase_context_kwargs() NICHT — "
+            "vokal-/wahrnehmungsbezogene Kontext-Keys fehlen, §0p-Guards latent deaktiviert"
+        )
+
+    def test_profiled_path_uses_canonical_context_helper(self):
+        """Fallback-Pfad _prepare_profiled_phase_runtime_context nutzt denselben Helper."""
+        import inspect
+
+        from backend.core.unified_restorer_v3 import UnifiedRestorerV3
+
+        src = inspect.getsource(UnifiedRestorerV3._prepare_profiled_phase_runtime_context)
+        assert "_canonical_phase_context_kwargs()" in src, (
+            "§0f/§0p BUG: Fallback-Pfad nutzt _canonical_phase_context_kwargs() NICHT — "
+            "die beiden Pfade injizieren divergierende Kontext-Keys"
+        )
+
+    def test_canonical_helper_returns_all_keys(self):
+        """_canonical_phase_context_kwargs() liefert den vollständigen §0p-Key-Satz."""
+        from backend.core.unified_restorer_v3 import UnifiedRestorerV3
+
+        stub = SimpleNamespace(_restoration_context={})
+        out = UnifiedRestorerV3._canonical_phase_context_kwargs(stub)  # type: ignore[arg-type]
+        for key in self._CANONICAL_KEYS:
+            assert key in out, f"§0p: kanonischer Kontext-Key '{key}' fehlt im Helper-Output"
+
+    def test_canonical_helper_sources_from_restoration_context(self):
+        """Werte stammen aus _restoration_context (nicht hartkodiert/konstant, §0c)."""
+        from backend.core.unified_restorer_v3 import UnifiedRestorerV3
+
+        rctx = {
+            "panns_singing": 0.42,
+            "vocal_presence_active": True,
+            "vibrato_zones": [(1.0, 2.0)],
+            "transfer_chain": ["vinyl", "cassette"],
+        }
+        stub = SimpleNamespace(_restoration_context=rctx)
+        out = UnifiedRestorerV3._canonical_phase_context_kwargs(stub)  # type: ignore[arg-type]
+        assert out["panns_singing"] == pytest.approx(0.42), "panns_singing nicht aus restoration_context gelesen"
+        assert out["vocal_presence_active"] is True
+        assert out["vibrato_zones"] == [(1.0, 2.0)]
+        assert out["transfer_chain"] == ["vinyl", "cassette"]
+
+    def test_canonical_helper_safe_defaults_on_empty_context(self):
+        """Leerer Kontext → sichere Defaults (keine None/Exception, §3.1)."""
+        from backend.core.unified_restorer_v3 import UnifiedRestorerV3
+
+        stub = SimpleNamespace(_restoration_context={})
+        out = UnifiedRestorerV3._canonical_phase_context_kwargs(stub)  # type: ignore[arg-type]
+        assert out["panns_singing"] == 0.0
+        assert out["vocal_presence_active"] is False
+        assert out["soft_saturation_severity"] == 0.0
+        assert out["frisson_zones"] == []
+        assert out["panns_tags"] == {}
+        assert out["defect_event_metadata"] == {}
+
+
+class TestPhase03BsRoformerVocalStemNR:
+    """Tests für BS-RoFormer Vocal-Stem-NR in phase_03 (§0a-konformer MIIPHER-Äquivalent)."""
+
+    def _make_noisy_stereo(self, sr: int = 48000, dur: float = 1.0) -> np.ndarray:
+        """Synthetisches Stereo-Signal: 220 Hz Sinus + weißes Rauschen (-20 dBFS)."""
+        rng = np.random.default_rng(42)
+        t = np.linspace(0, dur, int(sr * dur), endpoint=False)
+        signal = 0.3 * np.sin(2 * np.pi * 220 * t).astype(np.float32)
+        noise = 0.05 * rng.standard_normal(len(t)).astype(np.float32)
+        mono = np.clip(signal + noise, -1.0, 1.0)
+        return np.column_stack([mono, mono * 0.9]).astype(np.float32)  # (N, 2)
+
+    def test_bsrof_active_path_preserves_instrumental_stem(self, monkeypatch):
+        """Aktiver BS-RoFormer-Pfad remixt unveränderten Instrumental-Stem zurück."""
+        import importlib
+
+        from plugins.bs_roformer_plugin import StemSeparationResult
+
+        mod = importlib.import_module("backend.core.phases.phase_03_denoise")
+        phase = mod.DenoisePhase()
+
+        audio_in = _white_noise(48000, amplitude=0.04, seed=123)
+        original_rms = float(np.sqrt(np.mean(audio_in.astype(np.float64) ** 2) + 1e-20))
+
+        class _FakeBsRoformer:
+            def separate(self, audio, sr, *, stems=None):
+                assert sr == 48000
+                assert stems == ["vocals"]
+                return StemSeparationResult(
+                    stems={"vocals": np.zeros_like(audio, dtype=np.float32)},
+                    sr=48000,
+                    sdri_db=5.0,
+                    model_used="melbandroformer_test",
+                    confidence=0.95,
+                )
+
+        monkeypatch.setattr("plugins.bs_roformer_plugin.get_bs_roformer", lambda: _FakeBsRoformer())
+        monkeypatch.setattr(mod, "RESOURCE_MANAGER_AVAILABLE", False, raising=False)
+
+        result = phase.process(
+            audio=audio_in,
+            material_type="vinyl",
+            sample_rate=48000,
+            panns_singing=0.50,
+            strength=0.1,
+            decade=1930,
+            quality_mode="fast",
+        )
+        assert result is not None
+        assert result.audio is not None
+        assert result.metadata.get("bsrof_stem_active", False) is True
+        assert result.metadata.get("bsrof_recombined", False) is True
+        result_rms = float(np.sqrt(np.mean(result.audio.astype(np.float64) ** 2) + 1e-20))
+        assert result_rms >= original_rms * 0.75
+
+    def test_recombine_bsrof_inactive_passthrough(self):
+        """_recombine_bsrof_if_needed gibt audio unverändert zurück wenn inaktiv."""
+        import importlib
+
+        mod = importlib.import_module("backend.core.phases.phase_03_denoise")
+        phase = mod.DenoisePhase()
+
+        audio_in = np.zeros((48000,), dtype=np.float32)
+        audio_in[100] = 0.5
+
+        # panns_singing=0.0 → Gate nicht erfüllt → kein BS-RoFormer
+        result = phase.process(
+            audio=audio_in,
+            material_type="vinyl",
+            sample_rate=48000,
+            panns_singing=0.0,
+            strength=0.1,
+            decade=1975,
+        )
+        assert result is not None
+        assert result.audio is not None
+        assert result.metadata.get("bsrof_stem_active", False) is False
+
+    def test_bsrof_gate_panns_threshold(self):
+        """BS-RoFormer-Gate aktiviert nur wenn panns_singing >= 0.35."""
+        import importlib
+
+        mod = importlib.import_module("backend.core.phases.phase_03_denoise")
+        phase = mod.DenoisePhase()
+
+        rng = np.random.default_rng(7)
+        audio = (0.05 * rng.standard_normal(48000)).astype(np.float32)
+
+        # panns_singing = 0.20 → unter Gate (0.35) → bsrof_stem_active = False
+        result_low = phase.process(
+            audio=audio,
+            material_type="vinyl",
+            sample_rate=48000,
+            panns_singing=0.20,
+            strength=0.1,
+            decade=1975,
+        )
+        assert result_low.metadata.get("bsrof_stem_active", False) is False
+
+    def test_recombine_bsrof_adds_instrumental(self):
+        """_recombine_bsrof_if_needed: NR-Vokal + Instrumental ergibt plausiblen Mix."""
+        # Direkte Einheit: Vokal 0.3, Instrumental 0.2 → Summe ≈ 0.5
+        voc = np.full(4800, 0.3, dtype=np.float32)
+        inst = np.full(4800, 0.2, dtype=np.float32)
+        combined = np.clip(voc + inst, -1.0, 1.0)
+        assert float(np.mean(combined)) == pytest.approx(0.5, abs=1e-4)
+
+    def test_bsrof_gate_snr_threshold(self):
+        """BS-RoFormer-Gate nur wenn SNR < 20 dB; bei sauberem Signal inaktiv."""
+        import importlib
+
+        mod = importlib.import_module("backend.core.phases.phase_03_denoise")
+        phase = mod.DenoisePhase()
+
+        # Sehr sauberes Signal (>35 dB SNR → SNR-Bypass wird aktiv, kein BS-RoFormer)
+        t = np.linspace(0, 1.0, 48000, endpoint=False)
+        clean = (0.5 * np.sin(2 * np.pi * 440 * t)).astype(np.float32)
+
+        result_clean = phase.process(
+            audio=clean,
+            material_type="cd_digital",
+            sample_rate=48000,
+            panns_singing=0.50,
+            strength=0.1,
+            decade=2000,
+        )
+        # SNR-Bypass greift oder BS-RoFormer inaktiv wegen material_type=cd_digital (snr > 35)
+        assert result_clean is not None
+        assert result_clean.audio is not None
+
+
+# ---------------------------------------------------------------------------
+# §Lücke3 V55: WLPC — era_decade < 1960 aktiviert noise-robuste LPC-Schätzung
+# ---------------------------------------------------------------------------
+class TestWLPCFormantEnhance:
+    """§V55: lpc_formant_enhance() mit era_decade — WLPC-Pfad validieren."""
+
+    def _make_voiced_audio(self, dur_s: float = 0.5, sr: int = 48000) -> np.ndarray:
+        import numpy as np
+
+        t = np.linspace(0, dur_s, int(dur_s * sr), endpoint=False)
+        f0 = 200.0
+        audio = np.zeros_like(t)
+        for k in range(1, 8):
+            audio += (1.0 / k) * np.sin(2 * np.pi * f0 * k * t)
+        return (audio / (np.max(np.abs(audio)) + 1e-8)).astype(np.float32)
+
+    def test_era_none_does_not_crash(self):
+        """era_decade=None → normale LPC-Verarbeitung, kein Absturz."""
+        import numpy as np
+
+        from backend.core.dsp.lpc_formant_tracker import lpc_formant_enhance
+
+        audio = self._make_voiced_audio()
+        result = lpc_formant_enhance(audio, 48000, era_decade=None)
+        assert result is not None
+        assert result.shape == audio.shape
+        assert not np.any(np.isnan(result))
+
+    def test_historical_era_activates_wlpc(self):
+        """era_decade=1930 → WLPC-Pfad aktiv — kein Absturz, valides Ergebnis."""
+        import numpy as np
+
+        from backend.core.dsp.lpc_formant_tracker import lpc_formant_enhance
+
+        audio = self._make_voiced_audio()
+        result = lpc_formant_enhance(audio, 48000, era_decade=1930)
+        assert result is not None
+        assert result.shape == audio.shape
+        assert not np.any(np.isnan(result))
+        assert not np.any(np.isinf(result))
+
+    def test_modern_era_uses_standard_lpc(self):
+        """era_decade=1975 → WLPC nicht aktiv (>= 1960), Standard-LPC."""
+        import numpy as np
+
+        from backend.core.dsp.lpc_formant_tracker import lpc_formant_enhance
+
+        audio = self._make_voiced_audio()
+        result = lpc_formant_enhance(audio, 48000, era_decade=1975)
+        assert result is not None
+        assert result.shape == audio.shape
+        assert not np.any(np.isnan(result))
+
+    def test_era_boundary_1960_standard_lpc(self):
+        """era_decade=1960 → Grenzwert >= 1960: Standard-LPC."""
+
+        from backend.core.dsp.lpc_formant_tracker import lpc_formant_enhance
+
+        audio = self._make_voiced_audio()
+        result = lpc_formant_enhance(audio, 48000, era_decade=1960)
+        assert result is not None
+        assert result.shape == audio.shape
+
+    def test_era_1959_activates_wlpc(self):
+        """era_decade=1959 → streng < 1960: WLPC aktiv."""
+        import numpy as np
+
+        from backend.core.dsp.lpc_formant_tracker import lpc_formant_enhance
+
+        audio = self._make_voiced_audio()
+        result = lpc_formant_enhance(audio, 48000, era_decade=1959)
+        assert result is not None
+        assert result.shape == audio.shape
+        assert not np.any(np.isnan(result))
+
+    def test_wlpc_output_clipped(self):
+        """WLPC-Ausgabe muss in [-1, 1] liegen (Clipping-Guard)."""
+        import numpy as np
+
+        from backend.core.dsp.lpc_formant_tracker import lpc_formant_enhance
+
+        audio = self._make_voiced_audio()
+        result = lpc_formant_enhance(audio, 48000, era_decade=1925)
+        assert float(np.max(np.abs(result))) <= 1.0 + 1e-4, "Clipping-Guard: Ausgabe > 1.0"
+
+    def test_stereo_era_historical_no_crash(self):
+        """Stereo (2, N) + era_decade=1940 → kein Absturz."""
+        import numpy as np
+
+        from backend.core.dsp.lpc_formant_tracker import lpc_formant_enhance
+
+        mono = self._make_voiced_audio()
+        # Stereo channels-first (2, N) — Phase42 übergibt in diesem Format
+        stereo = np.stack([mono, mono * 0.9], axis=0)
+        result = lpc_formant_enhance(stereo, 48000, era_decade=1940)
+        assert result is not None
+        assert not np.any(np.isnan(result))

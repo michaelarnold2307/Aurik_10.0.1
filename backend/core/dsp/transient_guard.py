@@ -20,7 +20,7 @@ import numpy as np
 try:
     import librosa  # type: ignore[import-untyped]
 except Exception:  # pragma: no cover - optionale Abhängigkeit
-    librosa = None
+    librosa = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
 
@@ -54,8 +54,8 @@ def _detect_onsets_simple(audio_mono: np.ndarray, sr: int, hop: int = 256) -> np
         if librosa is None:
             raise RuntimeError("librosa nicht verfügbar")
 
-        onsets = librosa.onset.onset_detect(y=audio_mono, sr=sr, hop_length=hop, units="samples", backtrack=True)
-        return np.asarray(onsets, dtype=np.int64)
+        onsets = librosa.onset.onset_detect(y=audio_mono, sr=sr, hop_length=hop, units="samples", backtrack=True)  # type: ignore[attr-defined]
+        return np.asarray(onsets, dtype=np.int64)  # type: ignore[no-any-return]
     except Exception:
         pass
 
@@ -69,7 +69,7 @@ def _detect_onsets_simple(audio_mono: np.ndarray, sr: int, hop: int = 256) -> np
     diff = np.diff(energies, prepend=energies[:1])
     threshold = float(np.mean(diff) + 1.5 * np.std(diff))
     onset_frames = np.where(diff > threshold)[0]
-    return (onset_frames * frame_len).astype(np.int64)
+    return (onset_frames * frame_len).astype(np.int64)  # type: ignore[no-any-return]
 
 
 def detect_transient_shifts(

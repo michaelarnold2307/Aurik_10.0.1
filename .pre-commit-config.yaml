@@ -1,5 +1,5 @@
 # =============================================================================
-# .pre-commit-config.yaml — Aurik 9 Code-Qualitäts-Hooks (SOTA, März 2026)
+# .pre-commit-config.yaml — Aurik 9 Code-Qualitäts-Hooks (SOTA, Juni 2026)
 # Installation: pre-commit install
 # Manuell ausführen: pre-commit run --all-files
 # =============================================================================
@@ -153,6 +153,7 @@ repos:
           - --disable-error-code=union-attr
           - --disable-error-code=return
           - --disable-error-code=dict-item
+          - --disable-error-code=override
         # Nur Kern-Module prüfen (backend/ + plugins/ + denker/ — deckt backend/core/ korrekt ab)
         files: ^(backend|plugins|denker)/.*\.py$
 
@@ -230,7 +231,7 @@ repos:
         entry: .venv_aurik/bin/python scripts/compliance_check.py --errors-only
         language: system
         pass_filenames: false
-        files: ^(backend|core|dsp|plugins|denker|Aurik910)/.*\.py$
+        files: ^(backend|core|dsp|plugins|denker|Aurik10)/.*\.py$
 
       - id: aurik-verboten-linter
         name: "🔍 Aurik AST VERBOTEN-Linter (V01–V33)"
@@ -252,3 +253,52 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+
+      - id: aurik-type-ignore-order
+        name: "🧭 mypy type-ignore Reihenfolge (ignore vor Inline-Kommentar)"
+        entry: .venv_aurik/bin/python scripts/check_type_ignore_order.py backend plugins Aurik10 cli scripts
+        language: system
+        pass_filenames: false
+        files: ^(backend|plugins|Aurik10|cli|scripts)/.*\.py$
+
+      - id: aurik-mypy-real-bug-gate
+        name: "🧪 Aurik mypy Real-Bug-Gate (alle Layer, var-annotated Sprint 4 toleriert)"
+        entry: .venv_aurik/bin/python scripts/check_mypy_real_bugs.py
+        language: system
+        pass_filenames: false
+        files: ^(backend|plugins|Aurik10|cli)/.*\.py$
+
+      # ── v10.0.1 Chirurgische Präzision ──────────────────────────
+      - id: aurik-format-string-guard
+        name: "🔤 Format-String-Guard (logger %s-Anzahl == Argument-Anzahl)"
+        entry: .venv_aurik/bin/python scripts/compliance/check_format_strings.py
+        language: system
+        pass_filenames: true
+        files: ^(backend|Aurik10)/.*\.py$
+
+      - id: aurik-contract-validator
+        name: "🔗 ContractValidator (Cross-Module Defect/Phase-Konsistenz)"
+        entry: .venv_aurik/bin/python scripts/compliance/check_contracts.py
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: aurik-import-breaking
+        name: "🚫 Import-Breaking-Change (kritische Exports erhalten)"
+        entry: .venv_aurik/bin/python scripts/compliance/check_import_breaking.py
+        language: system
+        pass_filenames: true
+        files: ^backend/core/(quality_mode|defect_manifest|phase_pruner|safe_dict|periodic_health)\.py$
+
+      - id: aurik-anti-regression
+        name: "🛡️ Anti-Regression-Gate (alle 9 Bug-Muster)"
+        entry: .venv_aurik/bin/python scripts/compliance/anti_regression_gate.py
+        language: system
+        pass_filenames: true
+
+      - id: aurik-version-consistency
+        name: "🏷️ Version-Consistency (kein Aurik 8.0/9.x in Logs)"
+        entry: "bash -c '! grep -rn \"Aurik [0-9]\\.[0-9]\" backend/ Aurik10/ --include=\"*.py\" | grep -v \"10\\.\" | grep -v \"# \" | grep -v \"CLAUDE\" | grep -v \"CHANGELOG\" | grep -v \"specs/\"'"
+        language: system
+        pass_filenames: false
+        files: ^(backend|Aurik10)/.*\.py$

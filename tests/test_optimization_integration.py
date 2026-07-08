@@ -50,6 +50,63 @@ def test_cli_uses_frontend_export_contract():
     assert "sf.write(output_path" not in source
 
 
+def test_export_quality_blocks_structural_silence_lift() -> None:
+    """§0h: Export darf in struktureller Stille keine Energie hinzufuegen."""
+    from backend.exporter import validate_export_quality
+
+    result = SimpleNamespace(
+        quality_estimate=0.9,
+        metadata={
+            "structural_silence_audit": {
+                "failed": True,
+                "max_lift_db": 2.4,
+            },
+            "musical_goals": {"scores": {}, "violations": [], "thresholds": {}},
+        },
+    )
+
+    passed, warnings = validate_export_quality(result)
+
+    assert passed is False
+    assert any("Structural-Silence" in warning or "Stille-Zonen" in warning for warning in warnings)
+
+
+def test_export_quality_blocks_severe_vocal_naturalness_damage() -> None:
+    """§0p: schwere Formant-/Vibrato-Schäden sind Export-Hörschaden, kein kosmetischer Warnfall."""
+    from backend.exporter import validate_export_quality
+
+    result = SimpleNamespace(
+        quality_estimate=0.9,
+        metadata={
+            "vocal_quality_check": {
+                "formant_integrity": 0.68,
+                "vibrato_depth_preservation": 0.76,
+            },
+            "musical_goals": {"scores": {}, "violations": [], "thresholds": {}},
+        },
+    )
+
+    passed, warnings = validate_export_quality(result)
+
+    assert passed is False
+    assert any("Formant" in warning for warning in warnings)
+    assert any("Vibrato" in warning for warning in warnings)
+
+
+def test_ab_plan_recommendation_prefers_safe_candidate_over_metric_gain() -> None:
+    """A/B-Harness darf Metrikgewinn nie ueber AFG/VQI-Sicherheitsveto stellen."""
+    from scripts.ab_plan_eval import _recommend_plan
+
+    baseline = {"hpi": 0.05, "artifact_freedom": 0.96, "vqi": 0.78, "n_phases_executed": 3}
+    unsafe_candidate = {"hpi": 0.20, "artifact_freedom": 0.90, "vqi": 0.69, "n_phases_executed": 2}
+
+    recommendation = _recommend_plan(baseline, unsafe_candidate)
+
+    assert recommendation["winner"] == "A"
+    assert "artifact_freedom<0.95" in recommendation["safety_violations_b"]
+    assert "vqi<0.72" in recommendation["safety_violations_b"]
+
+
 def test_cli_export_helper_uses_audio_exporter_and_quality_payload(monkeypatch, tmp_path):
     """CLI-Export muss AudioExporter, Export-Guard und Gate-Payload wie das Frontend nutzen."""
     from cli import aurik_cli
@@ -218,7 +275,7 @@ def test_cli_export_helper_applies_mono_guard_and_forwards_musiclover_metadata(m
 
 
 def test_batch_processor_forwards_worldclass_and_hybrid_metadata(monkeypatch, tmp_path):
-    """Batch-Results sollen den 9.12.10-Weltklasse-Contract in metadata weiterreichen."""
+    """Batch-Results sollen den aktuellen Weltklasse-Contract in metadata weiterreichen."""
     import batch_processor as bp
 
     class _FakeSf:
@@ -244,6 +301,44 @@ def test_batch_processor_forwards_worldclass_and_hybrid_metadata(monkeypatch, tm
 
     monkeypatch.setattr(bp, "sf", _FakeSf)
     monkeypatch.setattr(bp, "_get_aurik_denker", lambda: _FakeDenker())
+    monkeypatch.setattr(bp, "_run_pre_analysis", lambda **_kwargs: None)
+    monkeypatch.setattr(bp, "_validate_export_quality", lambda _result: (True, []))
+    monkeypatch.setattr(
+        bp,
+        "_build_export_quality_gate_payload",
+        lambda _result: {
+            "passed": True,
+            "degradation_status": "ok",
+            "fail_reason": "",
+            "recovery_attempted": False,
+            "best_possible_reached": False,
+            "fallback_quality_floor": {"status": "passed"},
+            "thresholds": {"quality_estimate": 0.55, "level_drop_db": 3.0},
+            "worldclass_composite_gate": {
+                "wcs": 0.89,
+                "threshold": 0.85,
+                "profile": "instrumental",
+                "artifact_veto": False,
+                "passed": True,
+            },
+            "threshold_evidence": {
+                "worldclass_composite_gate": {
+                    "source_class": "C",
+                    "revalidate_by": "2026-09-30",
+                }
+            },
+            "musiclover": {
+                "vocal_integrity": {"vqi": 0.87, "singer_identity_cosine": 0.95},
+                "temporal_risk": {"hotspot_count": 2},
+                "stereo_integrity": {"mono_compatibility_warning": True},
+                "goal_attainment": {"remaining_count": 1},
+                "decision_trace": {
+                    "all_sota_real": False,
+                    "vocal_restoration_capability_status": "sota_fallback",
+                },
+            },
+        },
+    )
     monkeypatch.setattr(
         bp,
         "_load_audio_file",
@@ -258,5 +353,60 @@ def test_batch_processor_forwards_worldclass_and_hybrid_metadata(monkeypatch, tm
 
     assert res["success"] is True
     assert res["metadata"]["quality_gate_worldclass_score"] == "0.89"
+    assert res["metadata"]["quality_gate_worldclass_threshold"] == "0.85"
+    assert res["metadata"]["quality_gate_worldclass_passed"] == "True"
+    assert res["metadata"]["quality_gate_worldclass_profile"] == "instrumental"
     assert '"artifact_freedom": 0.98' in res["metadata"]["quality_gate_hybrid_engineer_vector"]
     assert '"vocal_identity_preservation": 0.93' in res["metadata"]["quality_gate_hybrid_engineer_vector"]
+    assert res["metadata"]["quality_gate_evidence_worldclass_source_class"] == "C"
+    assert res["metadata"]["quality_gate_evidence_worldclass_revalidate_by"] == "2026-09-30"
+    assert res["metadata"]["quality_gate_musiclover_vqi"] == "0.87"
+    assert res["metadata"]["quality_gate_musiclover_temporal_hotspots"] == "2"
+    assert res["metadata"]["quality_gate_musiclover_mono_warning"] == "True"
+    assert res["metadata"]["quality_gate_musiclover_all_sota_real"] == "False"
+    assert res["metadata"]["quality_gate_musiclover_sota_reason"] == "sota_fallback"
+
+
+def test_batch_processor_normalizes_release_alias_mode(monkeypatch, tmp_path):
+    """Batch muss Release-Aliase via Bridge normalisieren (maximum -> Studio 2026)."""
+    import batch_processor as bp
+
+    mode_calls: dict[str, str] = {}
+
+    class _FakeSf:
+        @staticmethod
+        def write(_path, _audio, _sr):
+            return None
+
+    class _FakeDenker:
+        def denke(self, _audio, _sr, **kwargs):
+            mode_calls["mode"] = str(kwargs.get("mode", ""))
+            return SimpleNamespace(
+                audio=np.zeros((8, 2), dtype=np.float32),
+                total_time_seconds=1.0,
+                metadata={"worldclass_composite_gate": {"wcs": 0.9}, "hybrid_engineer_vector": {}},
+            )
+
+    monkeypatch.setattr(bp, "sf", _FakeSf)
+    monkeypatch.setattr(bp, "_get_aurik_denker", lambda: _FakeDenker())
+    monkeypatch.setattr(bp, "_run_pre_analysis", lambda **_kwargs: None)
+    monkeypatch.setattr(bp, "_validate_export_quality", lambda _result: (True, []))
+    monkeypatch.setattr(
+        bp,
+        "_build_export_quality_gate_payload",
+        lambda _result: {"passed": True, "degradation_status": "ok", "fail_reason": ""},
+    )
+    monkeypatch.setattr(
+        bp,
+        "_load_audio_file",
+        lambda *_args, **_kwargs: {"audio": np.zeros((8, 2), dtype=np.float32), "sr": 48_000},
+    )
+
+    processor = bp.BatchProcessor(output_dir=tmp_path, workers=1, resume=False)
+    input_file = tmp_path / "input.wav"
+    input_file.write_bytes(b"fake")
+
+    res = processor.process_file(input_file, {"mode": "maximum"})
+
+    assert res["success"] is True
+    assert mode_calls["mode"] == "Studio 2026"

@@ -1,4 +1,4 @@
-# Aurik 9 — Spec 08: Architektur, Code-Standards & Distribution
+# Aurik 10 — Spec 08: Architektur, Code-Standards & Distribution
 
 > Softwareschichten, Code-Konventionen, Frontend-Regeln, Plugin-Policy,
 > CLI, Distribution (AppImage/NSIS), Out-of-the-Box-Pflicht.
@@ -9,7 +9,7 @@
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
-│  Desktop-UI  (Aurik910/)   PyQt5 · ModernMainWindow          │
+│  Desktop-UI  (Aurik10/)   PyQt5 · ModernMainWindow          │
 │    BatchProcessingThread (Stufe 1, Quality-first Standard)    │
 │    MLRefinementThread    (Stufe 2, LIMIT_BACKGROUND=∞)       │
 ├─────────────────────────────────────────────────────────────┤
@@ -23,13 +23,13 @@
 └─────────────────────────────────────────────────────────────┘
 ```
 
-**Verbot:** UI-Module unter `Aurik910/` dürfen `backend/core/`, `dsp/` oder `plugins/` **nicht** direkt importieren.
+**Verbot:** UI-Module unter `Aurik10/` dürfen `backend/core/`, `dsp/` oder `plugins/` **nicht** direkt importieren.
 Kommunikation nur über `backend/api/bridge.py` und Qt-Signals/Slots.
 
 ### §11.1 Kanonischer Verarbeitungseinstieg (PFLICHT)
 
 - UI/Batches müssen über `get_aurik_denker_class()` aus der Bridge gehen.
-- Aufrufkette: `Aurik910/ui/*` → `backend/api/bridge.py` → `denker/aurik_denker.py` → Core.
+- Aufrufkette: `Aurik10/ui/*` → `backend/api/bridge.py` → `denker/aurik_denker.py` → Core.
 - Direkte UI-Aufrufe von `UnifiedRestorerV3.restore(...)` sind nicht zulässig.
 
 ```python
@@ -65,10 +65,10 @@ Paketversion kommen und darf nicht in UI-Texten hartkodiert werden.
 
 Pflichtregeln:
 
-1. Kanonische Quelle: `Aurik910/__init__.py::__version__`.
-2. Fenstertitel: `Aurik910/ui/modern_window.py` nutzt `_AURIK_VERSION` aus `__version__`.
-3. Splashscreen-Badge: `Aurik910/ui/splash_screen.py` nutzt `_VERSION` aus `__version__`.
-4. App-Metadaten: `Aurik910/main.py` setzt `app.setApplicationVersion(__version__)`.
+1. Kanonische Quelle: `Aurik10/__init__.py::__version__`.
+2. Fenstertitel: `Aurik10/ui/modern_window.py` nutzt `_AURIK_VERSION` aus `__version__`.
+3. Splashscreen-Badge: `Aurik10/ui/splash_screen.py` nutzt `_VERSION` aus `__version__`.
+4. App-Metadaten: `Aurik10/main.py` setzt `app.setApplicationVersion(__version__)`.
 5. `ui.app_title` in i18n darf eine Versionsanzeige nur als dynamischen Platzhalter enthalten
     (z. B. `{version}`), niemals als hartkodierte Release-Nummer.
 
@@ -481,7 +481,7 @@ except Exception as exc:
 
 **Pflicht**: Nach `soundfile.read()` / `pedalboard.read()`, vor Pipeline-Übergabe:
 
-> **Audio-Import-Kaskade (kanonisch, Stand April 2026):** Alle Einstiegspunkte (`batch_processor.py`, `backend/aurik_restore.py`, `backend/meta_router.py`, `Aurik910/ui/modern_window.py`) MÜSSEN `load_audio_file(filepath)` aus `backend.file_import` verwenden — **nicht** `sf.read(path)` oder `librosa.load(path)` direkt. Die Kaskade: `soundfile` (WAV/FLAC/OGG) → `pedalboard/FFmpeg` (MP3/AAC/WMA/Opus) → `pydub` (universell). `sf.read(io.BytesIO(...))` auf interne PCM-Puffer ist zulässig.
+> **Audio-Import-Kaskade (kanonisch, Stand April 2026):** Alle Einstiegspunkte (`batch_processor.py`, `backend/aurik_restore.py`, `backend/meta_router.py`, `Aurik10/ui/modern_window.py`) MÜSSEN `load_audio_file(filepath)` aus `backend.file_import` verwenden — **nicht** `sf.read(path)` oder `librosa.load(path)` direkt. Die Kaskade: `soundfile` (WAV/FLAC/OGG) → `pedalboard/FFmpeg` (MP3/AAC/WMA/Opus) → `pydub` (universell). `sf.read(io.BytesIO(...))` auf interne PCM-Puffer ist zulässig.
 
 ```python
 MAX_AUDIO_BYTES_RAM: int = 4 * 1024**3  # 4 GB absolutes RAM-Limit für einen Audio-Buffer
@@ -582,7 +582,7 @@ _cache = {}                      # ohne Lock → threading.Lock() Pflicht
 
 ### Architektur
 
-- Kein direkter `Aurik910/`-Import in Core-Modulen
+- Kein direkter `Aurik10/`-Import in Core-Modulen
 - Keine hardcodierten Pfade → stets `pathlib.Path.home() / ".aurik" / ...`
 - Kein `from module import *`
 - Keine sync-Datei-I/O in Hot-Paths (GP-Gedächtnis nur am Anfang/Ende)
@@ -810,7 +810,7 @@ Das visuelle Feedback teilt sich auf zwei Anzeigebereiche auf:
 
 ## §11.4d [RELEASE_MUST] Tonträgerketten-Display-Invarianten (v9.11.14)
 
-Das Tonträger-Display-System in `Aurik910/ui/modern_window.py` hat **drei unabhängige Update-Pfade**, die alle auf denselben State schreiben (`detected_medium_label`, `_carrier_bg_label`). Ohne Single Source of Truth können Medien-Mappings divergieren und Anzeigen falsch oder leer werden.
+Das Tonträger-Display-System in `Aurik10/ui/modern_window.py` hat **drei unabhängige Update-Pfade**, die alle auf denselben State schreiben (`detected_medium_label`, `_carrier_bg_label`). Ohne Single Source of Truth können Medien-Mappings divergieren und Anzeigen falsch oder leer werden.
 
 ### Drei Update-Pfade (normativ dokumentiert)
 
@@ -825,7 +825,7 @@ Das Tonträger-Display-System in `Aurik910/ui/modern_window.py` hat **drei unabh
 ### Single Source of Truth — Modul-Level-Konstanten und -Helfer
 
 ```python
-# Aurik910/ui/modern_window.py (Modul-Level — NUR HIER definiert)
+# Aurik10/ui/modern_window.py (Modul-Level — NUR HIER definiert)
 _CARRIER_MEDIUM_DISPLAY: dict[str, tuple[str, str]]  # (icon_stem, label) pro Medium-Key
 _CARRIER_EXT_DISPLAY: dict[str, tuple[str, str]]     # (icon_stem, label) pro Dateiendung
 _CARRIER_ANALOG_MEDIA: frozenset[str]                # analoge Materialtypen
@@ -958,7 +958,7 @@ Era-Badge-Block (nach Pfad C)
 
 ## §13 Distribution & Out-of-the-Box-Pflicht
 
-> Aurik 9 muss auf einem frischen Linux- oder Windows-System **ohne Python,
+> Aurik 10 muss auf einem frischen Linux- oder Windows-System **ohne Python,
 > ohne Terminal, ohne Vorkenntnisse** sofort lauffähig sein.
 
 ### Installer-Ziele
@@ -1196,8 +1196,8 @@ Timeout: `QTimer.singleShot(15_000, _preanalysis_timeout)`.
 ### Watchdog-Timer
 
 ```python
-_per_file_ms = max(5_400_000, int(audio_dur_s * 32_000) + 1_800_000)
-_watchdog_ms = max(5_400_000, n_files * _per_file_ms)  # Min 90 Min
+_per_file_ms = max(5_400_000, int(audio_dur_s * 64_000) + 3_600_000)  # 64×RT + 60min (vgl. §K)
+_watchdog_ms = max(5_400_000, n_files * _per_file_ms)  # Min 90 Min, bis 300 Min pro File
 ```
 
 ### Bridge-Fallback (`_BRIDGE_AVAILABLE`)
@@ -1320,8 +1320,8 @@ Timeout: `QTimer.singleShot(15_000, _preanalysis_timeout)`.
 ### Watchdog-Timer
 
 ```python
-_per_file_ms = max(5_400_000, int(audio_dur_s * 32_000) + 1_800_000)
-_watchdog_ms = max(5_400_000, n_files * _per_file_ms)  # Min 90 Min
+_per_file_ms = max(5_400_000, int(audio_dur_s * 64_000) + 3_600_000)  # 64×RT + 60min (vgl. §K)
+_watchdog_ms = max(5_400_000, n_files * _per_file_ms)  # Min 90 Min, bis 300 Min pro File
 ```
 
 ### Bridge-Fallback (`_BRIDGE_AVAILABLE`)

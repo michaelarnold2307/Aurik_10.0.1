@@ -229,9 +229,11 @@ duerfen nicht als ungeordnete Sonderfaelle konkurrieren.
 #   - artifact_freedom < 0.95
 # Klasse B: RECOVERY_TRIGGER
 #   - vqi < material_vqi_floor
-#   - singer_identity_cosine < 0.92 (wenn multi_singer=False)
+#   - singer_identity_cosine < 0.92 (wenn multi_singer=False UND singer_id_dsp_fallback=False)
+#     §DSP-Fallback-Guard (v9.15.3): singer_id_dsp_fallback=True → Advisory only (Class C)
 # Klasse C: ADVISORY
 #   - vqi < mode_target (Restoration 0.82 / Studio 0.87)
+#   - singer_identity_cosine < 0.92 bei singer_id_dsp_fallback=True → singer_id_advisory_cosine
 
 quality_gate_registry = {
     "events": [...],
@@ -614,6 +616,26 @@ _NEVER_SKIP = {
 }
 # Diese Phasen laufen immer — auch bei hoher Restorability und bei MAS-Early-Stop
 ```
+
+Die adaptive Steuerung aller PhaseConductor-Entscheidungen, inklusive Gewichtung
+für Strength-/Wet-Parameter, wird ausschließlich aus `restoration_policy_profile`
+abgeleitet. `song_goal_weights` ist ein abgeleiteter Kompatibilitätswert, keine
+eigenständige Normquelle.
+
+Die Denker dürfen diese zentrale Policy ausdrücklich anreichern: `StrategieDenker`
+liefert Eingriffsbudget, Hörziele und Human-Hearing-Risiken; `PhaseInteractionDenker`
+liefert Goal-Risiken, Phasen-Dichte und Qualitäts-Tiers; `ReparaturDenker` und
+`RekonstruktionsDenker` liefern Reparatur-/Plausibilitätsrisiken. Diese Signale
+fließen als `denker_policy_input` in UV3 ein und werden dort in
+`restoration_policy_profile` verdichtet. Sie dürfen nie als parallele Steuerquelle
+neben dem Profil genutzt werden.
+
+`StrategieDenker` MUSS zusätzlich ein songindividuelles
+`human_hearing_comfort_profile` beitragen. Dieses Profil bündelt Peak-Komfort,
+HF-/Air-Toleranz, Müdigkeitsrisiko, Transientenschutz, Mikrodynamikschutz und
+Overprocessing-Risiko. UV3 und finale Guards dürfen diese Werte ausschließlich
+aus `restoration_policy_profile["human_hearing_comfort_profile"]` lesen; direkte
+Denker-Bypässe oder phasenlokale Zweitprofile sind verboten.
 
 ## §2.53b Determinismus
 
@@ -1060,6 +1082,54 @@ if export_hpi > 0 and metadata.get("artifact_freedom", 0) >= 0.95:
 - Write ist atomic (write to `.tmp`, dann `os.replace`).
 - **VERBOTEN**: `RestorationMemory` auf Cloudspeicher oder Netzwerkpfade schreiben — rein lokal.
 
+**Coalition-aware Prior-Invariante (v9.15.4)**:
+
+- Erfolgreiche Läufe dürfen zusätzlich Koalitions-Lernsignale in `phase_params` persistieren:
+    `_coalition_learning_factor`, `_dominant_phase_coalition_ratio`, `_phase_coalition_count`.
+- Diese Felder sind advisory-only für den GP-Start und dürfen harte Gates (PMGG/CIG/AFG/HPI)
+    niemals überstimmen.
+- Beim Laden eines Priors MUSS UV3 den geladenen Prior in `_restoration_context` spiegeln
+    (`restoration_memory_prior`), damit Downstream-Module und Telemetrie dieselbe Referenz sehen.
+
+## §2.78b Runtime-Metric-Reliability-Graph [RELEASE_MUST v9.15.5]
+
+**Problem**: PMGG/Phase-Deltas liefern pro Phase reichhaltige Proxy-Telemetrie, aber ohne
+laufzeitnahe Reliability-Kalibrierung bleiben Goal-Konfidenzen in Grenzfällen zu statisch.
+
+**Lösung**: Ein kontextsensitiver `MetricReliabilityGraph` kalibriert Goal-Zuverlässigkeit
+online aus realen Phase-Deltas und PMGG-Metadaten (Team-Net-Delta,
+Reconstruction-Localized, epistemic confidence).
+
+```python
+# Vor AdaptivePhaseRescheduler.reschedule(...)
+from backend.core.metric_reliability_graph import get_metric_reliability_graph
+
+_mrg = get_metric_reliability_graph()
+_mrg.update_from_phase_delta(
+        phase_id=phase_id,
+        goal_deltas=self._phase_deltas.get(phase_id, {}).get("delta", {}),
+        phase_metadata=self._phase_metadata_accumulator.get(phase_id, {}),
+        material_type=material_key,
+        transfer_chain=transfer_chain,
+        is_studio_2026=self.is_studio_mode(),
+        era_decade=decade,
+)
+runtime_conf = _mrg.get_goal_reliability(...)
+base_w, runtime_w = _mrg.get_blend_weights(...)
+blended_conf = base_w * base_conf + runtime_w * runtime_conf
+```
+
+**Invarianten**:
+
+- Advisory-only: Der Graph darf harte Gates (PMGG/CIG/AFG/HPI/VQI) niemals ersetzen.
+- Offline-only: Persistenz ausschließlich lokal (`~/.aurik/metric_reliability_graph.json`,
+    atomarer Write, non-blocking Read/Write).
+- Gebundene Werte: Goal-Reliability immer in `[0.20, 0.98]`.
+- Kontextbindung Pflicht: Key muss mindestens Modus, Material, Era-Bucket und
+    Chain-Komplexitäts-Bucket enthalten.
+- Blend-Gewichte müssen adaptiv sein (cross-run Evidenz), normiert auf 1.0 und
+    in den Grenzen `base ∈ [0.40, 0.75]`, `runtime ∈ [0.25, 0.60]` liegen.
+
 > Datei-Pfad: `~/.aurik/restoration_memory.json`. Konfigurierbar via `AURIK_MEMORY_PATH`-Env-Variable (Desktop-Offline-Pflicht beachten).
 
 ## §2.71 Formant-Toleranz-Verscharfäung [RELEASE_MUST v9.5]
@@ -1097,8 +1167,11 @@ _vdp = check_vibrato_depth_preservation(audio_pre, audio_post, sr)
 if _vdp.depth_reduction_pct > 10.0:
     # Blend in Vibrato-Segmenten: 50 % Dry
     metadata["vibrato_depth_reduction_pct"] = _vdp.depth_reduction_pct
+    metadata["vibrato_depth_preservation"] = max(0.0, 1.0 - _vdp.depth_reduction_pct / 100.0)
     logger.warning("vibrato_depth: %.1f%% > 10%% → blend 50%% dry in vibrato-segments", _vdp.depth_reduction_pct)
 ```
+
+**Pflicht-Telemetrie**: `vibrato_depth_preservation` MUSS zusaetzlich ueber `_update_vocal_quality_metrics(...)` in `_restoration_context["vocal_quality_check"]` und `_phase_metadata_accumulator` gespiegelt werden, damit WCS/HTEV/psychoakustische Gates denselben Wert lesen wie der Phasen-Guard.
 
 ## §2.73 Pre-Echo-Prevention [RELEASE_MUST v9.5]
 
@@ -1130,17 +1203,54 @@ if _scp.correlation < 0.97:
 
 ## §2.75 Mikrodynamik-Korrelation [RELEASE_MUST v9.5]
 
-**Regel**: Frame-Energie-Korrelation (10 ms) auf voiced-Zonen ≥ 0.97 nach NR/Dynamics-Phasen.
+**Regel**: Frame-Energie-Korrelation (10 ms) auf voiced-Zonen nach NR/Dynamics-Phasen.
+
+- `0.25 ≤ panns_singing < 0.35` → Zielwert `≥ 0.97`
+- `panns_singing ≥ 0.35` → Zielwert `≥ 0.985`, Blend-Floor `0.93`
 
 ```python
 from backend.core.dsp.mikrodynamik_guard import frame_energy_correlation
 if panns_singing >= 0.25:
     _corr = frame_energy_correlation(pre_phase_audio, audio, sr, frame_ms=10)
-    if _corr < 0.97:
-        _wet = float(min(1.0, max(0.0, (_corr - 0.90) / 0.07)))
+    _target = 0.985 if panns_singing >= 0.35 else 0.97
+    _floor = 0.93 if panns_singing >= 0.35 else 0.90
+    if _corr < _target:
+        _wet = float(min(1.0, max(0.0, (_corr - _floor) / max(_target - _floor, 1e-6))))
         audio = pre_phase_audio * (1.0 - _wet) + audio * _wet
         metadata["mikrodynamik_corr"] = _corr
+        metadata["mikrodynamik_target_corr"] = _target
 ```
+
+**Pflicht-Telemetrie**: `micro_dynamic_correlation` MUSS ueber `_update_vocal_quality_metrics(...)` in `_restoration_context["vocal_quality_check"]` und `_phase_metadata_accumulator` geschrieben werden. Finale WCS-/Psychoakustik-Gates duerfen nicht auf phasenlokale `metadata` beschraenkt bleiben.
+
+## §2.75a Vocal-Guard-Runtime-Bridge [RELEASE_MUST v9.20.3]
+
+**Problem**: Phase-lokale Guard-Metadaten sind fuer das End-Gate wertlos, wenn sie nur in `result.metadata` leben. UV3-Final-Gates (WCS, HTEV, Psychoakustik, Spec-Upgrade-Entscheidung) lesen aggregierte Werte aus `_restoration_context["vocal_quality_check"]` und `_phase_metadata_accumulator`.
+
+```python
+# KANONISCH nach jedem relevanten Vocal-Guard:
+_update_vocal_quality_metrics(
+    formant_integrity=formant_integrity,
+    formant_fidelity=formant_integrity,
+    vibrato_depth_preservation=vibrato_depth_preservation,
+    micro_dynamic_correlation=micro_dynamic_correlation,
+    noise_texture_authenticity=noise_texture_authenticity,
+)
+```
+
+**Pflichtfelder**:
+
+- `formant_integrity`
+- `vibrato_depth_preservation`
+- `micro_dynamic_correlation`
+- `noise_texture_authenticity`
+
+**Verboten**:
+
+- Vocal-Guard schreibt nur in `result.metadata` oder `phase_metadata[phase_id]`
+- WCS/HTEV liest Default-1.0, obwohl ein Guard bereits degradierten Wert gemessen hat
+
+**Strenger Vocal-NTI-Pfad**: Bei `panns_singing ≥ 0.35` gilt fuer `noise_texture_authenticity` der strengere Guard-Schwellenwert `0.18` statt `0.25`.
 
 ## §2.76 Wärmeband-Guard [RELEASE_MUST v9.5]
 
@@ -1183,9 +1293,14 @@ audio = apply_onset_protection_mask(
 
 > `cassette` → intern immer als `tape` in `_MATERIAL_PRIORITY_PHASES`
 
-## §2.78 AdaptivePhaseRescheduler — Geschlossener Regelkreis [RELEASE_MUST v9.12.9]
+## §2.78 AdaptivePhaseRescheduler — Geschlossener Regelkreis [RELEASE_MUST v9.15.3]
 
-**Funktion**: Nach jeder Phase werden Goal-Lücken (`song_goal_targets[g] − post_snap[g]`) berechnet. Für Goals mit `gap > 0.05` injiziert der Rescheduler die Primär-Recovery-Phase (aus `get_goal_recovery_phases()`) ans Ende von `selected_phases`. Python's `for`-Loop besucht neu angehängte Elemente — kein Loop-Refactoring nötig.
+**Funktion**: Nach jeder Phase werden Goal-Lücken (`song_goal_targets[g] − post_snap[g]`) berechnet. Für Goals mit signifikantem Gap injiziert der Rescheduler die Primär-Recovery-Phase (aus `get_goal_recovery_phases()`) ans Ende von `selected_phases`. Python's `for`-Loop besucht neu angehängte Elemente — kein Loop-Refactoring nötig.
+
+**Koalitionsregel**: Wenn die Primär-Recovery-Phase eines Goals auch in den Recovery-Listen
+anderer offener Goals auftaucht, bekommt dieses Goal einen kleinen Prioritätsbonus. Dadurch
+werden Phasen bevorzugt, die mehrere offene Defizite zusammen adressieren können, ohne dass
+§2.45 Minimal-Intervention oder die Ein-Phase-pro-Goal-Regel aufgeweicht werden.
 
 **Modul**: `backend/core/adaptive_phase_rescheduler.py` (Singleton `get_adaptive_phase_rescheduler()`)
 
@@ -1197,6 +1312,7 @@ audio = apply_onset_protection_mask(
 - §2.65 MAS: `_mas_fully_achieved=True` → Rescheduler nicht aufgerufen (UV3-Guard)
 - §_SELF_MANAGED_GOALS: `vocal_quality`, `formant_fidelity` haben eigene Recovery-Pfade (VQI-Gate §0p) → kein Rescheduler-Override
 - Max 3 Injektionen pro Song-Session (`MAX_INJECTIONS_PER_SESSION`); `reset_session()` nach Song
+- Koalitionsbonus ist nur Reihenfolge-Hint; Session-Grenzen, Executed/Plan-Guards und §0a bleiben bindend
 
 **Integration in UV3 (§Hebel-3 Block)**:
 
@@ -1314,13 +1430,20 @@ if panns_singing >= 0.35:
     vqi = result["vqi"]  # float [0, 1]
     metadata["vqi"] = vqi
     metadata["singer_identity_cosine"] = result.get("singer_identity_cosine", 0.85)
+    metadata["singer_id_dsp_fallback"] = result.get("singer_id_dsp_fallback", True)
     # singer_identity_cosine-Gate (Resemblyzer-Identitäts-Prüfung):
     # NUR aktiv wenn kein Multi-Singer-Track (Duette/Chorprojekte würden falsch-positiv)
+    # UND NUR wenn kein DSP-Fallback (ZCR/Spektral-Proxy zu unzuverlässig für Rollback-Trigger)
+    # §DSP-Fallback-Guard (v9.15.3): singer_id_dsp_fallback=True → Advisory only, kein Rollback
     if not metadata.get("multi_singer", False):
         sic = result.get("singer_identity_cosine", 0.85)
-        if sic < 0.92:
+        _sic_dsp_fb = bool(result.get("singer_id_dsp_fallback", True))
+        if sic < 0.92 and not _sic_dsp_fb:
             logger.warning("singer_identity_cosine=%.3f < 0.92 — rolling back last vocal phase", sic)
             audio_restored = _rollback_last_vocal_phase(audio_restored)
+        elif sic < 0.92 and _sic_dsp_fb:
+            logger.info("singer_identity_cosine=%.3f < 0.92 but singer_id_dsp_fallback=True — advisory only, no rollback", sic)
+            metadata["singer_id_advisory_cosine"] = sic
     # Dreistufige Recovery-Kaskade (kein harter Veto, §0p):
     # material_vqi_floor — KANONISCHE BERECHNUNG (VERBOTEN: Konstante 0.72 hardcoden!):
     material_vqi_floor = calibration_matrix.get_material_floor(material, "vqi")

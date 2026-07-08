@@ -133,7 +133,7 @@ class MushraSession:
         if self._mushra is None:
             from backend.core.mushra_evaluator import get_mushra_evaluator
 
-            self._mushra = get_mushra_evaluator()
+            self._mushra = get_mushra_evaluator()  # type: ignore[assignment]
         return self._mushra
 
     def create_randomized_panel(

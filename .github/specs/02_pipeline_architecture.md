@@ -1,7 +1,17 @@
-# Aurik 9 — Spec 02: Pipeline-Architektur
+# Aurik 10 — Spec 02: Pipeline-Architektur
 
 > Kanonischer Pipeline-Ablauf, RestorationResult-Spec, Restaurierungs-Modi,
 > StemRemixBalancer, Studio-2026-Verarbeitungskette.
+
+---
+
+## §v10 Pleasantness-First (2026-07-05)
+
+> **HPE ist oberste Instanz.** PMGG darf Phasen ueberspringen, wenn sie
+> den Klang fuer menschliche Ohren verschlechtern (§2.29 v10).
+> Siehe backend/core/per_phase_musical_goals_gate.py,
+> backend/core/human_pleasantness_estimator.py.
+> **Kein Rollback-Verbot mehr.** CausalDefectReasoner kann irren — das Ohr nicht.
 
 ---
 
@@ -17,7 +27,7 @@
 - Chroma-Korrelation Original↔Restauriert ≥ 0.95
 - LUFS-Differenz ≤ 1 LU
 - Kein hinzugefügtes Harmonic-Exciter-Material
-- Rauschboden: material-adaptiv (Shellac ≤ −45, Vinyl ≤ −55, Tape ≤ −60, Digital ≤ −72 dBFS) — Studio-Ambience bewahren (§0a)
+- Rauschboden: CD-ähnlicher Export-Boden für alle analogen Tonträger (`shellac`, `wax_cylinder`, `lacquer_disc`, `wire_recording`, `vinyl`, `tape`, `reel_tape`, `cassette`); analoges Hiss-/Oberflächenrauschen darf nicht als Mindestboden zurückkehren (§0a/V21)
 - HPI-Gate: `timbral_fidelity` dominant (§2.44) — akustisch nicht unterscheidbar vom Original
 
 **Studio-2026-Modus Pflicht-Invarianten:**
@@ -27,6 +37,42 @@
 - Bass-Kraft ≥ 0.88 (verschärft)
 - Rauschboden ≤ −72 dBFS (§0a)
 - HPI-Gate: PQS-Improvement dominant (§2.44)
+
+### §1.4b [RELEASE_MUST] Psychoakustische Anti-Maschinenklang-Invariante
+
+Ziel: Hoerbar natuerliche Musikwiedergabe vor technischer Ueberoptimierung.
+
+Pflichtregeln:
+
+1. Additive/Enhancement-Familien MUESSEN vor der finalen Phasenstaerke durch einen
+    psychoakustischen Naturalness-Guard skaliert werden.
+2. Der Guard MUSS maschinell klingende Muster explizit bestrafen:
+    `musical_noise`, `metallic_ringing`, `roughness_regression`,
+    kumulative `psycho_delta_penalty` und `rolling_risk`.
+3. Bei Vokal-Material (`panns_singing >= 0.35`) MUSS der Guard zusaetzlich
+    `breath_naturalness` und `spectral_color_preservation` auswerten.
+4. Bei aktivem Guard ist nur Daempfung erlaubt (`scalar <= 1.0`), kein Boost.
+
+Kanonischer Vertragsrahmen (UV3):
+
+```python
+naturalness_guard = _compute_naturalness_guard_scalar(
+     phase_family=...,
+     studio_mode=...,
+     panns_singing=...,
+     vocal_quality_check=...,            # inkl. breath_naturalness/spectral_color_preservation
+     phase_metadata_accumulator=...,     # inkl. n_musical_noise/n_metallic_ringing/
+                                                     # roughness_regression/_psycho_runtime_state
+)
+uq_scalar *= naturalness_guard["scalar"]
+```
+
+VERBOTEN:
+
+- Enhancement-Phasen ohne Naturalness-Guard-Skalierung.
+- Ignorieren von `rolling_risk` bei vorhandenen Laufzeit-Psycho-Deltas.
+- Akzeptieren von wiederkehrendem Musical-Noise/Metallic-Ringing ohne
+  konservative Staerkedaempfung.
 
 ### §1.4a [RELEASE_MUST] Fail-Fast-Kontrakt für kritische Qualitätsmodule (v9.10.130)
 
@@ -54,6 +100,85 @@ qualitativ schwache Platzhalterpfade fallen.
 
 **Invariante:** Ein Export darf nie allein deshalb passieren, weil ein kritischer
 Qualitätsdetektor nicht verfügbar war.
+
+### §1.4c [RELEASE_MUST] Disziplin-Parallelisierung via InnovationSuperiorityOrchestrator (v9.15.7)
+
+Ziel: Alle Kern-Disziplinen der Restaurierung (Defektbehebung, Vokalintegritaet,
+timbrale Treue, zeitliche Praezision, raeumliche Kohärenz, Zielkonvergenz)
+werden parallel im Closed Loop bewertet und als bounded Innovation-Hinweise
+fuer die §2.78-Nachsteuerung bereitgestellt.
+
+Pflichtregeln:
+
+1. Orchestrator laeuft pro Phase parallel zum Runtime-Reliability-Layer.
+2. Orchestrator ist advisory-only und darf harte Gates nicht ersetzen.
+3. Goal-Confidence-Uplifts muessen bounded bleiben (`<= 0.05` pro Goal).
+4. Endgueltige Goal-Konfidenzen bleiben auf `[0.20, 0.98]` begrenzt.
+5. Telemetrie muss mindestens enthalten:
+   `priority_goals`, `recovery_phase_hints`, `goal_confidence_uplift`,
+   `discipline_scores`, `innovation_intensity`.
+
+Kanonischer Integrationsrahmen (UV3):
+
+```python
+from backend.core.innovation_superiority_orchestrator import (
+    get_innovation_superiority_orchestrator,
+)
+
+orch = get_innovation_superiority_orchestrator()
+plan = orch.build_realtime_plan(...)
+
+for goal, uplift in plan.goal_confidence_uplift.items():
+    goal_confidence[goal] = clip(goal_confidence[goal] + uplift, 0.20, 0.98)
+```
+
+VERBOTEN:
+
+- direkte Phase-Injektion ohne bestehenden §2.78-Rescheduler-Vertrag,
+- ungebundene Konfidenz-Boosts,
+- Gate-Bypass durch Innovationslogik.
+
+### §1.4d [RELEASE_MUST] Kombinierte End-Gate-Weltspitzenmassnahmen (v9.12.16)
+
+Ziel: Geplante und ungeplante Qualitaetsmassnahmen muessen im End-Gate als
+ein gemeinsamer, widerspruchsfreier No-Harm-Entscheider laufen.
+
+Pflichtregeln:
+
+1. Candidate-Ranking bleibt primaer multi-goal-basiert (weighted-gap + critical drops).
+2. `spatial_depth` hat zusaetzliche Harddrop-Sensitivitaet im Ranking (frueher Schutz vor Raumkollaps).
+3. Bei `waerme`-Verletzung MUSS ein konservativer `waerme_focus_rescue`-Kandidat evaluiert werden.
+4. Der `waerme_focus_rescue` darf nur low-mid gezielt staerken und MUSS eine Stereo-Schutzkappe haben.
+5. Endentscheidung bleibt no-harm: Kandidat nur bei objektiver Rank-Verbesserung.
+6. Telemetrie MUSS den gesamten Pfad ausweisen (`candidate_ranking_*`, `waerme_focus_rescue*`).
+7. Material-Causal-Reconciliation MUSS in die source-penalties einfliessen:
+    niedrige Material-Konfidenz oder Material-Defect-Inkonsistenz reduzieren Original-Prior
+    und bevorzugen chain-kompatible Checkpoints.
+8. HPI-Referenzwahl darf bei Material-Causal-Reconciliation auf
+    `best_carrier_checkpoint` wechseln, auch wenn `carrier_chain_recovery_ratio <= 0.15`,
+    sofern eine analoge Stufe in der Transferkette vorliegt und Material-Defect-
+    Inkonsistenz aktiv ist.
+
+Kanonischer Ablauf (UV3 End-Gate):
+
+```python
+if "waerme" in remaining_violations:
+    waerme_candidate, waerme_meta = _build_waerme_focus_rescue_candidate(...)
+    if waerme_candidate is not None:
+        candidate_sources.append(("waerme_focus_rescue", waerme_candidate, penalty))
+
+rank_current = _rank_goal_recovery_candidate(...)
+rank_best = min(candidates, key=final_rank_key)
+
+if rank_best < rank_current:
+    apply(rank_best)
+```
+
+VERBOTEN:
+
+- Waerme-Rettung ohne Stereo-Schutzkappe.
+- Wechsel auf Kandidaten trotz verschlechtertem End-Gate-Rank.
+- Telemetrie-loser Kandidatwechsel.
 
 ---
 
@@ -1188,11 +1313,11 @@ UI: _load_file(path)
 
 | Invariante | Ort | Status |
 | --- | --- | --- |
-| Hard Cache Clear bei neuem Import | `Aurik910/ui/modern_window.py` line ~11920 | ✅ |
-| PreAnalysisResult Storage | `Aurik910/ui/modern_window.py` line ~12691 | ✅ |
-| Queue-Handover | `Aurik910/ui/modern_window.py` line ~13939 | ✅ |
-| Batch-Prioritization | `Aurik910/ui/modern_window.py` line ~2117 | ✅ |
-| Defect-Handover-Absicherung | `Aurik910/ui/modern_window.py` line ~2107 | ✅ |
+| Hard Cache Clear bei neuem Import | `Aurik10/ui/modern_window.py` line ~11920 | ✅ |
+| PreAnalysisResult Storage | `Aurik10/ui/modern_window.py` line ~12691 | ✅ |
+| Queue-Handover | `Aurik10/ui/modern_window.py` line ~13939 | ✅ |
+| Batch-Prioritization | `Aurik10/ui/modern_window.py` line ~2117 | ✅ |
+| Defect-Handover-Absicherung | `Aurik10/ui/modern_window.py` line ~2107 | ✅ |
 | Test: Exactly 1 detect() call | `tests/unit/test_pre_analysis_handover_no_double_detect.py` | ✅ |
 
 **Kritische Invariante**: `MediumDetector.detect()` wird **GENAU 1x** aufgerufen (von `run_pre_analysis()`), nie 2x oder 3x.
@@ -1446,7 +1571,7 @@ Zusammenfassung aller Stabilitäts-Invarianten. Jede Verletzung einer dieser Reg
 | S-07 | Audio-Buffer-RAM-Guard | §3.9.7 spec 08 | OOM durch sehr große Audio-Dateien |
 | S-08 | Lock-Acquisition-Order (ARM→PLM→MLBudget) | §3.9.8 spec 08 | Deadlock zwischen ARM und PLM |
 | S-09 | MLRefinementThread Buffer-Release in finally | §3.9.9 spec 08 | RAM-Leak bei KMV-Abbruch |
-| S-10 | watchdog + requestInterruption → terminate() | §11.4 spec 08 | Freeze > 90 min (Desktop-Watchdog) |
+| S-10 | watchdog + requestInterruption → terminate() | §11.4 spec 08 | Freeze > 90–300 min (Desktop-Watchdog, §K 64×RT) |
 | S-11 | OOM-Recovery-Checkpoint (MemoryError-Pfad) | §2.39 | Python MemoryError → kein Totalverlust |
 | S-12 | §2.38 KMV Stufe 2 mit 4 GB RAM-Guard | §2.38 | OOM bei Hintergrund-ML-Veredelung |
 | S-13 | §2.38a ML-Headroom-Guard vor ML-Load | §2.38a | OOM während Modell-Laden |
@@ -1565,6 +1690,7 @@ _TIMBRAL_FLOORS = {
     "shellac": 0.40, "wax_cylinder": 0.35, "lacquer_disc": 0.38,
     "vinyl": 0.55, "tape": 0.55, "reel_tape": 0.55, "cassette": 0.50,
     "cd_digital": 0.75, "dat": 0.70, "mp3_low": 0.60, "unknown": 0.55,
+    "minidisc": 0.60,   # ATRAC-Kompression — gleiche Floor-Klasse wie mp3_low (v9.15.3)
 }
 _tf_floor = _TIMBRAL_FLOORS.get(material, 0.55)
 # Restorability-Skalierung: sehr beschädigtes Material (< 40) hat niedrigeren erreichbaren timbral
@@ -1612,6 +1738,59 @@ Die HPI-Multiplikation ist **nicht** gleichgewichtet — die Faktoren operieren 
 | `emotional_arc` | [0.7, 1.0] | Dynamik-Bogen + Makrodynamik — Narrative Struktur erhalten |
 
 Ein Artefakt (`artifact_freedom` = 0.5) killt den HPI härter als eine leichte Timbre-Abweichung (`timbral_fidelity` = 0.95) — das ist beabsichtigt.
+
+### §0d CCR-Timbral-Floor (v9.15.3) [RELEASE_MUST]
+
+**Problem**: Wenn die Carrier-Chain-Inversion erfolgreich war (`carrier_chain_recovery_ratio > 0.15`),
+entfernt sich das restaurierte Signal intentional vom degradierten Input. In diesem Fall misst
+`timbral_fidelity` gegen den Input einen niedrigen Wert — obwohl das Ergebnis besser klingt.
+Das kann zu einem falschen HPI-Fail führen, obwohl MERT-Similarity hoch ist (musikalische Identität erhalten).
+
+**Lösung** (implementiert in `HolisticPerceptualGate`):
+
+```python
+# §0d CCR-Timbral-Floor: Verhindern, dass intentionelle Carrier-Inversion
+# einen falschen HPI-Fail erzeugt.
+if mert_sim >= 0.74 and carrier_checkpoint_used:
+    timbral_floor = float(np.clip(mert_sim * 0.90, 0.65, 0.95))
+    timbral_fidelity = max(timbral_fidelity, timbral_floor)
+    metadata["ccr_timbral_floor_applied"] = True
+    metadata["ccr_timbral_floor_value"] = timbral_floor
+```
+
+**Invariante**: Nur aktiv wenn `carrier_checkpoint_used=True` (UV3 setzt dieses Flag nach Carrier-Phasen)
+UND `mert_sim ≥ 0.74` (musikalische Identität ist erhalten). Kein Floor bei reinen Enhancement-Phasen.
+
+### §2.44b [RELEASE_MUST] HPG Reference-Memory — UV3-Wiring-Pflicht (v9.15.3)
+
+**Normative Pflicht**: UV3 MUSS `_hg.update_reference_memory()` nach jedem erfolgreichen HPI-Lauf aufrufen.
+Dieselbe Bedingung wie RestorationMemory-Save (`HPI > 0.0 AND artifact_freedom ≥ 0.95`).
+
+```python
+# In UV3._execute_pipeline(), nach RestorationMemory-Save (§2.70):
+# §2.44 [RELEASE_MUST] HPG Reference-Memory: update nach erfolgreichem HPI.
+if float(_hpi_result.hpi) > 0.0 and _af_save >= 0.95:
+    try:
+        _hg.update_reference_memory(
+            restored=restored_audio,
+            sr=sample_rate,
+            hpi=float(_hpi_result.hpi),
+            artifact_freedom=_af_save,
+            p1_p2_passed=bool(_hpi_result.passed),
+            genre=_hpi_genre,
+            material=_hpi_material,
+            era_bin=_hpi_era,
+        )
+    except Exception as _ref_mem_exc:
+        logger.debug("§2.44 ReferenceMemory.update non-blocking: %s", _ref_mem_exc)
+```
+
+**Kaltstart / Bootstrap**: `scripts/bootstrap_hpg_reference_memory.py` seeded
+`~/.aurik/hpg_reference_memory.json` aus `golden_samples/references/`. Pflicht nach Neuinstallation.
+
+**VERBOTEN**: `update_reference_memory()` nicht aufrufen → `_ref_memory` bleibt leer →
+alle 5 Fallback-Stufen liefern None → `timbral_fidelity` nutzt stets nur den degradierten Input
+→ Restaurierungsqualität systematisch unterschätzt → HPG-Lernkurve deaktiviert.
 
 ## §2.45 [RELEASE_MUST] Minimal-Intervention-Prinzip (v9.10.122, aktualisiert §2.54)
 
@@ -2909,12 +3088,14 @@ if phase_id in _conductor_strength_hints and "strength" not in explicit_kwargs:
 
 ### §2.52a PhaseConductor × SongGoalImportance Integration (v9.11.14)
 
-`PhaseConductor.recommend()` erhält optional `goal_weights: dict[str, float]` (aus §2.56 `estimate_goal_importance()`).
+`PhaseConductor.recommend()` erhält optional `goal_weights: dict[str, float]`, die ausschließlich
+aus dem zentralen `restoration_policy_profile` abgeleitet werden. `song_goal_weights` ist nur ein
+Legacy-Fallback für Kompatibilität, nicht eine konkurrierende Primärquelle.
 
 **Workflow**:
 
-1. UV3 berechnet `goal_weights` einmalig in `restore()` (§2.56 Stufe 1–5)
-2. UV3 übergibt `goal_weights` an `_conductor.recommend(next_phase_id, state, material_type, goal_weights=goal_weights)`
+1. UV3 berechnet das `restoration_policy_profile` einmalig in `restore()` (§2.56 Stufe 1–5)
+2. UV3 übergibt daraus abgeleitete `goal_weights` an `_conductor.recommend(next_phase_id, state, material_type, goal_weights=goal_weights)`
 3. PhaseConductor berücksichtigt Gewichte bei der Strength-Empfehlung:
    - Hohe `transparenz`/`brillanz`-Gewichtung → ADDITIVE-Phasen bekommen leichten Strength-Boost
    - Hohe `natuerlichkeit`/`authentizitaet`-Gewichtung → konservativere Empfehlung (niedrigerer Strength)
@@ -2925,6 +3106,9 @@ if phase_id in _conductor_strength_hints and "strength" not in explicit_kwargs:
 - `goal_weights=None` → Fallback auf Uniform-Gewichtung (1.0 für alle Goals)
 - Fehler im goal_weights-Pfad → `logger.debug`, neutraler Strength (kein Crash)
 - PMGG-Strength hat weiterhin absoluten Vorrang (§2.52 Kein-§0-Verstoß-Invariante)
+
+**Invariante:** Kein Phase-Module oder Subsystem darf eigene songweite Zielgewichte parallel berechnen;
+die einzige normative Quelle ist `restoration_policy_profile`.
 
 ### Zusammenspiel mit §2.47 PhaseSkipper (Hebel 1 + Hebel 3 Synergie)
 
@@ -3057,14 +3241,20 @@ ins Frontend propagiert werden.
 - Fehler sind non-blocking: fehlende Experience-Telemetrie blockiert keinen Export,
     wird aber als Degrade-Hinweis protokolliert.
 
-## §2.53a [RELEASE_MUST] Exzellenz-API-Kompatibilitätsvertrag (v9.11.1)
+## §2.53a [RELEASE_MUST] Exzellenz-API-Kompatibilitätsvertrag (v9.11.1 / v9.15.1)
 
 ### Vertrag
 
 `AurikDenker` MUSS beide Exzellenz-Schnittstellen unterstützen:
 
-1. Primär: `ExzellenzDenker.messe_und_repariere(audio, sr, ...) -> (audio, goals)`
-2. Legacy-Fallback: `ExzellenzDenker.messe_ziele(audio, sr, ...)`
+1. Primär: `ExzellenzDenker.messe_und_repariere(audio, sr, reference_audio=..., inapplicable_goals=..., mode=..., material=...) -> (audio, goals)`
+2. Legacy-Fallback: `ExzellenzDenker.messe_ziele(audio, sr, reference=None)`
+
+### Signatur-Erweiterungen (v9.15.1)
+
+**`reference_audio`** (S6): Originales (prä-Restaurierung) Audio als `np.ndarray | None`. Wird an alle internen `messe_ziele()`-Aufrufe weitergegeben. Ohne `reference_audio` verwendet `TonalCenterMetric` intra-song Chroma-Stabilität (Score 0.50–0.60 für Verse/Chorus-Songs) statt ref-vs-restored Chroma-Korrelation (~0.92+). Bestätigt: tonal_center=0.5501 ohne reference, ~0.95 mit reference (V50). In AurikDenker: `reference_audio=audio` (das `audio`-Argument von `denke()`, vor Restaurierung, 48 kHz, float32).
+
+**`inapplicable_goals`** (S5): `frozenset[str]` mit physikalisch nicht erreichbaren Goal-Namen. Aus `RestorationResult.goal_applicability` des UV3-Runs extrahiert: `frozenset(g for g, ok in rest.goal_applicability.items() if not ok)`. `_count_passed()` und `goals_total` im ExzellenzDenker schließen diese Goals aus Zähler UND Nenner aus (V49). Nur übergeben wenn frozenset nicht leer.
 
 ### Invarianten
 
@@ -3072,6 +3262,27 @@ ins Frontend propagiert werden.
 - Bei Legacy-Fallback MUSS ein eindeutiger Stage-Note-Eintrag gesetzt werden:
     `Legacy-Goal-Messpfad`.
 - Fehlt die Primärmethode, darf die Pipeline nicht abbrechen, solange Legacy verfügbar ist.
+- `messe_ziele(audio, sr, reference=None)` ist die normative interne Mess-Funktion — immer mit `reference=reference_audio` aufrufen, wenn `reference_audio` vorhanden (V50).
+
+## §2.53c [RELEASE_MUST] GAF-Inapplicable-Propagationskette (v9.15.1, V51-Fix S7)
+
+```text
+GAF.evaluate_goal_applicability(audio, sr, material, era, ..., transfer_chain)
+    → RestorationResult.goal_applicability: dict[str, bool]   ← UV3
+    → RestaurierErgebnis.goal_applicability: dict[str, bool]   ← _konvertiere() propagiert (V51)
+    → AurikDenker._goal_app_raw: dict[str, bool]  ← initialisiert als {} VOR try-Block (V51)
+    → AurikDenker._rest_inapplicable_goals = frozenset(g for g, ok in ... if not ok)
+    → ExzellenzDenker.messe_und_repariere(..., inapplicable_goals=_rest_inapplicable_goals)
+    → _count_passed(): schließt _inappl aus (Zähler + Nenner)
+    → goals_passed recompute: sum(1 for k,v if k not in _inappl and v >= threshold)
+    → AurikErgebnis.goal_applicability: dict[str, bool]  ← für externe Caller (V51)
+```
+
+**V51-Invariante**: `RestaurierErgebnis` MUSS `goal_applicability: dict[str, bool]` als Dataclass-Feld haben (default `{}`). `_konvertiere()` MUSS `goal_applicability=dict(getattr(raw, "goal_applicability", None) or {})` setzen. `_goal_app_raw` MUSS vor dem try-Block als `{}` initialisiert werden — fehlt diese Initialisierung, wirft Python bei Exception im try-Block `UnboundLocalError` und blockiert die gesamte Pipeline. `AurikErgebnis` MUSS ebenfalls `goal_applicability`-Feld haben.
+
+**V52-Invariante**: `separation_fidelity` folgt der `spatial_depth`-Near-Mono-Codec-Regel (gleiche `_CODEC_JOINT_STEREO_MATS`, gleicher corr-Schwellwert ≥ 0.83). Fehlt die Parallelregel, bleibt `separation_fidelity` bei Joint-Stereo-Codec fälschlich applicable → false Violation.
+
+**Propagations-Vollständigkeitsinvariante**: Die Kette ist vollständig oder nicht vorhanden. Teilpropagation (GAF feuert, ExzellenzDenker ignoriert) erzeugt systematisch falsche Violation-Counts und Over-Processing. Leer-frozenset → kein Overhead.
 
 ## §2.53b [RELEASE_MUST] Denker-Plan-Determinismus in UV3 (v9.11.2)
 
@@ -3101,12 +3312,44 @@ ist dieser Plan der **verbindliche Ausführungsplan**.
 Hybrid-Orchestrierung (Denker + UV3-Autoselektion im selben Lauf) erzeugt nicht-deterministische
 Planabweichungen und erschwert Reproduzierbarkeit, QA und Root-Cause-Analyse.
 
+**Ergänzung zur Entscheidungslogik:** Die Denker liefern die inhaltliche Intelligenz
+für Erkennung, Kontext und Priorisierung. Ihre Ergebnisse fließen in das zentrale
+`restoration_policy_profile` ein, das die normative songweite Steuerung bereitstellt.
+Die Denker dürfen damit die Qualität maximal verbessern, aber keine zweite, konkurrierende
+Song-Steuerquelle aufbauen.
+
+**Denker-Policy-Input:** Vor UV3 wird ein `denker_policy_input` gebildet. Pflichtfelder
+sind, sofern verfügbar: `strategy.intervention_budget`, `strategy.listening_experience_targets`,
+`strategy.human_hearing_risk_map`, `strategy.human_hearing_comfort_profile`,
+`phase_interaction.goal_risk_map`,
+`repair_risk_profile`, `reconstruction_risk_profile` und `signal_signature`. UV3 darf
+diese Signale nur über den zentralen Policy-Resolver in `restoration_policy_profile`
+übernehmen.
+
+**Human-Hearing-Comfort-Profil:** Der `StrategieDenker` MUSS aus der
+songindividuellen Signatur (`crest_db`, `hf_ratio`, `transient_ratio`,
+`micro_dynamic_db`), dem Eingriffsbudget und den Risiko-Maps ein
+`human_hearing_comfort_profile` ableiten. Das Profil steuert u. a.
+`peak_overshoot_cap_db`, `hf_loss_tolerance_db`, `hf_lift_cap_db`,
+`transient_protection`, `microdynamic_protection`, `fatigue_sensitivity` und
+`dynamic_smoothing_tolerance`. Der finale Hoerkomfort-Guard und alle zukuenftigen
+komfortbezogenen Phasen-/Post-Gates verwenden nur dieses zentrale Profil.
+
 ## §2.54 [RELEASE_MUST] Adaptives Phasen-Optimum — Messen-Handeln-Validieren (v9.11.2, erweitert v9.11.14)
 
 > Dieses Paradigma ist normativ übergeordnet gegenüber allen festen Schwellwerten in §2.48, §2.29d, §2.45.
 > Feste Schwellwerte sind **Notbremsen** (letztes Sicherheitsnetz), nicht die Steuerung.
 
 ### Grundprinzip
+
+Die Denker-Schicht ist die Intelligenzverstärkung vor UV3: Sie analysiert Material,
+Kontext, Defektlage und Rekonstruktionshinweise und verdichtet diese Informationen in
+eine bessere zentrale Policy. UV3 bleibt die einzige normative Ausführungs- und
+Exportinstanz; `restoration_policy_profile` bleibt die einzige songweite Steuerquelle.
+
+Die Denker optimieren damit nicht gegen technische Messwerte allein, sondern gegen das
+positive Klangerlebnis für das menschliche Gehör: Natürlichkeit, Ermüdungsfreiheit,
+Vokalnähe, Mikro-Dynamik, Wärme, glaubwürdige Raumanteile und Nicht-Halluzination.
 
 Jeder Song ist einzigartig. Feste Schwellwerte können die Vielfalt an Genre, Ära, Tonträgerkette und
 Defekten nicht abbilden. Stattdessen durchläuft jede Phase einen **Messen→Handeln→Validieren-Zyklus**:
@@ -3510,6 +3753,14 @@ Fix: Post-Pipeline kumulative Stereo-Collapse-Guard (§2.49b).
 **4. PlateauStop dämpft fälschlich ab Phase 4 für Stereo-Songs**
 `_spectral_quality_score` nutzte `a[0]` statt `a[:, 0]` → immer 0.0 für Stereo →
 PlateauStop aktiv. Fix: `mono = a[:, 0] if a.ndim == 2 else a`.
+
+**5. Hauptfortschritt erreicht früh 97 % und wirkt eingefroren**
+UV3-Post-Processing-Callbacks (`pct >= 86`) duerfen in der GUI den Hauptbalken nicht bis
+97-98 % treiben, solange Defektabschluss, Export-Quality-Gate, Resampling/Datei-Export und
+UI-Finalisierung noch folgen. Kanonischer UI-Vertrag: UV3-Analyse/Phasen belegen 9-83 %, UV3-
+Post-Processing belegt 83-90 %, und 90-100 % bleiben exklusiv fuer Abschluss-/Export-Schritte.
+Heartbeat-Prognosen duerfen diese 90-%-Grenze vor dem expliziten Export-/Finalisierungsblock nicht
+ueberschreiten.
 
 ### Psychoakustik-Gewichtung für Tiefen-Immersion (§8.3)
 
@@ -4297,3 +4548,8 @@ def test_ssip_reassembly_bit_exact_silence():
             err_msg=f"Stille-Zone [{start}:{end}] ist nicht bit-identisch nach Reassembly"
         )
 ```
+
+
+## v10: PIM & RLP
+
+Der **Perceptual Intensity Mapper (PIM)** wird VOR dem Phasen-Loop ausgeführt und kalibriert 10 Frequenzbänder × N Song-Sektionen. Der **Reflective Listening Pass (RLP)** läuft NACH dem Loop und bessert Restprobleme nach.

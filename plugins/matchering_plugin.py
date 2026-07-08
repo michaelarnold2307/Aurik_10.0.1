@@ -30,7 +30,7 @@ try:
 
     _MATCHERING_AVAILABLE = True
 except ImportError:
-    _mg: Any = None
+    _mg: Any = None  # type: ignore[no-redef]
     _MATCHERING_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
@@ -119,7 +119,7 @@ class MatcheringPlugin:
 
         result = self._restore_shape(out_stereo, target)
         result = np.nan_to_num(result, nan=0.0, posinf=0.0, neginf=0.0)
-        return np.clip(result, -1.0, 1.0)
+        return np.clip(result, -1.0, 1.0)  # type: ignore[no-any-return]
 
     # ------------------------------------------------------------------
     # DSP fallback: Mid/Side-aware multiband spectral matching
@@ -166,7 +166,7 @@ class MatcheringPlugin:
             g_rms = float(np.clip(rms_r / rms_t, 0.1, 10.0))
             Zout = Zt * ratio[:, np.newaxis] * g_rms
             _, out = istft(Zout, fs=sr, window=win, nperseg=self.N_FFT, noverlap=self.N_FFT - self.HOP)
-            return np.nan_to_num(out[: len(tgt_ch)], nan=0.0).astype(np.float32)
+            return np.nan_to_num(out[: len(tgt_ch)], nan=0.0).astype(np.float32)  # type: ignore[no-any-return]
 
         out_mid = _eq_channel(tgt_mid, ref_mid)
         out_side = _eq_channel(tgt_side, ref_side)
@@ -177,7 +177,7 @@ class MatcheringPlugin:
         out_stereo = np.stack([out_l, out_r], axis=0)
 
         result = self._restore_shape(out_stereo, target)
-        return np.clip(result, -1.0, 1.0)
+        return np.clip(result, -1.0, 1.0)  # type: ignore[no-any-return]
 
     # ------------------------------------------------------------------
     # Helpers
@@ -187,12 +187,12 @@ class MatcheringPlugin:
         """Gibt (2, samples) float32, duplicating mono if needed zurück."""
         a = np.asarray(audio, dtype=np.float32)
         if a.ndim == 1:
-            return np.stack([a, a], axis=0)
+            return np.stack([a, a], axis=0)  # type: ignore[no-any-return]
         if a.shape[0] == 2:
-            return a
+            return a  # type: ignore[no-any-return]
         if a.ndim == 2 and a.shape[1] == 2:
-            return a.T
-        return np.stack([a[0], a[0]], axis=0)
+            return a.T  # type: ignore[no-any-return]
+        return np.stack([a[0], a[0]], axis=0)  # type: ignore[no-any-return]
 
     def _to_interleaved(self, audio: np.ndarray) -> np.ndarray:
         """Gibt (samples, 2) float32 interleaved for soundfile zurück."""
@@ -215,12 +215,12 @@ class MatcheringPlugin:
         elif n_out < n_orig:
             out_stereo = np.pad(out_stereo, ((0, 0), (0, n_orig - n_out)))
         if orig.ndim == 1:
-            return ((out_stereo[0] + out_stereo[1]) * 0.5).astype(np.float32)
+            return ((out_stereo[0] + out_stereo[1]) * 0.5).astype(np.float32)  # type: ignore[no-any-return]
         if orig.shape[0] == 2:  # (2, samples)
-            return out_stereo.astype(np.float32)
+            return out_stereo.astype(np.float32)  # type: ignore[no-any-return]
         if orig.ndim == 2 and orig.shape[1] == 2:  # (samples, 2)
-            return out_stereo.T.astype(np.float32)
-        return ((out_stereo[0] + out_stereo[1]) * 0.5).astype(np.float32)
+            return out_stereo.T.astype(np.float32)  # type: ignore[no-any-return]
+        return ((out_stereo[0] + out_stereo[1]) * 0.5).astype(np.float32)  # type: ignore[no-any-return]
 
 
 def get_matchering_plugin() -> MatcheringPlugin:

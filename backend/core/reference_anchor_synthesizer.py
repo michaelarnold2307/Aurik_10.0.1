@@ -155,7 +155,7 @@ class ReferenceAnchorSynthesizer:
         if isinstance(anchor_result, np.ndarray):
             anchor_spectrum = anchor_result
         elif hasattr(anchor_result, "anchor_spectrum"):
-            anchor_spectrum = anchor_result.anchor_spectrum
+            anchor_spectrum = anchor_result.anchor_spectrum  # type: ignore[assignment]
         else:
             anchor_spectrum = np.zeros(N_ANCHOR_BINS, dtype=np.float32)
 
@@ -173,7 +173,7 @@ class ReferenceAnchorSynthesizer:
         result = processed[0] if original_shape == audio.shape and audio.ndim == 1 else np.stack(processed, axis=0)
 
         result = np.nan_to_num(result, nan=0.0, posinf=0.0, neginf=0.0)
-        return np.clip(result, -1.0, 1.0)
+        return np.clip(result, -1.0, 1.0)  # type: ignore[no-any-return]
 
     # ----------------------------------------------------------------
     # Hilfsmethoden
@@ -196,7 +196,7 @@ class ReferenceAnchorSynthesizer:
             # Vereinfachte Anker-Auswahl: Ära-basierter Matindex
             decade_idx = int(np.clip((era_decade - 1890) // 10, 0, len(anchors) - 1))
             anchor = anchors[decade_idx].astype(np.float32)
-            return np.nan_to_num(anchor, nan=0.0)
+            return np.nan_to_num(anchor, nan=0.0)  # type: ignore[no-any-return]
         except Exception as exc:
             logger.debug("anchors.npz Laden fehlgeschlagen: %s", exc)
             return None
@@ -241,7 +241,7 @@ class ReferenceAnchorSynthesizer:
 
         # Clippen auf ±6 dB
         anchor_db = np.clip(anchor_db, -MAX_EQ_DB, MAX_EQ_DB)
-        return anchor_db
+        return anchor_db  # type: ignore[no-any-return]
 
     def _apply_eq(
         self,
@@ -285,7 +285,7 @@ class ReferenceAnchorSynthesizer:
         norm = np.max(np.abs(result)) + 1e-9
         if norm > 1.0:
             result /= norm
-        return result.astype(np.float32)
+        return result.astype(np.float32)  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------
@@ -321,4 +321,4 @@ def synthesize_reference_anchor(
     Returns:
         AnchorResult mit 128-dim Spektral-Anker und Metadaten.
     """
-    return get_reference_anchor_synthesizer().synthesize(era_decade, genre_label, material)
+    return get_reference_anchor_synthesizer().synthesize(era_decade, genre_label, material)  # type: ignore[return-value]

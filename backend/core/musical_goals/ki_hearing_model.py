@@ -85,7 +85,7 @@ class KIHörbarkeitsAnalyzer:
                 audio_mono = audio
 
             # Normalisiere auf [-1, 1]
-            max_amp = np.max(np.abs(audio_mono))
+            max_amp: float = float(np.max(np.abs(audio_mono)))
             if max_amp > 0:
                 audio_mono = audio_mono / max_amp
             else:
@@ -191,11 +191,11 @@ class KIHörbarkeitsAnalyzer:
             if len(zcr_values) < 2:
                 return 0.0
 
-            zcr_values = np.array(zcr_values)
+            _zcr_arr = np.array(zcr_values)
 
             # Pitch Variation = Standardabweichung der ZCR
-            mean_zcr = np.mean(zcr_values)
-            pitch_variation = np.std(zcr_values) / mean_zcr if mean_zcr > 0 else 0.0
+            mean_zcr = float(np.mean(_zcr_arr))
+            pitch_variation = float(np.std(_zcr_arr)) / mean_zcr if mean_zcr > 0 else 0.0
 
             # Normalisiere (JND für Pitch ≈ 0.3%)
             # Variationen > 1% sind deutlich hörbar
@@ -275,7 +275,7 @@ class KIHörbarkeitsAnalyzer:
                 return 0.0
 
             # Zähle abnormale Transienten
-            abnormal_transients = np.sum(envelope_diff > threshold * 2)
+            abnormal_transients: int = int(np.sum(envelope_diff > threshold * 2))
 
             # Normalisiere auf Zeit (Clicks pro Sekunde)
             duration_sec = len(audio) / sr
@@ -489,7 +489,7 @@ def _to_mono(audio: np.ndarray) -> np.ndarray:
             a = a.mean(axis=0)
         elif a.shape[1] <= 2:
             a = a.mean(axis=1)
-    return np.nan_to_num(a, nan=0.0, posinf=0.0, neginf=0.0)
+    return np.nan_to_num(a, nan=0.0, posinf=0.0, neginf=0.0)  # type: ignore[no-any-return]
 
 
 def _konsonanten_transient_ratio(orig: np.ndarray, rest: np.ndarray, sr: int) -> float:
@@ -554,7 +554,7 @@ def _breathiness_ratio(orig: np.ndarray, rest: np.ndarray, sr: int) -> float:
         for i in range(n_frames):
             chunk = sig[i * hop : i * hop + frame_len]
             r[i] = np.sqrt(np.mean(chunk**2) + 1e-30)
-        return r
+        return r  # type: ignore[no-any-return]
 
     rms_orig = _rms_frames(orig)
     rms_rest = _rms_frames(rest)

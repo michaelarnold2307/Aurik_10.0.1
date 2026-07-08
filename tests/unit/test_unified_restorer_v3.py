@@ -13,6 +13,7 @@ import inspect
 import math
 import types
 from dataclasses import fields
+from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -35,7 +36,7 @@ SR = 48000
 
 def _sine(secs: float = 2.0, freq: float = 440.0) -> np.ndarray:
     t = np.linspace(0, secs, int(SR * secs), endpoint=False)
-    return np.sin(2 * np.pi * freq * t).astype(np.float32)
+    return np.asarray(np.sin(2 * np.pi * freq * t), dtype=np.float32)
 
 
 def _noise(secs: float = 1.0, amp: float = 0.05) -> np.ndarray:
@@ -218,6 +219,115 @@ class TestCentralGateArchitecture:
         assert "singer_identity_below_threshold" in payload["recovery_triggers"]
         assert "vqi_below_mode_target" in payload["advisories"]
 
+    def test_40zzj2_classify_quality_gate_events_honors_prior_activated_vocal_gate(self):
+        payload = UnifiedRestorerV3._classify_quality_gate_events(
+            artifact_freedom=0.98,
+            panns_singing=0.0,
+            vocal_gate_active=True,
+            mode="restoration",
+            vqi_score=0.68,
+            vqi_floor=0.72,
+            singer_identity_cosine=0.89,
+            multi_singer=False,
+        )
+
+        assert payload["hard_veto"] is False
+        assert "vqi_below_material_floor" in payload["recovery_triggers"]
+        assert "singer_identity_below_threshold" in payload["recovery_triggers"]
+        assert "vqi_below_mode_target" in payload["advisories"]
+
+
+class TestShortExcerptGoalFeasibilityCaps:
+    def test_40zzk_short_excerpt_caps_thresholds_to_original_plus_margin(self):
+        thresholds = {
+            "bass_kraft": 0.70,
+            "brillanz": 0.64,
+            "transparenz": 0.75,
+            "waerme": 0.74,
+            "transient_energie": 0.91,
+            "authentizitaet": 0.90,
+            "artikulation": 0.88,
+        }
+        original_scores = {
+            "bass_kraft": 0.09,
+            "brillanz": 0.00,
+            "transparenz": 0.53,
+            "waerme": 0.61,
+            "transient_energie": 0.66,
+            "authentizitaet": 0.81,
+            "artikulation": 0.90,
+        }
+
+        out = UnifiedRestorerV3._apply_short_excerpt_goal_feasibility_caps(
+            thresholds,
+            original_scores,
+            duration_s=8.0,
+        )
+
+        assert out["bass_kraft"] == pytest.approx(0.17, abs=1e-6)
+        assert out["brillanz"] == pytest.approx(0.10, abs=1e-6)
+        assert out["transparenz"] == pytest.approx(0.57, abs=1e-6)
+        assert out["waerme"] == pytest.approx(0.67, abs=1e-6)
+        assert out["transient_energie"] == pytest.approx(0.74, abs=1e-6)
+        assert out["authentizitaet"] == pytest.approx(0.86, abs=1e-6)
+        # Nicht im Cap-Mapping: unverändert.
+        assert out["artikulation"] == pytest.approx(0.88, abs=1e-6)
+
+    def test_40zzl_long_excerpt_keeps_thresholds_unchanged(self):
+        thresholds = {"bass_kraft": 0.70, "brillanz": 0.64, "transparenz": 0.75, "waerme": 0.74}
+        original_scores = {"bass_kraft": 0.09, "brillanz": 0.0, "transparenz": 0.53, "waerme": 0.61}
+
+        out = UnifiedRestorerV3._apply_short_excerpt_goal_feasibility_caps(
+            thresholds,
+            original_scores,
+            duration_s=20.0,
+        )
+
+        assert out == thresholds
+
+
+class TestPsychoNaturalnessShortExcerptFloor:
+    def test_40zzm_short_excerpt_keeps_strict_per_metric_floor(self):
+        vector = {
+            "noise_texture_authenticity": 0.74,
+            "micro_dynamic_correlation": 0.92,
+            "emotional_arc_preservation": 0.90,
+            "spectral_color_preservation": 0.91,
+        }
+
+        out = UnifiedRestorerV3._evaluate_psychoacoustic_naturalness_gate(
+            vector=vector,
+            panns_singing=0.0,
+            is_studio_mode=False,
+            duration_s=8.0,
+        )
+
+        assert out["score_pass"] is True
+        assert out["per_metric_floor"] == pytest.approx(0.76, abs=1e-6)
+        assert out["per_metric_floor_effective"] == pytest.approx(0.76, abs=1e-6)
+        assert out["floor_pass"] is False
+        assert out["passed"] is False
+
+    def test_40zzn_long_excerpt_keeps_strict_floor(self):
+        vector = {
+            "noise_texture_authenticity": 0.74,
+            "micro_dynamic_correlation": 0.92,
+            "emotional_arc_preservation": 0.90,
+            "spectral_color_preservation": 0.91,
+        }
+
+        out = UnifiedRestorerV3._evaluate_psychoacoustic_naturalness_gate(
+            vector=vector,
+            panns_singing=0.0,
+            is_studio_mode=False,
+            duration_s=20.0,
+        )
+
+        assert out["score_pass"] is True
+        assert out["per_metric_floor_effective"] == pytest.approx(0.76, abs=1e-6)
+        assert out["floor_pass"] is False
+        assert out["passed"] is False
+
 
 class TestQuietZoneReintroductionShield:
     def test_40zzn_phase34_passthrough_after_phase29_quiet_zone_alarm(self, monkeypatch):
@@ -310,6 +420,25 @@ class TestQuietZoneReintroductionShield:
         assert "phase_23_spectral_repair" in src
         assert "phase_24_dropout_repair" in src
         assert "phase_38_presence_boost" in src
+
+    def test_40zzn_vocal_guard_metrics_feed_runtime_context_and_nti_is_stricter_for_vocals(self):
+        """Neue Vocal-Schutzmetriken müssen in Runtime-Context/WCS sichtbar sein."""
+        src = inspect.getsource(_uv3_mod.UnifiedRestorerV3._profiled_phase_call)
+        assert "def _update_vocal_quality_metrics" in src
+        assert '"vocal_quality_check"' in src
+        assert "_FORMANT_DB_LIMITS = (1.0, 1.0, 1.5, 1.5)" in src
+        assert "vibrato_depth_preservation" in src
+        assert "_mkk_target_corr = 0.985 if _v20_panns >= 0.35 else 0.97" in src
+        assert "_mkk_floor_corr = 0.93 if _v20_panns >= 0.35 else 0.90" in src
+        assert "_ntg_threshold = 0.18 if _v19_panns >= 0.35 else 0.25" in src
+        assert "noise_texture_authenticity" in src
+
+    def test_40zzo_wcs_prefers_aggregated_vocal_noise_texture_metric(self):
+        """WCS muss die aggregierte Vocal-Noise-Texture-Metrik vor dem End-of-pipeline-Fallback lesen."""
+        src = inspect.getsource(_uv3_mod.UnifiedRestorerV3.restore)
+        assert "_noise_texture_auth_wcs = _phase_meta_acc_world.get(" in src
+        assert '"noise_texture_authenticity": _noise_texture_auth_wcs' in src
+        assert 'float(getattr(_noise_texture_result, "coherence", 1.0))' in src
 
 
 class TestSpecUpgradeMetadata:
@@ -457,6 +586,66 @@ class TestPhaseCoalitions:
         assert "phase_42_vocal_enhancement" in active["vocal_production"]
 
 
+class TestDefectPhaseMappingReporting:
+    def test_compute_defect_phase_mapping_result_includes_coalition_context(self, monkeypatch):
+        restorer = object.__new__(UnifiedRestorerV3)
+        restorer.config = RestorationConfig(mode=QualityMode.QUALITY, studio_2026=False)
+        restorer._restoration_context = {}
+
+        captured: dict[str, object] = {}
+
+        class _DummyMapper:
+            def phases_for_defect_profile(
+                self, defects, max_phases=10, mode="restoration", material=None, phase_coalitions=None
+            ):
+                captured["mode"] = mode
+                captured["material"] = material
+                captured["phase_coalitions"] = phase_coalitions
+                return [
+                    "phase_23_spectral_repair",
+                    "phase_50_spectral_repair",
+                    "phase_03_denoise",
+                ]
+
+        monkeypatch.setattr("backend.core.defect_phase_mapper.DefectPhaseMapper", lambda: _DummyMapper())
+        monkeypatch.setattr(
+            UnifiedRestorerV3,
+            "get_active_phase_coalitions",
+            classmethod(
+                lambda cls, selected_phases, is_studio_2026=False: {
+                    "digital_repair_chain": (
+                        "phase_23_spectral_repair",
+                        "phase_50_spectral_repair",
+                    )
+                }
+            ),
+        )
+
+        defect_result = types.SimpleNamespace(
+            scores={
+                "a": types.SimpleNamespace(defect_type=DefectType.ALIASING, severity=0.8),
+            }
+        )
+        material_stub = types.SimpleNamespace(value="cd_digital")
+
+        result = restorer._compute_defect_phase_mapping_result(
+            defect_result=defect_result,
+            executed_phases=[
+                "phase_23_spectral_repair",
+                "phase_50_spectral_repair",
+                "phase_03_denoise",
+            ],
+            material_type=material_stub,
+        )
+
+        assert result is not None
+        assert captured["mode"] == "restoration"
+        assert captured["material"] == "cd_digital"
+        assert isinstance(captured["phase_coalitions"], dict)
+        assert result["dominant_coalition"] == "digital_repair_chain"
+        assert result["dominant_coalition_coverage_ratio"] == 0.667
+
+
 # ---------------------------------------------------------------------------
 # Klasse 2: RestorationResult
 # ---------------------------------------------------------------------------
@@ -553,6 +742,162 @@ class TestPreventFirstQuietEdges:
         assert original_alphas == (0.90, 0.82, 0.74, 0.64, 0.56, 0.48)
         assert carrier_alphas == (0.90, 0.82, 0.74, 0.66)
         assert default_alphas == (0.90, 0.82, 0.74)
+
+    def test_40dzc_goal_candidate_blend_alphas_expand_for_waerme_recovery(self):
+        waerme_alphas = _uv3_mod._goal_candidate_blend_alphas(
+            "original_audio",
+            recovery_goals={"waerme", "spatial_depth"},
+        )
+        assert waerme_alphas == (0.90, 0.82, 0.74, 0.64, 0.56, 0.48, 0.42, 0.36)
+
+    def test_40dzd_rank_goal_recovery_candidate_penalizes_spatial_depth_drop(self):
+        thresholds = {
+            "transparenz": 0.85,
+            "waerme": 0.75,
+            "spatial_depth": 0.70,
+            "brillanz": 0.78,
+        }
+        applicable = set(thresholds)
+        baseline = {
+            "transparenz": 0.90,
+            "waerme": 0.82,
+            "spatial_depth": 0.80,
+            "brillanz": 0.80,
+        }
+
+        mild_drop = {
+            "transparenz": 0.90,
+            "waerme": 0.82,
+            "spatial_depth": 0.78,
+            "brillanz": 0.80,
+        }
+        strong_drop = {
+            "transparenz": 0.90,
+            "waerme": 0.82,
+            "spatial_depth": 0.74,
+            "brillanz": 0.80,
+        }
+
+        rank_mild = _uv3_mod._rank_goal_recovery_candidate(
+            scores=mild_drop,
+            baseline_scores=baseline,
+            thresholds=thresholds,
+            applicable_goals=applicable,
+        )
+        rank_strong = _uv3_mod._rank_goal_recovery_candidate(
+            scores=strong_drop,
+            baseline_scores=baseline,
+            thresholds=thresholds,
+            applicable_goals=applicable,
+        )
+
+        assert rank_mild < rank_strong
+
+    def test_40dze_waerme_focus_rescue_candidate_raises_warm_band_energy(self):
+        from scipy.signal import butter, sosfiltfilt
+
+        t = np.linspace(0.0, 2.0, int(SR * 2.0), endpoint=False)
+        original = (0.11 * np.sin(2.0 * np.pi * 280.0 * t) + 0.05 * np.sin(2.0 * np.pi * 2400.0 * t)).astype(np.float32)
+        current = (0.03 * np.sin(2.0 * np.pi * 280.0 * t) + 0.05 * np.sin(2.0 * np.pi * 2400.0 * t)).astype(np.float32)
+
+        candidate, meta = _uv3_mod._build_waerme_focus_rescue_candidate(current, original, SR)
+
+        assert candidate is not None
+        assert bool(meta.get("waerme_rescue_used")) is True
+        sos = butter(2, [180.0 / (SR * 0.5), 900.0 / (SR * 0.5)], btype="band", output="sos")
+        warm_current = sosfiltfilt(sos, current)
+        warm_candidate = sosfiltfilt(sos, candidate)
+        rms_current = float(np.sqrt(np.mean(np.square(warm_current)) + 1e-9))
+        rms_candidate = float(np.sqrt(np.mean(np.square(warm_candidate)) + 1e-9))
+        assert rms_candidate > rms_current
+
+    def test_40dzf_waerme_focus_rescue_candidate_keeps_spatial_drop_below_cap(self):
+        t = np.linspace(0.0, 2.0, int(SR * 2.0), endpoint=False)
+        mid = 0.08 * np.sin(2.0 * np.pi * 330.0 * t)
+        side = 0.06 * np.sin(2.0 * np.pi * 2500.0 * t)
+        warm_orig = 0.08 * np.sin(2.0 * np.pi * 260.0 * t)
+
+        original_l = (mid + side + warm_orig).astype(np.float32)
+        original_r = (mid - side + warm_orig).astype(np.float32)
+        current_l = (mid + side + 0.02 * np.sin(2.0 * np.pi * 260.0 * t)).astype(np.float32)
+        current_r = (mid - side + 0.02 * np.sin(2.0 * np.pi * 260.0 * t)).astype(np.float32)
+
+        original = np.stack([original_l, original_r], axis=0)
+        current = np.stack([current_l, current_r], axis=0)
+
+        candidate, _meta = _uv3_mod._build_waerme_focus_rescue_candidate(
+            current,
+            original,
+            SR,
+            max_spatial_drop_db=0.20,
+        )
+
+        assert candidate is not None
+        side_before = (current[0] - current[1]) * 0.5
+        side_after = (candidate[0] - candidate[1]) * 0.5
+        sb = float(np.sqrt(np.mean(np.square(side_before)) + 1e-9))
+        sa = float(np.sqrt(np.mean(np.square(side_after)) + 1e-9))
+        drop_db = float(20.0 * np.log10((sb + 1e-9) / (sa + 1e-9)))
+        assert drop_db <= 0.21
+
+    def test_40dzg_goal_candidate_source_penalties_default_values(self):
+        hpi_p, carrier_p, orig_p = _uv3_mod._compute_goal_candidate_source_penalties({})
+        assert hpi_p == pytest.approx(0.010)
+        assert carrier_p == pytest.approx(0.015)
+        # Ohne explizite Material-Konfidenz greift konservativer Default-Pfad.
+        assert orig_p == pytest.approx(0.040)
+
+    def test_40dzh_goal_candidate_source_penalties_material_causal_reconciliation(self):
+        meta = {
+            "chain_threshold_override_count": 2,
+            "material_confidence": 0.42,
+            "chain_stage_materials": ["vinyl", "tape", "mp3_low"],
+            "material_defect_consistency_flag": True,
+            "material_defect_consistency_warning_count": 2,
+        }
+        hpi_p, carrier_p, orig_p = _uv3_mod._compute_goal_candidate_source_penalties(meta)
+
+        assert hpi_p < 0.010
+        assert carrier_p < 0.015
+        assert orig_p > 0.040
+
+    def test_40dzi_effective_self_comparison_true_for_identical_signal(self):
+        x = (_sine(secs=1.0, freq=440.0) * 0.2).astype(np.float32)
+        assert _uv3_mod._is_effective_self_comparison(x, x.copy()) is True
+
+    def test_40dzj_effective_self_comparison_false_when_only_intro_matches(self):
+        x = (_sine(secs=2.0, freq=440.0) * 0.2).astype(np.float32)
+        y = x.copy()
+        # Intro bleibt identisch, Tail wird veraendert — alter Head-Only-Check waere false-positive.
+        y[int(0.7 * x.size) :] *= 0.5
+        assert _uv3_mod._is_effective_self_comparison(x, y) is False
+
+    def test_40dzk_should_use_carrier_reference_for_hpi_by_ccr_ratio(self):
+        assert _uv3_mod._should_use_carrier_reference_for_hpi(0.20, {}) is True
+
+    def test_40dzl_should_use_carrier_reference_for_hpi_by_material_causal_reconciliation(self):
+        scan_meta = {
+            "material_defect_consistency_flag": True,
+            "material_defect_consistency_warning_count": 1,
+            "chain_stage_materials": ["vinyl", "tape", "mp3_low"],
+        }
+        assert _uv3_mod._should_use_carrier_reference_for_hpi(0.05, scan_meta) is True
+
+    def test_40dzm_should_use_carrier_reference_for_hpi_on_mdc_warning_without_chain(self):
+        scan_meta = {
+            "material_defect_consistency_flag": False,
+            "material_defect_consistency_warning_count": 1,
+            "chain_stage_materials": [],
+        }
+        assert _uv3_mod._should_use_carrier_reference_for_hpi(0.05, scan_meta) is True
+
+    def test_40dzn_should_not_use_carrier_reference_for_hpi_without_mdc_or_ccr(self):
+        scan_meta = {
+            "material_defect_consistency_flag": False,
+            "material_defect_consistency_warning_count": 0,
+            "chain_stage_materials": [],
+        }
+        assert _uv3_mod._should_use_carrier_reference_for_hpi(0.05, scan_meta) is False
 
     def test_40d_extract_transfer_chain_accepts_direct_string_and_list_inputs(self):
         assert UnifiedRestorerV3._extract_transfer_chain_from_forensics("vinyl -> tape -> mp3_low") == [
@@ -660,7 +1005,7 @@ class TestPreventFirstQuietEdges:
             "phase_99_gain_a": {"name": "Gain A", "dependencies": [], "category": "mastering"},
             "phase_99_gain_b": {"name": "Gain B", "dependencies": [], "category": "mastering"},
         }
-        restorer._get_phase = lambda pid: _PhaseStub(pid)  # type: ignore[method-assign]
+        restorer._get_phase = lambda pid: _PhaseStub(pid)  # type: ignore[method-assign, assignment, return-value]
 
         def _mock_profiled_call(_phase: object, _audio: np.ndarray, **_kwargs: object) -> object:
             boosted = np.clip(np.asarray(_audio, dtype=np.float32) * 1.18, -1.0, 1.0)
@@ -671,7 +1016,7 @@ class TestPreventFirstQuietEdges:
                 warnings=[],
             )
 
-        restorer._profiled_phase_call = _mock_profiled_call  # type: ignore[method-assign]
+        restorer._profiled_phase_call = _mock_profiled_call  # type: ignore[method-assign, assignment]
 
         intro = _sine(secs=1.0, freq=220.0) * 0.015
         middle = _sine(secs=2.0, freq=440.0) * 0.18
@@ -922,8 +1267,8 @@ class TestNoRtLimitPhaseDeferralBypass:
                 "dependencies": [],
             }
         }
-        restorer._get_phase = lambda _pid: _DummyPhaseForNoRt()  # type: ignore[method-assign]
-        restorer._profiled_phase_call = (  # type: ignore[method-assign]
+        restorer._get_phase = lambda _pid: _DummyPhaseForNoRt()  # type: ignore[method-assign, assignment, return-value]
+        restorer._profiled_phase_call = (  # type: ignore[method-assign, assignment]
             lambda _phase, _audio, **_kwargs: types.SimpleNamespace(
                 success=True,
                 # §2.45: tiny spectral change so perceptual_delta > 0 in the direct path.
@@ -937,7 +1282,7 @@ class TestNoRtLimitPhaseDeferralBypass:
     def test_55_rt_guard_defers_phase_without_no_rt_limit(self):
         restorer = self._build_restorer()
         guard = _AlwaysSkipGuard()
-        restorer.performance_guard = guard
+        restorer.performance_guard = guard  # type: ignore[assignment]
 
         audio = _sine(secs=0.3)
         defect_result = types.SimpleNamespace(scores={})
@@ -961,7 +1306,7 @@ class TestNoRtLimitPhaseDeferralBypass:
     def test_56_no_rt_limit_executes_phase_despite_guard_skip(self):
         restorer = self._build_restorer()
         guard = _AlwaysSkipGuard()
-        restorer.performance_guard = guard
+        restorer.performance_guard = guard  # type: ignore[assignment]
 
         audio = _sine(secs=0.3)
         defect_result = types.SimpleNamespace(scores={})
@@ -1037,7 +1382,10 @@ def test_57_phase_skipper_medium_map_covers_extended_legacy_media(
 ) -> None:
     """_apply_phase_skipping must map legacy media to concrete SourceMedium values."""
     restorer = UnifiedRestorerV3(RestorationConfig(enable_phase_skipping=False))
-    restorer.phase_skipper = object()  # only truthy check is required in _apply_phase_skipping
+    restorer.phase_skipper = cast(
+        Any,
+        object(),
+    )  # only truthy check is required in _apply_phase_skipping
 
     captured: dict[str, object] = {}
 
@@ -1064,6 +1412,10 @@ class TestUnifiedRestorerV3Init:
     def test_19_default_init_no_crash(self):
         restorer = UnifiedRestorerV3()
         assert restorer is not None
+
+    def test_19a_metadata_runtime_dict_initialized(self):
+        restorer = UnifiedRestorerV3()
+        assert isinstance(restorer._metadata, dict)
 
     def test_20_custom_config_applied(self):
         cfg = RestorationConfig(mode=QualityMode.FAST, num_cores=2)
@@ -1093,6 +1445,18 @@ class TestUnifiedRestorerV3Init:
         restorer = UnifiedRestorerV3(quality_mode="studio_2026")
         assert restorer.config.mode == QualityMode.MAXIMUM
         assert restorer.is_studio_mode() is True
+
+    def test_23c_restore_resets_metadata_per_run(self):
+        restorer = UnifiedRestorerV3()
+        restorer._metadata["stale_marker"] = True
+
+        # <100 ms triggert den frühen Pass-Through, aber der per-run Reset
+        # in restore() muss vorher bereits erfolgt sein.
+        tiny_audio = np.zeros(100, dtype=np.float32)
+        result = restorer.restore(tiny_audio, sample_rate=48000)
+
+        assert isinstance(result, RestorationResult)
+        assert restorer._metadata == {}
 
 
 # ---------------------------------------------------------------------------
@@ -1362,7 +1726,7 @@ class TestRestoreMocked:
             calls["n"] = int(a.shape[-1])
             raise RuntimeError("stop_after_scan")
 
-        restorer.defect_scanner.scan = _scan_capture  # type: ignore[method-assign]
+        restorer.defect_scanner.scan = _scan_capture  # type: ignore[method-assign, assignment]
 
         cached_medium = types.SimpleNamespace(
             material=MaterialType.VINYL,
@@ -1441,7 +1805,7 @@ class TestRestoreMocked:
             calls["forensic_medium_result"] = kwargs.get("forensic_medium_result")
             raise RuntimeError("stop_after_scan")
 
-        restorer.defect_scanner.scan = _scan_capture  # type: ignore[method-assign]
+        restorer.defect_scanner.scan = _scan_capture  # type: ignore[method-assign, assignment]
 
         pre_medium = types.SimpleNamespace(
             transfer_chain=["vinyl", "mp3_low"],
@@ -1494,7 +1858,7 @@ class TestRestoreMocked:
             calls["forensic_medium_result"] = kwargs.get("forensic_medium_result")
             raise RuntimeError("stop_after_scan")
 
-        restorer.defect_scanner.scan = _scan_capture  # type: ignore[method-assign]
+        restorer.defect_scanner.scan = _scan_capture  # type: ignore[method-assign, assignment]
 
         cached_era = types.SimpleNamespace(decade=1970, material_prior="vinyl", confidence=0.99)
         cached_genre = types.SimpleNamespace(
@@ -1986,6 +2350,7 @@ class TestSongCalibrationProfile:
 
         assert profile["material"] == MaterialType.CASSETTE.value
         assert profile["material_canonical"] == MaterialType.TAPE.value
+        assert profile["source_fidelity_material"] == MaterialType.CASSETTE.value
 
     def test_68b_resolve_post_scan_material_type_keeps_specific_cassette(self):
         mc_result = types.SimpleNamespace(
@@ -2626,6 +2991,105 @@ class TestStereoSafetyGuardBranching:
         assert "true_peak_gt_minus_1dbtp" in result["hard_fail_reasons"]
 
 
+class TestStereoContractEventRecorder:
+    def test_95_records_event_into_phase_metadata_and_context(self):
+        phase_meta: dict[str, Any] = {}
+        restoration_ctx: dict[str, Any] = {}
+
+        guard = {
+            "reason": "warning",
+            "hard_fail": False,
+            "warning": True,
+            "warning_reasons": ["interchannel_delay_0p5_to_1ms"],
+            "hard_fail_reasons": [],
+            "input": {"delay_ms": 0.10, "iacc": 0.62},
+            "output": {"delay_ms": 0.72, "iacc": 0.78, "spatial_depth_iacc": 0.22},
+            "delta": {"delay_ms": 0.62, "mono_compat": -0.03, "interchannel_corr": -0.08, "iacc": 0.16},
+        }
+
+        event = UnifiedRestorerV3._record_phase_stereo_contract_event(
+            phase_meta,
+            restoration_ctx,
+            phase_id="phase_48_stereo_width_enhancer",
+            guard_result=guard,
+            rolled_back=False,
+        )
+
+        assert event["phase_id"] == "phase_48_stereo_width_enhancer"
+        assert event["warning"] is True
+        assert event["rolled_back"] is False
+        assert event["delay_ms_delta"] > 0.5
+        assert event["iacc_delta"] > 0.1
+
+        assert "stereo_contract_events" in phase_meta
+        assert phase_meta["stereo_contract_events"]
+        assert phase_meta["phase_48_stereo_width_enhancer"]["stereo_contract"]["iacc_out"] == pytest.approx(0.78)
+
+        assert "stereo_contract_events" in restoration_ctx
+        assert restoration_ctx["stereo_contract_events"]
+
+    def test_96_event_list_is_capped_for_phase_metadata(self):
+        phase_meta: dict[str, Any] = {}
+        restoration_ctx: dict[str, Any] = {}
+        guard = {
+            "reason": "ok",
+            "hard_fail": False,
+            "warning": False,
+            "input": {"delay_ms": 0.0, "iacc": 0.5},
+            "output": {"delay_ms": 0.0, "iacc": 0.5, "spatial_depth_iacc": 0.5},
+            "delta": {"delay_ms": 0.0, "mono_compat": 0.0, "interchannel_corr": 0.0, "iacc": 0.0},
+        }
+
+        for idx in range(300):
+            UnifiedRestorerV3._record_phase_stereo_contract_event(
+                phase_meta,
+                restoration_ctx,
+                phase_id=f"phase_{idx:02d}",
+                guard_result=guard,
+                rolled_back=False,
+            )
+
+        assert len(phase_meta.get("stereo_contract_events", [])) == 256
+        assert len(restoration_ctx.get("stereo_contract_events", [])) == 128
+
+    def test_97_stereo_contract_multiplier_reduces_next_phase_strength_on_hard_fail(self):
+        guard = {
+            "reason": "iacc_collapse",
+            "hard_fail": True,
+            "warning": True,
+            "delta": {"iacc": 0.24, "delay_ms": 0.72, "interchannel_corr": -0.31, "mono_compat": -0.06},
+        }
+
+        multiplier = UnifiedRestorerV3._compute_stereo_contract_strength_multiplier(
+            "phase_48_stereo_width_enhancer",
+            guard,
+        )
+
+        assert 0.55 <= multiplier < 0.80
+
+    def test_98_stereo_contract_multiplier_is_stricter_for_analog_widening(self):
+        guard = {
+            "reason": "iacc_rising_towards_mono",
+            "hard_fail": False,
+            "warning": True,
+            "delta": {"iacc": 0.12, "delay_ms": 0.28, "interchannel_corr": -0.16, "mono_compat": -0.03},
+        }
+
+        analog_multiplier = UnifiedRestorerV3._compute_stereo_contract_strength_multiplier(
+            "phase_48_stereo_width_enhancer",
+            guard,
+            "vinyl",
+        )
+        digital_multiplier = UnifiedRestorerV3._compute_stereo_contract_strength_multiplier(
+            "phase_48_stereo_width_enhancer",
+            guard,
+            "cd",
+        )
+
+        assert analog_multiplier < digital_multiplier
+        assert analog_multiplier <= 0.80
+
+
 class TestSingleGainAuthorityPolicy:
     def test_95_hpf_notch_phase_locks_positive_makeup_authority(self):
         allow, reason = UnifiedRestorerV3._update_positive_makeup_authority(
@@ -2710,10 +3174,10 @@ class TestSingleGainAuthorityEndToEnd:
         audio_in = np.clip(rng.standard_normal(SR * 2) * input_level, -1.0, 1.0).astype(np.float32)
 
         _PhaseStub = TestSingleGainAuthorityEndToEnd._PhaseStub
-        restorer._get_phase = lambda pid: _PhaseStub(pid)  # type: ignore[method-assign]
+        restorer._get_phase = lambda pid: _PhaseStub(pid)  # type: ignore[method-assign, assignment, return-value]
 
         def _mock_profiled_call(_phase: object, _audio: np.ndarray, **_kwargs: object) -> object:
-            pid: str = _phase.get_metadata().phase_id  # type: ignore[union-attr]
+            pid: str = _phase.get_metadata().phase_id  # type: ignore[union-attr, attr-defined]
             factor = 0.5 if "phase_05" in pid else 0.1  # HPF: -6 dB; phase_35: -20 dB
             return types.SimpleNamespace(
                 success=True,
@@ -2722,7 +3186,7 @@ class TestSingleGainAuthorityEndToEnd:
                 warnings=[],
             )
 
-        restorer._profiled_phase_call = _mock_profiled_call  # type: ignore[method-assign]
+        restorer._profiled_phase_call = _mock_profiled_call  # type: ignore[method-assign, assignment]
         rms_before = float(np.sqrt(np.mean(audio_in**2)))
 
         _fake_vm = types.SimpleNamespace(available=8 * 1024 * 1024 * 1024, percent=20.0, total=16 * 1024 * 1024 * 1024)
@@ -2765,10 +3229,10 @@ class TestSingleGainAuthorityEndToEnd:
         audio_in = np.clip(rng.standard_normal(SR) * 0.15, -1.0, 1.0).astype(np.float32)
 
         _PhaseStub = TestSingleGainAuthorityEndToEnd._PhaseStub
-        restorer._get_phase = lambda pid: _PhaseStub(pid)  # type: ignore[method-assign]
+        restorer._get_phase = lambda pid: _PhaseStub(pid)  # type: ignore[method-assign, assignment, return-value]
 
         def _mock_profiled_call(_phase: object, _audio: np.ndarray, **_kwargs: object) -> object:
-            pid: str = _phase.get_metadata().phase_id  # type: ignore[union-attr]
+            pid: str = _phase.get_metadata().phase_id  # type: ignore[union-attr, attr-defined]
             factor = 0.5 if "phase_05" in pid else 0.85
             return types.SimpleNamespace(
                 success=True,
@@ -2777,7 +3241,7 @@ class TestSingleGainAuthorityEndToEnd:
                 warnings=[],
             )
 
-        restorer._profiled_phase_call = _mock_profiled_call  # type: ignore[method-assign]
+        restorer._profiled_phase_call = _mock_profiled_call  # type: ignore[method-assign, assignment]
 
         _fake_vm = types.SimpleNamespace(available=8 * 1024 * 1024 * 1024, percent=20.0, total=16 * 1024 * 1024 * 1024)
         with patch("psutil.virtual_memory", return_value=_fake_vm):
@@ -3368,10 +3832,10 @@ class TestCIGRollbackNoMakeupGain:
         audio_in = np.clip(np.concatenate([music, fadeout]), -1.0, 1.0)
 
         _PhaseStub = TestSingleGainAuthorityEndToEnd._PhaseStub
-        restorer._get_phase = lambda pid: _PhaseStub(pid)  # type: ignore[method-assign]
+        restorer._get_phase = lambda pid: _PhaseStub(pid)  # type: ignore[method-assign, assignment, return-value]
 
         def _mock_profiled_call(_phase: object, _audio: np.ndarray, **_kwargs: object) -> object:
-            pid: str = _phase.get_metadata().phase_id  # type: ignore[union-attr]
+            pid: str = _phase.get_metadata().phase_id  # type: ignore[union-attr, attr-defined]
             # phase_05: HPF removes sub-bass energy (−6 dB)
             # phase_03: would denoise (−3 dB) but CIG rolls it back — return slightly attenuated
             # so the rollback has something to revert.
@@ -3383,7 +3847,7 @@ class TestCIGRollbackNoMakeupGain:
                 warnings=[],
             )
 
-        restorer._profiled_phase_call = _mock_profiled_call  # type: ignore[method-assign]
+        restorer._profiled_phase_call = _mock_profiled_call  # type: ignore[method-assign, assignment]
 
         # Inject a mock interaction guard that always rolls back phase_03
         class _RollbackGuard:
@@ -3652,6 +4116,45 @@ class TestChoirVqiGateZeroPanns:
         assert conf >= 0.35, f"Regressions-Guard §M1 fehlgeschlagen nach §0p v9.12.11-Patch: {conf:.3f}"
 
 
+class TestStrictVocalGenreZeroPanns:
+    """§0p v9.12.13 — exakte definitionsgemäß vokale Genres aktivieren den Vocal-Floor.
+
+    Regressions-Guard: Opera/Chanson/Vocal-Jazz können bei schwachen oder fehlenden
+    PANNs-Tags sonst unter die 0.35-Schwelle fallen, obwohl das Genre bereits klar
+    vokal ist. Breite Keyword-Genres wie 'folk' bleiben bewusst außerhalb dieses Floors.
+    """
+
+    def test_opera_zero_panns_activates_floor(self) -> None:
+        from backend.core.unified_restorer_v3 import UnifiedRestorerV3
+
+        conf = UnifiedRestorerV3._compute_vocal_presence_confidence(
+            {},
+            panns_vocals_confidence=0.0,
+            genre_label="opera",
+        )
+        assert conf >= 0.35, f"'opera' ohne PANNs-Signal muss floor 0.35 aktivieren: {conf:.3f}"
+
+    def test_chanson_zero_panns_activates_floor(self) -> None:
+        from backend.core.unified_restorer_v3 import UnifiedRestorerV3
+
+        conf = UnifiedRestorerV3._compute_vocal_presence_confidence(
+            {},
+            panns_vocals_confidence=0.0,
+            genre_label="chanson",
+        )
+        assert conf >= 0.35, f"'chanson' ohne PANNs-Signal muss floor 0.35 aktivieren: {conf:.3f}"
+
+    def test_vocal_jazz_zero_panns_activates_floor(self) -> None:
+        from backend.core.unified_restorer_v3 import UnifiedRestorerV3
+
+        conf = UnifiedRestorerV3._compute_vocal_presence_confidence(
+            {},
+            panns_vocals_confidence=0.0,
+            genre_label="vocal jazz",
+        )
+        assert conf >= 0.35, f"'vocal jazz' ohne PANNs-Signal muss floor 0.35 aktivieren: {conf:.3f}"
+
+
 class TestSection0aRestCauseGuards:
     """§0a v9.12.11 — CAUSE_TO_PHASES Restoration-Pfad: verbotene Phasen nicht vorschlagen.
 
@@ -3912,3 +4415,197 @@ class TestGoalExportCompliance:
         result = UnifiedRestorerV3._fast_goal_snapshot(short_audio, SR, "unknown")
         assert isinstance(result, dict), "_fast_goal_snapshot muss immer dict zurückgeben"
         # Kein Crash — das ist die non-blocking Garantie
+
+
+class TestResolveHighRestorabilityCap:
+    """§2.45b Hochrestorabilität-Gate — Near-Passthrough-Cap (`_resolve_high_restorability_cap`).
+
+    Vertrag: cappt mandatorische/restaurative Defekt-Reparatur-Phasen auf makellosem Material
+    NUR wenn ihr Zieldefekt praktisch abwesend ist (rohe Severity < 0.05). Echte Defekte
+    (≥ 0.05) laufen mit voller Härte (§0k/§0m). Vokalkritische Phasen (§0p) sind ausgenommen.
+    Fail-safe: jede Unsicherheit → None (kein Cap).
+    """
+
+    @staticmethod
+    def _first_non_vocal_repair_phase() -> tuple[str, DefectType]:
+        """Liefert (phase_id, ziel_defekt) einer nicht-vokalkritischen Defekt-Reparatur-Phase."""
+        from backend.core.defect_phase_mapper import get_reverse_phase_map
+
+        for pid, targets in get_reverse_phase_map().items():
+            if pid.startswith(("phase_42_", "phase_65_", "phase_03_")):
+                continue
+            if targets:
+                return pid, targets[0]
+        pytest.skip("Keine nicht-vokalkritische Defekt-Reparatur-Phase in Reverse-Map")
+
+    def test_gate_inactive_returns_none(self) -> None:
+        """high_restorability_gate=False → kein Cap (None)."""
+        pid, _dt = self._first_non_vocal_repair_phase()
+        cap = UnifiedRestorerV3._resolve_high_restorability_cap(
+            phase_id=pid,
+            material_type="vinyl",
+            restorability_score=95.0,
+            defect_scores={},
+            is_mandatory=True,
+            is_restorative=False,
+            panns_singing=0.0,
+            high_restorability_gate=False,
+        )
+        assert cap is None
+
+    def test_non_mandatory_non_restorative_returns_none(self) -> None:
+        """Enhancement-Phasen (weder mandatorisch noch restaurativ) → §9.11.1 greift, hier kein Cap."""
+        pid, _dt = self._first_non_vocal_repair_phase()
+        cap = UnifiedRestorerV3._resolve_high_restorability_cap(
+            phase_id=pid,
+            material_type="vinyl",
+            restorability_score=95.0,
+            defect_scores={},
+            is_mandatory=False,
+            is_restorative=False,
+            panns_singing=0.0,
+            high_restorability_gate=True,
+        )
+        assert cap is None
+
+    def test_absent_defect_caps_to_near_passthrough(self) -> None:
+        """Zieldefekt abwesend (Severity 0.0) + makelloses Material → Cap = get_phase_strength_range()[1]."""
+        from backend.core.calibration_matrix import get_phase_strength_range
+
+        pid, _dt = self._first_non_vocal_repair_phase()
+        cap = UnifiedRestorerV3._resolve_high_restorability_cap(
+            phase_id=pid,
+            material_type="vinyl",
+            restorability_score=95.0,
+            defect_scores={},  # keine Defekte gescannt → rohe Severity 0.0
+            is_mandatory=True,
+            is_restorative=False,
+            panns_singing=0.0,
+            high_restorability_gate=True,
+        )
+        assert cap is not None
+        _, expected_max = get_phase_strength_range(pid, "vinyl", 95.0)
+        assert cap == pytest.approx(float(np.clip(expected_max, 0.05, 1.0)), abs=1e-6)
+
+    def test_high_restorability_cap_below_low_restorability(self) -> None:
+        """§2.45b: Cap bei rest=95 muss < Cap bei rest=30 sein (restorability-adaptiv)."""
+        pid, _dt = self._first_non_vocal_repair_phase()
+        common: dict[str, Any] = {
+            "phase_id": pid,
+            "material_type": "vinyl",
+            "defect_scores": {},
+            "is_mandatory": True,
+            "is_restorative": False,
+            "panns_singing": 0.0,
+            "high_restorability_gate": True,
+        }
+        cap_high = UnifiedRestorerV3._resolve_high_restorability_cap(restorability_score=95.0, **common)
+        cap_low = UnifiedRestorerV3._resolve_high_restorability_cap(restorability_score=30.0, **common)
+        assert cap_high is not None and cap_low is not None
+        assert cap_high < cap_low
+
+    def test_real_defect_runs_uncapped(self) -> None:
+        """Echter Defekt (rohe Severity ≥ 0.05) → None (volle Härte, §0k/§0m)."""
+        pid, dt = self._first_non_vocal_repair_phase()
+        cap = UnifiedRestorerV3._resolve_high_restorability_cap(
+            phase_id=pid,
+            material_type="vinyl",
+            restorability_score=95.0,
+            defect_scores={dt: types.SimpleNamespace(severity=0.5)},
+            is_mandatory=True,
+            is_restorative=False,
+            panns_singing=0.0,
+            high_restorability_gate=True,
+        )
+        assert cap is None
+
+    def test_severity_just_below_threshold_caps(self) -> None:
+        """Rohe Severity knapp unter 0.05 → Cap greift; knapp darüber nicht."""
+        pid, dt = self._first_non_vocal_repair_phase()
+        below = UnifiedRestorerV3._resolve_high_restorability_cap(
+            phase_id=pid,
+            material_type="vinyl",
+            restorability_score=95.0,
+            defect_scores={dt: types.SimpleNamespace(severity=0.049)},
+            is_mandatory=True,
+            is_restorative=False,
+            panns_singing=0.0,
+            high_restorability_gate=True,
+        )
+        above = UnifiedRestorerV3._resolve_high_restorability_cap(
+            phase_id=pid,
+            material_type="vinyl",
+            restorability_score=95.0,
+            defect_scores={dt: types.SimpleNamespace(severity=0.051)},
+            is_mandatory=True,
+            is_restorative=False,
+            panns_singing=0.0,
+            high_restorability_gate=True,
+        )
+        assert below is not None
+        assert above is None
+
+    def test_vocal_critical_phases_excluded(self) -> None:
+        """§0p: phase_42_* und phase_65_* werden nie gecappt (volle Vokalqualität)."""
+        for pid in ("phase_42_vocal_enhancement", "phase_65_vocal_naturalness_restoration"):
+            cap = UnifiedRestorerV3._resolve_high_restorability_cap(
+                phase_id=pid,
+                material_type="vinyl",
+                restorability_score=95.0,
+                defect_scores={},
+                is_mandatory=True,
+                is_restorative=True,
+                panns_singing=0.0,
+                high_restorability_gate=True,
+            )
+            assert cap is None
+
+    def test_phase03_excluded_only_when_singing(self) -> None:
+        """§0p: phase_03_* nur bei Gesang (panns_singing ≥ 0.25) vom Cap ausgenommen."""
+        from backend.core.defect_phase_mapper import get_reverse_phase_map
+
+        p03 = next((p for p in get_reverse_phase_map() if p.startswith("phase_03_")), None)
+        if p03 is None:
+            pytest.skip("Keine phase_03_-Phase in Reverse-Map")
+        common: dict[str, Any] = {
+            "phase_id": p03,
+            "material_type": "vinyl",
+            "restorability_score": 95.0,
+            "defect_scores": {},
+            "is_mandatory": True,
+            "is_restorative": False,
+            "high_restorability_gate": True,
+        }
+        cap_singing = UnifiedRestorerV3._resolve_high_restorability_cap(panns_singing=0.4, **common)
+        cap_instrumental = UnifiedRestorerV3._resolve_high_restorability_cap(panns_singing=0.0, **common)
+        assert cap_singing is None  # bei Gesang geschützt
+        assert cap_instrumental is not None  # ohne Gesang cappbar
+
+    def test_non_repair_phase_not_capped(self) -> None:
+        """Phase ohne Defekt-Reparatur-Ziel (nicht in Reverse-Map) → kein Cap (Limiter-Schutz)."""
+        cap = UnifiedRestorerV3._resolve_high_restorability_cap(
+            phase_id="phase_99_nonexistent_enhancement",
+            material_type="vinyl",
+            restorability_score=95.0,
+            defect_scores={},
+            is_mandatory=True,
+            is_restorative=False,
+            panns_singing=0.0,
+            high_restorability_gate=True,
+        )
+        assert cap is None
+
+    def test_material_type_enum_value_extracted(self) -> None:
+        """material_type als Enum (MaterialType) → .value wird korrekt extrahiert (kein Crash)."""
+        pid, _dt = self._first_non_vocal_repair_phase()
+        cap = UnifiedRestorerV3._resolve_high_restorability_cap(
+            phase_id=pid,
+            material_type=MaterialType.VINYL,
+            restorability_score=95.0,
+            defect_scores={},
+            is_mandatory=True,
+            is_restorative=False,
+            panns_singing=0.0,
+            high_restorability_gate=True,
+        )
+        assert cap is not None and 0.05 <= cap <= 1.0

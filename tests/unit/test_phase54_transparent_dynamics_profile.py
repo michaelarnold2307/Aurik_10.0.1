@@ -4,6 +4,8 @@ Verifiziert dass der adaptive mix_delta-Parameter korrekt aus
 Quality-Mode und Restorability berechnet wird.
 """
 
+from typing import cast
+
 import numpy as np
 import pytest
 
@@ -46,7 +48,7 @@ class TestTransparentDynamicsProfileQualityMode:
         assert delta == pytest.approx(0.0), f"balanced should have 0 delta, got {delta}"
 
     def test_none_quality_mode_zero_delta(self):
-        delta = _profile(qm=None)["mix_delta"]
+        delta = _profile(qm=cast(str, None))["mix_delta"]
         assert delta == pytest.approx(0.0)
 
 
@@ -81,7 +83,7 @@ class TestTransparentDynamicsProfileBounds:
         for material in ["shellac", "vinyl", "cd_digital", "unknown"]:
             for qm in ["quality", "maximum", "fast", "balanced", None]:
                 for rest in [5.0, 50.0, 90.0]:
-                    delta = _profile(material, qm, rest)["mix_delta"]
+                    delta = _profile(material, cast(str, qm), rest)["mix_delta"]
                     assert -0.20 <= delta <= 0.20, f"mix_delta out of bounds: {delta} ({material}, {qm}, {rest})"
 
     def test_unknown_material_no_error(self):
@@ -151,6 +153,49 @@ class TestTransparentDynamicsCompressionPressure:
         assert result.metadata["hard_intervention_active"] is True
         assert result.metadata["control_strength"] >= 0.75
         assert result.metadata["mix"] >= 0.70
+
+
+class TestTransparentDynamicsLocalityProfile:
+    def test_locality_profile_is_event_strength_adaptive(self):
+        sr = 48000
+        profile, coverage = TransparentDynamicsPhase._build_locality_profile(
+            n_samples=sr * 3,
+            sample_rate=sr,
+            defect_locations={"compression_artifacts": [(0.30, 0.90)], "transient_smearing": [(1.70, 2.30)]},
+            event_metadata={
+                "compression_artifacts": {"severity": 0.95, "confidence": 0.95},
+                "transient_smearing": {"severity": 0.35, "confidence": 0.65},
+            },
+        )
+
+        assert profile.shape == (sr * 3,)
+        assert 0.0 < coverage < 0.50
+        strong_region = float(np.mean(profile[int(0.45 * sr) : int(0.75 * sr)]))
+        mild_region = float(np.mean(profile[int(1.85 * sr) : int(2.15 * sr)]))
+        clean_region = float(np.mean(profile[int(1.10 * sr) : int(1.35 * sr)]))
+        assert strong_region > mild_region * 1.5
+        assert clean_region < 0.04
+
+    def test_vibrato_zone_caps_locality_profile(self):
+        sr = 48000
+        free, _ = TransparentDynamicsPhase._build_locality_profile(
+            n_samples=sr * 3,
+            sample_rate=sr,
+            defect_locations={"nr_breathing_artifact": [(1.20, 1.80)]},
+            event_metadata={"nr_breathing_artifact": {"severity": 0.95, "confidence": 0.95}},
+        )
+        capped, _ = TransparentDynamicsPhase._build_locality_profile(
+            n_samples=sr * 3,
+            sample_rate=sr,
+            defect_locations={"nr_breathing_artifact": [(1.20, 1.80)]},
+            event_metadata={"nr_breathing_artifact": {"severity": 0.95, "confidence": 0.95}},
+            protected_zones=[(1.15, 1.85, 0.20)],
+        )
+
+        free_strength = float(np.mean(free[int(1.35 * sr) : int(1.65 * sr)]))
+        capped_strength = float(np.mean(capped[int(1.35 * sr) : int(1.65 * sr)]))
+        assert capped_strength <= 0.21
+        assert capped_strength < free_strength * 0.55
 
     def test_low_compression_pressure_keeps_hard_intervention_off(self):
         phase = TransparentDynamicsPhase(sample_rate=48000)

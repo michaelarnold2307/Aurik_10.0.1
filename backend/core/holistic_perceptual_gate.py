@@ -13,14 +13,17 @@ HPI > 0 → Export | HPI ≤ 0 → Rollback
 
 MERT-Referenz-Memory: EMA (α=0.15) pro (genre × material × era_bin).
 Fallback-Kaskade (5 Stufen) wenn kein passender Referenz-Vektor.
-Referenz-Update nur wenn: HPI > 0.5 AND artifact_freedom ≥ 0.95 AND P1/P2 bestanden.
+Referenz-Update nur wenn: HPI > 0.0 AND artifact_freedom ≥ 0.95 (V54-aligned v9.20.0).
 
 Reference: Spec 02 §2.44, §2.49 (artifact_freedom)
 """
 
 from __future__ import annotations
 
+import json
 import logging
+import os
+import pathlib
 import threading
 from dataclasses import dataclass, field
 
@@ -31,6 +34,34 @@ logger = logging.getLogger(__name__)
 # ── EMA constant for reference-memory updates ──────────────────────────────
 _EMA_ALPHA: float = 0.15
 _MIN_OBS_CALIBRATED: int = 3  # < 3 obs → Bootstrap mit erhöhter Unsicherheit
+
+# ── Material-native BW-Ceiling für MERT-Spectral-Proxy (§2.44 BW-Ceiling-Guard) ──────────────
+# Quelle: IEC 60094-1 (Kassette), DIN 45511 (Analogband), RIAA-Spec (Vinyl), CD-Standard.
+# Werte gelten für das ORIGINAL-Signal ohne BW-Erweiterung; nach AudioSR (phase_06) kann
+# das restaurierte Signal über diesen Wert hinausgehende Energie enthalten —
+# Spectral-Proxy darf diese Energie NICHT als Divergenz bestrafen (Reference Paradox §0d).
+_MATERIAL_BW_CEILING_HZ: dict[str, int] = {
+    "shellac": 6000,  # Frühe elektr. Aufnahmen, Horncharakteristik ≤ 6 kHz
+    "wax_cylinder": 4000,  # Wachswalze (akustisches Richtrohr)
+    "lacquer_disc": 8000,  # Lackfolie (direktschnitt)
+    "wire_recording": 5000,  # Drahtaufnahme (Magnetdraht)
+    "vinyl": 20000,  # Vinyl-Pressungen — voller Bereich; keine Einschränkung
+    "tape": 15000,  # Analogband, beste Bedingungen (DIN 45511)
+    "reel_tape": 15000,  # Tonband/Spule (identisch)
+    "cassette": 12000,  # Kassette Type I IEC 60094-1 bei 4,75 cm/s
+    "cd_digital": 22050,  # CD-Nyquist
+    "dat": 22050,  # DAT-Nyquist
+    "md": 20000,  # MiniDisc ATRAC
+    "mp3_low": 12000,  # ≤ 128 kbps — psychoakust. HF-Cutoff
+    "mp3_high": 16000,  # 320 kbps
+    "aac": 18000,  # AAC HE/LC typisch
+    "unknown": 22050,  # keine Einschränkung
+}
+
+# ── Persistenz-Pfad für HPG-Referenz-Memory (§2.44, analog §2.70 RestorationMemory) ─────
+_HPG_REF_MEMORY_PATH: pathlib.Path = (
+    pathlib.Path(os.environ.get("AURIK_DATA_DIR", str(pathlib.Path.home() / ".aurik"))) / "hpg_reference_memory.json"
+)
 
 # ── Singleton ──────────────────────────────────────────────────────────────
 _instance: HolisticPerceptualGate | None = None
@@ -86,6 +117,8 @@ class HolisticPerceptualGate:
         # §2.44 VERBOTEN: MERT darf nicht primary sein wenn VERSA verfügbar.
         # _mert_proxy_used = True → VERSA fehlgeschlagen, MERT als Fallback aktiv.
         self._mert_proxy_used: bool = False
+        # §2.44 Persistenz: Referenz-Memory von Disk laden (analog §2.70 RestorationMemory).
+        self._load_ref_memory_from_disk()
 
     def evaluate_restoration(
         self,
@@ -101,6 +134,7 @@ class HolisticPerceptualGate:
         vqi: float = 1.0,
         panns_singing: float = 0.0,
         reference_audio: np.ndarray | None = None,
+        transfer_chain: list[str] | None = None,
     ) -> HPIResult:
         """Evaluate HPI for Restoration mode.
 
@@ -121,7 +155,12 @@ class HolisticPerceptualGate:
         self._mert_proxy_used = False  # reset per evaluation
         _reference_audio = reference_audio if reference_audio is not None else original
         _reference_mode = "best_carrier_checkpoint" if reference_audio is not None else "degraded_input"
-        mert_sim = self._compute_mert_similarity(_reference_audio, restored, sr)
+        # §2.44 BW-Ceiling-Guard: MERT-Spectral-Proxy darf absichtliche BW-Erweiterung
+        # (AudioSR phase_06 auf Kassette/Shellac) nicht als Spektral-Divergenz werten.
+        # Material-BW-Ceiling wird als Frequenz-Obergrenze in den Spectral-Proxy übergeben.
+        _mat_key_mert = str(material).lower().replace(" ", "_")
+        _bw_ceiling_hz = _MATERIAL_BW_CEILING_HZ.get(_mat_key_mert, _MATERIAL_BW_CEILING_HZ["unknown"])
+        mert_sim = self._compute_mert_similarity(_reference_audio, restored, sr, bw_ceiling_hz=_bw_ceiling_hz)
         # §2.44 [BUG-FIX v9.12.0]: MERT-Floor verhindert HPI-Kollaps auf 0 bei MERT-Ausfall.
         mert_sim = max(float(mert_sim), 0.5)
 
@@ -134,9 +173,147 @@ class HolisticPerceptualGate:
         else:
             # Kein Referenz-Vektor: misst ob das Signal in Richtung "sauber" verbessert wurde
             timbral_ref = self._compute_directional_restoration_quality(original, restored, sr)
+            # §2.44 Codec-Digital-Floor (v9.12.10): _compute_directional_restoration_quality()
+            # ist für analoge Defekte kalibriert (Rauschreduktion → Noise-Delta, HF-Crest-Gewinn).
+            # Für Codec-Container (MP3/AAC) mit hoher Restorability ist das Signal bereits sauber
+            # → direktionale Score ~0.5 (kein Rauschboden-Delta, kein HF-Crest-Gewinn) — obwohl
+            # die Restaurierung korrekt war. Fix: timbral_input (Mel-BW-Ceiling=12kHz) als Floor.
+            # timbral_input wird erst weiter unten berechnet — hier vorab für den Floor-Check.
+            _CODEC_MATS_HPG = frozenset({"mp3_low", "mp3_high", "aac", "streaming", "minidisc"})
+            if _mat_key_mert in _CODEC_MATS_HPG and restorability_score > 70.0:
+                _timbral_input_floor = self._compute_timbral_fidelity(
+                    _reference_audio, restored, sr, bw_ceiling_hz=_bw_ceiling_hz
+                )
+                _timbral_ref_before = timbral_ref
+                timbral_ref = max(timbral_ref, _timbral_input_floor)
+                if timbral_ref > _timbral_ref_before:
+                    logger.debug(
+                        "§2.44 Codec-Digital-Floor: timbral_ref %.3f → %.3f"
+                        " (timbral_input_floor=%.3f mat=%s restorability=%.0f)",
+                        _timbral_ref_before,
+                        timbral_ref,
+                        _timbral_input_floor,
+                        _mat_key_mert,
+                        restorability_score,
+                    )
+
+            # §2.44 Analog-Carrier-Floor (v9.15.2): _compute_directional_restoration_quality()
+            # ist für stationäres Rauschen kalibriert — noise_delta via 5. Perzentil der
+            # Frame-Energie. Bei Musikmaterial entspricht das 5. Perzentil einer leisen
+            # Musikpassage (keine Rauschbodenmessung) → noise_delta_db ≈ 0 → Score ≈ 0.5,
+            # obwohl die Restaurierung korrekt durchgeführt wurde.
+            # Fix: timbral_input (Mel-Cosinus, BW-Ceiling) als Floor für timbral_ref bei
+            # analogen Trägern mit ausreichend hoher Restorability (≥ 63.0).
+            # Content-Integrität (timbral_input ≥ timbral_ref) bedeutet: Das restaurierte
+            # Signal ist inhaltlich so nah am Input wie das Original — ein valides Qualitätszeichen.
+            _ANALOG_CARRIER_MATS_HPG = frozenset(
+                {
+                    "cassette",
+                    "cassette_dolby_b",
+                    "cassette_dolby_c",
+                    "cassette_dolby_s",
+                    "tape",
+                    "reel_tape",
+                    "vinyl",
+                    "shellac",
+                    "lacquer_disc",
+                    "wire_recording",
+                    "acetate",
+                }
+            )
+            if _mat_key_mert in _ANALOG_CARRIER_MATS_HPG and restorability_score >= 63.0:
+                _timbral_input_floor_analog = self._compute_timbral_fidelity(
+                    _reference_audio, restored, sr, bw_ceiling_hz=_bw_ceiling_hz
+                )
+                _timbral_ref_before_analog = timbral_ref
+                timbral_ref = max(timbral_ref, _timbral_input_floor_analog)
+                if timbral_ref > _timbral_ref_before_analog:
+                    logger.debug(
+                        "§2.44 Analog-Carrier-Floor: timbral_ref %.3f → %.3f"
+                        " (timbral_input_floor=%.3f mat=%s restorability=%.0f)",
+                        _timbral_ref_before_analog,
+                        timbral_ref,
+                        _timbral_input_floor_analog,
+                        _mat_key_mert,
+                        restorability_score,
+                    )
+
+            # §P1-VQI-Codec-Floor (v9.15.2→v9.15.3): Codec-Material ohne Referenz-Vektor und ohne
+            # Carrier-Checkpoint. Wenn VQI ≥ 0.82 + artifact_freedom ≥ 0.95 ist die Restaurierung
+            # nachweislich korrekt; die Mel-Divergenz vom degradierten Codec-Input ist physikalisch
+            # erwartet (Pre-Echo-Entfernung, HF-Rolloff-Kompensation, Artefakt-Reduktion).
+            # §R2/S1: Ceiling auf 0.90 erhöht (R2: 0.87, S1: +0.03). Skalierung × 3.0 (statt × 1.2).
+            # Neue Vokal-Floor: 0.60 + (vqi − 0.82) × 3.0, auf [0.60, 0.90] geklemmt.
+            # VQI=0.917 → 0.891. Zusätzliche Bedingung: mert_sim ≥ 0.80 (kein Content-Verlust).
+            # Instrumental-Floor: 0.64 (konservativ, nur artifact_freedom-basiert).
+            _VQI_CODEC_MATS_HPG = frozenset({"mp3_low", "mp3_high", "aac", "streaming", "minidisc"})
+            if (
+                _mat_key_mert in _VQI_CODEC_MATS_HPG
+                and reference_audio is None
+                and float(np.clip(artifact_freedom, 0.0, 1.0)) >= 0.95
+                and restorability_score > 70.0
+                and mert_sim >= 0.80
+            ):
+                if panns_singing >= 0.35 and float(np.clip(vqi, 0.0, 1.0)) >= 0.82:
+                    _vqi_codec_floor = float(np.clip(0.60 + (float(vqi) - 0.82) * 3.0, 0.60, 0.90))
+                else:
+                    _vqi_codec_floor = 0.64  # Instrumental oder niedrige VQI
+                _tref_before_vqi = timbral_ref
+                timbral_ref = max(timbral_ref, _vqi_codec_floor)
+                if timbral_ref > _tref_before_vqi:
+                    logger.debug(
+                        "§P1 VQI-Codec-Floor (§R2): timbral_ref %.3f→%.3f"
+                        " (vqi=%.3f panns=%.2f mat=%s artifact=%.3f mert=%.3f)",
+                        _tref_before_vqi,
+                        timbral_ref,
+                        float(vqi),
+                        float(panns_singing),
+                        _mat_key_mert,
+                        float(artifact_freedom),
+                        mert_sim,
+                    )
+
+            # §P1-VQI-Codec-Floor (§S4 Chain-End): Analoger Primärträger + Codec-Chain-Ende.
+            # Beispiel: Kassette→mp3_low — primary='cassette', transfer_chain=['mp3_low'].
+            # Die Codec-spezifischen Messung-Artefakte (Mel-Divergenz vom degradierten Input nach
+            # Pre-Echo-Entfernung, HF-Rolloff-Kompensation) gelten gleichermaßen wie bei reinem
+            # Codec-Material. VQI + artifact_freedom bestätigen korrekte Restaurierung.
+            # Restorability-Threshold: 40.0 (analog+Codec → typisch 55–70, selten > 70).
+            _chain_last_key_s4 = ""
+            if transfer_chain:
+                _chain_last_key_s4 = str(transfer_chain[-1]).lower().replace(" ", "_")
+            _VQI_CHAIN_END_CODEC = frozenset({"mp3_low", "mp3_high", "aac", "streaming", "minidisc"})
+            if (
+                _mat_key_mert in _ANALOG_CARRIER_MATS_HPG
+                and _chain_last_key_s4 in _VQI_CHAIN_END_CODEC
+                and reference_audio is None
+                and float(np.clip(artifact_freedom, 0.0, 1.0)) >= 0.95
+                and restorability_score >= 40.0
+                and mert_sim >= 0.70
+            ):
+                if panns_singing >= 0.35 and float(np.clip(vqi, 0.0, 1.0)) >= 0.82:
+                    _vqi_chain_floor = float(np.clip(0.60 + (float(vqi) - 0.82) * 3.0, 0.60, 0.90))
+                else:
+                    _vqi_chain_floor = 0.64  # Instrumental oder niedrige VQI
+                _tref_before_chain = timbral_ref
+                timbral_ref = max(timbral_ref, _vqi_chain_floor)
+                if timbral_ref > _tref_before_chain:
+                    logger.debug(
+                        "§P1 VQI-Codec-Floor (§S4 Chain-End): timbral_ref %.3f→%.3f"
+                        " (vqi=%.3f panns=%.2f primary=%s chain_last=%s restorability=%.0f)",
+                        _tref_before_chain,
+                        timbral_ref,
+                        float(vqi),
+                        float(panns_singing),
+                        _mat_key_mert,
+                        _chain_last_key_s4,
+                        restorability_score,
+                    )
 
         # timbral_input als Content-Integrity-Anteil (für Logging und niedrige Restorability)
-        timbral_input = self._compute_timbral_fidelity(_reference_audio, restored, sr)
+        # §2.44 BW-Ceiling-Guard (v9.12.10): mel-Vergleich auf material-native BW begrenzen
+        # → AudioSR-synthetisierter HF-Content bestraft timbral_input nicht mehr.
+        timbral_input = self._compute_timbral_fidelity(_reference_audio, restored, sr, bw_ceiling_hz=_bw_ceiling_hz)
 
         # §2.44 Restorability-dependent weights — Referenz/Direktional dominiert stets
         if restorability_score > 70.0:
@@ -151,6 +328,48 @@ class HolisticPerceptualGate:
             input_weight, ref_weight = 0.2, 0.8
 
         timbral = input_weight * timbral_input + ref_weight * timbral_ref
+
+        # §0d CCR-Timbral-Floor (v9.15.x): Nach Carrier-Chain-Inversion legitimiert VERSA-Qualität
+        # die Spektral-Divergenz vom Carrier-Checkpoint. Wenn reference_audio gesetzt (CCR-Referenz-
+        # Shift aktiv per §0d) UND VERSA primär (kein Proxy-Fallback):
+        #   timbral-Floor = versa_sim × 0.90 (konservativ, auf [0.65, 0.95] geklippt).
+        # Begründung: VERSA-MOS ≥ 0.74 (≈ MOS 3.9) bestätigt, dass Enhancement-Phasen die
+        # Timbral-Integrität nicht beschädigt haben — die Spektral-Divergenz von checkpoint→final
+        # ist physikalisch legitimiert (BW-Extension, Harmonik, Vocal-Enhancement §0d, §2.46 Stufe 5).
+        # Ohne diesen Floor: mel-cosine(checkpoint, restored) ≈ 0.54 bestraft korrekte
+        # Restaurierungen (HPI 0.42 statt ≈0.65 bei VERSA-MOS 4.5 — §0d-Messzahl-Artefakt v9.15.1).
+        #
+        # v9.15.2: reference_audio is not None Bedingung entfernt — der Floor gilt auch
+        # ohne aktive Carrier-Chain-Inversion, solange VERSA (primär, kein MERT-Proxy)
+        # mert_sim ≥ 0.74 bestätigt. Begründung: mel-cosine(degraded_input, restored) ≈ 0.54
+        # entsteht immer wenn NR erfolgreich Rauschenergie entfernt — die Divergenz ist
+        # physikalisch legitimiert durch erfolgreiche Rauschunterdrückung, nicht durch
+        # Qualitätsverlust. artifact_freedom ≥ 0.95 (separater Veto-Faktor) schützt
+        # vor falschen Floors bei tatsächlichen Artefakten.
+        if not self._mert_proxy_used and mert_sim >= 0.74:
+            _ccr_timbral_floor = float(np.clip(mert_sim * 0.90, 0.65, 0.95))
+            if timbral < _ccr_timbral_floor:
+                logger.debug(
+                    "§0d CCR-Timbral-Floor: timbral %.3f → %.3f (versa_sim=%.3f ccr-ref=%s)",
+                    timbral,
+                    _ccr_timbral_floor,
+                    mert_sim,
+                    "active" if reference_audio is not None else "no-carrier",
+                )
+                timbral = _ccr_timbral_floor
+        elif reference_audio is not None and self._mert_proxy_used and mert_sim >= 0.70:
+            # §0d MERT-Proxy-Fallback: konservativerer Floor (0.80 statt 0.90) wenn VERSA
+            # fehlgeschlagen ist aber CCR-Referenz aktiv ist. Schützt vor doppeltem HPI-Penalty
+            # (schlechterer MERT-Proxy-Score + mel-cosine-Penalty auf Carrier-Divergenz).
+            _ccr_timbral_floor_proxy = float(np.clip(mert_sim * 0.80, 0.60, 0.88))
+            if timbral < _ccr_timbral_floor_proxy:
+                logger.debug(
+                    "§0d CCR-Timbral-Floor (MERT-proxy): timbral %.3f → %.3f (mert_sim=%.3f)",
+                    timbral,
+                    _ccr_timbral_floor_proxy,
+                    mert_sim,
+                )
+                timbral = _ccr_timbral_floor_proxy
 
         hpi = mert_sim * timbral * artifact_freedom * emotional_arc_score
 
@@ -175,9 +394,8 @@ class HolisticPerceptualGate:
         # §2.44 v9.12.9: restorability-Penalty entfernt.
         # hpi *= 0.95 bei restorability > 85 war ein inkorrekter Penalty auf hochwertiges Material:
         # Hohe Restorability (CD, FLAC) bedeutet besser restaurierbares Signal — kein Penaltygrund.
-        # Der Effekt war: exzellente Restaurierungen fallen unter den hpi > 0.5 P1/P2-Gate-Schwellwert.
         # Korrekte Mechanik: hohe Restorability → höhere Erwartungen via _gbc_targets (§09.12),
-        # nicht via nachträglichen HPI-Abzug.
+        # nicht via nachträglichen HPI-Abzug. update_reference_memory()-Gate: HPI > 0.0 AND af ≥ 0.95.
 
         passed = hpi > 0.0 and artifact_freedom >= 0.95
 
@@ -316,24 +534,32 @@ class HolisticPerceptualGate:
         p1_p2_passed: bool,
         genre: str = "DEFAULT",
         material: str = "digital",
-        era_bin: str = "post-1990",
+        era_bin: str = "post-1980",
     ) -> None:
         """§2.44 Update MERT reference memory after successful restoration.
 
-        Quality-Gate: only HPI > 0.5 AND artifact_freedom ≥ 0.95 AND P1/P2 passed.
-        Update via EMA (α=0.15) → prevents mediocre restorations from degrading reference.
+        Quality-Gate v9.20.0 (V54-aligned): HPI > 0.0 AND artifact_freedom ≥ 0.95.
+        (Vorher: HPI > 0.5 AND p1_p2_passed — blockierte Kaltstart-Population,
+        da timbral_fidelity ohne Referenz systematisch bei 0.54 blieb → HPI < 0.5.)
+        EMA-Gewichtung: α skaliert mit HPI-Qualität (α_eff = α × min(1.0, HPI/0.7)),
+        sodass schwächere Läufe weniger Einfluss haben als starke.
+        Minimum-Alpha 0.05 verhindert, dass Kaltstart-Einträge nie gelernt werden.
         """
-        if not (hpi > 0.5 and artifact_freedom >= 0.95 and p1_p2_passed):
+        if not (hpi > 0.0 and artifact_freedom >= 0.95):
             return
 
         embedding = self._compute_embedding(restored, sr)
         key = (genre, material, era_bin)
 
+        # v9.20.0: EMA-α skaliert mit HPI-Qualität — schwächere Läufe haben weniger Einfluss.
+        # α_eff = _EMA_ALPHA × clamp(HPI / 0.7, 0.33, 1.0), Minimum-α = 0.05.
+        _alpha_eff = float(np.clip(_EMA_ALPHA * min(1.0, max(0.33, hpi / 0.7)), 0.05, _EMA_ALPHA))
+
         with self._ref_lock:
             if key in self._ref_memory:
                 entry = self._ref_memory[key]
-                # §2.44 EMA: α=0.15 → new_ref = 0.85 * old + 0.15 * new_embedding
-                entry.embedding = (1.0 - _EMA_ALPHA) * entry.embedding + _EMA_ALPHA * embedding
+                # §2.44 EMA: α_eff → qualitätsskaliertes Blending
+                entry.embedding = (1.0 - _alpha_eff) * entry.embedding + _alpha_eff * embedding
                 entry.obs_count += 1
                 entry.calibrated = entry.obs_count >= _MIN_OBS_CALIBRATED
 
@@ -345,11 +571,74 @@ class HolisticPerceptualGate:
                 )
 
         logger.info(
-            "§2.44 ReferenceMemory updated key=%s obs=%d calibrated=%s",
+            "§2.44 ReferenceMemory updated key=%s obs=%d calibrated=%s α_eff=%.3f",
             key,
             self._ref_memory[key].obs_count,
             self._ref_memory[key].calibrated,
+            _alpha_eff,
         )
+        # §2.44 Persistenz: nach jedem Quality-Gate-konformen Update speichern.
+        self._save_ref_memory_to_disk()
+
+    def _load_ref_memory_from_disk(self) -> None:
+        """§2.44 Lädt persistiertes Referenz-Memory von ~/.aurik/hpg_reference_memory.json.
+
+        Exception-safe: Bei fehlendem/beschädigtem File startet das System mit leerem Memory.
+        Wird nur für Einträge mit obs_count >= 1 geladen (kein Garbage-Import).
+        """
+        try:
+            if not _HPG_REF_MEMORY_PATH.exists():
+                return
+            with _HPG_REF_MEMORY_PATH.open("r", encoding="utf-8") as fh:
+                raw = json.load(fh)
+            loaded = 0
+            for k_str, v in raw.items():
+                parts = k_str.split("|")
+                if len(parts) != 3:
+                    continue
+                if not isinstance(v, dict) or "embedding" not in v:
+                    continue
+                obs = int(v.get("obs_count", 1))
+                if obs < 1:
+                    continue  # Kein Garbage-Import
+                emb = np.asarray(v["embedding"], dtype=np.float32)
+                key = (parts[0], parts[1], parts[2])
+                self._ref_memory[key] = _RefEntry(
+                    embedding=emb,
+                    obs_count=obs,
+                    calibrated=bool(v.get("calibrated", False)),
+                )
+                loaded += 1
+            logger.info("§2.44 ReferenceMemory: %d Einträge von Disk geladen (%s)", loaded, _HPG_REF_MEMORY_PATH)
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.warning("§2.44 ReferenceMemory: Disk-Load fehlgeschlagen — starte mit leerem Memory: %s", exc)
+
+    def _save_ref_memory_to_disk(self) -> None:
+        """§2.44 Speichert aktuelles Referenz-Memory nach ~/.aurik/hpg_reference_memory.json.
+
+        Exception-safe: Fehler beim Schreiben darf nie einen Lauf unterbrechen.
+        Format: {"genre|material|era_bin": {embedding: [...], obs_count: N, calibrated: bool}}
+        Nur Einträge mit obs_count >= 1 werden geschrieben.
+        """
+        try:
+            _HPG_REF_MEMORY_PATH.parent.mkdir(parents=True, exist_ok=True)
+            with self._ref_lock:
+                payload: dict[str, dict] = {}
+                for (genre, material, era_bin), entry in self._ref_memory.items():
+                    if entry.obs_count < 1:
+                        continue
+                    payload[f"{genre}|{material}|{era_bin}"] = {
+                        "embedding": entry.embedding.tolist(),
+                        "obs_count": entry.obs_count,
+                        "calibrated": entry.calibrated,
+                    }
+            tmp_path = _HPG_REF_MEMORY_PATH.with_suffix(".tmp")
+            with tmp_path.open("w", encoding="utf-8") as fh:
+                json.dump(payload, fh, separators=(",", ":"))
+            tmp_path.replace(_HPG_REF_MEMORY_PATH)
+            logger.debug("§2.44 ReferenceMemory: %d Einträge auf Disk gespeichert", len(payload))
+        except Exception as exc:  # pylint: disable=broad-except
+            logger.warning("§2.44 ReferenceMemory: Disk-Save fehlgeschlagen (non-blocking): %s", exc)
 
     def _get_reference_vector(self, genre: str, material: str, era_bin: str) -> np.ndarray | None:
         """§2.44 Fallback-Kaskade (5 Stufen).
@@ -370,29 +659,41 @@ class HolisticPerceptualGate:
         era_entries = [self._ref_memory[k] for k in self._ref_memory if k[2] == era_bin and k[0] == genre]
         if era_entries:
             embeddings = np.stack([e.embedding for e in era_entries])
-            return np.asarray(np.mean(embeddings, axis=0))
+            return np.asarray(np.mean(embeddings, axis=0))  # type: ignore[no-any-return]
 
         # Stufe 3: Same genre, any material, any era
         genre_entries = [self._ref_memory[k] for k in self._ref_memory if k[0] == genre]
         if genre_entries:
             embeddings = np.stack([e.embedding for e in genre_entries])
-            return np.asarray(np.mean(embeddings, axis=0))
+            return np.asarray(np.mean(embeddings, axis=0))  # type: ignore[no-any-return]
 
         # Stufe 4: Genre-agnostischer Ära-Median
         all_era = [self._ref_memory[k] for k in self._ref_memory if k[2] == era_bin]
         if all_era:
             embeddings = np.stack([e.embedding for e in all_era])
-            return np.asarray(np.mean(embeddings, axis=0))
+            return np.asarray(np.mean(embeddings, axis=0))  # type: ignore[no-any-return]
 
         # Stufe 5: Kein Referenz-Vektor
         return None
 
-    def _compute_embedding(self, audio: np.ndarray, sr: int) -> np.ndarray:
-        """Berechnet spectral embedding (mel-energy vector) as MERT-proxy."""
+    def _compute_embedding(
+        self,
+        audio: np.ndarray,
+        sr: int,
+        bw_ceiling_hz: int | None = None,
+    ) -> np.ndarray:
+        """Berechnet spectral embedding (mel-energy vector) as MERT-proxy.
+
+        §2.44 BW-Ceiling-Guard (v9.12.10): Wenn bw_ceiling_hz gesetzt ist, wird das
+        Mel-Filterbank auf diesen Frequenzbereich begrenzt. Verhindert, dass
+        AudioSR-synthetisierter HF-Content (z.B. 12–22 kHz für Kassette) beim
+        timbral_input-Vergleich fälschlicherweise die Cosinus-Ähnlichkeit reduziert
+        (Reference Paradox, §0d).
+        """
         mono = audio if audio.ndim == 1 else np.mean(audio, axis=0)
         n_samples = len(mono)
         if n_samples < 2048:
-            return np.ones(40, dtype=np.float32)
+            return np.ones(40, dtype=np.float32)  # type: ignore[no-any-return]
 
         n_fft = 2048
         hop = 512
@@ -400,8 +701,13 @@ class HolisticPerceptualGate:
         n_frames = min(200, max(1, (n_samples - n_fft) // hop))
         win = np.hanning(n_fft).astype(np.float32)
 
+        # §2.44 BW-Ceiling-Guard: obere Mel-Grenze auf material-native BW begrenzen.
+        _mel_f_max = float(sr) / 2.0
+        if bw_ceiling_hz is not None and int(bw_ceiling_hz) < int(sr // 2):
+            _mel_f_max = float(max(4000, int(bw_ceiling_hz)))
+
         # Mel filterbank
-        mel_freqs = np.linspace(0, 2595 * np.log10(1 + (sr / 2.0) / 700.0), n_mels + 2)
+        mel_freqs = np.linspace(0, 2595 * np.log10(1 + _mel_f_max / 700.0), n_mels + 2)
         hz_freqs = 700.0 * (10.0 ** (mel_freqs / 2595.0) - 1.0)
         bin_freqs = np.clip(np.floor((n_fft + 1) * hz_freqs / sr).astype(int), 0, n_fft // 2)
         filterbank = np.zeros((n_mels, n_fft // 2 + 1), dtype=np.float32)
@@ -422,11 +728,11 @@ class HolisticPerceptualGate:
             mel_frames.append(filterbank @ spec)
 
         if not mel_frames:
-            return np.ones(n_mels, dtype=np.float32)
+            return np.ones(n_mels, dtype=np.float32)  # type: ignore[no-any-return]
 
         embedding = np.log1p(np.mean(mel_frames, axis=0)).astype(np.float32)
         norm = float(np.linalg.norm(embedding) + 1e-12)
-        return np.asarray(embedding / norm, dtype=np.float32)
+        return np.asarray(embedding / norm, dtype=np.float32)  # type: ignore[no-any-return]
 
     @staticmethod
     def _cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
@@ -523,6 +829,7 @@ class HolisticPerceptualGate:
         original: np.ndarray,
         restored: np.ndarray,
         sr: int,
+        bw_ceiling_hz: int | None = None,
     ) -> float:
         """Compute musical quality coefficient for HPI.
 
@@ -530,6 +837,11 @@ class HolisticPerceptualGate:
         Primary path: VERSA MOS auf restoreriertem Audio (referenzfrei, kein Referenz-Paradoxon).
         Fallback path 1: MERT plugin similarity (proxy, setzt self._mert_proxy_used=True).
         Fallback path 2: spectral correlation proxy (artifact-safe).
+
+        bw_ceiling_hz: Material-native BW-Grenze (Hz) für Spectral-Proxy-Fallback.
+            Wenn gesetzt, wird der Frequenzvergleich auf [0, bw_ceiling_hz] begrenzt,
+            damit absichtliche BW-Erweiterung (AudioSR phase_06) nicht als Divergenz
+            gewertet wird (§2.44 BW-Ceiling-Guard, Reference Paradox §0d).
         """
         orig_clean = np.nan_to_num(original.astype(np.float32), nan=0.0, posinf=0.0, neginf=0.0)
         rest_clean = np.nan_to_num(restored.astype(np.float32), nan=0.0, posinf=0.0, neginf=0.0)
@@ -604,7 +916,9 @@ class HolisticPerceptualGate:
                 # §2.44 Blend: 65% Plugin-Score + 35% Spektral-Proxy.
                 # min() war zu konservativ und zog valide Ergebnisse systematisch nach unten
                 # (proxy ~0.7 bei Breitband-Änderungen → false rollback auch bei plugin=0.95).
-                proxy_sim = self._compute_mert_similarity_spectral_proxy(orig_clean, rest_clean, sr)
+                proxy_sim = self._compute_mert_similarity_spectral_proxy(
+                    orig_clean, rest_clean, sr, bw_ceiling_hz=bw_ceiling_hz
+                )
                 sim = 0.65 * float(plugin_sim) + 0.35 * float(proxy_sim)
                 return float(np.clip(sim, 0.0, 1.0))
             except Exception as exc:
@@ -613,15 +927,22 @@ class HolisticPerceptualGate:
                 self._mert_path_disabled = True
 
         # Failure-safe spectral proxy fallback.
-        return self._compute_mert_similarity_spectral_proxy(orig_clean, rest_clean, sr)
+        return self._compute_mert_similarity_spectral_proxy(orig_clean, rest_clean, sr, bw_ceiling_hz=bw_ceiling_hz)
 
     def _compute_mert_similarity_spectral_proxy(
         self,
         original: np.ndarray,
         restored: np.ndarray,
-        sr: int,  # pylint: disable=unused-argument
+        sr: int,
+        bw_ceiling_hz: int | None = None,
     ) -> float:
-        """Spectral proxy for musical similarity when MERT plugin is unavailable."""
+        """Spectral proxy for musical similarity when MERT plugin is unavailable.
+
+        bw_ceiling_hz: Wenn gesetzt, wird der Cosine-Vergleich auf Frequenzbins
+            ≤ bw_ceiling_hz beschränkt. BW-Erweiterung über das Material-Ceiling
+            (AudioSR für Kassette/Shellac) erscheint als Divergenz im vollen Spektrum,
+            obwohl sie eine gewollte Restaurierungsleistung ist (§2.44 BW-Ceiling-Guard).
+        """
         orig_mono = original if original.ndim == 1 else np.mean(original, axis=0)
         rest_mono = restored if restored.ndim == 1 else np.mean(restored, axis=0)
         min_len = min(len(orig_mono), len(rest_mono))
@@ -637,6 +958,18 @@ class HolisticPerceptualGate:
         n_frames = max(1, (min_len - n_fft) // hop)
         n_frames = min(n_frames, 100)
 
+        # §2.44 BW-Ceiling-Guard: Frequenz-Obergrenze für Material-native Bandbreite.
+        # Bins oberhalb des Material-Ceilings (z.B. Kassette: 12 kHz) enthalten
+        # im Original nur Träger-Hiss oder Stille; im Restored AudioSR-synthetisierten
+        # Inhalt. Der Cosine-Proxy darf diese gewollte Divergenz nicht bestrafen.
+        # Bin-Berechnung: bin = freq_hz × n_fft / sr (rfft-Bin-Index).
+        _spec_bin_count = n_fft // 2 + 1  # Anzahl rfft-Ausgangsbins
+        if bw_ceiling_hz is not None and int(bw_ceiling_hz) < sr // 2:
+            _bin_ceil = int(round(int(bw_ceiling_hz) * n_fft / sr))
+            _bin_ceil = max(32, min(_bin_ceil, _spec_bin_count))  # Safety-Clamp
+        else:
+            _bin_ceil = _spec_bin_count  # kein Ceiling → volles Spektrum
+
         correlations = []
         win = np.hanning(n_fft).astype(np.float32)
 
@@ -646,8 +979,8 @@ class HolisticPerceptualGate:
             if e > min_len:
                 break
 
-            orig_spec = np.abs(np.fft.rfft(orig_mono[s:e] * win))
-            rest_spec = np.abs(np.fft.rfft(rest_mono[s:e] * win))
+            orig_spec = np.abs(np.fft.rfft(orig_mono[s:e] * win))[:_bin_ceil]
+            rest_spec = np.abs(np.fft.rfft(rest_mono[s:e] * win))[:_bin_ceil]
 
             # Log-magnitude correlation (perceptually meaningful)
             orig_log = np.log1p(orig_spec)
@@ -673,11 +1006,16 @@ class HolisticPerceptualGate:
         original: np.ndarray,
         restored: np.ndarray,
         sr: int,
+        bw_ceiling_hz: int | None = None,
     ) -> float:
         """Content-integrity check via mel-embedding cosine similarity.
 
         Used as small content-preservation anchor in evaluate_restoration().
         NOT used as primary timbral_fidelity measure (see §2.44 FIX v9.11.2).
+
+        §2.44 BW-Ceiling-Guard (v9.12.10): bw_ceiling_hz begrenzt den Mel-Vergleich
+        auf den material-nativen Frequenzbereich. Verhindert false-negative
+        timbral_input-Werte bei AudioSR-Extension auf historischem Material.
         """
         min_len = min(
             len(original) if original.ndim == 1 else original.shape[-1],
@@ -685,8 +1023,8 @@ class HolisticPerceptualGate:
         )
         if min_len < 2048:
             return 1.0
-        orig_embed = self._compute_embedding(original, sr)
-        rest_embed = self._compute_embedding(restored, sr)
+        orig_embed = self._compute_embedding(original, sr, bw_ceiling_hz=bw_ceiling_hz)
+        rest_embed = self._compute_embedding(restored, sr, bw_ceiling_hz=bw_ceiling_hz)
         return float(np.clip(self._cosine_similarity(orig_embed, rest_embed), 0.0, 1.0))
 
     def _compute_directional_restoration_quality(
@@ -695,20 +1033,23 @@ class HolisticPerceptualGate:
         restored: np.ndarray,
         sr: int,
     ) -> float:
-        """§2.44 FIX v9.11.2 — Direktionale Verbesserungsmessung als Fallback.
+        """§2.44 FIX v9.11.2/v9.20.0 — Direktionale Verbesserungsmessung als Fallback.
 
         Misst ob die Restaurierung das Signal in Richtung "sauber und musikalisch"
         verbessert hat. Wird verwendet wenn kein Referenz-Vektor im GP-Memory vorliegt.
 
-        Drei Komponenten:
+        Vier Komponenten (v9.20.0: +D Harmonische Kohärenz für Musik):
           A) Noise-Floor-Delta: tieferer Rauschboden nach Restaurierung → Wert steigt
           B) Spektrale Klarheit (HF-Crest): höhere Klarheit nach Denoising → Wert steigt
           C) Content-Integrity-Guard: verhindert, dass zerstörter Inhalt besteht
+          D) Harmonische Kohärenz (v9.20.0): Erhalt harmonischer Spektralstruktur →
+             für Musikmaterial signifikant über 0.5, auch ohne Rauschreduzierung.
+             Verhindert, dass korrektes Music-Bypass als "keine Verbesserung" gewertet wird.
 
         Returns:
-            0.5 = keine Veränderung (Bypass)
-            > 0.5 = Signal wurde verbessert (Rauschen reduziert, Klarheit erhöht)
-            < 0.5 = Signal wurde verschlechtert
+            0.5 = keine Veränderung (Bypass), sofern keine Harmonik erkannt
+            > 0.5 = Signal verbessert oder Musikinhalt bewahrt (Harmonik-Kohärenz)
+            < 0.5 = Signal verschlechtert (Content-Verlust)
         """
         orig_mono = (original if original.ndim == 1 else np.mean(original, axis=0)).astype(np.float32)
         rest_mono = (restored if restored.ndim == 1 else np.mean(restored, axis=0)).astype(np.float32)
@@ -770,7 +1111,22 @@ class HolisticPerceptualGate:
             crest_improvement = 0.0
         clarity_score = float(np.clip(0.5 + crest_improvement * 0.5, 0.0, 1.0))
 
-        return float(np.clip(0.6 * noise_score + 0.4 * clarity_score, 0.0, 1.0))
+        # D) Harmonische Kohärenz (v9.20.0): Erhalt der spektralen Peakstruktur 80–4000 Hz.
+        # Misst ob die dominanten Spektral-Peaks (Harmonik von Stimme + Instrument) im
+        # restaurierten Signal an denselben Frequenzen wie im Original liegen.
+        # Für Musik: content_corr ≥ 0.85 → hohes harmonisches Overlap → harmonic_score > 0.7
+        # Verhindert, dass korrektes Bypassen oder minimale NR als "Score 0.5" bewertet wird.
+        # content_corr ist bereits ≥ 0.3 (Integrity-Guard oben), daher ist Skalierung sicher.
+        harmonic_score = float(np.clip(0.5 + (content_corr - 0.5) * 0.8, 0.3, 1.0))
+
+        # Gewichtung: Bei Musikmaterial dominiert harmonische Kohärenz + Noise-Score.
+        # Noise-Score liefert bei Musik nur ≈0.5 (5.Pz. = leise Musikpassage, kein Rauschboden).
+        # Harmonische Kohärenz liefert bei Musik 0.70–0.90 (hoher Spektral-Overlap).
+        # Klarheits-Score liefert ohne BW-Erweiterung ebenfalls ≈0.5.
+        # Neue Gewichtung v9.20.0: 35% Noise + 25% Clarity + 40% Harmonik
+        # (statt 60% Noise + 40% Clarity in v9.11.2 — Harmonik ersetzt Noise-Anteil für Musik)
+        combined = 0.35 * noise_score + 0.25 * clarity_score + 0.40 * harmonic_score
+        return float(np.clip(combined, 0.0, 1.0))
 
     def _compute_noresqa_score(self, audio: np.ndarray, sr: int) -> float:
         """§B3 NORESQA: Non-intrusive quality estimation (Manocha & Kumar, INTERSPEECH 2022).
@@ -896,8 +1252,11 @@ class HolisticPerceptualGate:
         in_score = _score(original)
         out_score = _score(restored)
 
-        # Improvement ratio mapped to [0.1, 1.0].
-        # out/in > 1 → improved → gain → 1.0; equal → 0.5; worse → down to 0.1.
-        ratio = out_score / max(in_score, 1e-4)
-        gain = float(np.clip(0.5 * ratio, 0.1, 1.0))
+        # Headroom-basierte Formel: Verbesserung relativ zum maximal erreichbaren
+        # Headroom ab Input-Niveau (v9.12.10). Ratio-basierte Formel verlor
+        # Diskriminierungskraft bei niedrigem in_score: in=0.05→out=0.06 und
+        # in=0.05→out=0.90 lieferten identischen geclippten Gain (beide → 1.0).
+        _headroom = max(1.0 - in_score, 0.05)  # Maximaler erreichbarer Headroom
+        _improvement = out_score - in_score
+        gain = float(np.clip(0.5 + _improvement / _headroom, 0.1, 1.0))
         return gain

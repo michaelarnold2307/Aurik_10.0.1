@@ -75,6 +75,7 @@ from scipy.signal import lfilter as _lfilter_p20  # vectorised IIR smoothing
 from backend.core.audio_utils import compute_gated_rms_linear as _gated_rms_20
 from backend.core.audio_utils import to_channels_last
 from backend.core.defect_scanner import MaterialType
+from backend.core.restoration_policy import get_effective_song_goal_weights
 
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult
 
@@ -122,7 +123,7 @@ except ImportError:  # pragma: no cover
 
     def _exp1_p20_gain(nu: np.ndarray) -> np.ndarray:  # type: ignore[misc]
         """Fallback: identity = degenerate Wiener gain (scipy.special unavailable)."""
-        return np.ones_like(nu)
+        return np.ones_like(nu)  # type: ignore[no-any-return]
 
 
 logger = logging.getLogger(__name__)
@@ -219,7 +220,7 @@ class ReverbReduction(PhaseInterface):
         §4.5c base guard semantics intact.
         Returns: (c80_down_limit_db, c80_soft_limit_db, c80_hard_limit_db, d50_limit)
         """
-        _gw = kwargs.get("song_goal_weights")
+        _gw = get_effective_song_goal_weights(kwargs)
         _w_nat = 1.0
         _w_auth = 1.0
         _w_timbre = 1.0
@@ -282,6 +283,19 @@ class ReverbReduction(PhaseInterface):
             PhaseResult with reverb-reduced audio
         """
         self.validate_input(audio)
+        # ── §v10 PIM: Per-Band-Intensität lesen ──
+        _per_band_mask = None
+        try:
+            from backend.core.pim_phase_hook import apply_pim_intensity, compute_per_band_nr_mask
+            _pim = apply_pim_intensity(kwargs, "reverb",
+                default_nr=0.5, default_de_ess=0.3, default_comp=1.0)
+            if "noise_reduction_strength" in kwargs:
+                kwargs["noise_reduction_strength"] = _pim["nr_strength"]
+            _pim_map = kwargs.get("pim_intensity_map")
+            if _pim_map is not None:
+                _per_band_mask = compute_per_band_nr_mask(_pim_map, sample_rate)
+        except Exception:
+            pass
         sample_rate = kwargs.get("sample_rate", 48000)
         assert sample_rate == 48000, f"SR muss 48000 Hz sein, erhalten: {sample_rate}"
         audio, _p20_transposed = to_channels_last(audio)
@@ -317,6 +331,32 @@ class ReverbReduction(PhaseInterface):
         phase_locality_factor = float(np.clip(phase_locality_factor, 0.35, 1.0))
         _pmgg_strength = float(kwargs.get("strength", 1.0))
         _effective_strength = float(np.clip(_pmgg_strength * phase_locality_factor, 0.0, 1.0))
+
+        # §V40 NMR-Feedback: NR-Stärke adaptiv anpassen (FeedbackChain-aware).
+        try:
+            from backend.core.dsp.nmr_feedback import (
+                compute_nmr_score as _nmr_fn_20,  # pylint: disable=import-outside-toplevel
+            )
+
+            _nmr_result_20 = _nmr_fn_20(audio, sample_rate)
+            if not _nmr_result_20.ok:
+                logger.warning(
+                    "Phase20 §V40 NMR: nmr_above_masking → §2.45 Minimal-Intervention prüfen",
+                )
+            _effective_strength = float(
+                np.clip(
+                    _effective_strength + _nmr_result_20.recommended_nr_strength_delta,
+                    0.0,
+                    1.0,
+                )
+            )
+            logger.debug(
+                "Phase20 §V40 NMR: delta=%.3f → eff_str=%.3f",
+                _nmr_result_20.recommended_nr_strength_delta,
+                _effective_strength,
+            )
+        except Exception as _nmr_exc_20:  # pylint: disable=broad-except
+            logger.debug("Phase20 §V40 NMR non-blocking: %s", _nmr_exc_20)
 
         if _effective_strength <= 0.0:
             passthrough = np.nan_to_num(audio.copy(), nan=0.0, posinf=0.0, neginf=0.0)
@@ -973,11 +1013,19 @@ class ReverbReduction(PhaseInterface):
                 pass
         if _p20_panns >= 0.35:
             try:
+                from backend.core.musical_goals.era_vocal_profile import (
+                    get_era_vocal_profile as _gevp_p20,  # pylint: disable=import-outside-toplevel  # §EraVocalProfile
+                )
                 from backend.core.musical_goals.vocal_quality_index import (  # pylint: disable=import-outside-toplevel
                     compute_vqi as _compute_vqi_p20,
                 )
 
-                _vqi_result_p20 = _compute_vqi_p20(audio_orig=audio, audio_restored=reduced, sr=sample_rate)
+                _vqi_result_p20 = _compute_vqi_p20(
+                    audio_orig=audio,
+                    audio_restored=reduced,
+                    sr=sample_rate,
+                    era_profile=_gevp_p20(int(decade)) if decade is not None else None,
+                )
                 _vqi_p20 = float(_vqi_result_p20.get("vqi", 1.0))
                 if _vqi_p20 < 0.95:
                     logger.info(
@@ -1057,10 +1105,14 @@ class ReverbReduction(PhaseInterface):
                 from backend.core.dsp.mikrodynamik_guard import (  # pylint: disable=import-outside-toplevel
                     frame_energy_correlation as _fec20,
                 )
+                from backend.core.dsp.mikrodynamik_guard import (
+                    recommend_mikrodynamik_wet as _recommend_mkk_wet,
+                )
 
                 _corr20 = _fec20(audio, reduced, sample_rate, frame_ms=10.0)
                 if _corr20 < 0.97:
-                    _wet20 = min(1.0, (_corr20 - 0.90) / 0.07) if _corr20 > 0.90 else 0.0
+                    _need20 = float(kwargs.get("mikrodynamik_global_need", kwargs.get("global_need", 0.0)) or 0.0)
+                    _wet20 = _recommend_mkk_wet(_corr20, _p20_panns, global_need=_need20)
                     reduced = (_wet20 * reduced + (1.0 - _wet20) * audio).astype(np.float32)
                     logger.warning(
                         "Phase20 V20 Mikrodynamik-Korr=%.3f < 0.97 → wet=%.3f Blend",
@@ -1123,6 +1175,17 @@ class ReverbReduction(PhaseInterface):
                     )
             except Exception as _vib20_exc:
                 logger.debug("Phase20 §2.72 Vibrato-Guard (non-blocking): %s", _vib20_exc)
+
+        
+        # ── §v10 Per-Band-Maske NACH reverb anwenden ──
+        if _per_band_mask is not None:
+            try:
+                from backend.core.pim_phase_hook import apply_per_band_mask
+                _before = audio
+                _after = apply_per_band_mask(_before, _per_band_mask, sample_rate, mix=0.55)
+                audio = _after
+            except Exception:
+                pass
 
         return PhaseResult(
             success=True,
@@ -1187,8 +1250,8 @@ class ReverbReduction(PhaseInterface):
             if _db > -50.0:
                 _env[_i : _i + _frame] = gain
         if _x.ndim == 2:
-            return (_x * _env[:, None]).astype(np.float32)
-        return (_x * _env).astype(np.float32)
+            return (_x * _env[:, None]).astype(np.float32)  # type: ignore[no-any-return]
+        return (_x * _env).astype(np.float32)  # type: ignore[no-any-return]
 
     def _apply_material_loudness_preservation(
         self,
@@ -1296,7 +1359,7 @@ class ReverbReduction(PhaseInterface):
         audio_out = audio_out * (1.0 - transient_up) + audio[: len(audio_out)] * transient_up
         audio_out = np.clip(audio_out, -1.0, 1.0)
 
-        return audio_out
+        return audio_out  # type: ignore[no-any-return]
 
     def _reduce_reverb_mrsa(self, audio: np.ndarray, sample_rate: int, strength: float, damping: float) -> np.ndarray:  # pylint: disable=unused-argument
         """MRSA 5-zone OMLSA/IMCRA reverb reduction with PGHI phase reconstruction.
@@ -1639,7 +1702,7 @@ class ReverbReduction(PhaseInterface):
                 extend_frames = int(0.02 * sample_rate / hop_samples)
                 transient_mask[i : min(i + extend_frames, num_windows)] = 1.0
 
-        return transient_mask
+        return transient_mask  # type: ignore[no-any-return]
 
 
 # Test

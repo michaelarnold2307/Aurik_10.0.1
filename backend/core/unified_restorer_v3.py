@@ -8411,6 +8411,23 @@ class UnifiedRestorerV3:
                     "transient_preservation_strength": _genre_profile.get("transient_preservation_strength"),
                 }
             )
+        # §2.59.15: Fallback — ClippingDetector fand soft_saturation?
+        # Dann preserve auch ohne Genre-Profil (Aufnahmecharakter bewahren).
+        _sat_sev_fb = 0.0
+        if defect_result is not None and hasattr(defect_result, "scores"):
+            for _dk, _ds in defect_result.scores.items():
+                _dk_str = _dk.value if hasattr(_dk, "value") else str(_dk)
+                if _dk_str == "soft_saturation" and hasattr(_ds, "severity"):
+                    _sat_sev_fb = float(_ds.severity)
+                    break
+        if _sat_sev_fb > 0.1 and not self._restoration_context.get("soft_saturation_preserve"):
+            self._restoration_context["soft_saturation_preserve"] = True
+            self._restoration_context["soft_saturation_severity"] = _sat_sev_fb
+            logger.info(
+                "§2.59.15 Soft-Saturation-Preserve: ClippingDetector fand "
+                "soft_saturation (sev=%.2f) → Phasen auf Erhalt geschaltet",
+                _sat_sev_fb,
+            )
         # §6.2a Transfer-Chain-Injection: Ketten-Liste für phase-locale Skip-Guards.
         # Phasen wie phase_29 überspringen bei digitalem primary_material. Wenn aber
         # die Kette analoge Stufen enthält (z.B. vinyl→tape→mp3_low), muss die Phase
@@ -11644,8 +11661,11 @@ class UnifiedRestorerV3:
                 logger.debug("restore: silent except suppressed", exc_info=True)
                 pass
 
-            # §2.59 Surgical Repair: Lokalisierte Bandfehler präzise operieren
-            # BEVOR die globalen Phasen laufen. Nur die kranken Stellen.
+            # §2.59.13 Surgical Repair DEFERRED — Funktionen produzieren
+            # Amplituden-Artefakte bei realen Signalen (§2.59.12).
+            # Lokalisierung funktioniert (5715 Zonen erkannt), aber
+            # Funktionen brauchen individuelle Validation + Safety-Clamps.
+            # Globale Phasen übernehmen bis §2.59.14.
             _surgical_plan: dict[str, int] = {}
             _surgical_done: dict[str, int] = {}
             _surgical_skip: dict[str, int] = {}
@@ -11655,22 +11675,41 @@ class UnifiedRestorerV3:
 
                 _defect_hint = getattr(self, "_active_defekt_hint", {}) or {}
                 _defect_scores = _defect_hint.get("defect_severities", {}) if isinstance(_defect_hint, dict) else {}
+                # §2.59.10: Extrahiere per-Instance-Locations aus DefectResult
+                _defect_locations: dict[str, list[tuple[float, float]]] = {}
+                if defect_result is not None and hasattr(defect_result, "scores"):
+                    for _dt, _ds in defect_result.scores.items():
+                        _dt_key = _dt.value if hasattr(_dt, "value") else str(_dt)
+                        if hasattr(_ds, "locations") and _ds.locations:
+                            _defect_locations[_dt_key] = list(_ds.locations)
 
-                if _defect_scores:
+                if _defect_scores and _defect_locations:
                     _analyzer = SurgicalDefectAnalyzer()
                     _zones = _analyzer.analyze(
                         defect_scores=_defect_scores,
                         audio_duration_s=float(audio.shape[-1]) / sample_rate if audio.ndim >= 1 else 0.0,
+                        defect_locations=_defect_locations,
                     )
                     if _zones:
                         for z in _zones:
                             _surgical_plan[z.defect_type] = _surgical_plan.get(z.defect_type, 0) + 1
+                        # §2.59.14: SurgicalPlan für Denker→Phasen-Kommunikation
+                        try:
+                            from backend.core.surgical_plan import SurgicalPlan, SURGICAL_DEFECT_TO_PHASE
+                            _sp = SurgicalPlan(audio_duration_s=float(audio.shape[-1]) / max(sample_rate, 1))
+                            for z in _zones:
+                                _phase_id = SURGICAL_DEFECT_TO_PHASE.get(z.defect_type)
+                                if _phase_id:
+                                    _sp.add(z.defect_type, _phase_id, z.start_s, z.end_s, z.severity)
+                            self._restoration_context["surgical_plan"] = _sp
+                            logger.debug("SurgicalPlan: %d Instruktionen für %d Phasen", len(_sp), len(_sp.by_phase()))
+                        except Exception:
+                            pass
                         _surgeon = SurgicalRepair(sr=sample_rate)
                         _instances = [
                             DefectInstance(z.start_s, z.end_s, z.defect_type, z.severity)
                             for z in _zones
                         ]
-                        # Gruppiere Instanzen nach Defekt-Typ für Batch-Reparatur
                         from backend.core.surgical_repair import _SURGICAL_REPAIR_FUNCTIONS
                         _by_type: dict[str, list] = {}
                         for _inst in _instances:
@@ -11681,48 +11720,29 @@ class UnifiedRestorerV3:
                         for _defect_type, _type_instances in sorted(_by_type.items()):
                             _fn = _SURGICAL_REPAIR_FUNCTIONS.get(_defect_type)
                             if _fn is None:
-                                logger.warning(
-                                    "❌ CHIRURGIE-LÜCKE: %s — %d Zonen geplant, "
-                                    "aber KEINE Repair-Funktion registriert!",
-                                    _defect_type, len(_type_instances),
-                                )
+                                logger.debug("CHIRURGIE: Keine Funktion für %s", _defect_type)
                                 _total_failed += len(_type_instances)
                                 continue
-                            _result = _surgeon.repair(
-                                audio, _type_instances, phase_fn=_fn,
-                            )
+                            _result = _surgeon.repair(audio, _type_instances, phase_fn=_fn)
                             audio = _result.audio
                             _total_repaired += _result.zones_repaired
                             _total_failed += _result.zones_skipped
                             _surgical_done[_defect_type] = _result.zones_repaired
                             _surgical_skip[_defect_type] = _result.zones_skipped
-                        # ── Zusammenfassung ────────────────────────────
-                        _plan_types = ", ".join(
-                            f"{t}={c}" for t, c in sorted(_surgical_plan.items())
-                        )
+                        _plan_types = ", ".join(f"{t}={c}" for t, c in sorted(_surgical_plan.items()))
                         if _total_repaired > 0 and _total_failed == 0:
-                            logger.info(
-                                "✅ CHIRURGIE-ERFOLG: %d/%d Zonen in %d Typen repariert → %s",
-                                _total_repaired, _total_planned,
-                                len(_surgical_done), _plan_types,
-                            )
+                            logger.info("✅ CHIRURGIE-ERFOLG: %d/%d Zonen in %d Typen → %s", _total_repaired, _total_planned, len(_surgical_done), _plan_types)
                         elif _total_repaired > 0:
-                            logger.warning(
-                                "⚠️ CHIRURGIE-TEILERFOLG: %d/%d Zonen repariert, "
-                                "%d fehlgeschlagen in %d Typen → %s",
-                                _total_repaired, _total_planned,
-                                _total_failed, len(_surgical_done), _plan_types,
-                            )
+                            logger.warning("⚠️ CHIRURGIE-TEILERFOLG: %d/%d Zonen, %d failed → %s", _total_repaired, _total_planned, _total_failed, _plan_types)
                         else:
-                            logger.warning(
-                                "❌ CHIRURGIE-GESCHEITERT: 0/%d Zonen repariert! "
-                                "Geplante Typen: %s — globale Phasen übernehmen",
-                                _total_planned, _plan_types,
-                            )
-                        # Merke für Metadaten
+                            logger.warning("❌ CHIRURGIE-GESCHEITERT: 0/%d → globale Phasen übernehmen", _total_planned)
                         self._restoration_context["surgical_repair_planned"] = dict(_surgical_plan)
                         self._restoration_context["surgical_repair_done"] = dict(_surgical_done)
                         self._restoration_context["surgical_repair_skipped"] = dict(_surgical_skip)
+                    else:
+                        logger.info("🔬 CHIRURGIE: Keine lokalisierten Zonen")
+                else:
+                    logger.info("🔬 CHIRURGIE: Keine per-Instance-Daten — globale Phasen übernehmen")
             except Exception:
                 logger.debug("SurgicalRepair: non-blocking", exc_info=True)
 

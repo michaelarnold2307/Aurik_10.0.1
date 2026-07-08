@@ -17,6 +17,7 @@ kein echter Audio-Load. Alle Tests laufen in < 500 ms (Budget: --timeout=30).
 """
 
 import gc
+from pathlib import Path
 from typing import cast
 
 import numpy as np
@@ -25,6 +26,71 @@ import pytest
 SR = 48000
 _DURATION_S = 1.0
 _N = int(_DURATION_S * SR)
+
+
+def test_uv3_final_export_audio_gate_runs_after_human_hearing_guard() -> None:
+    """Der wirklich exportierte Audiopuffer muss nach finalem Hoerkomfort erneut gegatet werden."""
+    repo_root = Path(__file__).resolve().parents[2]
+    src = (repo_root / "backend" / "core" / "unified_restorer_v3.py").read_text(encoding="utf-8")
+
+    hhc_idx = src.index("Final HumanHearingComfortGuard")
+    final_gate_idx = src.index("Final-Export-Audio-Gate")
+    result_idx = src.index("result = RestorationResult(")
+
+    assert hhc_idx < final_gate_idx < result_idx
+    assert "exact_export_buffer" in src[final_gate_idx:result_idx]
+    assert "FINAL_EXPORT_AUDIO_GATE_FAIL" in src[final_gate_idx:result_idx]
+
+
+def test_uv3_final_export_rollback_reapplies_human_hearing_guard_before_regate() -> None:
+    """Auch ein Final-Gate-Rollback-Puffer muss vor Re-Gate hoersicher geglaettet werden."""
+    repo_root = Path(__file__).resolve().parents[2]
+    src = (repo_root / "backend" / "core" / "unified_restorer_v3.py").read_text(encoding="utf-8")
+
+    fail_idx = src.index('"FINAL_EXPORT_AUDIO_GATE_FAIL"')
+    rollback_hhc_idx = src.index("human_hearing_comfort_guard_after_final_rollback", fail_idx)
+    recovered_idx = src.index('self._artifact_freedom_detail["final_export_audio_gate_recovered"]', fail_idx)
+    result_idx = src.index("result = RestorationResult(")
+
+    assert fail_idx < rollback_hhc_idx < recovered_idx < result_idx
+
+
+def test_uv3_final_export_exception_normalizes_and_reapplies_human_hearing_guard() -> None:
+    """Fail-Closed bei Final-Gate-Exception nutzt Exportlayout und Hoerkomfort-Guard."""
+    repo_root = Path(__file__).resolve().parents[2]
+    src = (repo_root / "backend" / "core" / "unified_restorer_v3.py").read_text(encoding="utf-8")
+
+    exception_idx = src.index("except Exception as _final_export_gate_exc")
+    normalize_idx = src.index("_normalize_to_external_layout(np.asarray(analysis_audio", exception_idx)
+    hhc_idx = src.index("human_hearing_comfort_guard_after_final_exception", exception_idx)
+    fail_reason_idx = src.index('"FINAL_EXPORT_AUDIO_GATE_EXCEPTION"', exception_idx)
+    result_idx = src.index("result = RestorationResult(")
+
+    assert exception_idx < normalize_idx < hhc_idx < fail_reason_idx < result_idx
+
+
+def test_gui_fallback_export_reapplies_export_guard_after_final_audio_mutations() -> None:
+    """GUI-Fallback-WAV muss unmittelbar vor sf.write erneut export_guard nutzen."""
+    repo_root = Path(__file__).resolve().parents[2]
+    src = (repo_root / "Aurik10" / "ui" / "modern_window.py").read_text(encoding="utf-8")
+
+    quiet_edge_idx = src.index("Fallback quiet-edge guard skipped")
+    guard_idx = src.index("_fallback_audio = _export_guard(_fallback_audio)", quiet_edge_idx)
+    write_idx = src.index('sf.write(_tmp_path, _fallback_audio, write_sr, format="WAV", subtype="PCM_24")', guard_idx)
+
+    assert quiet_edge_idx < guard_idx < write_idx
+
+
+def test_kmv_stage2_write_audio_sanitizes_before_disk_write() -> None:
+    """KMV-Stufe-2 darf keine NaN/Inf/Out-of-range-Samples in den Temp-Export schreiben."""
+    repo_root = Path(__file__).resolve().parents[2]
+    src = (repo_root / "Aurik10" / "ui" / "ml_refinement_thread.py").read_text(encoding="utf-8")
+
+    fn_idx = src.index("def _write_audio(")
+    guard_idx = src.index("np.nan_to_num", fn_idx)
+    write_idx = src.index("sf.write(path, mono_or_stereo", guard_idx)
+
+    assert fn_idx < guard_idx < write_idx
 
 
 # ─── Hilfs-Generatoren ───────────────────────────────────────────────────────
@@ -151,18 +217,19 @@ class TestNoiseTextureGuard:
 
 
 class TestNoiseFloorGuard:
-    """apply_noise_floor_minimum — Analog-Pause-Zonen erhalten Materialrauschboden."""
+    """apply_noise_floor_minimum — Analogträger bekommen keinen Export-Mindestboden."""
 
-    def test_silence_gets_floor_shellac(self):
-        """Stille auf Shellac-Material → Energieerhöhung über Stille."""
+    @pytest.mark.parametrize(
+        "material",
+        ["shellac", "wax_cylinder", "lacquer_disc", "wire_recording", "vinyl", "tape", "reel_tape", "cassette"],
+    )
+    def test_analog_material_targets_cd_like_floor(self, material):
+        """Analoger Träger → kein Hiss-/Oberflächenrausch-Mindestboden im Export."""
         from backend.core.dsp.noise_floor_guard import apply_noise_floor_minimum
 
         silent = _silence()
-        result = apply_noise_floor_minimum(silent, SR, "shellac")
-        assert result.shape == silent.shape
-        # Shellac-Boden ≈ −42 dBFS → ~0.0079 linear → RMS deutlich über 0
-        rms = float(np.sqrt(np.mean(result**2)))
-        assert rms > 1e-5, f"Shellac-Rauschboden sollte über 0 liegen, RMS={rms:.8f}"
+        result = apply_noise_floor_minimum(silent, SR, material)
+        assert np.allclose(result, silent, atol=1e-7), f"{material} soll keinen analogen Mindestboden reinjizieren"
 
     def test_digital_material_untouched(self):
         """CD-Material → kein Rauschboden hinzugefügt (digitale Stille bleibt)."""
@@ -284,6 +351,25 @@ class TestMikrodynamikGuard:
 
         with pytest.raises(AssertionError):
             frame_energy_correlation(_sine(), _sine(), 44100)
+
+    def test_recommended_wet_never_collapses_to_zero_on_voiced_material(self):
+        from backend.core.dsp.mikrodynamik_guard import recommend_mikrodynamik_wet
+
+        wet = recommend_mikrodynamik_wet(0.88, 0.35)
+        assert 0.0 < wet < 0.3
+
+    def test_recommended_wet_reaches_full_blend_at_target(self):
+        from backend.core.dsp.mikrodynamik_guard import recommend_mikrodynamik_wet
+
+        wet = recommend_mikrodynamik_wet(0.99, 0.35)
+        assert wet == 1.0
+
+    def test_recommended_wet_scales_with_global_need(self):
+        from backend.core.dsp.mikrodynamik_guard import recommend_mikrodynamik_wet
+
+        low_need = recommend_mikrodynamik_wet(0.88, 0.35, global_need=0.1)
+        high_need = recommend_mikrodynamik_wet(0.88, 0.35, global_need=0.9)
+        assert high_need > low_need
 
     def teardown_method(self, _method):
         gc.collect(0)
@@ -623,6 +709,138 @@ class TestTemporalContinuityGuardGainStep:
         assert result.gain_step_db > 1.5, (
             f"Großer Gain-Sprung sollte gain_step_db > 1.5 dB haben, got {result.gain_step_db:.3f}"
         )
+
+    def teardown_method(self, _method):
+        gc.collect(0)
+
+
+# ─── Final: human_hearing_comfort_guard ─────────────────────────────────────
+
+
+class TestHumanHearingComfortGuard:
+    """Finaler Hoerkomfort-Guard gegen Aurik-eigene Peak-Spitzen und HF-Dunkelung."""
+
+    def test_introduced_peak_overshoot_is_attenuated(self):
+        """Ein isolierter, nur im Kandidaten vorhandener Peak wird abgesenkt."""
+        from backend.core.dsp.human_hearing_comfort_guard import apply_human_hearing_comfort_guard
+
+        n = SR * 2
+        reference = _sine(440.0, n=n, amp=0.10) + _white_noise(n=n, amp=0.003)
+        candidate = reference.copy()
+        spike_start = int(0.625 * SR)
+        candidate[spike_start : spike_start + 160] = 0.85
+
+        before_peak = float(np.max(np.abs(candidate[spike_start : spike_start + 160])))
+        result = apply_human_hearing_comfort_guard(reference, candidate, SR)
+        after_peak = float(np.max(np.abs(result.audio[spike_start : spike_start + 160])))
+
+        assert result.peak_overshoot_frames >= 1
+        assert result.applied is True
+        assert after_peak < before_peak * 0.80
+        assert np.max(np.abs(result.audio)) <= 1.0
+
+    def test_original_musical_loudness_jump_is_not_flattened(self):
+        """Dynamiksprung, der schon im Original existiert, bleibt unveraendert."""
+        from backend.core.dsp.human_hearing_comfort_guard import apply_human_hearing_comfort_guard
+
+        n = SR * 2
+        first = _sine(330.0, n=n // 2, amp=0.08)
+        second = _sine(330.0, n=n // 2, amp=0.28)
+        reference = np.concatenate([first, second]).astype(np.float32)
+        candidate = reference.copy()
+
+        result = apply_human_hearing_comfort_guard(reference, candidate, SR)
+
+        assert result.peak_overshoot_frames == 0
+        assert result.hf_lift_db == 0.0
+        assert np.allclose(result.audio, candidate, atol=1e-6)
+
+    def test_small_hf_loss_is_partially_restored_without_clipping(self):
+        """HF-Verlust wird nur konservativ angehoben und bleibt clip-sicher."""
+        from backend.core.dsp.human_hearing_comfort_guard import apply_human_hearing_comfort_guard
+
+        n = SR * 2
+        reference = _sine(1000.0, n=n, amp=0.16) + _sine(10000.0, n=n, amp=0.05)
+        candidate = _sine(1000.0, n=n, amp=0.16) + _sine(10000.0, n=n, amp=0.025)
+
+        result = apply_human_hearing_comfort_guard(reference, candidate.astype(np.float32), SR)
+
+        assert result.hf_loss_db_before < -0.75
+        assert result.hf_lift_db > 0.05
+        assert result.hf_loss_db_after > result.hf_loss_db_before
+        assert result.hf_lift_db <= 1.2
+        assert np.max(np.abs(result.audio)) <= 1.0
+
+    def test_hf_lift_does_not_raise_robust_noise_floor(self):
+        """HF-Komfort darf keinen P5-Rauschboden hochziehen."""
+        from backend.core.dsp.human_hearing_comfort_guard import apply_human_hearing_comfort_guard
+
+        rng = np.random.default_rng(123)
+        n = SR * 2
+        reference = _sine(1000.0, n=n, amp=0.12) + _sine(10000.0, n=n, amp=0.04)
+        reference = reference + (rng.standard_normal(n) * 0.006).astype(np.float32)
+        candidate = _sine(1000.0, n=n, amp=0.12) + _sine(10000.0, n=n, amp=0.018)
+        candidate = candidate + (rng.standard_normal(n) * 0.006).astype(np.float32)
+
+        before_floor = float(20.0 * np.log10(float(np.percentile(np.abs(candidate), 5.0)) + 1e-12))
+        result = apply_human_hearing_comfort_guard(reference.astype(np.float32), candidate.astype(np.float32), SR)
+        after_floor = float(20.0 * np.log10(float(np.percentile(np.abs(result.audio), 5.0)) + 1e-12))
+
+        assert result.hf_lift_db >= 0.0
+        assert after_floor <= before_floor + 0.08
+        assert result.noise_floor_lift_db <= 0.08
+
+    def test_relative_noise_floor_is_clamped_without_flattening_program(self):
+        """Exportnaher Guard senkt nur Low-Level-Floor, nicht musikalische Peaks."""
+        from backend.core.dsp.human_hearing_comfort_guard import apply_human_hearing_comfort_guard
+
+        rng = np.random.default_rng(321)
+        n = SR * 2
+        program = np.zeros(n, dtype=np.float32)
+        burst = _sine(440.0, n=SR // 5, amp=0.16)
+        for start in range(0, n, SR // 2):
+            end = min(start + burst.size, n)
+            program[start:end] = burst[: end - start]
+        reference = program + (rng.standard_normal(n) * 0.0015).astype(np.float32)
+        candidate = program + (rng.standard_normal(n) * 0.007).astype(np.float32)
+
+        before_ref = float(20.0 * np.log10(float(np.percentile(np.abs(reference), 5.0)) + 1e-12))
+        before_cand = float(20.0 * np.log10(float(np.percentile(np.abs(candidate), 5.0)) + 1e-12))
+        result = apply_human_hearing_comfort_guard(
+            reference.astype(np.float32),
+            candidate.astype(np.float32),
+            SR,
+            max_relative_noise_floor_db=1.2,
+        )
+        after_cand = float(20.0 * np.log10(float(np.percentile(np.abs(result.audio), 5.0)) + 1e-12))
+
+        assert before_cand > before_ref + 1.2
+        assert after_cand <= before_ref + 1.25
+        assert result.noise_floor_clamp_db > 0.0
+        assert np.percentile(np.abs(result.audio), 95.0) >= np.percentile(np.abs(candidate), 95.0) * 0.98
+
+    def test_reference_length_mismatch_still_applies_noise_floor_clamp(self):
+        """Resampling-/Längenpfade dürfen den finalen No-Harm-Guard nicht deaktivieren."""
+        from scipy import signal
+
+        from backend.core.dsp.human_hearing_comfort_guard import apply_human_hearing_comfort_guard
+
+        rng = np.random.default_rng(987)
+        n_ref = SR * 2 - 1536
+        n_cand = SR * 2
+        program_ref = np.zeros(n_ref, dtype=np.float32)
+        burst = _sine(440.0, n=SR // 5, amp=0.16)
+        for start in range(0, n_ref, SR // 2):
+            end = min(start + burst.size, n_ref)
+            program_ref[start:end] = burst[: end - start]
+        reference = program_ref + (rng.standard_normal(n_ref) * 0.0015).astype(np.float32)
+        program_cand = signal.resample(program_ref, n_cand).astype(np.float32)
+        candidate = program_cand + (rng.standard_normal(n_cand) * 0.007).astype(np.float32)
+
+        result = apply_human_hearing_comfort_guard(reference, candidate, SR, max_relative_noise_floor_db=1.2)
+
+        assert result.audio.shape == candidate.shape
+        assert result.noise_floor_clamp_db > 0.0
 
     def teardown_method(self, _method):
         gc.collect(0)

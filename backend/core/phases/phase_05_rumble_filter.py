@@ -111,7 +111,7 @@ class RumbleFilterPhase(PhaseInterface):
     """
 
     # Material-adaptive Parameters (Professional-tuned)
-    MATERIAL_PARAMS = {
+    MATERIAL_PARAMS: dict[str, dict[str, Any]] = {
         "tape": {
             "cutoff_hz": 24,  # Conservative: preserve musical low-end, remove rumble only
             "filter_order": 6,  # Moderate slope (36 dB/oct)
@@ -271,6 +271,16 @@ class RumbleFilterPhase(PhaseInterface):
             PhaseResult with rumble-filtered audio
         """
         assert sample_rate == 48000, f"SR muss 48000 Hz sein, erhalten: {sample_rate}"
+        # ── §v10 PIM: Per-Band-Intensität kalibrieren ──
+        try:
+            from backend.core.pim_phase_hook import apply_pim_intensity
+            _pim = apply_pim_intensity(kwargs, "rumble_filter",
+                default_nr=0.4, default_de_ess=0.1, default_comp=1.0)
+            for _key in ("noise_reduction_strength", "nr_strength", "strength", "wet"):
+                if _key in kwargs:
+                    kwargs[_key] = _pim["nr_strength"]
+        except Exception:
+            pass
         use_fir: bool = bool(kwargs.get("use_fir", False))
         self.sample_rate = int(sample_rate)
         start_time = time.time()
@@ -288,7 +298,7 @@ class RumbleFilterPhase(PhaseInterface):
             return arr
 
         # Get material-specific parameters
-        params = dict(self.MATERIAL_PARAMS.get(material_type, self.MATERIAL_PARAMS["unknown"]))
+        params: dict[str, Any] = dict(self.MATERIAL_PARAMS.get(material_type, self.MATERIAL_PARAMS["unknown"]))
 
         # Locality-aware intensity control from UV3.
         phase_locality_factor = float(kwargs.get("phase_locality_factor", 1.0))
@@ -357,7 +367,7 @@ class RumbleFilterPhase(PhaseInterface):
         _vocal_detected_05 = bool(kwargs.get("vocal_detected", False)) or (_vocal_conf_05 >= 0.35)
         _vocal_guard_05 = False
         if _vocal_detected_05:
-            params["transient_preserve"] = float(max(params.get("transient_preserve", 0.7), 0.85))
+            params["transient_preserve"] = float(max(float(params.get("transient_preserve", 0.7)), 0.85))
             _old_cutoff_05 = int(adapted_cutoff)
             adapted_cutoff = int(min(adapted_cutoff, 24))
             _vocal_guard_05 = adapted_cutoff != _old_cutoff_05
@@ -420,6 +430,9 @@ class RumbleFilterPhase(PhaseInterface):
                     gate_dbfs=-50.0,
                     crossfade_ms=10.0,
                     sr=self.sample_rate,
+                    reference=np.asarray(
+                        audio, dtype=np.float32
+                    ),  # §V04: Gate auf Pre-Phase-Input, nicht auf gefiltertes Signal
                 )
                 filtered = np.nan_to_num(filtered, nan=0.0, posinf=0.0, neginf=0.0)
                 filtered = np.clip(filtered, -1.0, 1.0)
@@ -496,17 +509,33 @@ class RumbleFilterPhase(PhaseInterface):
         gate_dbfs: float = -50.0,
         crossfade_ms: float = 10.0,
         sr: int = 48000,
+        reference: np.ndarray | None = None,
     ) -> np.ndarray:
-        """§2.45a-II: Apply makeup gain only to musical frames, leaving silence untouched."""
+        """\u00a72.45a-II: Apply makeup gain only to musical frames, leaving silence untouched.
+
+        Args:
+            audio:     Das Signal, auf das der Gain angewendet wird (Post-HPF).
+            gain:      Makeup-Gain-Faktor.
+            gate_dbfs: Schwellwert in dBFS für Musical-Frame-Erkennung.
+            crossfade_ms: Übergangszeit für sanfte Gate-Übergänge.
+            sr:        Sample-Rate.
+            reference: \u00a7V04 Pre-Phase-Input für Gate-Berechnung (kein HPF-Einfluss).
+                       Falls None, wird 'audio' selbst als Referenz genutzt.
+        """
         if gain <= 1.0005:
             return audio
         _arr = np.asarray(audio, dtype=np.float32)
         _was_2d = _arr.ndim == 2
-        if _was_2d:
-            # (N, 2) → envelope from mean of channels
-            _mono_env = np.sqrt(np.mean(_arr**2, axis=1) + 1e-12)
+        # §V04: Gate-Berechnung auf Pre-Phase-Input (reference), nicht auf HPF-gefiltertes Signal.
+        # Nach dem Hochpass fehlt Sub-Bass-Energie — Gate würde sonst auf Shellac/Akustik-Material
+        # Stille-Frames als 'musikalisch' klassifizieren und Makeup-Gain irrtümlich anwenden.
+        _ref_arr = np.asarray(reference, dtype=np.float32) if reference is not None else _arr
+        if _ref_arr.shape[0] != _arr.shape[0]:
+            _ref_arr = _arr  # Längen-Schutz: Fallback auf audio wenn Reference-Länge abweicht
+        if _ref_arr.ndim == 2:
+            _mono_env = np.sqrt(np.mean(_ref_arr**2, axis=1) + 1e-12)
         else:
-            _mono_env = np.abs(_arr)
+            _mono_env = np.abs(_ref_arr)
         _frame_len = 2048
         _n_samples = len(_mono_env)
         _n_full_frames = max(1, _n_samples // _frame_len)
@@ -534,7 +563,7 @@ class RumbleFilterPhase(PhaseInterface):
             _result = _arr * _per_sample_gain[:, np.newaxis]
         else:
             _result = _arr * _per_sample_gain
-        return _result
+        return _result  # type: ignore[no-any-return]
 
     def _detect_rumble_professional(self, audio: np.ndarray, params: dict[str, Any]) -> tuple[bool, float, list[float]]:
         """
@@ -555,11 +584,11 @@ class RumbleFilterPhase(PhaseInterface):
 
         # Sub-bass region (below cutoff)
         sub_bass_mask = freqs < params["cutoff_hz"]
-        sub_bass_energy = np.sum(magnitude[sub_bass_mask] ** 2)
+        sub_bass_energy: float = float(np.sum(magnitude[sub_bass_mask] ** 2))
 
         # Bass reference region (cutoff to 300 Hz)
         bass_mask = (freqs >= params["cutoff_hz"]) & (freqs < 300)
-        bass_energy = np.sum(magnitude[bass_mask] ** 2)
+        bass_energy: float = float(np.sum(magnitude[bass_mask] ** 2))
 
         # Energy ratio
         energy_ratio = sub_bass_energy / bass_energy if bass_energy > 0 else 0.0
@@ -602,9 +631,7 @@ class RumbleFilterPhase(PhaseInterface):
         adapted_cutoff = base_cutoff + cutoff_adjustment
 
         # Clamp to reasonable range
-        adapted_cutoff = np.clip(adapted_cutoff, 8, 70)
-
-        return adapted_cutoff
+        return float(np.clip(adapted_cutoff, 8, 70))
 
     def _dc_blocker(self, audio: np.ndarray) -> np.ndarray:
         """
@@ -619,10 +646,11 @@ class RumbleFilterPhase(PhaseInterface):
         alpha = 0.9995  # 1 Hz cutoff @ 48 kHz
         b, a = [1.0, -1.0], [1.0, -alpha]
         if audio.ndim == 2:
-            return np.column_stack([_filtfilt_dc(b, a, audio[:, ch]) for ch in range(audio.shape[1])]).astype(
+            return np.column_stack([_filtfilt_dc(b, a, audio[:, ch]) for ch in range(audio.shape[1])]).astype(  # type: ignore[no-any-return]
                 audio.dtype
             )
-        return _filtfilt_dc(b, a, audio).astype(audio.dtype)
+        _result: np.ndarray = np.asarray(_filtfilt_dc(b, a, audio), dtype=audio.dtype)
+        return _result
 
     def _detect_transients_professional(self, audio: np.ndarray, sensitivity: float) -> np.ndarray:
         """
@@ -718,7 +746,7 @@ class RumbleFilterPhase(PhaseInterface):
             onset_samples[:_edge_guard_samples] = False
             onset_samples[-_edge_guard_samples:] = False
 
-        return onset_samples
+        return onset_samples  # type: ignore[no-any-return]
 
     def _apply_iir_highpass_transient_preserving(
         self, audio: np.ndarray, cutoff_hz: float, order: int, transient_mask: np.ndarray
@@ -766,7 +794,7 @@ class RumbleFilterPhase(PhaseInterface):
                     filtered[:, ch] = signal.sosfiltfilt(sos, audio[:, ch], padlen=_padlen)
             else:
                 filtered = signal.sosfiltfilt(sos, audio, padlen=_padlen)
-            return filtered
+            return filtered  # type: ignore[no-any-return]
 
         # Build a soft bypass envelope instead of hard sample switches.
         # Hard np.where transitions can create boundary discontinuities at intro/outro,
@@ -790,7 +818,7 @@ class RumbleFilterPhase(PhaseInterface):
             filtered_audio = signal.sosfiltfilt(sos, audio, padlen=_padlen)
             filtered = _soft_mask * audio + (1.0 - _soft_mask) * filtered_audio
 
-        return filtered
+        return filtered  # type: ignore[no-any-return]
 
     def _apply_fir_highpass(self, audio: np.ndarray, cutoff_hz: float, order: int) -> np.ndarray:
         """
@@ -821,7 +849,7 @@ class RumbleFilterPhase(PhaseInterface):
         else:
             filtered = signal.filtfilt(fir_coeffs, 1.0, audio, padlen=_padlen_fir)
 
-        return filtered
+        return filtered  # type: ignore[no-any-return]
 
     def supports_material(self, material_type: str) -> bool:  # pylint: disable=unused-argument
         """All materials supported."""

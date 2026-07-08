@@ -81,6 +81,19 @@ _DIGITAL_CODEC_MATERIALS: frozenset[str] = frozenset(
     {"mp3_low", "mp3_high", "aac", "cd_digital", "dat", "streaming", "minidisc"}
 )
 
+# ---------------------------------------------------------------------------
+# §2.67 Koalitions-Priorisierung im DefectMapper
+# Zusammengehörige Phasen werden bereits in der Defektprofil-Selektion näher
+# zusammengezogen, damit sie nicht erst spät durch globale Sortierung getrennt
+# werden. Nur additive Priorisierung, keine harte Erzwingung.
+# ---------------------------------------------------------------------------
+_DEFECT_MAPPER_PHASE_COALITIONS: dict[str, tuple[str, ...]] = {
+    "digital_repair_chain": ("phase_23_spectral_repair", "phase_50_spectral_repair"),
+    "hiss_harmonic_rebuild": ("phase_29_tape_hiss_reduction", "phase_07_harmonic_restoration"),
+    "stereo_alignment": ("phase_14_phase_correction", "phase_25_azimuth_correction"),
+    "generation_loss_rebuild": ("phase_23_spectral_repair", "phase_07_harmonic_restoration"),
+}
+
 
 # ---------------------------------------------------------------------------
 # Datenstruktur: PhaseAssignment
@@ -146,6 +159,23 @@ class PhaseAssignment:
                 setattr(config, k, v)
             else:
                 setattr(config, k, v)
+
+
+def _validate_phase_map_completeness() -> None:
+    """Stellt sicher, dass jede Defektart eine explizite Phase-Zuordnung hat.
+
+    Die DefectPhaseMapper ist die kanonische Entscheidungsquelle für alle
+    Defekte. Lücken würden bedeuten, dass einzelne Defekte nur teilweise oder
+    implizit behandelt werden.
+    """
+    missing = [dt for dt in DefectType if dt not in _PHASE_MAP]
+    if missing:
+        missing_names = ", ".join(dt.name for dt in missing)
+        raise RuntimeError(f"DefectPhaseMapper unvollständig: fehlende Defekte: {missing_names}")
+
+    for defect_type, assignment in _PHASE_MAP.items():
+        if not assignment.primary_phases:
+            raise RuntimeError(f"DefectPhaseMapper ungültig: {defect_type.name} hat keine Primary-Phase")
 
 
 # ---------------------------------------------------------------------------
@@ -381,7 +411,9 @@ _PHASE_MAP: dict[DefectType, PhaseAssignment] = {
         ],
         secondary_phases=[
             "phase_54_transparent_dynamics",  # Transparente Dynamik-Restauration
-            "phase_35_multiband_compression",  # Ausgewogenes Multiband-Reamping
+            # §0a: phase_35_multiband_compression ist Studio-2026-only und darf hier
+            # nie stehen — wird in Restoration durch Runtime-Filter abgeblockt, aber
+            # §0a verlangt, dass §0a-verbotene Phasen gar nicht erst vorgeschlagen werden.
         ],
         description=(
             "Umkehrung von Dynamik-Überkompression via Upward Expansion. "
@@ -929,7 +961,11 @@ _PHASE_MAP: dict[DefectType, PhaseAssignment] = {
     DefectType.VOCAL_HARSHNESS: PhaseAssignment(
         defect_type=DefectType.VOCAL_HARSHNESS,
         primary_phases=[
-            "phase_42_vocal_enhancement",  # BSRoFormer: Vokal-Stem isolieren, Harshness-Band dämpfen
+            # §0a: phase_42_vocal_enhancement ist Studio-2026-only — in Restoration
+            # ist phase_65_vocal_naturalness_restoration der §0a-konforme Ersatz
+            # (HNR-Blend + Spektral-Tilt + Formant-Tilt). §0a: phase_42 darf hier
+            # nie stehen (V04-BUG-FIX v9.15.1).
+            "phase_65_vocal_naturalness_restoration",  # §0a-konformer Restoration-Ersatz (HNR-Blend, Formant-Tilt)
             "phase_19_de_esser",  # De-Essing / De-Harshness im 2–6 kHz Band
         ],
         secondary_phases=[
@@ -1321,10 +1357,10 @@ _PHASE_MAP: dict[DefectType, PhaseAssignment] = {
     DefectType.AMPLITUDE_DRIFT: PhaseAssignment(
         defect_type=DefectType.AMPLITUDE_DRIFT,
         primary_phases=[
-            "phase_12_wow_flutter_fix",
+            "phase_40_loudness_normalization",
         ],
         secondary_phases=[
-            "phase_40_loudness_normalization",
+            "phase_12_wow_flutter_fix",
             "phase_29_tape_hiss_reduction",
         ],
         description=(
@@ -1489,6 +1525,137 @@ _PHASE_MAP: dict[DefectType, PhaseAssignment] = {
             "preserve_analog_character": True,
         },
     ),
+    # ------------------------------------------------------------------
+    # Tier 2: MPEG_FRAME_LOSS — MP3/AAC-Frame-Verluste
+    # ------------------------------------------------------------------
+    DefectType.MPEG_FRAME_LOSS: PhaseAssignment(
+        defect_type=DefectType.MPEG_FRAME_LOSS,
+        primary_phases=[
+            "phase_23_spectral_repair",
+            "phase_06_frequency_restoration",
+        ],
+        secondary_phases=[
+            "phase_39_air_band_enhancement",
+        ],
+        description=(
+            "Repariert MPEG-Frame-Verluste durch spektrale Inpainting der Brickwall-Cutoff-Zonen "
+            "und Wiederherstellung verlorener Hochfrequenz-Anteile."
+        ),
+        config_delta={
+            "enable_spectral_repair": True,
+            "spectral_repair_strength": 0.65,
+            "preserve_analog_character": False,  # Digital → keine analoge Patina
+        },
+    ),
+    # ------------------------------------------------------------------
+    # Tier 2: STEREO_FIELD_COLLAPSE — progressiver Stereofeld-Kollaps
+    # ------------------------------------------------------------------
+    DefectType.STEREO_FIELD_COLLAPSE: PhaseAssignment(
+        defect_type=DefectType.STEREO_FIELD_COLLAPSE,
+        primary_phases=[
+            "phase_13_stereo_enhancement",
+            "phase_34_mid_side_processing",
+        ],
+        secondary_phases=[
+            "phase_15_stereo_balance",
+        ],
+        description=(
+            "Stellt kollabiertes Stereofeld wieder her durch MS-Dekorrelation und selektive "
+            "Stereobreiten-Erweiterung in kollabierten Passagen."
+        ),
+        config_delta={
+            "stereo_width": 1.35,
+            "mid_side_balance": 0.60,
+            "preserve_analog_character": True,
+        },
+    ),
+    # ------------------------------------------------------------------
+    # Tier 2: PHASE_ROTATION — unnatürliche Allpass-Filter-Phasenrotation
+    # ------------------------------------------------------------------
+    DefectType.PHASE_ROTATION: PhaseAssignment(
+        defect_type=DefectType.PHASE_ROTATION,
+        primary_phases=[
+            "phase_14_phase_correction",
+            "phase_23_spectral_repair",
+        ],
+        secondary_phases=[
+            "phase_08_transient_preservation",
+        ],
+        description=(
+            "Korrigiert unnatürliche Phasenrotation durch adaptive Allpass-Filter-Inversion. "
+            "Stellt kohärente Gruppenlaufzeit über Frequenzbänder wieder her."
+        ),
+        config_delta={
+            "phase_correction_strength": 0.55,
+            "enable_spectral_repair": True,
+            "preserve_analog_character": True,
+        },
+    ),
+    # ------------------------------------------------------------------
+    # Tier 2: DROPOUT_OXIDE — kurzer Oxid-Dropout (2–20 ms)
+    # ------------------------------------------------------------------
+    DefectType.DROPOUT_OXIDE: PhaseAssignment(
+        defect_type=DefectType.DROPOUT_OXIDE,
+        primary_phases=[
+            "phase_24_dropout_repair",
+        ],
+        secondary_phases=[
+            "phase_55_diffusion_inpainting",
+        ],
+        description=(
+            "Repariert kurze Oxid-Dropouts (2–20 ms, 30–70% Pegelverlust) per Waveform-Interpolation. "
+            "Bewahrt transiente Musik-Pegel durch zeitlich begrenzte Rekonstruktion."
+        ),
+        config_delta={
+            "dropout_repair_mode": "interpolation",
+            "interpolation_window_ms": 10.0,
+            "preserve_analog_character": True,
+        },
+    ),
+    # ------------------------------------------------------------------
+    # Tier 2: DROPOUT_HEAD_CONTACT — längerer Kopf-Kontakt-Dropout (50–200 ms)
+    # ------------------------------------------------------------------
+    DefectType.DROPOUT_HEAD_CONTACT: PhaseAssignment(
+        defect_type=DefectType.DROPOUT_HEAD_CONTACT,
+        primary_phases=[
+            "phase_24_dropout_repair",
+            "phase_56_head_wear_compensation",
+        ],
+        secondary_phases=[
+            "phase_55_diffusion_inpainting",
+        ],
+        description=(
+            "Kompensiert längere Kopf-Kontakt-Dropouts (50–200 ms, modulierter Pegelverlauf) "
+            "durch Gain-Kompensation mit adaptivem Envelope-Tracking."
+        ),
+        config_delta={
+            "dropout_repair_mode": "gain_compensation",
+            "gain_smooth_ms": 50.0,
+            "preserve_analog_character": True,
+        },
+    ),
+    # ------------------------------------------------------------------
+    # Tier 2: DROPOUT_SPLICE — abrupter Band-Spleiß-Dropout (>95% Pegelverlust)
+    # ------------------------------------------------------------------
+    DefectType.DROPOUT_SPLICE: PhaseAssignment(
+        defect_type=DefectType.DROPOUT_SPLICE,
+        primary_phases=[
+            "phase_64_tape_splice_repair",
+            "phase_23_spectral_repair",
+        ],
+        secondary_phases=[
+            "phase_24_dropout_repair",
+        ],
+        description=(
+            "Repariert abrupter Band-Spleiß-Dropouts (>95% Pegelverlust) mit spektralem Inpainting. "
+            "Rekonstruiert fehlendes Signal aus umliegenden Spektralregionen."
+        ),
+        config_delta={
+            "dropout_repair_mode": "spectral_inpainting",
+            "spectral_repair_strength": 0.85,
+            "preserve_analog_character": True,
+        },
+    ),
 }
 
 # ---------------------------------------------------------------------------
@@ -1554,6 +1721,11 @@ _MATERIAL_PHASE_FACTORS: dict[str, dict[str, float]] = {
         "phase_02_hum_removal": 0.45,  # shellac motor rumble is character
         "phase_18_noise_gate": 0.20,  # gating destroys groove-noise character
         "phase_24_dropout_repair": 0.50,  # scratch-based dropouts need care
+        # v9.15.1: Shellac-spezifische Defekte vollständig abdecken
+        "phase_05_rumble_filter": 0.80,  # Schellack-Dreher Subsonic-Rumble
+        "phase_23_spectral_repair": 0.45,  # Spektrale Reparatur für IGD + Oberflächenlücken
+        "phase_29_tape_hiss_reduction": 0.60,  # Shellac-Oberflächenrauschen ähnelt Tape-Hiss
+        "phase_60_inner_groove_distortion_repair": 0.55,  # IGD tritt auch bei Schellack-Rillen auf
     },
     # LACQUER_DISC — similar to shellac, more substrate clicks
     "lacquer_disc": {
@@ -1625,6 +1797,14 @@ _MATERIAL_PHASE_FACTORS: dict[str, dict[str, float]] = {
         "phase_02_hum_removal": 0.40,  # turntable motor rumble + AC hum
         "phase_18_noise_gate": 0.25,  # vinyl surface noise is continuous — gating = artifacts
         "phase_24_dropout_repair": 0.60,  # vinyl scratches need careful fill
+        # v9.15.1: Vinyl-spezifische Defekte vollständig abdecken
+        "phase_05_rumble_filter": 0.80,  # Plattenteller-Subsonic-Rumble (<25 Hz)
+        "phase_12_wow_flutter_fix": 0.45,  # Vinyl-Warp → langsame Pitch-Schwankung
+        "phase_23_spectral_repair": 0.60,  # IGD-Reste, Groove-Echo-Reparatur
+        "phase_28_surface_noise_profiling": 0.80,  # Vinyl-Surface-Noise Profiler (primär)
+        "phase_31_speed_pitch_correction": 0.30,  # Plattenspieler-Geschwindigkeitsfehler
+        "phase_60_inner_groove_distortion_repair": 0.70,  # IGD: THD steigt mit kleinem Rillenradius
+        "phase_61_groove_echo_cancellation": 0.65,  # Groove-Echo (~1.8 s @33⅓) beseitigen
     },
     # ===================================================================
     # TAPE-BASED MATERIALS  (hiss priority, tape character preservation)
@@ -1652,6 +1832,14 @@ _MATERIAL_PHASE_FACTORS: dict[str, dict[str, float]] = {
         "phase_18_noise_gate": 0.20,  # tape hiss is continuous — gating = pumping artifacts
         "phase_24_dropout_repair": 0.55,  # oxide flaking dropouts need careful fill
         "phase_12_wow_flutter_fix": 0.75,  # capstan flutter is real but ML phase has no retry
+        # v9.15.1: Tape-spezifische Defekte vollständig abdecken
+        "phase_01_click_removal": 0.45,  # Tape-Dropouts erzeugen click-artige Impulse
+        "phase_23_spectral_repair": 0.55,  # Print-Through-Reste, Generation-Loss-Reparatur
+        "phase_31_speed_pitch_correction": 0.40,  # Reel-Tape-Motorgeschwindigkeitsfehler
+        "phase_40_loudness_normalization": 0.50,  # Pegelausgleich nach Hiss-Reduktion
+        "phase_55_diffusion_inpainting": 0.55,  # Tape-Dropout-Diffusions-Inpainting
+        "phase_57_print_through_reduction": 0.70,  # Print-Through primäres Reel-Tape-Problem
+        "phase_64_tape_splice_repair": 0.60,  # Splice-Stellen: Klick + Pegelsprung + Phase
     },
     # CASSETTE — compact cassette defects must be corrected, not treated as generic tape.
     "cassette": {
@@ -1668,6 +1856,21 @@ _MATERIAL_PHASE_FACTORS: dict[str, dict[str, float]] = {
         "phase_49_advanced_dereverb": 0.25,
         "phase_18_noise_gate": 0.15,  # gating cassette hiss creates pumping/echo illusion
         "phase_39_air_band_enhancement": 0.20,
+        # v9.15.1: Kassetten-spezifische Defekte vollständig abdecken
+        "phase_01_click_removal": 0.50,  # Oxide-Fehler + Head-Clog → click-artige Impulse
+        "phase_02_hum_removal": 0.45,  # Kassettenrekorder-Gleichstrommotor-Brummen
+        "phase_08_transient_preservation": 0.65,  # Transienten nach NR schützen (Dolby-Atmung)
+        "phase_14_phase_correction": 0.75,  # Azimuth-Fehler → Phasendrehung zwischen Kanälen
+        "phase_23_spectral_repair": 0.45,  # Print-Through-Reste, Generation-Loss
+        "phase_26_dynamic_range_expansion": 0.30,  # Vorsichtig — Dolby-Kompression bewahren
+        "phase_31_speed_pitch_correction": 0.45,  # Kassettenrekorder-Motorgeschwindigkeitsfehler
+        "phase_36_transient_shaper": 0.35,  # Moderate Transientenwiederherstellung
+        "phase_40_loudness_normalization": 0.55,  # Pegelausgleich nach Hiss-Reduktion
+        "phase_54_transparent_dynamics": 0.60,  # Dolby-NR-Pumpen beseitigen (nr_breathing)
+        "phase_55_diffusion_inpainting": 0.55,  # Oxide-/Head-Contact-Dropout-Inpainting
+        "phase_56_spectral_band_gap_repair": 0.60,  # Head-Wear → frequenzspezifische Band-Lücken
+        "phase_57_print_through_reduction": 0.45,  # Vorecho (weniger ausgeprägt als Reel-Tape)
+        "phase_64_tape_splice_repair": 0.45,  # Klick + Pegelsprung + Phasendiskontinuität
     },
     # REEL_TAPE — higher quality, print-through focus
     "reel_tape": {
@@ -1820,6 +2023,9 @@ _MATERIAL_PHASE_FACTORS: dict[str, dict[str, float]] = {
 }
 
 
+_validate_phase_map_completeness()
+
+
 def get_material_initial_strength(material: str, phase_id: str) -> float:
     """Gibt the material-adaptive initial strength for a given phase zurück.
 
@@ -1946,6 +2152,7 @@ class DefectPhaseMapper:
         max_phases: int = 10,
         mode: str = "restoration",
         material: str | None = None,
+        phase_coalitions: dict[str, tuple[str, ...]] | None = None,
     ) -> list[str]:
         """
         Gibt eine de-duplizierte, priorisierte Phase-Liste für mehrere Defekte zurück.
@@ -1957,13 +2164,43 @@ class DefectPhaseMapper:
                         (phase_21_exciter, phase_35_multiband_compression, phase_42_vocal_enhancement).
             material:   Optionaler MaterialType.value-String. Für digitale Codec-Materialien
                         wird phase_09_crackle_removal ausgeblendet (V29, §4.11).
+            phase_coalitions:
+                        Optionaler Koalitions-Mapping-Override (coalition_name → tuple[phase_id]).
+                        Falls None, werden die internen DPM-Koalitionen verwendet.
 
         Returns:
             Geordnete Phase-ID-Liste (primary first, dann secondary, dann de-dup)
         """
+
+        def _sanitize_01(value: object | None, default: float) -> float:
+            try:
+                if value is None:
+                    return float(default)
+                v = float(value)  # type: ignore[arg-type]
+                if v != v:  # NaN
+                    return float(default)
+                return max(0.0, min(1.0, v))
+            except Exception:
+                return float(default)
+
         seen: dict[str, float] = {}  # phase_id → max_severity
+        _confidences: list[float] = []
         for defect in defects:
-            severity = getattr(defect, "severity", 0.5)
+            severity = _sanitize_01(getattr(defect, "severity", 0.5), 0.5)
+            confidence = _sanitize_01(getattr(defect, "confidence", None), 0.65)
+            _confidences.append(confidence)
+            # Unsicherheitsbewusste Priorisierung: bei niedriger Defekt-Confidence
+            # werden Zusatzphasen zurückhaltender priorisiert (No-Harm).
+            confidence_gain = 0.55 + 0.45 * confidence
+            primary_weight = 1.00 if confidence >= 0.80 else 0.95
+            secondary_weight = 0.60
+            if confidence < 0.35:
+                secondary_weight = 0.35 if mode == "restoration" else 0.45
+            elif confidence < 0.60:
+                secondary_weight = 0.50
+            if confidence < 0.20 and mode == "restoration":
+                secondary_weight = 0.00
+
             dt = getattr(defect, "defect_type", None)
             if dt is None:
                 continue
@@ -1971,9 +2208,9 @@ class DefectPhaseMapper:
             if assignment is None:
                 continue
             for phase_id in assignment.primary_phases:
-                seen[phase_id] = max(seen.get(phase_id, 0.0), severity * 1.0)
+                seen[phase_id] = max(seen.get(phase_id, 0.0), severity * confidence_gain * primary_weight)
             for phase_id in assignment.secondary_phases:
-                seen[phase_id] = max(seen.get(phase_id, 0.0), severity * 0.6)
+                seen[phase_id] = max(seen.get(phase_id, 0.0), severity * confidence_gain * secondary_weight)
 
         # §0a: Verbotene Phasen im Restoration-Modus herausfiltern
         if mode == "restoration":
@@ -1984,9 +2221,32 @@ class DefectPhaseMapper:
         if material and material in _DIGITAL_CODEC_MATERIALS:
             seen.pop("phase_09_crackle_removal", None)
 
+        # §2.67 Koalitions-Priorisierung: Wenn mindestens zwei Mitglieder einer
+        # Koalition aktiv sind, werden die Scores innerhalb der Koalition enger
+        # zusammengezogen. Dadurch laufen zusammengehörige Reparaturschritte
+        # konsistenter als Gruppe statt durch globale Defekt-Scores getrennt.
+        _coalitions = phase_coalitions if isinstance(phase_coalitions, dict) else _DEFECT_MAPPER_PHASE_COALITIONS
+        for members in _coalitions.values():
+            present = [pid for pid in members if pid in seen]
+            if len(present) < 2:
+                continue
+            dominant = max(float(seen[pid]) for pid in present)
+            coalition_floor = max(0.0, dominant * 0.92)
+            for pid in present:
+                seen[pid] = max(float(seen[pid]), coalition_floor)
+
         # Sortieren: primäre (severity×1.0) zuerst, sekundäre danach
+        seen = {phase_id: score for phase_id, score in seen.items() if float(score) > 0.0}
         sorted_phases = sorted(seen.items(), key=lambda kv: kv[1], reverse=True)
-        return [phase_id for phase_id, _ in sorted_phases[:max_phases]]
+        _effective_max_phases = int(max_phases)
+        if _confidences:
+            _avg_conf = sum(_confidences) / len(_confidences)
+            if _avg_conf < 0.35:
+                _effective_max_phases = max(3, int(max_phases * 0.5))
+            elif _avg_conf < 0.50:
+                _effective_max_phases = max(4, int(max_phases * 0.7))
+
+        return [phase_id for phase_id, _ in sorted_phases[:_effective_max_phases]]
 
     def describe(self, defect_type: DefectType) -> str:
         """Menschenlesbare Beschreibung der Strategie für einen Defekttyp."""
@@ -2022,7 +2282,7 @@ def _build_reverse_phase_map() -> dict[str, list[DefectType]]:
     }
     for defect_type, assignment in _PHASE_MAP.items():
         for phase_id in assignment.primary_phases:
-            if phase_id in _excluded_primary_phases:
+            if phase_id in _excluded_primary_phases and defect_type is not DefectType.AMPLITUDE_DRIFT:
                 continue
             reverse.setdefault(phase_id, []).append(defect_type)
     return reverse

@@ -262,7 +262,7 @@ class ClickPopRemoval(PhaseInterface):
             material_enum = material_type
         else:
             _mat_norm = str(material_type or "unknown").strip().upper().replace("-", "_").replace(" ", "_")
-            material_enum = getattr(MaterialType, _mat_norm, MaterialType.CD_DIGITAL)
+            material_enum = getattr(MaterialType, _mat_norm, MaterialType.CD_DIGITAL)  # type: ignore[arg-type]
         material_name = material_enum.name
 
         is_stereo = audio.ndim == 2
@@ -281,7 +281,34 @@ class ClickPopRemoval(PhaseInterface):
         click_repair_profile = self._compute_click_repair_profile(_material_key, _quality_mode, _restorability_score)
         self._click_repair_profile_current = click_repair_profile
         _safe_strength = self._derive_safe_click_strength(_effective_strength, _material_key, _panns_tags)
-        config["repair_strength"] = float(np.clip(config["repair_strength"] * _safe_strength, 0.0, 1.0))
+        config["repair_strength"] = float(np.clip(float(config["repair_strength"]) * _safe_strength, 0.0, 1.0))  # type: ignore[arg-type]
+        config["sample_rate"] = int(sample_rate)
+
+        # §V38 VFA-Schutzzonen für per-Click-Strength-Oracle (§0p Vocal-Supremacy)
+        _p27_protected_zones: list[tuple[float, float, float]] = []
+        for _z in kwargs.get("vibrato_zones") or []:
+            try:
+                _p27_protected_zones.append((float(_z[0]), float(_z[1]), 0.20))
+            except Exception:
+                pass
+        for _z in kwargs.get("frisson_zones") or []:
+            try:
+                _fz_s = float(getattr(_z, "start_s", None) or _z[0])
+                _fz_e = float(getattr(_z, "end_s", None) or _z[1])
+                _p27_protected_zones.append((_fz_s, _fz_e, 0.30))
+            except Exception:
+                pass
+        for _z in kwargs.get("whisper_zones") or []:
+            try:
+                _p27_protected_zones.append((float(_z[0]), float(_z[1]), 0.25))
+            except Exception:
+                pass
+        for _z in kwargs.get("passaggio_zones") or []:
+            try:
+                _p27_protected_zones.append((float(_z[0]), float(_z[1]), 0.35))
+            except Exception:
+                pass
+        _p27_pz = _p27_protected_zones or None
 
         if _effective_strength <= 0.0:
             passthrough = np.nan_to_num(audio.copy(), nan=0.0, posinf=0.0, neginf=0.0)
@@ -312,12 +339,12 @@ class ClickPopRemoval(PhaseInterface):
             mono_mix = (left + right) * 0.5
             click_locations = self._detect_clicks_multiband(mono_mix, config)
             classified_clicks = self._classify_clicks(mono_mix, click_locations, config)
-            cleaned_left = self._repair_clicks(left, classified_clicks, config)
-            cleaned_right = self._repair_clicks(right, classified_clicks, config)
+            cleaned_left = self._repair_clicks(left, classified_clicks, config, protected_zones=_p27_pz)
+            cleaned_right = self._repair_clicks(right, classified_clicks, config, protected_zones=_p27_pz)
             cleaned_audio = stereo_like(cleaned_left, cleaned_right, audio)
             total_clicks = len(classified_clicks)
         else:
-            cleaned_audio, total_clicks = self._process_channel(audio, sample_rate, config)
+            cleaned_audio, total_clicks = self._process_channel(audio, sample_rate, config, protected_zones=_p27_pz)
 
         execution_time = time.time() - start_time
         rt_factor = execution_time / (audio_sample_count(audio) / sample_rate)
@@ -363,6 +390,36 @@ class ClickPopRemoval(PhaseInterface):
         except Exception as _guard27_exc:
             logger.debug("§2.36/§2.46f Phase27 guards (non-blocking): %s", _guard27_exc)
 
+        # §V19 Noise-Textur-Invariante (VERBOTEN-V19): Residual bewahrt Materialcharakter
+        _mat27_str = str(material_type or "unknown").lower()
+        try:
+            from backend.core.dsp.noise_texture_guard import (  # pylint: disable=import-outside-toplevel
+                compute_noise_texture_distance as _nt27_fn,
+            )
+
+            if cleaned_audio.shape == audio.shape:
+                _nt27_d = _nt27_fn(
+                    audio.astype(np.float32) - cleaned_audio.astype(np.float32), _mat27_str, sr=sample_rate
+                )
+                if _nt27_d > 0.25:
+                    cleaned_audio = (0.5 * cleaned_audio + 0.5 * audio).astype(np.float32)
+                    logger.warning("§V19 phase_27 noise_texture dist=%.3f > 0.25 → 50%%-Blend", _nt27_d)
+        except Exception as _nt27_exc:
+            logger.debug("§V19 phase_27 noise_texture_guard (non-blocking): %s", _nt27_exc)
+
+        # §V24 Spektralfarbe-Prüfung (VERBOTEN-V24): 1/3-Oktav-Profil darf nicht verfärbt werden
+        try:
+            from backend.core.dsp.spectral_color_guard import (  # pylint: disable=import-outside-toplevel
+                check_spectral_color_preservation as _scg27,
+            )
+
+            if cleaned_audio.shape == audio.shape:
+                _sc27 = _scg27(audio.astype(np.float32), cleaned_audio.astype(np.float32), sample_rate)
+                if not _sc27.ok:
+                    cleaned_audio = (0.70 * cleaned_audio + 0.30 * audio).astype(np.float32)
+        except Exception as _sc27_exc:
+            logger.debug("§V24 phase_27 spectral_color_guard (non-blocking): %s", _sc27_exc)
+
         return PhaseResult(
             success=True,
             audio=cleaned_audio,
@@ -383,7 +440,13 @@ class ClickPopRemoval(PhaseInterface):
             warnings=[] if rt_factor < 0.25 else [f"Performance sub-optimal: {rt_factor:.2f}× realtime"],
         )
 
-    def _process_channel(self, audio: np.ndarray, sample_rate: int, config: dict[str, Any]) -> tuple[np.ndarray, int]:
+    def _process_channel(
+        self,
+        audio: np.ndarray,
+        sample_rate: int,
+        config: dict[str, Any],
+        protected_zones: list[tuple[float, float, float]] | None = None,
+    ) -> tuple[np.ndarray, int]:
         """Verarbeitet a single channel for click/pop removal."""
         del sample_rate
         # Step 1: Detect clicks via AR-Residual + Z-Score (Godsill & Rayner 1998)
@@ -393,7 +456,7 @@ class ClickPopRemoval(PhaseInterface):
         classified_clicks = self._classify_clicks(audio, click_locations, config)
 
         # Step 3: Repair clicks
-        repaired_audio = self._repair_clicks(audio, classified_clicks, config)
+        repaired_audio = self._repair_clicks(audio, classified_clicks, config, protected_zones=protected_zones)
 
         return repaired_audio, len(classified_clicks)
 
@@ -493,7 +556,7 @@ class ClickPopRemoval(PhaseInterface):
             if duration <= max_duration:
                 # Compute severity metrics
                 if start > 0 and end < len(audio) - 1:
-                    energy = np.sum(audio[start : end + 1] ** 2)
+                    energy: float = float(np.sum(audio[start : end + 1] ** 2))
 
                     click_info = {
                         "start": start,
@@ -508,12 +571,51 @@ class ClickPopRemoval(PhaseInterface):
 
         return classified
 
+    @staticmethod
+    def _compute_click_local_strength(
+        mono_ref: np.ndarray,
+        start: int,
+        end: int,
+        sr: int,
+        base_strength: float,
+        protected_zones: list[tuple[float, float, float]],
+    ) -> float:
+        """§V38 Per-Click-Strength-Oracle: 250ms RMS-Proxy + VFA-Schutzzonen-Cap.
+
+        Vibrato/Frisson/Flüster/Passaggio-Zonen begrenzen die Strength auf den Zone-Cap.
+        `base_strength < 1e-6` → 0.0 (V38-Invariante).
+        """
+        if base_strength < 1e-6:
+            return 0.0
+        # 250 ms Kontext-RMS-Proxy
+        _ctx = max(1, int(0.125 * sr))  # ±125 ms
+        _s = max(0, start - _ctx)
+        _e = min(len(mono_ref), end + _ctx)
+        _rms = float(np.sqrt(np.mean(mono_ref[_s:_e] ** 2))) if _e > _s else 0.0
+        # Sanfte RMS-Skalierung: stille Passagen → Strength reduzieren
+        _scale = float(np.clip(_rms / (0.05 + 1e-8), 0.5, 1.0))
+        strength = float(base_strength) * _scale
+        # VFA-Schutzzonen-Cap
+        _start_s = start / max(sr, 1)
+        _end_s = end / max(sr, 1)
+        for _pz_s, _pz_e, _pz_cap in protected_zones:
+            if _start_s < _pz_e and _end_s > _pz_s:
+                strength = min(strength, _pz_cap)
+                break
+        return float(np.clip(strength, 0.0, 1.0))
+
     def _repair_clicks(
-        self, audio: np.ndarray, classified_clicks: list[dict[str, Any]], config: dict[str, Any]
+        self,
+        audio: np.ndarray,
+        classified_clicks: list[dict[str, Any]],
+        config: dict[str, Any],
+        protected_zones: list[tuple[float, float, float]] | None = None,
     ) -> np.ndarray:
         """Repariert detected clicks using adaptive strategies."""
         repaired = audio.copy()
-        repair_strength = config["repair_strength"]
+        _base_repair_strength = config["repair_strength"]
+        _sr = config.get("sample_rate", 48000)
+        _pz = protected_zones or []
 
         for click in classified_clicks:
             start = click["start"]
@@ -536,6 +638,10 @@ class ClickPopRemoval(PhaseInterface):
                 # Cross-fade
                 repaired_segment = self._crossfade_repair(audio, start, end)
 
+            # §V38 Per-Click-Stärke (250ms RMS-Proxy + VFA-Schutzzonen-Cap)
+            repair_strength = self._compute_click_local_strength(
+                audio, start, end, int(_sr), float(_base_repair_strength), _pz
+            )
             # Apply repair with strength blending
             repaired[start : end + 1] = (
                 repaired[start : end + 1] * (1 - repair_strength) + repaired_segment * repair_strength
@@ -569,7 +675,7 @@ class ClickPopRemoval(PhaseInterface):
         x_repair = np.arange(start, end + 1)
         repaired = cs(x_repair)
 
-        return repaired
+        return np.asarray(repaired, dtype=np.float32)  # type: ignore[no-any-return]
 
     def _ar_prediction(self, audio: np.ndarray, start: int, end: int) -> np.ndarray:
         """AR prediction for medium pops (order ≥ 16 @ 48 kHz, §VERBOTEN: LPC < 16)."""
@@ -607,7 +713,7 @@ class ClickPopRemoval(PhaseInterface):
             repaired.append(pred)
             buffer.append(pred)
 
-        return np.array(repaired)
+        return np.array(repaired)  # type: ignore[no-any-return]
 
     def _crossfade_repair(self, audio: np.ndarray, start: int, end: int) -> np.ndarray:
         """Cross-fade repair for large bursts."""
@@ -622,4 +728,4 @@ class ClickPopRemoval(PhaseInterface):
 
         repaired = before_avg * fade + after_avg * (1 - fade)
 
-        return repaired
+        return np.asarray(repaired, dtype=np.float32)  # type: ignore[no-any-return]

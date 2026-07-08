@@ -139,6 +139,10 @@ CAUSES = [
     # Vokal-Naturalness-Degradierung: VQI-Abfall durch kumulative NR/Kompressor-Eingriffe →
     # DSP-Korrektiv (HNR-Blend + Spektral-Tilt + Formant-Tilt) via phase_65 (§0a-konform).
     "vocal_quality_degradation",
+    # ── v9.15.1: Stem-Targeted NR (phase_66) ────────────────────────────────
+    # Kombination aus Vokal-Rauschen + Begleitungs-Rauschen, die wideband-NR nicht
+    # sauber voneinander trennen kann → stem-spezifische NR via BSRoFormer-Separation.
+    "vocal_stem_noise",  # Vokal-Stem + Begleitung haben unterschiedliche Rauschprofile
 ]
 
 # Material-Typen — Priors für alle 34 Kausal-Ursachen (v9.10.77b)
@@ -1278,6 +1282,129 @@ for _mat, _prior in _VOCAL_QUALITY_DEGRADATION_MATERIAL_PRIORS.items():
 for _priors in MATERIAL_PRIORS.values():
     _priors.setdefault("vocal_quality_degradation", 0.04)
 
+# v9.15.1: vocal_stem_noise — Vokal-Stem + Begleitung haben unterschiedliche Rauschprofile.
+# Häufig bei Kassette/Tape (Hiss dominant) und MP3 (codec NR ungleichmäßig).
+_VOCAL_STEM_NOISE_MATERIAL_PRIORS: dict[str, float] = {
+    "tape": 0.14,  # Tape-Hiss im Begleit-Stem häufig dominanter als im Vokal-Stem
+    "cassette": 0.16,  # Kassetten-Hiss + Dolby-Inkonsistenz: Stems divergieren stark
+    "reel_tape": 0.12,  # Professionelle Aufnahme: geringerer Hiss-Unterschied
+    "shellac": 0.10,  # Oberflächenrauschen — beide Stems betroffen
+    "wax_cylinder": 0.09,
+    "vinyl": 0.08,  # Knistern beide Stems; weniger Stem-Divergenz
+    "mp3_low": 0.11,  # Codec NR erzeugt unterschiedliche Residuen je Stem
+    "aac": 0.09,
+    "digital": 0.04,
+    "cd_digital": 0.03,
+    "unknown": 0.08,
+}
+for _mat, _prior in _VOCAL_STEM_NOISE_MATERIAL_PRIORS.items():
+    if _mat in MATERIAL_PRIORS:
+        MATERIAL_PRIORS[_mat].setdefault("vocal_stem_noise", _prior)
+for _priors in MATERIAL_PRIORS.values():
+    _priors.setdefault("vocal_stem_noise", 0.05)
+
+# --- Tier 2: Neue Ursachen-Priors (MPEG / Stereo / Phase / Dropout-Subtypen) ---
+
+_MPEG_FRAME_LOSS_MATERIAL_PRIORS: dict[str, float] = {
+    "mp3_low": 0.18,  # Stark komprimiert → Brickwall hörbar
+    "mp3_high": 0.12,  # Mittel → weniger auffällig
+    "aac": 0.10,
+    "minidisc": 0.08,  # ATRAC: eigene Artefakte
+    "streaming": 0.14,
+    "cd_digital": 0.02,  # CD: nur als Transcode
+    "cassette": 0.0,  # Analog
+    "tape": 0.0,
+    "reel_tape": 0.0,
+    "shellac": 0.0,
+    "vinyl": 0.0,
+    "wax_cylinder": 0.0,
+    "dat": 0.05,
+    "unknown": 0.05,
+}
+for _mat, _prior in _MPEG_FRAME_LOSS_MATERIAL_PRIORS.items():
+    if _mat in MATERIAL_PRIORS:
+        MATERIAL_PRIORS[_mat].setdefault("mpeg_frame_loss", _prior)
+for _priors in MATERIAL_PRIORS.values():
+    _priors.setdefault("mpeg_frame_loss", 0.02)
+
+_STEREO_COLLAPSE_MATERIAL_PRIORS: dict[str, float] = {
+    "shellac": 0.10,  # Meist Mono → fake Stereo
+    "wax_cylinder": 0.10,
+    "cassette": 0.08,
+    "tape": 0.06,
+    "mp3_low": 0.07,  # Joint Stereo MS
+    "lacquer_disc": 0.08,
+    "vinyl": 0.04,
+    "cd_digital": 0.02,
+    "unknown": 0.05,
+}
+for _mat, _prior in _STEREO_COLLAPSE_MATERIAL_PRIORS.items():
+    if _mat in MATERIAL_PRIORS:
+        MATERIAL_PRIORS[_mat].setdefault("stereo_field_collapse", _prior)
+for _priors in MATERIAL_PRIORS.values():
+    _priors.setdefault("stereo_field_collapse", 0.03)
+
+_PHASE_ROTATION_MATERIAL_PRIORS: dict[str, float] = {
+    "cassette": 0.10,  # Dolby NR + EQ
+    "tape": 0.08,
+    "reel_tape": 0.07,
+    "wire_recording": 0.09,
+    "shellac": 0.05,
+    "wax_cylinder": 0.05,
+    "mp3_low": 0.06,
+    "unknown": 0.04,
+}
+for _mat, _prior in _PHASE_ROTATION_MATERIAL_PRIORS.items():
+    if _mat in MATERIAL_PRIORS:
+        MATERIAL_PRIORS[_mat].setdefault("phase_rotation", _prior)
+for _priors in MATERIAL_PRIORS.values():
+    _priors.setdefault("phase_rotation", 0.03)
+
+_DROPOUT_OXIDE_MATERIAL_PRIORS: dict[str, float] = {
+    "cassette": 0.18,  # Kassette: häufigste Oxid-Dropouts
+    "tape": 0.14,
+    "reel_tape": 0.10,
+    "wire_recording": 0.12,
+    "shellac": 0.0,
+    "vinyl": 0.0,
+    "unknown": 0.05,
+}
+for _mat, _prior in _DROPOUT_OXIDE_MATERIAL_PRIORS.items():
+    if _mat in MATERIAL_PRIORS:
+        MATERIAL_PRIORS[_mat].setdefault("dropout_oxide", _prior)
+for _priors in MATERIAL_PRIORS.values():
+    _priors.setdefault("dropout_oxide", 0.02)
+
+_DROPOUT_HEAD_CONTACT_MATERIAL_PRIORS: dict[str, float] = {
+    "cassette": 0.15,
+    "tape": 0.14,
+    "reel_tape": 0.12,
+    "wire_recording": 0.10,
+    "shellac": 0.0,
+    "vinyl": 0.0,
+    "unknown": 0.04,
+}
+for _mat, _prior in _DROPOUT_HEAD_CONTACT_MATERIAL_PRIORS.items():
+    if _mat in MATERIAL_PRIORS:
+        MATERIAL_PRIORS[_mat].setdefault("dropout_head_contact", _prior)
+for _priors in MATERIAL_PRIORS.values():
+    _priors.setdefault("dropout_head_contact", 0.02)
+
+_DROPOUT_SPLICE_MATERIAL_PRIORS: dict[str, float] = {
+    "reel_tape": 0.15,  # Profi-Band = Schnitte
+    "tape": 0.10,
+    "cassette": 0.05,
+    "wire_recording": 0.05,
+    "shellac": 0.0,
+    "vinyl": 0.0,
+    "unknown": 0.03,
+}
+for _mat, _prior in _DROPOUT_SPLICE_MATERIAL_PRIORS.items():
+    if _mat in MATERIAL_PRIORS:
+        MATERIAL_PRIORS[_mat].setdefault("dropout_splice", _prior)
+for _priors in MATERIAL_PRIORS.values():
+    _priors.setdefault("dropout_splice", 0.01)
+
 # Phase-Empfehlungen pro Ursache (kanonische phase_id = Dateiname ohne .py)
 CAUSE_TO_PHASES: dict[str, list[str]] = {
     # ── Magnetband ────────────────────────────────────────────────────────────
@@ -1492,6 +1619,7 @@ CAUSE_TO_PHASES: dict[str, list[str]] = {
         "phase_06_frequency_restoration",  # Primary: AudioSR bandwidth extension
         "phase_23_spectral_repair",  # Spectral envelope reconstruction
         "phase_04_eq_correction",  # HF shelf compensation
+        "phase_24_dropout_repair",  # Sekundär: Oxid-Degradierung → Dropout-Risiko (physikalisch koppliert)
     ],
     "stylus_damage": [
         "phase_09_crackle_removal",  # Primary: broadband distortion removal
@@ -1605,6 +1733,26 @@ CAUSE_TO_PHASES: dict[str, list[str]] = {
         "phase_03_denoise",  # Sekundär: Rausch-Basis absenken → VQI stabilisieren
         "phase_19_de_esser",  # Tertiär: Sibilanten-Harshness als VQI-Treiber dämpfen
     ],
+    # ── v9.15.1: Stem-Targeted NR (phase_66) ─────────────────────────────────
+    # Wenn Vokal + Begleitung unterschiedliche Rauschprofile haben, die wideband-NR
+    # (phase_03/phase_29) nicht sauber entkoppeln kann. BSRoFormer-Separation erlaubt
+    # stem-spezifische NR-Parameter (energy_bias −6 dB Vokal, −9 dB Instrumental).
+    # §0a: Erlaubt in Restoration UND Studio 2026 (kein §0a-Ausschluss).
+    "vocal_stem_noise": [
+        "phase_66_stem_targeted_nr",  # Primary: BSRoFormer + stem-spezifische DFN-NR
+        "phase_03_denoise",  # Sekundär: wideband-NR als Ergänzung
+        "phase_65_vocal_naturalness_restoration",  # Tertiär: VQI-Korrektiv wenn nötig
+    ],
+}
+
+# §2.67 Koalitions-Priorisierung bereits auf Ursache→Phase-Ebene.
+# Damit bleiben zusammengehörige Reparaturphasen auch vor der UV3-Ausführung
+# dichter beieinander und werden weniger durch globale Einzelscores getrennt.
+_CAUSAL_PHASE_COALITIONS: dict[str, tuple[str, ...]] = {
+    "digital_repair_chain": ("phase_23_spectral_repair", "phase_50_spectral_repair"),
+    "hiss_harmonic_rebuild": ("phase_29_tape_hiss_reduction", "phase_07_harmonic_restoration"),
+    "stereo_alignment": ("phase_14_phase_correction", "phase_25_azimuth_correction"),
+    "generation_loss_rebuild": ("phase_23_spectral_repair", "phase_07_harmonic_restoration"),
 }
 
 # §6.2b/c Era-Verarbeitungsrichtlinien: Materialspezifische Phasen-Ausschlüsse.
@@ -2079,7 +2227,7 @@ def _harmonic_line_score(ps: np.ndarray, freqs: np.ndarray, f0: float, n_harmoni
         bg_lo = ps[max(0, idx - 10) : max(0, idx - 3)]
         bg_hi = ps[min(len(ps) - 1, idx + 3) : min(len(ps), idx + 10)]
         bg = np.mean(np.concatenate([bg_lo, bg_hi])) + 1e-12
-        score += min(line_energy / bg, 10.0)  # SNR der Linie
+        score += min(line_energy / bg, 10.0)  # type: ignore[operator]  # SNR der Linie
     return score / (n_harmonics * 10.0)  # normiert auf [0, 1]
 
 
@@ -2102,7 +2250,7 @@ def _compute_dropout_density(mono: np.ndarray, sr: int) -> float:
     n_frames = len(mono) // frame_len
     frame_rms = np.array([np.sqrt(np.mean(mono[i * frame_len : (i + 1) * frame_len] ** 2)) for i in range(n_frames)])
     global_rms = np.mean(frame_rms) + 1e-9
-    dropout_frames = np.sum(frame_rms < 0.05 * global_rms)
+    dropout_frames: int = int(np.sum(frame_rms < 0.05 * global_rms))
     dur_s = len(mono) / (sr + 1e-9)
     return float(dropout_frames * 0.005 / dur_s)
 
@@ -2985,6 +3133,24 @@ def _likelihood_vocal_quality_degradation(sf: SpectralFeatures, defect_scores: d
     return float(np.clip(p, 0.0, 1.0))
 
 
+def _likelihood_vocal_stem_noise(sf: SpectralFeatures, defect_scores: dict[str, float]) -> float:
+    """P(Merkmale | vocal_stem_noise) — Vokal-Stem und Begleitung haben unterschiedliche
+    Rauschprofile; BSRoFormer-Stem-Trennung + stem-spezifische NR sinnvoll. v9.15.1"""
+    p = 0.0
+    # Primär: HF-Rauschen vorhanden (Stem-Trennung bringt Gewinn)
+    hf_noise = float(defect_scores.get("high_freq_noise", 0.0))
+    p += _sigmoid_score(hf_noise, k=8, x0=0.20) * 0.40
+    # Sekundär: Tape-Hiss (häufigste Trägerform für vocal_stem_noise) — Alias: tape_hiss oder high_freq_noise
+    tape_hiss_sev = float(defect_scores.get("tape_hiss", hf_noise))
+    p += _sigmoid_score(tape_hiss_sev, k=7, x0=0.25) * 0.30
+    # Tertiär: breites Rauschen (high_freq_noise als Proxy) + hoher Crest-Factor deutet auf klare Stimme hin
+    p += _sigmoid_score(hf_noise, k=6, x0=0.15) * 0.20
+    # Quartär: kein Knistern (das würde andere Phasen bevorzugen)
+    crackle_sev = float(defect_scores.get("crackle", 0.0))
+    p += float(np.clip(1.0 - crackle_sev * 2.0, 0.0, 1.0)) * 0.10
+    return float(np.clip(p, 0.0, 1.0))
+
+
 LIKELIHOOD_FNS = {
     # ── Original 12 ──────────────────────────────────────────────────────────
     "tape_dropout": _likelihood_tape_dropout,
@@ -3058,6 +3224,8 @@ LIKELIHOOD_FNS = {
     "wire_recording_specific": _likelihood_wire_recording_specific,
     # ── v9.12.10: vocal_quality_degradation ──────────────────────────────────
     "vocal_quality_degradation": _likelihood_vocal_quality_degradation,
+    # ── v9.15.1: vocal_stem_noise ─────────────────────────────────────────────
+    "vocal_stem_noise": _likelihood_vocal_stem_noise,
 }
 
 
@@ -3102,19 +3270,27 @@ def _normalize_defect_scores(defect_scores: dict[str, float]) -> dict[str, float
             fv = float(np.clip(fv, 0.0, 1.0))
         norm[k] = fv
 
-    # Bidirectional aliases for legacy/new score names.
-    aliases = {
-        "clicks": "click_severity",
-        "dropouts": "dropout_severity",
-        "clipping": "clip_severity",
-        "wow": "wow_severity",
-        "flutter": "flutter_severity",
-    }
-    for new_key, legacy_key in aliases.items():
-        if new_key in norm and legacy_key not in norm:
-            norm[legacy_key] = norm[new_key]
-        if legacy_key in norm and new_key not in norm:
-            norm[new_key] = norm[legacy_key]
+    # Bidirectionale Alias-Gruppen (Spec-/Code-Drift-Resilienz):
+    # Scanner-Keys, Legacy-Keys und CAUSE-Namen werden auf denselben
+    # Evidenzstand harmonisiert, damit Erkennung und Behebung konsistent bleiben.
+    alias_groups = [
+        ("clicks", "click_severity"),
+        ("dropouts", "dropout_severity", "tape_dropout"),
+        ("clipping", "clip_severity", "digital_clip"),
+        ("wow", "wow_severity"),
+        ("flutter", "flutter_severity"),
+        ("tape_hiss", "high_freq_noise"),
+        ("electrical_hum", "hum"),
+        ("nr_breathing_artifact", "nr_breathing"),
+        ("azimuth_error", "head_misalignment", "cassette_azimuth_tolerance"),
+    ]
+    for group in alias_groups:
+        _vals = [float(norm[k]) for k in group if k in norm]
+        if not _vals:
+            continue
+        _merged = float(np.clip(max(_vals), 0.0, 1.0))
+        for k in group:
+            norm[k] = _merged
 
     # Derive combined wow/flutter if only components are present.
     if "wow_flutter" not in norm and ("wow" in norm or "flutter" in norm):
@@ -3227,7 +3403,40 @@ class CausalDefectReasoner:
         # Sortierung absteigend
         ranked = sorted(posteriors.items(), key=lambda kv: kv[1], reverse=True)
         primary_cause = ranked[0][0]
-        confidence = ranked[0][1]
+        # Kalibrierte Kausal-Konfidenz statt rohem Max-Posterior:
+        # Berücksichtigt Trennschärfe (Top-2-Margin), Entropie und Defekt-Evidenz,
+        # damit robuste Mehrfach-Evidenz nicht als "niedrige Konfidenz" kollabiert.
+        _top1 = float(ranked[0][1])
+        _top2 = float(ranked[1][1]) if len(ranked) > 1 else 0.0
+        _margin = max(0.0, _top1 - _top2)
+        _probs = np.asarray([float(v) for _, v in ranked], dtype=np.float64)
+        _probs = np.clip(_probs, 1e-12, 1.0)
+        _norm = float(np.sum(_probs))
+        if _norm > 0.0:
+            _probs /= _norm
+        _entropy = float(-np.sum(_probs * np.log(_probs)))
+        _entropy_norm = _entropy / max(math.log(float(len(_probs))), 1e-9)
+        _entropy_conf = float(np.clip(1.0 - _entropy_norm, 0.0, 1.0))
+
+        _sev_vals = [float(v) for v in defect_scores.values() if isinstance(v, (int, float)) and np.isfinite(v)]
+        if _sev_vals:
+            _sev_vals_sorted = sorted(_sev_vals, reverse=True)
+            _top3_mean = float(np.mean(_sev_vals_sorted[:3]))
+            _evidence_conf = float(np.clip(0.55 * _sev_vals_sorted[0] + 0.45 * _top3_mean, 0.0, 1.0))
+        else:
+            _evidence_conf = 0.5
+
+        _top_conf = float(np.clip(_top1 / 0.25, 0.0, 1.0))
+        _margin_conf = float(np.clip(_margin / 0.18, 0.0, 1.0))
+        confidence = float(
+            np.clip(
+                0.42 * _top_conf + 0.20 * _margin_conf + 0.18 * _entropy_conf + 0.20 * _evidence_conf,
+                0.0,
+                1.0,
+            )
+        )
+        if _top1 < 0.08 and _evidence_conf < 0.35:
+            confidence = min(confidence, 0.45)
 
         # Fusions-Plan: Phasen der Top-3 Ursachen zusammenführen
         seen_phases: set = set()
@@ -3283,6 +3492,16 @@ class CausalDefectReasoner:
                 len(ordered_phases),
             )
 
+        # §2.67 Koalitions-Priorisierung: Nach dem globalen Severity-Reorder
+        # zusammengehörige Phasen sanft zusammenziehen.
+        _coalition_ordered = self._apply_phase_coalition_priority(ordered_phases, ranked)
+        if _coalition_ordered != ordered_phases:
+            logger.info(
+                "§2.67 Causal-Coalition-Priority: reordered %d phases for coalition continuity",
+                len(_coalition_ordered),
+            )
+            ordered_phases = _coalition_ordered
+
         reasoning = self._build_reasoning(primary_cause, ranked, sf, material)
 
         return RestorationPlan(
@@ -3294,6 +3513,38 @@ class CausalDefectReasoner:
             confidence=confidence,
             reasoning=reasoning,
             material=material,
+        )
+
+    @staticmethod
+    def _apply_phase_coalition_priority(
+        ordered_phases: list[str],
+        ranked_causes: list[tuple[str, float]],
+        phase_coalitions: dict[str, tuple[str, ...]] | None = None,
+    ) -> list[str]:
+        """Wendet eine milde §2.67-Koalitionspriorisierung auf die Phasenliste an."""
+        if not ordered_phases:
+            return ordered_phases
+
+        phase_priority: dict[str, float] = {}
+        for cause, prob in ranked_causes[:10]:
+            for phase in CAUSE_TO_PHASES.get(cause, []):
+                phase_priority[phase] = max(phase_priority.get(phase, 0.0), float(prob))
+
+        coalitions = phase_coalitions if isinstance(phase_coalitions, dict) else _CAUSAL_PHASE_COALITIONS
+        for members in coalitions.values():
+            present = [phase_id for phase_id in members if phase_id in ordered_phases]
+            if len(present) < 2:
+                continue
+            dominant = max(phase_priority.get(phase_id, 0.0) for phase_id in present)
+            coalition_floor = max(0.0, float(dominant) * 0.92)
+            for phase_id in present:
+                phase_priority[phase_id] = max(float(phase_priority.get(phase_id, 0.0)), coalition_floor)
+
+        original_order = {phase_id: idx for idx, phase_id in enumerate(ordered_phases)}
+        return sorted(
+            ordered_phases,
+            key=lambda phase_id: (phase_priority.get(phase_id, 0.0), -original_order.get(phase_id, 999)),
+            reverse=True,
         )
 
     def _build_reasoning(

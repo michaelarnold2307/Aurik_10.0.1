@@ -43,7 +43,7 @@ class MultibandPhaseCoherenceEnhancer:
         """
         x = np.asarray(audio, dtype=np.float32)
         if len(x) == 0:
-            return x.copy()
+            return x.copy()  # type: ignore[no-any-return]
 
         out = np.zeros(len(x), dtype=np.float64)
         for low_hz, high_hz in self._BANDS:
@@ -60,7 +60,7 @@ class MultibandPhaseCoherenceEnhancer:
             -1.0,
             1.0,
         )
-        return out.astype(np.float32)
+        return out.astype(np.float32)  # type: ignore[no-any-return]
 
     def _extract_band_linear_phase(
         self,
@@ -93,7 +93,7 @@ class MultibandPhaseCoherenceEnhancer:
         high_norm = min(high_hz / nyq, 1.0 - 1e-4)
 
         if low_norm >= high_norm:
-            return np.zeros(len(x))
+            return np.zeros(len(x))  # type: ignore[no-any-return]
 
         try:
             if low_norm < 1e-3:

@@ -163,7 +163,7 @@ class RmvpePlugin:
                 _reg_plm(
                     "RMVPE",
                     size_gb=0.03,
-                    unload_fn=lambda s=self: setattr(s, "_session", None) or setattr(s, "_model_loaded", False),
+                    unload_fn=lambda s=self: setattr(s, "_session", None) or setattr(s, "_model_loaded", False),  # type: ignore[func-returns-value,misc]
                 )
             except Exception as _exc:
                 logger.debug("Operation failed (non-critical): %s", _exc)
@@ -240,7 +240,7 @@ class RmvpePlugin:
                     fb[m - 1, k] = (hi - f) / (hi - ctr)
         mel = fb @ mag_sq  # [n_mels, T]
         mel_log = np.log(np.maximum(mel, 1e-8)).astype(np.float32)
-        return np.nan_to_num(mel_log, nan=0.0, posinf=0.0, neginf=-18.4).T  # [T, n_mels]
+        return np.nan_to_num(mel_log, nan=0.0, posinf=0.0, neginf=-18.4).T  # type: ignore[no-any-return]  # [T, n_mels]
 
     def _analyze_onnx(self, mono_48k: np.ndarray, sr: int, voiced_threshold: float) -> RmvpeResult:
         """RMVPE ONNX-Inferenz: Mel → Salience-Map → F0."""

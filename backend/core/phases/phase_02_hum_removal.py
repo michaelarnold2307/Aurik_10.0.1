@@ -83,7 +83,7 @@ except ImportError:
     SOUNDFILE_AVAILABLE = False
 
 try:
-    from backend.core.quality_mode import QualityMode, should_use_ml
+    from backend.core.quality_mode import QualityMode, should_use_ml  # type: ignore[attr-defined]
 
     QUALITY_MODE_AVAILABLE = True
 except ImportError:
@@ -273,6 +273,16 @@ class HumRemovalPhase(PhaseInterface):
             PhaseResult with hum-free audio
         """
         sample_rate = kwargs.get("sample_rate", 48000)
+        # ── §v10 PIM: Per-Band-Intensität kalibrieren ──
+        try:
+            from backend.core.pim_phase_hook import apply_pim_intensity
+            _pim = apply_pim_intensity(kwargs, "hum_removal",
+                default_nr=0.35, default_de_ess=0.1, default_comp=1.0)
+            for _key in ("noise_reduction_strength", "nr_strength", "strength", "wet"):
+                if _key in kwargs:
+                    kwargs[_key] = _pim["nr_strength"]
+        except Exception:
+            pass
         assert sample_rate == 48000, f"SR muss 48000 Hz sein, erhalten: {sample_rate}"
         _ = auto_detect  # Pflichtparameter PhaseInterface-Vertrag; Funktion erkennt immer auto
         start_time = time.time()
@@ -356,7 +366,7 @@ class HumRemovalPhase(PhaseInterface):
         # Step 2: Track harmonics for each fundamental
         harmonic_data = []
         for fundamental_freq in detected_fundamentals:
-            harmonics = self._track_harmonics(audio, fundamental_freq, params["max_harmonics"], params["threshold_db"])
+            harmonics = self._track_harmonics(audio, fundamental_freq, params["max_harmonics"], params["threshold_db"])  # type: ignore[arg-type]
             harmonic_data.append({"fundamental": fundamental_freq, "harmonics": harmonics})
 
         # Step 3: Apply adaptive comb filters (DSP stage)
@@ -647,7 +657,7 @@ class HumRemovalPhase(PhaseInterface):
         freqs = np.fft.rfftfreq(fft_size, 1 / self.sample_rate)
         spectrum = np.abs(np.fft.rfft(audio_mono[:fft_size]))
 
-        total_energy = np.sum(spectrum**2)
+        total_energy: float = float(np.sum(spectrum**2))
         threshold_energy = total_energy * 10 ** (threshold_db / 10)
 
         # Check each harmonic
@@ -690,7 +700,7 @@ class HumRemovalPhase(PhaseInterface):
         initial_hum_energy = 0
         for hum_info in harmonic_data:
             for harmonic_freq in hum_info["harmonics"]:
-                initial_hum_energy += self._measure_hum_at_freq(audio, harmonic_freq)
+                initial_hum_energy += self._measure_hum_at_freq(audio, harmonic_freq)  # type: ignore[assignment]
 
         # Apply notch filter for each harmonic
         for hum_info in harmonic_data:
@@ -716,7 +726,7 @@ class HumRemovalPhase(PhaseInterface):
         final_hum_energy = 0
         for hum_info in harmonic_data:
             for harmonic_freq in hum_info["harmonics"]:
-                final_hum_energy += self._measure_hum_at_freq(result, harmonic_freq)
+                final_hum_energy += self._measure_hum_at_freq(result, harmonic_freq)  # type: ignore[assignment]
 
         # Calculate reduction
         reduction_db = 10 * np.log10((initial_hum_energy + 1e-10) / (final_hum_energy + 1e-10))
@@ -748,7 +758,7 @@ class HumRemovalPhase(PhaseInterface):
             # Fallback to forward filter if filtfilt fails
             filtered = signal.lfilter(b, a, audio)
 
-        return filtered
+        return filtered  # type: ignore[no-any-return]
 
     def _detect_musical_content(self, audio: np.ndarray, freq: float) -> bool:
         """

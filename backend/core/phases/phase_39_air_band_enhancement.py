@@ -200,6 +200,31 @@ class AirBandEnhancement(PhaseInterface):
         _pmgg_strength = float(kwargs.get("strength", 1.0))
         _effective_strength = float(np.clip(_pmgg_strength * phase_locality_factor, 0.0, 1.0))
 
+        # §V41 [RELEASE_MUST] ForwardMaskingGuard: Additive Air-Band-Phase bei Vokal
+        # stärker (NR-Stärke in post-transienten Fenstern erhöhen, psychoakustisch sicher).
+        _panns_s_39 = float(kwargs.get("panns_singing", 0.0))
+        if _panns_s_39 >= 0.25 and _effective_strength > 0.0:
+            try:
+                from backend.core.dsp.temporal_masking import (
+                    get_forward_masking_guard as _fmg_fn_39,  # pylint: disable=import-outside-toplevel
+                )
+
+                _fmz_39 = kwargs.get("forward_masking_zones") or _fmg_fn_39().compute_zones(audio, sample_rate)
+                if _fmz_39:
+                    _n_s_39 = audio.shape[-1] if audio.ndim > 1 else len(audio)
+                    _zone_samples_39 = sum(z.end_sample - z.start_sample for z in _fmz_39)
+                    _zone_frac_39 = float(np.clip(_zone_samples_39 / max(1, _n_s_39), 0.0, 1.0))
+                    _boost_39 = _zone_frac_39 * 0.15
+                    _effective_strength = float(np.clip(_effective_strength + _boost_39, 0.0, 1.0))
+                    logger.debug(
+                        "Phase39 §V41 ForwardMasking: zone_frac=%.2f boost=%.3f → eff_str=%.3f",
+                        _zone_frac_39,
+                        _boost_39,
+                        _effective_strength,
+                    )
+            except Exception as _fmg_exc_39:  # pylint: disable=broad-except
+                logger.debug("Phase39 §V41 ForwardMaskingGuard non-blocking: %s", _fmg_exc_39)
+
         if _effective_strength <= 0.0:
             audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
             audio = np.clip(audio, -1.0, 1.0)
@@ -618,7 +643,7 @@ class AirBandEnhancement(PhaseInterface):
         hf_delta = excited - audio  # just the harmonic addition
         enhanced = shelved + hf_delta  # proper additive combination
 
-        return enhanced
+        return enhanced  # type: ignore[no-any-return]
 
     def _apply_high_shelf(self, audio: np.ndarray, sample_rate: int, freq_hz: float, gain_db: float) -> np.ndarray:
         """Wendet an: high-frequency shelving filter (biquad coefficients cached per key)."""
@@ -641,8 +666,8 @@ class AirBandEnhancement(PhaseInterface):
         # §2.51 Anti-Zeitversatz: filtfilt (Zero-Phase) statt lfilter — Shelf-EQ darf keine
         # Gruppenlatenz erzeugen (hörbar als Zeitversatz auf HF-Transienten/Vokaleinsätzen).
         if len(audio) >= 9:
-            return signal.filtfilt(b, a, audio)
-        return signal.lfilter(b, a, audio)
+            return signal.filtfilt(b, a, audio)  # type: ignore[no-any-return]
+        return signal.lfilter(b, a, audio)  # type: ignore[no-any-return]
 
     def _apply_exciter(self, audio: np.ndarray, sample_rate: int, mix: float, drive: float) -> np.ndarray:
         """Wendet an: harmonic exciter to HF region (SOS filter cached per sample_rate)."""
@@ -655,7 +680,7 @@ class AirBandEnhancement(PhaseInterface):
         # §2.51 Anti-Zeitversatz: sosfiltfilt (Zero-Phase) statt sosfilt — hf + audio werden gemischt.
         hf = signal.sosfiltfilt(sos, audio)
         excited_hf = np.tanh(hf * drive * 2) / (drive + 0.5)
-        return audio + excited_hf * mix
+        return audio + excited_hf * mix  # type: ignore[no-any-return]
 
     def _measure_hf_energy(self, audio: np.ndarray, sample_rate: int) -> float:
         """Misst high-frequency energy (12-20 kHz RMS, cached SOS filter)."""

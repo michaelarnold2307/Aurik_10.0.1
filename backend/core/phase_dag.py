@@ -64,10 +64,54 @@ HARD_BEFORE_CONSTRAINTS: list[PhaseConstraint] = [
         "phase_07_harmonic_restoration",
         "Band-NR vor Harmonik (Rauschen nicht als Harmonik rekonstruieren)",
     ),
+    # Pegeldrift-Korrektur (§2.46 Stufe 4.5): nach subtraktiver Carrier-NR,
+    # vor additiver BW-/Harmonik-Restauration, damit weder Rauschen noch
+    # synthetische Obertöne die Gain-Hüllkurve verfälschen.
+    PhaseConstraint(
+        "phase_03_denoise",
+        "phase_40_loudness_normalization",
+        "Carrier-NR vor Pegeldrift-Ausgleich (§2.46 Stufe 4 vor 4.5)",
+    ),
+    PhaseConstraint(
+        "phase_29_tape_hiss_reduction",
+        "phase_40_loudness_normalization",
+        "Band-NR vor Pegeldrift-Ausgleich (§2.46 Stufe 4 vor 4.5)",
+    ),
+    PhaseConstraint(
+        "phase_40_loudness_normalization",
+        "phase_06_frequency_restoration",
+        "Pegeldrift-Ausgleich vor BW-Extension (§2.46 Stufe 4.5 vor 5)",
+    ),
+    PhaseConstraint(
+        "phase_40_loudness_normalization",
+        "phase_07_harmonic_restoration",
+        "Pegeldrift-Ausgleich vor Harmonik (§2.46 Stufe 4.5 vor 5)",
+    ),
     PhaseConstraint(
         "phase_06_frequency_restoration",
         "phase_07_harmonic_restoration",
         "BW-Extension vor Harmonik (Stufe 5 intern geordnet)",
+    ),
+    # Finale Export-Sicherheitskette: LUFS/Gain vor TruePeak, TruePeak vor Format/Dither.
+    PhaseConstraint(
+        "phase_17_mastering_polish",
+        "phase_40_loudness_normalization",
+        "Mastering-Polish vor LUFS-/Gain-Normierung (keine Pegeländerung nach Final-LUFS)",
+    ),
+    PhaseConstraint(
+        "phase_40_loudness_normalization",
+        "phase_47_truepeak_limiter",
+        "LUFS-/Gain-Normierung vor TruePeak-Limiter (Limiter darf nicht nachträglich skaliert werden)",
+    ),
+    PhaseConstraint(
+        "phase_47_truepeak_limiter",
+        "phase_41_output_format_optimization",
+        "TruePeak-Limiter vor Ausgabeformat/Dither (finaler Peak-Schutz vor Exportformat)",
+    ),
+    PhaseConstraint(
+        "phase_40_loudness_normalization",
+        "phase_41_output_format_optimization",
+        "LUFS-/Gain-Normierung vor Ausgabeformat auch wenn TruePeak nicht aktiv ist",
     ),
     # Crackle vor Noise-Gate (Phase_09 → Phase_18)
     PhaseConstraint(
@@ -105,6 +149,9 @@ _SHORT_TO_FULL: dict[str, str] = {
     "phase_25": "phase_25_azimuth_correction",
     "phase_29": "phase_29_tape_hiss_reduction",
     "phase_30": "phase_30_dc_offset_removal",
+    "phase_40": "phase_40_loudness_normalization",
+    "phase_41": "phase_41_output_format_optimization",
+    "phase_47": "phase_47_truepeak_limiter",
 }
 
 

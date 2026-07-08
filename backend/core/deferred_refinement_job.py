@@ -19,7 +19,7 @@ import numpy as np
 try:
     from backend.core.ml_memory_budget import release as _ml_budget_release
 except Exception:
-    _ml_budget_release = None
+    _ml_budget_release = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
 

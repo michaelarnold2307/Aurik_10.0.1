@@ -160,7 +160,7 @@ class ImcraNoisEstimator:
 
             noise_psd[:, ll] = lambda_d[:, 0]
 
-        return noise_psd.astype(np.float32)
+        return noise_psd.astype(np.float32)  # type: ignore[no-any-return]
 
 
 # ── Canonical public API (DSP-instructions) ──────────────────────────────────
@@ -217,9 +217,9 @@ def compute_imcra_noise_estimate(
             _, _, Zxx = _scipy_stft(audio, fs=sr, nperseg=n_fft, noverlap=n_overlap, window="hann", boundary="even")
             power = (np.abs(Zxx) ** 2).astype(np.float32)
             noise_floor = np.median(power, axis=1, keepdims=True)
-            return np.broadcast_to(noise_floor, power.shape).copy()
+            return np.broadcast_to(noise_floor, power.shape).copy()  # type: ignore[no-any-return]
         except Exception:
-            return np.full((n_fft // 2 + 1, 1), 1e-8, dtype=np.float32)
+            return np.full((n_fft // 2 + 1, 1), 1e-8, dtype=np.float32)  # type: ignore[no-any-return]
 
 
 __all__ = [

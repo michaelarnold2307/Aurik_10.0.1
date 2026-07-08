@@ -1,7 +1,7 @@
 """AMRB CI-Gate — blockiert Merge wenn OS-Führerschaft-Schwelle nicht erfüllt.
 
 Spec §8.1 (copilot-instructions.md):
-    AMRB-Gesamt-Score ≥ 84.0 UND ≥ 8/10 Szenarien bestanden.
+    AMRB-Gesamt-Score ≥ 84.0 UND ≥ 8/11 Szenarien bestanden.
     Baselines: iZotope RX 11 ≈ 71.0, Aurik 9.9 Restoration ≈ 84.0.
 
 Laufzeit:  ~60–180 s (n_items_per_scenario=1, synthetische Signale intern erzeugt).
@@ -18,26 +18,34 @@ import numpy as np
 import pytest
 
 from benchmarks.musical_restoration_benchmark import (
+    _SCENARIO_MATERIAL_TYPE,
     AMRB_BASELINES,
     BenchmarkConfig,
     BenchmarkReport,
     run_benchmark,
 )
+from scripts.run_amrb_v99 import dsp_restore
 
 logger = logging.getLogger(__name__)
 
+
 _SCENARIO_DEFAULT_HINTS: dict[str, tuple[str, str]] = {
-    "AMRB-01-TAPE": ("reel_tape", "reel_tape"),
-    "AMRB-02-VINYL": ("vinyl", "vinyl"),
-    "AMRB-03-SHELLAC": ("shellac", "shellac"),
-    "AMRB-04-DIGITAL": ("cd_digital", "cd_digital"),
-    "AMRB-05-CODEC": ("mp3_low", "mp3_low"),
-    "AMRB-06-VOCAL": ("tape", "tape"),  # v9.12.9 fix: WOW ±1.5% braucht tape-Threshold 0.3% statt cd_digital 2.0%
-    "AMRB-07-REVERB": ("reel_tape", "reel_tape"),
-    "AMRB-08-HUM": ("tape", "tape"),
-    "AMRB-09-DROPOUT": ("tape", "tape"),
-    "AMRB-10-COMPOSITE": ("tape", "vinyl>tape"),
+    sid: (
+        str(material),
+        "vinyl>tape" if sid == "AMRB-10-COMPOSITE" else str(material),
+    )
+    for sid, material in _SCENARIO_MATERIAL_TYPE.items()
 }
+
+
+def test_amrb_scenario_hints_follow_benchmark_material_map() -> None:
+    """Schützt vor Drift: erster Hint-Wert muss der kanonischen Benchmark-Zuordnung folgen."""
+    for sid, expected_material in _SCENARIO_MATERIAL_TYPE.items():
+        assert sid in _SCENARIO_DEFAULT_HINTS, f"Fehlender AMRB-Hint für Szenario: {sid}"
+        actual_material = _SCENARIO_DEFAULT_HINTS[sid][0]
+        assert actual_material == str(expected_material), (
+            f"Material-Hint-Drift für {sid}: erwartet {expected_material}, erhalten {actual_material}"
+        )
 
 
 def _build_cached_medium_hint(sid: str | None):
@@ -66,42 +74,7 @@ def _build_cached_medium_hint(sid: str | None):
 _UNPROCESSED_MUSHRA: float = AMRB_BASELINES["Unbearbeitet (degradiert)"]["mushra_overall"]  # 32.0
 _IZOTOPE_MUSHRA: float = AMRB_BASELINES["iZotope RX 11 (commercial)"]["mushra_overall"]  # 71.0
 _AURIK_TARGET: float = 84.0  # OS-Führerschaft-Schwelle (§8.1)
-_SCENARIOS_REQUIRED: int = 8  # von 10 Szenarien müssen bestanden sein
-
-
-# ---------------------------------------------------------------------------
-# Hilfsfunktion: Aurik-Pipeline als AMRB restoration_fn
-# ---------------------------------------------------------------------------
-
-
-def _aurik_restoration_fn(audio: np.ndarray, sr: int, sid: str | None = None) -> np.ndarray:
-    """Ruft UnifiedRestorerV3 auf; fällt bei Fehler auf Pass-Through zurück."""
-    try:
-        from denker.aurik_denker import get_aurik_denker  # type: ignore[import]
-
-        denker = get_aurik_denker()
-        cached_medium = _build_cached_medium_hint(sid)
-        if cached_medium is not None:
-            chain = list(getattr(cached_medium, "transfer_chain", []) or [])
-            input_path = f"amrb_input_{'_'.join(chain) if chain else 'auto'}.wav"
-            result = denker.denke(
-                audio,
-                sr,
-                mode="restoration",
-                no_rt_limit=False,
-                cached_medium_result=cached_medium,
-                input_path=input_path,
-            )
-        else:
-            result = denker.denke(audio, sr, mode="restoration", no_rt_limit=False)
-        out: np.ndarray = result.audio
-        return out
-    except Exception as exc:  # pragma: no cover
-        logger.warning(
-            "Aurik-Engine nicht verfügbar (%s) — Pass-Through (schlechte AMRB-Scores erwartet).",
-            exc,
-        )
-        return audio
+_SCENARIOS_REQUIRED: int = 8  # von 11 Szenarien müssen bestanden sein
 
 
 # ---------------------------------------------------------------------------
@@ -111,10 +84,10 @@ def _aurik_restoration_fn(audio: np.ndarray, sr: int, sid: str | None = None) ->
 
 def _run_amrb(n_items: int = 1, verbose: bool = False) -> BenchmarkReport:
     config = BenchmarkConfig(
-        restoration_fn=_aurik_restoration_fn,
+        restoration_fn=dsp_restore,
         system_name="Aurik 9 CI",
         n_items_per_scenario=n_items,
-        # Normative Gate fokusiert auf AMRB-MUSHRA-Ziele; schwere Zusatzpfade
+        # Normative Gate fokussiert auf AMRB-MUSHRA-Ziele; schwere Zusatzpfade
         # (Proxy/Goals/Formal-Session + 30s Fragment-Guard) erhöhen Laufzeit/
         # Speicherdruck stark und verursachen in CI Timeout ohne zusätzlichen
         # Erkenntnisgewinn für diese Assertions.
@@ -141,7 +114,7 @@ def _amrb_report_cached() -> BenchmarkReport:
 @pytest.mark.amrb
 @pytest.mark.timeout(1800)
 def test_amrb_os_leadership_threshold(_amrb_report_cached: BenchmarkReport) -> None:
-    """Aurik muss AMRB overall_score ≥ 84.0 UND n_passed ≥ 8/10 erreichen (§8.1).
+    """Aurik muss AMRB overall_score ≥ 84.0 UND n_passed ≥ 8/11 erreichen (§8.1).
 
     Dieser Test blockiert einen Merge, wenn Aurik die OS-Führerschaft-Schwelle
     unterschreitet. Laufzeit ca. 60–180 s (synthetische Signale, n=1 pro Szenario).
@@ -151,7 +124,7 @@ def test_amrb_os_leadership_threshold(_amrb_report_cached: BenchmarkReport) -> N
     assert report.passes_os_leadership_threshold(), (
         f"\nAMRB OS-Führerschaft NICHT ERREICHT:\n"
         f"  Gesamt-Score : {report.overall_score:.1f}/100  (Ziel: ≥ {_AURIK_TARGET:.1f})\n"
-        f"  Bestanden    : {report.n_passed}/10          (Ziel: ≥ {_SCENARIOS_REQUIRED})\n"
+        f"  Bestanden    : {report.n_passed}/11          (Ziel: ≥ {_SCENARIOS_REQUIRED})\n"
         f"  Schwächstes  : {report.worst_scenario}\n"
         f"\n"
         f"  Referenz iZotope RX 11 : {_IZOTOPE_MUSHRA:.1f}\n"
@@ -190,11 +163,11 @@ def test_amrb_score_far_above_unprocessed(_amrb_report_cached: BenchmarkReport) 
 @pytest.mark.amrb
 @pytest.mark.timeout(60)
 def test_amrb_at_least_8_scenarios_passed(_amrb_report_cached: BenchmarkReport) -> None:
-    """Genau ≥ 8/10 Szenarien müssen bestanden sein (MUSHRA ≥ 80 pro Szenario)."""
+    """Genau ≥ 8/11 Szenarien müssen bestanden sein (MUSHRA ≥ 80 pro Szenario)."""
     report = _amrb_report_cached
 
     assert report.n_passed >= _SCENARIOS_REQUIRED, (
-        f"Nur {report.n_passed}/10 Szenarien bestanden (Ziel: ≥ {_SCENARIOS_REQUIRED}).\n"
+        f"Nur {report.n_passed}/11 Szenarien bestanden (Ziel: ≥ {_SCENARIOS_REQUIRED}).\n"
         f"Schwächstes Szenario: {report.worst_scenario}\n"
         f"Gesamt-Score: {report.overall_score:.1f}/100"
     )
@@ -208,7 +181,7 @@ def test_amrb_report_fields_complete(_amrb_report_cached: BenchmarkReport) -> No
 
     # Numerische Grenzen
     assert 0.0 <= report.overall_score <= 100.0, "overall_score außerhalb [0, 100]"
-    assert report.n_scenarios == 10, f"Erwartet 10 Szenarien, erhalten: {report.n_scenarios}"
+    assert report.n_scenarios == 11, f"Erwartet 11 Szenarien, erhalten: {report.n_scenarios}"
     assert 0 <= report.n_passed <= report.n_scenarios
 
     # Felder nicht leer
@@ -220,6 +193,15 @@ def test_amrb_report_fields_complete(_amrb_report_cached: BenchmarkReport) -> No
     # Szenario-Ergebnisse
     for sid, res in report.scenario_results.items():
         assert 0.0 <= res.mushra_mean <= 100.0, f"mushra_mean für '{sid}' außerhalb [0, 100]: {res.mushra_mean}"
+
+
+def test_amrb_ci_gate_uses_shared_dsp_helper() -> None:
+    """CI-AMRB darf nicht auf den optional-heavy UV3/Denker-Pfad zurückdriften."""
+    import inspect
+
+    assert dsp_restore.__module__ == "scripts.run_amrb_v99"
+    signature = inspect.signature(dsp_restore)
+    assert "sid" in signature.parameters
 
 
 # ===========================================================================

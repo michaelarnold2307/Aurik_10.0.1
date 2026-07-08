@@ -103,7 +103,7 @@ class PerceptualQualityScorer:
         # len() auf (2, N) liefert 2 (Kanäle), nicht Samples → würde Stub auslösen.
         def _to_mono(x: np.ndarray) -> np.ndarray:
             if x.ndim == 2:
-                return np.mean(x, axis=0) if x.shape[0] <= x.shape[1] else np.mean(x, axis=1)
+                return np.mean(x, axis=0) if x.shape[0] <= x.shape[1] else np.mean(x, axis=1)  # type: ignore[no-any-return]
             return x
 
         reference = _to_mono(reference)
@@ -163,7 +163,7 @@ class PerceptualQualityScorer:
             if librosa is None:
                 raise ImportError("librosa not available")
             _n_mels = int(min(40, max(8, _n_fft_pqs // 2)))
-            _mel_basis = librosa.filters.mel(sr=sr, n_fft=_n_fft_pqs, n_mels=_n_mels)
+            _mel_basis = librosa.filters.mel(sr=sr, n_fft=_n_fft_pqs, n_mels=_n_mels)  # type: ignore[attr-defined]
             _ref_stft = np.abs(librosa.stft(ref.astype(np.float32), n_fft=_n_fft_pqs, hop_length=512))
             _deg_stft = np.abs(librosa.stft(deg.astype(np.float32), n_fft=_n_fft_pqs, hop_length=512))
             _ref_mel = np.dot(_mel_basis, _ref_stft) + 1e-10

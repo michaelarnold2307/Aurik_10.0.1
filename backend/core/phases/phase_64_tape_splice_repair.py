@@ -104,6 +104,62 @@ def _detect_splice_points(x: np.ndarray, sample_rate: int, crossfade_samples: in
     return splice_points
 
 
+def _compute_splice_local_strength(
+    original: np.ndarray,
+    splice_idx: int,
+    sample_rate: int,
+    crossfade_samples: int,
+    base_strength: float,
+    protected_zones: list | None = None,
+) -> float:
+    """Berechnet per-Splice lokale Stärke über 250 ms Kontext + Schutzzonen-Caps.
+
+    §V38: Event-Oracle statt globaler Einheitsstärke.
+    """
+    if base_strength < 1e-6:
+        return 0.0
+
+    n = int(len(original))
+    _sr = max(int(sample_rate), 1)
+    _ctx = max(1, int(0.250 * _sr))
+
+    _pre_ctx_s = max(0, splice_idx - _ctx)
+    _pre_ctx_e = max(_pre_ctx_s + 1, splice_idx)
+    _post_ctx_s = min(n - 1, splice_idx)
+    _post_ctx_e = min(n, splice_idx + _ctx)
+
+    _pre_ctx_r = float(np.sqrt(np.mean(original[_pre_ctx_s:_pre_ctx_e] ** 2) + 1e-12))
+    _post_ctx_r = float(np.sqrt(np.mean(original[_post_ctx_s:_post_ctx_e] ** 2) + 1e-12))
+    _ctx_r = max(_pre_ctx_r, _post_ctx_r, 1e-10)
+
+    _pre_len = min(crossfade_samples, splice_idx)
+    _post_len = min(crossfade_samples, n - splice_idx)
+    _pre_r = (
+        float(np.sqrt(np.mean(original[splice_idx - _pre_len : splice_idx] ** 2) + 1e-12)) if _pre_len > 0 else 1e-10
+    )
+    _post_r = (
+        float(np.sqrt(np.mean(original[splice_idx : splice_idx + _post_len] ** 2) + 1e-12)) if _post_len > 0 else 1e-10
+    )
+    _level_ratio = max(_pre_r, _post_r) / (min(_pre_r, _post_r) + 1e-12)
+    _level_jump_db = float(20.0 * np.log10(max(1.0, _level_ratio)))
+
+    _jump_factor = float(np.clip(0.35 + 0.65 * (_level_jump_db - 2.0) / 8.0, 0.30, 1.0))
+    _activity_factor = float(np.clip(_ctx_r / 0.08, 0.35, 1.0))
+    local_strength = float(base_strength * _jump_factor * _activity_factor)
+
+    if protected_zones:
+        _sp_s = splice_idx / float(_sr)
+        for _pz in protected_zones:
+            try:
+                if float(_pz[0]) <= _sp_s <= float(_pz[1]):
+                    local_strength = min(local_strength, float(_pz[2]))
+                    break
+            except Exception:
+                continue
+
+    return float(np.clip(local_strength, 0.05, 1.0))
+
+
 def _apply_splice_repair(
     out: np.ndarray,
     original: np.ndarray,
@@ -127,30 +183,14 @@ def _apply_splice_repair(
     n = len(out)
     _sr = max(int(sample_rate), 1)
     for sp in splice_points:
-        # Per-Splice individuelle Stärke aus lokalem Pegelsprung (§0l Strength-Orakel)
-        _pre_len = min(crossfade_samples, sp)
-        _post_len = min(crossfade_samples, n - sp)
-        _pre_r = float(np.sqrt(np.mean(original[sp - _pre_len : sp] ** 2) + 1e-12)) if _pre_len > 0 else 1e-10
-        _post_r = float(np.sqrt(np.mean(original[sp : sp + _post_len] ** 2) + 1e-12)) if _post_len > 0 else 1e-10
-        if _pre_r > 1e-8 and _post_r > 1e-8:
-            _level_ratio = max(_pre_r, _post_r) / (min(_pre_r, _post_r) + 1e-12)
-            _level_jump_db = float(20.0 * np.log10(max(1.0, _level_ratio)))
-            # Stärke proportional zum Pegelsprung: 35% bei 2 dB, maximal bei 10 dB
-            _jump_factor = float(np.clip(0.35 + 0.65 * (_level_jump_db - 2.0) / 8.0, 0.30, 1.0))
-            _local_str = strength * _jump_factor
-        else:
-            _local_str = strength * 0.50
-        # Schutzzone: VFA-Vibrato/Frisson/Flüster/Passaggio-Zonen reduzieren Stärke
-        if protected_zones:
-            _sp_s = sp / float(_sr)
-            for _pz in protected_zones:
-                try:
-                    if float(_pz[0]) <= _sp_s <= float(_pz[1]):
-                        _local_str = min(_local_str, float(_pz[2]))
-                        break
-                except Exception:
-                    continue
-        _local_str = float(np.clip(_local_str, 0.05, 1.0))
+        _local_str = _compute_splice_local_strength(
+            original=original,
+            splice_idx=int(sp),
+            sample_rate=_sr,
+            crossfade_samples=crossfade_samples,
+            base_strength=float(strength),
+            protected_zones=protected_zones,
+        )
 
         # Sub-step 2a: Remove click impulse (short interpolation)
         click_half = min(32, crossfade_samples // 2)
@@ -190,13 +230,13 @@ def apply(
 ) -> np.ndarray:
     """Haupt-entry point for Phase 64."""
     assert sample_rate == 48000, f"SR must be 48000 Hz, got: {sample_rate}"
-    audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
+    audio = np.asarray(np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0), dtype=np.float32)
 
     if defect_scores is not None:
         splice_score = float(defect_scores.get("tape_splice_artifact", 0.0))
         if splice_score < min_splice_score:
             logger.debug("Phase 64: splice score %.3f < %.3f — skipped", splice_score, min_splice_score)
-            return np.clip(audio, -1.0, 1.0)
+            return np.clip(audio, -1.0, 1.0)  # type: ignore[no-any-return]
 
     crossfade_samples = max(1, int(crossfade_ms * 0.001 * sample_rate))
 
@@ -208,7 +248,7 @@ def apply(
         mono64 = mono_mix.astype(np.float32)
         splice_points = _detect_splice_points(mono64, sample_rate, crossfade_samples)
         if not splice_points:
-            return np.clip(audio, -1.0, 1.0).astype(np.float32)
+            return np.asarray(np.clip(audio, -1.0, 1.0), dtype=np.float32)  # type: ignore[no-any-return]
         left_out = _apply_splice_repair(
             audio[0].astype(np.float32),
             audio[0].astype(np.float32),
@@ -229,12 +269,12 @@ def apply(
         )
         left_out = np.nan_to_num(left_out, nan=0.0, posinf=0.0, neginf=0.0)
         right_out = np.nan_to_num(right_out, nan=0.0, posinf=0.0, neginf=0.0)
-        return np.clip(np.stack([left_out, right_out], axis=0), -1.0, 1.0).astype(np.float32)
+        return np.asarray(np.clip(np.stack([left_out, right_out], axis=0), -1.0, 1.0), dtype=np.float32)  # type: ignore[no-any-return]
 
     x = audio.astype(np.float32)
     splice_points = _detect_splice_points(x, sample_rate, crossfade_samples)
     if not splice_points:
-        return np.clip(audio, -1.0, 1.0).astype(np.float32)
+        return np.asarray(np.clip(audio, -1.0, 1.0), dtype=np.float32)  # type: ignore[no-any-return]
 
     out = _apply_splice_repair(
         np.copy(x),
@@ -246,7 +286,7 @@ def apply(
         sample_rate=sample_rate,
     )
     result = np.nan_to_num(out, nan=0.0, posinf=0.0, neginf=0.0)
-    return np.clip(result, -1.0, 1.0).astype(np.float32)
+    return np.asarray(np.clip(result, -1.0, 1.0), dtype=np.float32)  # type: ignore[no-any-return]
 
 
 # ─── PhaseInterface ────────────────────────────────────────────────────────────
@@ -363,6 +403,24 @@ class TapeSpliceRepairPhase(PhaseInterface):
         phase_locality_factor = float(np.clip(float(kwargs.get("phase_locality_factor", 1.0)), 0.35, 1.0))
         _pmgg_strength = float(kwargs.get("strength", strength))
         _effective_strength = float(np.clip(_pmgg_strength * phase_locality_factor, 0.0, 1.0))
+
+        # §V41 ForwardMaskingGuard — Enhancement-Stärke in post-transienten Masking-Zonen erhöhen
+        _panns_s_64 = float(kwargs.get("panns_singing", 0.0))
+        if _panns_s_64 >= 0.25 and _effective_strength > 0.0:
+            try:
+                from backend.core.dsp.temporal_masking import (
+                    get_forward_masking_guard as _fmg_fn_64,
+                )
+
+                _fmz_64 = kwargs.get("forward_masking_zones") or _fmg_fn_64().compute_zones(audio, sample_rate)
+                if _fmz_64:
+                    _n_s_64 = audio.shape[-1] if audio.ndim > 1 else len(audio)
+                    _zone_s_64 = sum(z.end_sample - z.start_sample for z in _fmz_64)
+                    _zone_frac_64 = float(np.clip(_zone_s_64 / max(1, _n_s_64), 0.0, 1.0))
+                    _effective_strength = float(np.clip(_effective_strength + _zone_frac_64 * 0.15, 0.0, 1.0))
+            except Exception as _fmg_exc_64:
+                logger.debug("Phase64 §V41 ForwardMaskingGuard non-blocking: %s", _fmg_exc_64)
+
         _profile_64 = self._compute_splice_profile(
             str(material_type or kwargs.get("material_type") or kwargs.get("material") or "unknown"),
             str(kwargs.get("quality_mode", "balanced")),
@@ -439,6 +497,36 @@ class TapeSpliceRepairPhase(PhaseInterface):
             result_audio = np.nan_to_num(result_audio, nan=0.0, posinf=0.0, neginf=0.0)
             result_audio = np.clip(result_audio, -1.0, 1.0).astype(np.float32)
         elapsed = _time.perf_counter() - t0
+
+        # §V19 Noise-Textur-Invariante (VERBOTEN-V19): Residual bewahrt Materialcharakter
+        _mat64_str = str(material_type or "unknown").lower()
+        try:
+            from backend.core.dsp.noise_texture_guard import (  # pylint: disable=import-outside-toplevel
+                compute_noise_texture_distance as _nt64_fn,
+            )
+
+            if result_audio.shape == audio.shape:
+                _nt64_d = _nt64_fn(
+                    audio.astype(np.float32) - result_audio.astype(np.float32), _mat64_str, sr=sample_rate
+                )
+                if _nt64_d > 0.25:
+                    result_audio = (0.5 * result_audio + 0.5 * audio).astype(np.float32)
+                    logger.warning("§V19 phase_64 noise_texture dist=%.3f > 0.25 → 50%%-Blend", _nt64_d)
+        except Exception as _nt64_exc:
+            logger.debug("§V19 phase_64 noise_texture_guard (non-blocking): %s", _nt64_exc)
+
+        # §V24 Spektralfarbe-Prüfung (VERBOTEN-V24): 1/3-Oktav-Profil darf nicht verfärbt werden
+        try:
+            from backend.core.dsp.spectral_color_guard import (  # pylint: disable=import-outside-toplevel
+                check_spectral_color_preservation as _scg64,
+            )
+
+            if result_audio.shape == audio.shape:
+                _sc64 = _scg64(audio.astype(np.float32), result_audio.astype(np.float32), sample_rate)
+                if not _sc64.ok:
+                    result_audio = (0.70 * result_audio + 0.30 * audio).astype(np.float32)
+        except Exception as _sc64_exc:
+            logger.debug("§V24 phase_64 spectral_color_guard (non-blocking): %s", _sc64_exc)
 
         _rms_out_db = _rms_dbfs_gated(result_audio)
         _rms_drop = (_rms_out_db - _rms_in_db) if _rms_in_db > -80.0 else 0.0

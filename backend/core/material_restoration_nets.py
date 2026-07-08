@@ -104,7 +104,7 @@ def _apply_riaa_deriaa(audio: np.ndarray, sample_rate: int) -> np.ndarray:
         for ch in range(audio.shape[0]):
             result[ch] = sig.lfilter(b, a, audio[ch])
     result = np.nan_to_num(result, nan=0.0, posinf=0.0, neginf=0.0)
-    return np.clip(result, -1.0, 1.0)
+    return np.clip(result, -1.0, 1.0)  # type: ignore[no-any-return]
 
 
 # ─── Shellac-Restaurierung ───────────────────────────────────────────────
@@ -122,7 +122,7 @@ def _shellac_bandwidth_limit(audio: np.ndarray, sample_rate: int) -> np.ndarray:
         for ch in range(audio.shape[0]):
             result[ch] = sig.filtfilt(b, a, audio[ch])
     result = np.nan_to_num(result, nan=0.0, posinf=0.0, neginf=0.0)
-    return np.clip(result, -1.0, 1.0)
+    return np.clip(result, -1.0, 1.0)  # type: ignore[no-any-return]
 
 
 def _adaptive_click_removal(audio: np.ndarray, sample_rate: int, threshold_db: float = -20.0) -> tuple[np.ndarray, int]:
@@ -324,7 +324,7 @@ def _tape_noise_reduction(audio: np.ndarray, sample_rate: int) -> np.ndarray:
         Zxx_clean = suppressed_mag * np.exp(1j * phase)
 
         _, ch_clean = sig.istft(Zxx_clean, fs=sample_rate, window=window, nperseg=n_fft, noverlap=n_fft - hop)
-        return ch_clean[: len(ch)]
+        return ch_clean[: len(ch)]  # type: ignore[no-any-return]
 
     if audio.ndim == 1:
         return _process_channel(audio)
@@ -333,7 +333,7 @@ def _tape_noise_reduction(audio: np.ndarray, sample_rate: int) -> np.ndarray:
         for ch in range(audio.shape[0]):
             cleaned = _process_channel(audio[ch])
             out[ch, : len(cleaned)] = cleaned
-        return out
+        return out  # type: ignore[no-any-return]
 
 
 def _tape_dropout_repair(audio: np.ndarray, sample_rate: int, min_gap_ms: float = 5.0) -> tuple[np.ndarray, int]:
@@ -548,4 +548,4 @@ def restore_by_medium(
             metrics={},
         )
 
-    return restorer(audio, sample_rate, **kwargs)
+    return restorer(audio, sample_rate, **kwargs)  # type: ignore[operator]

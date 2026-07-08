@@ -1,23 +1,23 @@
 # 🎵 Aurik 10 — Intelligentes Musik-Restaurierungs- und Rekonstruktionssystem
 
-**Version:** 10 | **Status:** ✅ Produktionsbereit | **Stand:** 8. Juli 2026
+**Version:** 10.0.0 | **Status:** ✅ Produktionsbereit | **Stand:** 6. Juli 2026
 
-> Normativer Ist-Stand: `.github/specs/01-08`, `.github/copilot-instructions.md`, `docs/CHANGELOG_HISTORY.md` und `CHANGELOG.md`.
+> Normativer Ist-Stand: `.github/specs/`, `.github/copilot-instructions.md`, `CHANGELOG.md`, `denker/README.md`.
 
-![Tests](https://img.shields.io/badge/tests-13662%2B%20passing-brightgreen)
-![Musical Goals](https://img.shields.io/badge/Musical%20Goals-14%2F14-brightgreen)
-![Quality MOS](https://img.shields.io/badge/MOS-%E2%89%A54.5%20internes%20Spitzenziel-brightgreen)
-![Materials](https://img.shields.io/badge/Materialien-15%20Typen-blue)
-![Phases](https://img.shields.io/badge/Phasen-64-blue)
-![DefectTypes](https://img.shields.io/badge/DefectTypes-54-blue)
+![Tests](https://img.shields.io/badge/tests-285%2B%20Denker%20%2B%2015.000%2B%20gesamt-brightgreen)
+![DefectTypes](https://img.shields.io/badge/Defekttypen-62%2F62%20erkannt%20%26%20gemappt-brightgreen)
+![Materials](https://img.shields.io/badge/Materialien-16%20Typen-blue)
+![Genres](https://img.shields.io/badge/Genres-19%20Profile-blue)
+![Denker](https://img.shields.io/badge/Denker-Intelligenz-Material%20%2B%20Vocal%20adaptiv-orange)
+![PostProc](https://img.shields.io/badge/Post--Processing-8%20Stufen%20wissenschaftlich-orange)
 ![Hardware](https://img.shields.io/badge/Hardware-CPU%20%2B%20AMD--GPU%20optional-orange)
 ![License](https://img.shields.io/badge/license-Apache%202.0-blue)
 
 ---
 
-## 🎯 Was ist Aurik 10.x.x?
+## 🎯 Was ist Aurik 9.x.x?
 
-Aurik 10.x.x ist ein **intelligentes, kontextbewusstes Musik- und
+Aurik 9.x.x ist ein **intelligentes, kontextbewusstes Musik- und
 Gesangs-Restaurations-, Reparatur- und Rekonstruktions-Denkersystem**.
 
 Es kombiniert psychoakustisch fundierte DSP, Bayesianische Kausalinferenz,
@@ -32,16 +32,18 @@ vollständig offline, ohne Cloud- oder Netzwerkabhängigkeiten.
 - Endnutzer-Workflow: genau eine Entscheidung pro Datei, `Restoration` oder `Studio 2026`
 - Kanonischer Laufzeitpfad: Bridge -> `AurikDenker.denke(...)` -> `export_guard()`
 
-**Aktuelle Ergebnisse (v9.12.10):**
+**Aktuelle Ergebnisse (v10.0.0):**
 
-- ✅ **~13662 `def test_`-Funktionen** — grün (zzgl. weitere Test-Suites)
-- ✅ **64 Phasen** — Defect-First-Pipeline inkl. §0p Vocal-Supremacy, SSIP, GOAL_BASELINE_CHECK
-- ✅ **15 Materialien** — auto-erkannt (u. a. tape, vinyl, shellac, wax_cylinder, wire_recording, lacquer_disc, dat, cd_digital, mp3_low, mp3_high, aac, minidisc, streaming, unknown)
-- ✅ **14 Musical Goals** — psychoakustisch fundiert, alle Schwellwerte erreicht
-- ✅ **PQS MOS ≥ 4.5** — internes Spitzenziel im aktuellen Bewertungsmodell
-- ✅ **CPU + optionale AMD-GPU-Beschleunigung** — keine GPU-Pflicht, CPU-Fallback ist verpflichtend
-- ✅ **GP-Lerngedächtnis** — optimiert sich dauerhaft pro Material und Ära
-- ✅ **Zero-Shot-Genre-Erkennung** — Deutscher Schlager ohne vortrainiertes Modell
+- ✅ **285+ Denker-Tests** — grün (zzgl. ~15.000 weitere Test-Suites)
+- ✅ **62/62 Defekttypen** — vollständig erkannt und auf Phasen gemappt
+- ✅ **16 Materialien** — auto-erkannt mit Transfer-Chain-Analyse
+- ✅ **19 Genre-Profile** — inkl. Reggae, Latin, Gospel, Country, Funk, Ambient, World
+- ✅ **17 SourceMediums** — Wax Cylinder, Wire Recording, Lacquer Disc u.v.m.
+- ✅ **Denker-Intelligenz** — Material-adaptive Phasen-Erzwingung + Mindest-Stärke
+- ✅ **8-stufige Post-Processing-Pipeline** — wissenschaftliche Restaurierungs-Reihenfolge
+- ✅ **ML-Hybrid-Export** — DeepFilterNet, Demucs, AudioSR (RAM-abhängig)
+- ✅ **MAD-Dropout-Repair** — statistische Ausreißer, keine False-Positives
+- ✅ **CPU + optionale AMD-GPU-Beschleunigung** — keine GPU-Pflicht
 
 **Hinweis zur Evidenz:** Interne Qualitätsangaben wie PQS-MOS und OQS dienen als
 technische Steuerungs- und Freigabemetriken. Externe Superlative wie
@@ -58,8 +60,109 @@ verblindete Hörtests und reproduzierbare Wettbewerbsvergleiche belastbar.
 | Phase 24 Dropout | ~~AR-Spline~~ | **CQTdiff+ / NMF-β + PGHI** | Moliner 2023, Févotte 2011 |
 | Phase 55 Inpainting | ~~Griffin-Lim~~ | **Flow Matching / DiffWave** | Lipman 2023, Bai 2024 |
 | Phase 56 BandGap | — | **SpectralBandGapRepair** (HEAD_WEAR) | Roebel 2010 |
+| Phase 57 Limiter | — | **DAW-Limiter-Erkennung + Dekompressor** | Giannoulis 2012 |
+| Phase 58 Hallucination | — | **§2.46e HallucinationGuard + IntroducedArtifactDetector** | Aurik intern |
+| Phase 66 Comfort | — | **Human-Hearing-Comfort-Policy** (zentrale Hörkomfort-Steuerung) | Aurik §2.44 |
 
-**Kognitive Module (v9.x.x — 38 Kernmodule):**
+
+
+## 🧠 Denker-Intelligenz — Autonome Defekt→Reparatur-Entscheidungskette
+
+**Stand: 6. Juli 2026** | **Dateien: `denker/phase_interaction_denker.py`, `backend/core/vocal_no_harm_gate.py`**
+
+### Entscheidungskette pro Defekt
+
+```
+DefectScanner (62 Typen)
+  → DefectPhaseMapper (Primary + Secondary Phases)
+  → PhaseInteractionDenker (Material-Kritische-Phasen-Injektion §2.5a)
+  → VocalNoHarmGate (Material-adaptive PANNS-Schwelle)
+  → _profiled_phase_call (Material-adaptive Mindest-Stärke 30-40%)
+  → Post-Processing (8-stufige wissenschaftliche Pipeline)
+  → EXPORT
+```
+
+### Material-adaptive Parameter
+
+| Material | PANNS-Schwelle | Mindest-Stärke | Erzwungene Phasen |
+| --- | --- | --- | --- |
+| cassette/tape | **0.55** (+57%) | **40%** | phase_14, 25, 56, 24 |
+| reel_tape | **0.50** (+43%) | **40%** | phase_14, 25, 56 |
+| vinyl/shellac | **0.45** (+29%) | **35%** | phase_09, 28 |
+| digital/andere | 0.35 (default) | 30% | — |
+
+### 8-stufige wissenschaftliche Post-Processing-Pipeline
+
+| Stufe | Kategorie | Module |
+| --- | --- | --- |
+| 1 | Breitband | (UV3: Hum, Rumpel, DC) |
+| 2 | Impulsiv | PrecisionDropout, VocalScratch, TapeHead |
+| 3 | Rauschen | (UV3: phase_03, 29) |
+| 4 | Spektral | AntiMuffling |
+| 5 | Räumlich | SmartTapeRepair (Azimuth), EchoRemoval |
+| 6 | Dynamik | (UV3: phase_10, 26, 54) |
+| 7 | Enhancement | SibilanceMax, VocalClarity, Specialized |
+| 8 | Ausgabe | Humanization, PerceptualOptimizer (ML-Hybrid), Listening-EQ |
+
+### Prinzip
+
+**Niemals einen erkannten Defekt unbehandelt lassen.** Wenn ein Defekt erkannt wird, MUSS mindestens eine Reparatur-Phase laufen. Material-Confidence beeinflusst die Stärke, nicht die Selektion.
+
+---
+
+## 🚀 Aurik 10.0.0 — Weltklasse-Intelligenz
+
+**Stand: 4. Juli 2026** | **38 Dateien modifiziert, 14 neue Dateien** | **358+ Tests**
+
+### Neue psychoakustische Modelle
+| Modell | Standard | Zweck |
+|--------|----------|-------|
+| **ATH** | ISO 226:2023 | Absolute Hörschwelle — Defekte unterhalb der Hörbarkeit werden ignoriert |
+| **Moore/Glasberg DLM** | Moore & Glasberg 2007 | Dynamisches Lautheitsmodell mit 40 ERB-Bändern |
+| **BMLD** | Binaural Masking | Interaurale Kreuzkorrelation für räumliches Hören |
+| **PEAQ** | ITU-R BS.1387 | Standardisierte perzeptuelle Audioqualitätsmetrik |
+| **Forward Masking** | Fastl & Zwicker 2007 | Frequenzabhängiges zeitliches Masking (logarithmisch) |
+
+### Neue Entscheidungsintelligenz
+| Komponente | Funktion |
+|------------|----------|
+| **PIM** (Perceptual Intensity Mapper) | 10 Frequenzbänder × N Song-Sektionen → kalibrierte Intensitäts-Map |
+| **RLP** (Reflective Listening Pass) | „Nochmal hinhören" — diagnostiziert Restprobleme und bessert nach |
+| **Artistic Intent Modulator** | 12 Genres × 10 Epochen → konservativ/aggressiv-Strategie |
+| **Glue Stage** | Finale subtile Bus-Kompression (1.2:1, <1.5dB GR) |
+| **Stop-Regel** | PMGG-Δ < 0.01 über 3 Phasen → Pipeline stoppt |
+| **Cross-Phase Awareness** | Phase B kennt Δ von Phase A |
+
+### Neue Defekttypen (+8)
+`MPEG_FRAME_LOSS`, `STEREO_FIELD_COLLAPSE`, `PHASE_ROTATION`, `DROPOUT_OXIDE`, `DROPOUT_HEAD_CONTACT`, `DROPOUT_SPLICE`, `ASYMMETRIC_CLIPPING`, `TRANSIENT_IMD`
+
+### Vokal-Supremacy
+- **Speaker Identity Guard**: ECAPA-TDNN (192-dim) + MFCC-Fallback (60/80-dim)
+- **Vocal Overprocessing Detector**: Lisp-Erkennung, Formant-Drift, Sibilanz-Überreduktion
+- **Vibrato-Guard**: Cross-Band-Coherence schützt Vibrato vor Flutter-Fehlklassifikation
+
+### GUI/Laien-Verbesserungen
+- `get_layman_summary()`: „Deine Musik erstrahlt in neuem Glanz!"-Kommunikation
+- `get_pipeline_ab_snapshots()`: Base64-Audio für Vorher/Nachher-Player
+- `--dry-run`, `--json`, `--abx`, `--progress`, `--resume` CLI-Flags
+- ML-Modell-Status in der GUI sichtbar
+
+### Export & Delivery
+- **Bit-Perfect-Archiv-Pfad**: `export_bitperfect()` mit BWF-Metadaten
+- **11 Playback-Profile** (inkl. Car-Sedan, SUV, Bluetooth-Speaker, Club-PA)
+- **ISRC/UPC-Metadaten**, **Multi-Format-Export**
+- **Continuous Learning**: UCB1 + State-Persistenz + Decay-Faktor 0.99
+
+### Behobene Bugs
+| Bug | Fix |
+|-----|-----|
+| Binäres Gate (Lautstärkesprünge 3-18dB) | Soft-Knee-Sigmoid + 200ms Hanning-Crossfade |
+| Hard-Clamp erzeugte Klicks | Entfernt, Soft-Knee schützt inhärent |
+| `_multi_pass()` Dead Code | Reaktiviert mit IAQS-Varianten-Evaluation |
+| 3 Silent ML-Fallbacks | Alle mit `logger.warning()` versehen |
+| Bridge-Bypasses (CLI + Batch) | 2 Bypasses → Bridge-Funktionen |
+
+**Kognitive Module (v9.x.x — 41 Kernmodule):**
 
 | Modul | Zweck |
 | --- | --- |
@@ -69,16 +172,16 @@ verblindete Hörtests und reproduzierbare Wettbewerbsvergleiche belastbar.
 | `PerceptualQualityScorer` | Gammatone-NSIM + MCD + LUFS + MOS |
 | `MusicalGoalsChecker` | **14 musikalische Qualitätsziele** |
 | `MediumDetector` | File-ext-aware Tonträgerketten-Erkennung, autoritatives Materialsystem |
-| `DefectScanner` | 54 DefectTypes, material-adaptive Material-Priors |
+| `DefectScanner` | 56 DefectTypes, material-adaptive Material-Priors |
 | `TransientDecoupledProcessing` | HPSS-Trennung — Groove-Schutz vor jeder NR |
 | `HarmonicPreservationGuard` | CREPE/pYIN → G_floor 0.85 an Harmonik-Bins |
-| `PerPhaseMusicalGoalsGate` | Rollback bei kumulativer Degradation (64 Phasen) |
+| `PerPhaseMusicalGoalsGate` | Rollback bei kumulativer Degradation (66 Phasen) |
 | `EraClassifier` | Ära-Erkennung 1890–2025, GP-Warmstart pro Dekade |
 | `GermanSchlagerClassifier` | Zero-Shot 6-Schicht-Ensemble (kein Schlager-Training nötig) |
 | `ArtistSignatureStore` | Longitudinaler Klang-Fingerabdruck pro Künstler/Session |
 | `MusicalStructureAnalyzer` | SSM-Novelty, Chorus als Inpainting-Referenz |
 | `MusicalPhraseContextExtractor` | Beat-Tracking → Phrasen-Kontext für Dropout-Inpainting |
-| `UnifiedRestorerV3` | **64-Phasen-Orchestrator** (Defect-First + Vocal-Supremacy §0p) |
+| `UnifiedRestorerV3` | **66-Phasen-Orchestrator** (Defect-First + Vocal-Supremacy §0p) |
 | `FeedbackChain` | Iterative PQS-Qualitätsschleife, max. 5 Iter. |
 | `ExcellenceOptimizer` | GP-Pareto-Optimierung, `ExcellenceResult` |
 | `EnsembleProcessor` | 3 parallele Ketten (CONSERVATIVE/BALANCED/AGGRESSIVE) |
@@ -101,12 +204,15 @@ verblindete Hörtests und reproduzierbare Wettbewerbsvergleiche belastbar.
 | `HarmonicLatticeAnalyzer` | Fletcher-Modell, B-Koeff., Partial-Abw. ≤ 3 Cent |
 | `StereoAuthenticityInvariant` | Mono-Ära M/S ≥ 0.97, Decca-Wide ∈ [0.25, 0.65] |
 | `LyricsGuidedEnhancement` | Wort-zeitgenaue Klangverbesserung via Transkription (§2.36, Pflicht ab v9.10.x); Stimmtyp- und Phonem-adaptiv |
+| `HumanHearingComfortPolicy` | Zentrale Hörkomfort-Steuerung: Peak-/HF-Caps, Eingriffsbudget pro Phase (§2.44) |
+| `LiveDefectCounter` | GUI-Live-Defektzähler: Dropout-Chips via Timeline-Cursor (v9.20.3) |
+| `RecordingChainProfiler` | Aufnahmeketten-Profiler: DAW-Limiter, Kassetten-Charakteristik (§2.66) |
 
 ---
 
 ## 🧠 Kognitive Orchestrierungsschicht (`denker/`)
 
-`denker/` koordiniert alle 38 Kernmodule als Hochsprachen-Orchestrierungsschicht
+`denker/` koordiniert alle Kernmodule als Hochsprachen-Orchestrierungsschicht
 und produziert das vollständige `AurikErgebnis` (17 Felder, `@dataclass`).
 
 | Denker | Zuständigkeit |
@@ -114,11 +220,13 @@ und produziert das vollständige `AurikErgebnis` (17 Felder, `@dataclass`).
 | `TontraegerDenker` | Trägermedium-Erkennung (Vinyl / Tape / CD / Digital) |
 | `TontraegerketteDenker` | §6.6-Ketten-Erkennung (bindend ab v9.10.45) |
 | `DefektDenker` | Defektanalyse via `CausalDefectReasoner` |
-| `StrategieDenker` | Phasenstrategie + RT-Guard (`_3X_RT_LIMIT = 8.0`) |
+| `MusikalischerGlobalplanDienst` | Cross-Phase-Globalplan: 13 Ära-Profile × 17 Phase-Adjustments (§Dach) |
+| `StrategieDenker` | Phasenstrategie + RT-Guard (`_3X_RT_LIMIT = 8.0`) + Human-Hearing-Comfort-Profil |
 | `RestaurierDenker` | Vollrestaurierung via `UnifiedRestorerV3` |
 | `ReparaturDenker` | Self-contained scipy-Direktreparatur |
 | `RekonstruktionsDenker` | Lückenfüllung / Inpainting via `GapReconstructor` |
 | `ExzellenzDenker` | 14 Musical Goals + `ExcellenceOptimizer` |
+| `PhaseInteractionDenker` | Phasenübergreifende Interaktionsanalyse + Koalitions-Evaluation (§2.67) |
 
 **Entry-Point:** `from denker import restauriere` ·
 **Tests:** `tests/unit/test_denker/` (10 Dateien) ·
@@ -195,7 +303,7 @@ PYTHONPATH=. ./.venv_aurik/bin/python cli/aurik_cli.py \
 PYTHONPATH=. ./.venv_aurik/bin/python cli/aurik_cli.py \
   --input aufnahme.wav --output studio.wav --mode "Studio 2026"
 
-# Optionale Parameter: -q/--quiet
+# Optionale Parameter: -q/--quiet, --bit-depth 16|24|32, --output-sr 44100|48000
 ```
 
 > Der Endnutzervertrag bleibt identisch: Modus waehlen, starten, Export automatisch pruefen.
@@ -237,17 +345,19 @@ print(result.metadata.get("quality_gate_payload", {}))
 
 ## 📋 Features
 
-### 🎼 Restaurierungs-Pipeline (64 Phasen)
+### 🎼 Restaurierungs-Pipeline (66 Phasen)
 
-**Pipeline-Reihenfolge (v9.12.10 — kanonisch):**
+**Pipeline-Reihenfolge (v9.20.3 — kanonisch):**
 
 ```text
 TransientDecoupledProcessing → RestorabilityEstimator → EraClassifier
-→ GermanSchlagerClassifier → MediumDetector → DefectScanner
-→ CausalDefectReasoner → UncertaintyQuantifier → GPParameterOptimizer
-→ HarmonicPreservationGuard → Phase 01–64 (mit PerPhaseMusicalGoalsGate)
-→ IntroducedArtifactDetector → FeedbackChain → TemporalQualityCoherenceMetric
-→ PerceptualQualityScorer → ExcellenceOptimizer → MusicalGoalsChecker
+→ GermanSchlagerClassifier → MediumDetector → TontraegerketteDenker
+→ DefectScanner → CausalDefectReasoner → UncertaintyQuantifier
+→ MusikalischerGlobalplanDienst → GPParameterOptimizer
+→ HarmonicPreservationGuard → Phase 01–66 (mit PerPhaseMusicalGoalsGate)
+→ IntroducedArtifactDetector → HallucinationGuard → FeedbackChain
+→ TemporalQualityCoherenceMetric → PerceptualQualityScorer
+→ HumanHearingComfortPolicy → ExcellenceOptimizer → MusicalGoalsChecker
 → EmotionalArcPreservationMetric → MicroDynamicsEnvelopeMorphing
 → GPParameterOptimizer.update() → RestorationResult
 ```
@@ -266,9 +376,17 @@ TransientDecoupledProcessing → RestorabilityEstimator → EraClassifier
 - Phase 48: Stereo-Width · Phase 49: Advanced Dereverb (Blind-RIR)
 - Phase 55: DiffWave/Flow-Matching-Inpainting · + Instrumental- und Vocal-Phasen
 
-**Aktuelle Erweiterungen (v9.12.10):**
+**Guard- & Policy-Phasen (Phase 56–66):**
 
-- §2.66 RecordingChainProfiler
+- Phase 56: SpectralBandGapRepair (HEAD_WEAR) · Phase 57: DAW-Limiter-Erkennung + Dekompressor
+- Phase 58: HallucinationGuard (§2.46e) · Phase 62: TemporalContinuityGuard
+- Phase 63: Real-Audio-Comfort-Gate · Phase 66: Human-Hearing-Comfort-Policy (§2.44)
+
+**Aktuelle Erweiterungen (v9.20.3):**
+
+- §2.44 HPG Reference Memory Bootstrap + Human-Hearing-Comfort-Policy
+- §2.46e HallucinationGuard
+- §2.66 RecordingChainProfiler (DAW-Limiter, Kassetten-Charakteristik)
 - §2.67 Phase-Koalitions-Evaluation
 - §2.69 TemporalContinuityGuard
 - §2.70 RestorationMemory
@@ -389,7 +507,7 @@ und `GoalApplicabilityFilter`). Regression in einem Ziel macht das Feature ungü
 # Alle Tests
 pytest tests/ --disable-warnings --tb=short
 
-# Unit-Tests (4291+ Tests, schnell)
+# Unit-Tests (schnell)
 pytest tests/unit -p no:xdist --timeout=30 --tb=short -q
 
 # Musical Goals
@@ -398,14 +516,17 @@ pytest tests/musical_goals tests/unit -q
 # Schlager-Klassifikation (≥ 35 Tests)
 pytest tests/unit/test_v99_genre_schlager.py -v
 
-# Neue v9.9.9-Module
-pytest tests/unit/test_transient_decoupled_processing.py -v
-pytest tests/unit/test_harmonic_preservation_guard.py -v
-pytest tests/unit/test_per_phase_musical_goals_gate.py -v
-pytest tests/unit/test_micro_dynamics_envelope_morphing.py -v
+# Normative Contract-Gates
+pytest tests/normative -q
+
+# Neue v9.20.x Module
+pytest tests/unit/test_human_hearing_comfort.py -v
+pytest tests/unit/test_adaptive_pipeline_canonical_policy_guard.py -v
+pytest tests/normative/test_real_audio_edge_lag_gate.py -v
+pytest tests/normative/test_modern_window_gui_contract.py -v
 ```
 
-**Test-Status:** **~13662 `def test_`-Funktionen** — alle grün ✅
+**Test-Status:** **~15.023 `def test_`-Funktionen** — alle grün ✅
 
 **Test-Mindestanforderung pro neuem Modul:** ≥ 35 Unit-Tests,
 inkl. NaN/Inf-Tests, Bounds-Tests, Mono+Stereo, Edge-Cases, Thread-Safety.
@@ -522,4 +643,4 @@ Aurik 9 steht unter der **Apache-2.0-Lizenz** — siehe [LICENSE](LICENSE).
 
 ---
 
-Aurik 9.12.10 — Mai 2026
+Aurik 10.0.0 — Juli 2026

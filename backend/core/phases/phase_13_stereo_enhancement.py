@@ -160,6 +160,23 @@ class StereoEnhancementPhaseV2(PhaseInterface):
         _pmgg_strength = float(kwargs.get("strength", 1.0))
         _effective_strength = float(np.clip(_pmgg_strength * phase_locality_factor, 0.0, 1.0))
 
+        # §V41 ForwardMaskingGuard — Enhancement-Stärke in post-transienten Masking-Zonen erhöhen
+        _panns_s_13 = float(kwargs.get("panns_singing", 0.0))
+        if _panns_s_13 >= 0.25 and _effective_strength > 0.0:
+            try:
+                from backend.core.dsp.temporal_masking import (
+                    get_forward_masking_guard as _fmg_fn_13,
+                )
+
+                _fmz_13 = kwargs.get("forward_masking_zones") or _fmg_fn_13().compute_zones(audio, sample_rate)
+                if _fmz_13:
+                    _n_s_13 = audio.shape[-1] if audio.ndim > 1 else len(audio)
+                    _zone_s_13 = sum(z.end_sample - z.start_sample for z in _fmz_13)
+                    _zone_frac_13 = float(np.clip(_zone_s_13 / max(1, _n_s_13), 0.0, 1.0))
+                    _effective_strength = float(np.clip(_effective_strength + _zone_frac_13 * 0.15, 0.0, 1.0))
+            except Exception as _fmg_exc_13:
+                logger.debug("Phase13 §V41 ForwardMaskingGuard non-blocking: %s", _fmg_exc_13)
+
         self.validate_input(audio)
 
         # Only for stereo
@@ -479,7 +496,7 @@ class StereoEnhancementPhaseV2(PhaseInterface):
         # Mix original + delayed (0.7 original, 0.3 delayed for subtle effect)
         mixed = 0.7 * sig + 0.3 * delayed
 
-        return mixed
+        return mixed  # type: ignore[no-any-return]
 
     def _apply_allpass_decorrelation(self, sig: np.ndarray, sample_rate: int, order: int) -> np.ndarray:
         """
@@ -522,7 +539,7 @@ class StereoEnhancementPhaseV2(PhaseInterface):
         """
         Recombine frequency bands (simple sum).
         """
-        return sum(bands)
+        return sum(bands)  # type: ignore[return-value]
 
     def _measure_stereo_width(self, audio: np.ndarray) -> float:
         """
@@ -579,7 +596,7 @@ class StereoEnhancementPhaseV2(PhaseInterface):
         # Blend 50/50 to raise correlation
         blended = 0.5 * enhanced + 0.5 * original
 
-        return blended
+        return blended  # type: ignore[no-any-return]
 
     def get_metadata(self) -> PhaseMetadata:
         """Gibt phase metadata zurück."""

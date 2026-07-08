@@ -27,6 +27,8 @@ Singleton pattern: use get_dac_plugin().
 CPU-only: CPUExecutionProvider.
 """
 
+# pylint: disable=import-outside-toplevel
+
 from __future__ import annotations
 
 import logging
@@ -57,7 +59,7 @@ _ENCODER_GB: float = 0.10
 _DECODER_GB: float = 0.22
 
 _lock = threading.Lock()
-_instance: DacPlugin | None = None
+_INSTANCE_HOLDER: list[DacPlugin | None] = [None]
 
 
 # ---------------------------------------------------------------------------
@@ -137,13 +139,14 @@ def _resample(audio: np.ndarray, from_sr: int, to_sr: int) -> np.ndarray:
     g = gcd(from_sr, to_sr)
     up, down = to_sr // g, from_sr // g
     if audio.ndim == 1:
-        return resample_poly(audio, up, down).astype(np.float32)
+        return np.asarray(resample_poly(audio, up, down), dtype=np.float32)  # type: ignore[no-any-return]
     # [C, T] or [B, C, T]
-    return np.apply_along_axis(
-        lambda x: resample_poly(x, up, down).astype(np.float32),
-        axis=-1,
-        arr=audio,
-    )  # type: ignore[no-any-return]
+    flat = np.reshape(audio, (-1, audio.shape[-1]))
+    resampled_flat = [resample_poly(ch, up, down).astype(np.float32) for ch in flat]
+    stacked = np.stack(resampled_flat, axis=0)
+    new_len = stacked.shape[-1]
+    reshaped = np.reshape(stacked, (*audio.shape[:-1], new_len))
+    return np.asarray(reshaped, dtype=np.float32)  # type: ignore[no-any-return]
 
 
 def _pad_to_stride(audio: np.ndarray) -> tuple[np.ndarray, int]:
@@ -256,7 +259,7 @@ class DacPlugin:
             try:
                 from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm
 
-                _reg_plm("DacEncoder", size_gb=_ENCODER_GB, unload_fn=lambda: self._unload_encoder())
+                _reg_plm("DacEncoder", size_gb=_ENCODER_GB, unload_fn=self._unload_encoder)
             except Exception as _exc:
                 logger.debug("Plugin operation failed (non-critical): %s", _exc)
 
@@ -287,7 +290,7 @@ class DacPlugin:
                 try:
                     from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm
 
-                    _reg_plm("DacDecoder", size_gb=_DECODER_GB, unload_fn=lambda: self._unload_decoder())
+                    _reg_plm("DacDecoder", size_gb=_DECODER_GB, unload_fn=self._unload_decoder)
                 except Exception as _exc:
                     logger.debug("Plugin operation failed (non-critical): %s", _exc)
 
@@ -528,12 +531,13 @@ class DacPlugin:
 
 def get_dac_plugin() -> DacPlugin:
     """Gibt thread-safe singleton DacPlugin instance (double-checked locking) zurück."""
-    global _instance
-    if _instance is None:
+    if _INSTANCE_HOLDER[0] is None:
         with _lock:
-            if _instance is None:
-                _instance = DacPlugin()
-    return _instance
+            if _INSTANCE_HOLDER[0] is None:
+                _INSTANCE_HOLDER[0] = DacPlugin()
+    plugin = _INSTANCE_HOLDER[0]
+    assert plugin is not None
+    return plugin
 
 
 # ---------------------------------------------------------------------------

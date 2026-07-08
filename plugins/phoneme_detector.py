@@ -46,7 +46,7 @@ def get_phoneme_detector() -> PhonemeDetector:
         with _phoneme_lock:
             if _phoneme_instance is None:
                 _phoneme_instance = PhonemeDetector.__new__(PhonemeDetector)
-                _phoneme_instance._initialized = True
+                _phoneme_instance._initialized = True  # type: ignore[attr-defined]
     return _phoneme_instance
 
 

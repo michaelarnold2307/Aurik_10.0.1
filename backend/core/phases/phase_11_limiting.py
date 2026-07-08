@@ -246,7 +246,7 @@ class LimitingPhase(PhaseInterface):
         ceiling_linear = 10 ** (ceiling_db / 20)
 
         # True Peak Detection (mit Oversampling)
-        true_peak_db = self._measure_true_peak(audio, oversample_factor)
+        true_peak_db = self._measure_true_peak(audio, oversample_factor)  # type: ignore[arg-type]
 
         if true_peak_db <= ceiling_db:
             audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
@@ -279,7 +279,7 @@ class LimitingPhase(PhaseInterface):
             )
 
         # Metriken
-        true_peak_after_db = self._measure_true_peak(limited_audio, oversample_factor)
+        true_peak_after_db = self._measure_true_peak(limited_audio, oversample_factor)  # type: ignore[arg-type]
         peak_reduction_db = true_peak_db - true_peak_after_db
 
         # RMS-Analyse
@@ -352,10 +352,10 @@ class LimitingPhase(PhaseInterface):
             # Kein Oversampling
             upsampled = np.maximum(np.abs(audio[:, 0]), np.abs(audio[:, 1])) if audio.ndim == 2 else np.abs(audio)
 
-        true_peak_linear = np.max(upsampled)
+        true_peak_linear: float = float(np.max(upsampled))
         true_peak_db = 20 * np.log10(true_peak_linear + 1e-10)
 
-        return true_peak_db
+        return true_peak_db  # type: ignore[no-any-return]
 
     def _split_bands(self, audio: np.ndarray, sample_rate: int) -> list:
         """
@@ -495,7 +495,7 @@ class LimitingPhase(PhaseInterface):
             limited = band * smoothed_gain
 
         # Metriken
-        max_gr_linear = np.min(smoothed_gain)
+        max_gr_linear: float = float(np.min(smoothed_gain))
         max_gr_db = 20 * np.log10(max_gr_linear + 1e-10)  # Negativ = Gain Reduction
 
         peak_before = np.abs(band).max()
@@ -653,7 +653,7 @@ def _run_manual_demo() -> None:
         logger.debug("Material: %s", material.name)
         logger.debug("%s", "─" * 80)
 
-        result = phase.process(test_audio_stereo, demo_sample_rate, material)
+        result = phase.process(test_audio_stereo, demo_sample_rate, material)  # type: ignore[arg-type]
 
         if result.success and result.metadata.get("limiting_applied"):
             logger.debug("\n✅ Multi-Band True Peak Limiting:")

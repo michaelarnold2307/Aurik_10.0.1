@@ -213,7 +213,7 @@ def _extract_band(audio: np.ndarray, sr: int, low_hz: float, high_hz: float) -> 
     # HP at low_hz unless it's effectively 0
     if low_hz > 10.0:
         band = _lr4_highpass(band, sr, low_hz)
-    return band
+    return band  # type: ignore[no-any-return]
 
 
 # ── Per-band NR (stationary-noise spectral subtraction) ──────────────────────
@@ -494,7 +494,7 @@ def get_sub_stem_processor() -> SubStemProcessor:
         with _lock:
             if SubStemProcessor not in _SINGLETON_INSTANCES:
                 _SINGLETON_INSTANCES[SubStemProcessor] = SubStemProcessor()
-    return _SINGLETON_INSTANCES[SubStemProcessor]
+    return _SINGLETON_INSTANCES[SubStemProcessor]  # type: ignore[no-any-return]
 
 
 def process_sub_stems(

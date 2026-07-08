@@ -20,6 +20,7 @@ Pflicht-Test: tests/unit/test_passthrough_invariant.py
 from __future__ import annotations
 
 import math
+from typing import cast
 
 import numpy as np
 import pytest
@@ -36,20 +37,20 @@ np.random.seed(42)  # §5.4: Reproduzierbarkeit
 def _clean_sine(freq_hz: float = 440.0, duration_s: float = 3.0) -> np.ndarray:
     """Reiner Sinuston — kein Rauschen, kein Defekt."""
     t = np.linspace(0, duration_s, int(duration_s * SR), endpoint=False)
-    return (0.5 * np.sin(2 * np.pi * freq_hz * t)).astype(np.float32)
+    return cast(np.ndarray, (0.5 * np.sin(2 * np.pi * freq_hz * t)).astype(np.float32))
 
 
 def _clean_harmonic(f0: float = 220.0, duration_s: float = 3.0) -> np.ndarray:
     """Synthetisches harmonisches Signal (Grundton + 4 Obertöne). Kein Rauschen."""
     t = np.linspace(0, duration_s, int(duration_s * SR), endpoint=False)
     sig = sum((0.5 / n) * np.sin(2 * np.pi * n * f0 * t) for n in range(1, 6))
-    return (sig / np.max(np.abs(sig) + 1e-9) * 0.7).astype(np.float32)
+    return cast(np.ndarray, (sig / np.max(np.abs(sig) + 1e-9) * 0.7).astype(np.float32))
 
 
 def _clean_stereo(duration_s: float = 3.0) -> np.ndarray:
     """Sauberes Stereo-Signal."""
     mono = _clean_harmonic(duration_s=duration_s)
-    return np.stack([mono, mono * 0.95], axis=1).astype(np.float32)
+    return cast(np.ndarray, np.stack([mono, mono * 0.95], axis=1).astype(np.float32))
 
 
 def _chirp(duration_s: float = 2.0) -> np.ndarray:
@@ -57,7 +58,7 @@ def _chirp(duration_s: float = 2.0) -> np.ndarray:
     t = np.linspace(0, duration_s, int(duration_s * SR), endpoint=False)
     f0, f1 = 100.0, 8000.0
     phase = 2 * np.pi * (f0 * t + (f1 - f0) / (2 * duration_s) * t**2)
-    return (0.5 * np.sin(phase)).astype(np.float32)
+    return cast(np.ndarray, (0.5 * np.sin(phase)).astype(np.float32))
 
 
 # ---------------------------------------------------------------------------
@@ -186,6 +187,84 @@ class TestPhase40PassThrough:
     def test_08_phase40_no_clipping(self):
         audio = _clean_harmonic()
         result = self.phase.process(audio, sample_rate=SR, material_type=self._material)
+        assert np.max(np.abs(result.audio)) <= 1.0 + 1e-6
+
+    def test_08b_phase40_amplitude_drift_uses_smooth_gain_envelope(self):
+        """Amplitude-Drift-Korrektur darf keine hörbaren 100-ms-Pegelsprünge erzeugen."""
+        n = 12 * SR
+        t = np.arange(n, dtype=np.float32) / float(SR)
+        block = (np.arange(n) // int(0.2 * SR)) % 2
+        amp = np.where(block == 0, 10 ** (-39.0 / 20.0), 10 ** (-41.0 / 20.0)).astype(np.float32)
+        audio = (amp * np.sin(2 * np.pi * 440.0 * t)).astype(np.float32)
+
+        result = self.phase.process(
+            audio,
+            sample_rate=SR,
+            material_type=self._material,
+            amplitude_drift_correction=True,
+            drift_slope_db_per_minute=-6.0,
+            quality_mode="restoration",
+        )
+
+        frame = int(0.1 * SR)
+        in_frames = audio[: (audio.size // frame) * frame].reshape(-1, frame)
+        out_frames = result.audio[: (audio.size // frame) * frame].reshape(-1, frame)
+        in_rms = np.sqrt(np.mean(in_frames * in_frames, axis=1) + 1e-12)
+        out_rms = np.sqrt(np.mean(out_frames * out_frames, axis=1) + 1e-12)
+        gain_db = 20.0 * np.log10(np.maximum(out_rms, 1e-9) / np.maximum(in_rms, 1e-9))
+
+        assert np.max(np.abs(np.diff(gain_db))) <= 0.45
+
+    def test_08c_phase40_amplitude_drift_flattens_carrier_level_trend(self):
+        """Tonträgerbedingte Pegeldrift wird geglättet, statt nur global normalisiert zu werden."""
+        n = 12 * SR
+        t = np.arange(n, dtype=np.float32) / float(SR)
+        drift_db = np.linspace(0.0, -2.4, n, dtype=np.float32)
+        amp = np.float32(0.28) * (np.float32(10.0) ** (drift_db / np.float32(20.0)))
+        audio = (amp * np.sin(2 * np.pi * 440.0 * t)).astype(np.float32)
+
+        result = self.phase.process(
+            audio,
+            sample_rate=SR,
+            material_type=self._material,
+            amplitude_drift_correction=True,
+            drift_slope_db_per_minute=-12.0,
+            quality_mode="restoration",
+        )
+
+        def edge_delta_db(signal: np.ndarray):
+            edge_n = int(2.0 * SR)
+            start = float(np.sqrt(np.mean(signal[:edge_n] * signal[:edge_n]) + 1e-12))
+            end = float(np.sqrt(np.mean(signal[-edge_n:] * signal[-edge_n:]) + 1e-12))
+            start_safe: float = start if start > 1e-9 else 1e-9
+            end_safe: float = end if end > 1e-9 else 1e-9
+            ratio: float = end_safe / start_safe
+            delta_db: float = 20.0 * math.log10(ratio)
+            return delta_db
+
+        before_delta = abs(edge_delta_db(audio))
+        after_delta = abs(edge_delta_db(np.asarray(result.audio, dtype=np.float32)))
+
+        assert after_delta < before_delta * 0.45
+        assert result.metadata["amplitude_drift_correction_applied"] is True
+        assert np.max(np.abs(result.audio)) <= 1.0 + 1e-6
+
+    def test_08d_phase40_restores_channel_first_stereo_layout(self):
+        """Stereo-Eingaben im (2, N)-Layout müssen auch so zurückgegeben werden."""
+        mono = _clean_harmonic(duration_s=0.25)
+        audio = np.vstack((mono, mono * 0.9)).astype(np.float32)
+
+        result = self.phase.process(
+            audio,
+            sample_rate=SR,
+            material_type=self._material,
+            amplitude_drift_correction=True,
+            drift_slope_db_per_minute=-6.0,
+            quality_mode="restoration",
+        )
+
+        assert result.audio.shape == audio.shape
+        assert np.isfinite(result.audio).all()
         assert np.max(np.abs(result.audio)) <= 1.0 + 1e-6
 
 

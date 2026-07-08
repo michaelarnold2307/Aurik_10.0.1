@@ -302,7 +302,7 @@ class MaterialSpecificOptimizer:
 
             # Compute musical goals
             checker = MusicalGoalsChecker()
-            goals_result = checker.evaluate_musical_goals(output_audio, sr=48000)
+            goals_result = checker.evaluate_musical_goals(output_audio, sr=48000)  # type: ignore[attr-defined]
             goals_score = goals_result["overall_score"]
 
             # Weighted combination (total = 1.0; SI-SDR-Gewicht auf Musical Goals umverteilt §10.2)
@@ -364,7 +364,7 @@ class MaterialSpecificOptimizer:
         logger.info("  Trials: %s", self.n_trials)
 
         # Optimize
-        self.study.optimize(
+        self.study.optimize(  # type: ignore[attr-defined]
             lambda trial: self.objective_function(trial, evaluation_dataset, process_function),
             n_trials=self.n_trials,
             n_jobs=self.n_jobs,
@@ -372,8 +372,8 @@ class MaterialSpecificOptimizer:
         )
 
         # Get best parameters
-        self.best_params = self.study.best_params
-        best_value = -self.study.best_value  # Negate back to get quality score
+        self.best_params = self.study.best_params  # type: ignore[attr-defined]
+        best_value = -self.study.best_value  # type: ignore[attr-defined]  # Negate back to get quality score
 
         logger.info("Optimization completed!")
         logger.info("  Best quality score: %.4f", best_value)
@@ -386,7 +386,7 @@ class MaterialSpecificOptimizer:
         return {
             "best_params": self.best_params,
             "best_score": best_value,
-            "n_trials": len(self.study.trials),
+            "n_trials": len(self.study.trials),  # type: ignore[attr-defined]
             "study_name": study_name,
         }
 
@@ -467,7 +467,7 @@ class MaterialSpecificOptimizer:
 
         logger.info("Best parameters loaded: %s", params_path)
 
-        return params
+        return params  # type: ignore[no-any-return]
 
 
 class MultiMaterialOptimizer:
@@ -527,7 +527,7 @@ class MultiMaterialOptimizer:
 
         return results
 
-    def generate_summary_report(self, results: dict[str, dict[str, Any]]) -> np.ndarray:
+    def generate_summary_report(self, results: dict[str, dict[str, Any]]) -> np.ndarray:  # type: ignore[return]
         """Generiert summary report for all materials."""
         summary = {
             "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -546,8 +546,8 @@ class MultiMaterialOptimizer:
             json.dump(summary, f, indent=2)
 
         logger.info("\nOptimization summary saved: %s", output_path)
-        logger.info("Average quality score: %.4f", summary["overall_stats"]["avg_quality_score"])
-        logger.info("Best material: %s", summary["overall_stats"]["best_material"])
+        logger.info("Average quality score: %.4f", summary["overall_stats"]["avg_quality_score"])  # type: ignore[index]
+        logger.info("Best material: %s", summary["overall_stats"]["best_material"])  # type: ignore[index]
 
 
 # Example usage
@@ -561,7 +561,7 @@ if __name__ == "__main__":
     # Dummy process function (in practice, use actual Aurik pipeline)
     def dummy_process(audio, config) -> np.ndarray:
         # Simulate processing
-        return audio * 0.9
+        return audio * 0.9  # type: ignore[no-any-return]
 
     # Run optimization
     results = optimizer.optimize(evaluation_dataset=dummy_dataset, process_function=dummy_process)

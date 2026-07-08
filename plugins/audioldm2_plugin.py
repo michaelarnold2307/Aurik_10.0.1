@@ -86,7 +86,7 @@ class AudioLDM2Plugin:
                     sess_options=opts,
                     providers=_providers,
                 )
-                self._input_names = [i.name for i in self._session.get_inputs()]
+                self._input_names = [i.name for i in self._session.get_inputs()]  # type: ignore[attr-defined]
                 self._ok = True
                 logger.info(
                     "✅ AudioLDM2 geladen: %s | Eingaben: %s",
@@ -99,7 +99,7 @@ class AudioLDM2Plugin:
                     _reg_plm(
                         "AudioLDM2",
                         size_gb=1.3,
-                        unload_fn=lambda s=self: setattr(s, "_session", None) or setattr(s, "_ok", False),
+                        unload_fn=lambda s=self: setattr(s, "_session", None) or setattr(s, "_ok", False),  # type: ignore[func-returns-value,misc]
                     )
                 except Exception as _exc:
                     logger.debug("Operation failed (non-critical): %s", _exc)
@@ -146,7 +146,7 @@ class AudioLDM2Plugin:
             prompt,
             duration,
         )
-        return np.zeros(n_samples, dtype=np.float32)
+        return np.zeros(n_samples, dtype=np.float32)  # type: ignore[no-any-return]
 
     def _run_onnx(self, prompt: str, n_samples: int, guidance: float) -> np.ndarray:
         """Versuche ONNX-Inferenz mit bekannten Eingabe-Formaten."""

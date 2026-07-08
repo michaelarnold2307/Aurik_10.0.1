@@ -84,7 +84,7 @@ class AdaptiveCoreScheduler:
     """
 
     # Hardware-Optimized Settings
-    OPTIMAL_CORES = 8
+    OPTIMAL_CORES = 4
     MAX_CORES = 8  # Hard Limit (auch wenn System mehr hat)
     MEMORY_POOL_SIZE_MB = 512  # Pre-allocated Memory Pool
     CACHE_SIZE_L2_MB = 8  # Typical L2 Cache Size
@@ -109,10 +109,7 @@ class AdaptiveCoreScheduler:
             # User override, aber warnen wenn suboptimal
             self.num_cores = min(num_cores, self.MAX_CORES)
             if num_cores > self.OPTIMAL_CORES:
-                logger.warning(
-                    f"Using {self.num_cores} cores (requested {num_cores}). "
-                    f"Optimal is {self.OPTIMAL_CORES} for Aurik workload!"
-                )
+                logger.info(f"Using {self.num_cores} cores (requested {num_cores}) — optimal is {self.OPTIMAL_CORES}")
             elif num_cores < self.OPTIMAL_CORES:
                 logger.info("Using %s cores (suboptimal, %s recommended)", self.num_cores, self.OPTIMAL_CORES)
 
@@ -129,12 +126,12 @@ class AdaptiveCoreScheduler:
         self.failed_phases: set = set()
 
         # Monitoring
-        self.stats = None
+        self.stats: SchedulerStats | None = None
         self.phase_times: dict[str, float] = {}
         self.core_utilization: list[list[float]] = [[] for _ in range(self.num_cores)]
 
         # Memory Pool (if enabled)
-        self.memory_pool = None
+        self.memory_pool: dict[str, list[np.ndarray]] | None = None
         if enable_memory_pool:
             self._init_memory_pool()
 

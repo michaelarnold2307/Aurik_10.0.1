@@ -36,8 +36,8 @@ def _sosfilt_array(sos: np.ndarray, audio: np.ndarray) -> np.ndarray:
     """Gibt only the filtered audio array from scipy.signal.sosfilt zurück."""
     filtered = scipy_signal.sosfilt(sos, audio)
     if isinstance(filtered, tuple):
-        return np.asarray(filtered[0])
-    return np.asarray(filtered)
+        return np.asarray(filtered[0])  # type: ignore[no-any-return]
+    return np.asarray(filtered)  # type: ignore[no-any-return]
 
 
 @dataclass
@@ -108,7 +108,7 @@ class DatasetGenerator:
                     samples.append(synthetic_sample)
 
         # 3. Statistiken
-        medium_distribution = {}
+        medium_distribution: dict[str, int] = {}
         for sample in samples:
             medium_name = sample.medium_type.name
             medium_distribution[medium_name] = medium_distribution.get(medium_name, 0) + 1
@@ -145,7 +145,7 @@ class DatasetGenerator:
                 samples.append(synthetic_sample)
 
         # Statistiken
-        era_distribution = {}
+        era_distribution: dict[str, int] = {}
         for sample in samples:
             era_name = sample.era_type.value
             era_distribution[era_name] = era_distribution.get(era_name, 0) + 1
@@ -156,7 +156,7 @@ class DatasetGenerator:
         """
         Lädt echte Golden Samples aus golden_samples/ Verzeichnis.
         """
-        samples = []
+        samples: list[SyntheticSample] = []
 
         if not self.golden_samples_dir.exists():
             logger.debug("⚠️  Golden samples directory not found: %s", self.golden_samples_dir)
@@ -419,13 +419,13 @@ class DatasetGenerator:
         from scipy.signal import resample_poly
 
         if audio.ndim == 1:
-            return resample_poly(audio, sr_out, sr_in)
+            return resample_poly(audio, sr_out, sr_in)  # type: ignore[no-any-return]
         else:
             # Stereo
             resampled = np.zeros((int(len(audio) * sr_out / sr_in), 2))
             resampled[:, 0] = resample_poly(audio[:, 0], sr_out, sr_in)
             resampled[:, 1] = resample_poly(audio[:, 1], sr_out, sr_in)
-            return resampled
+            return resampled  # type: ignore[no-any-return]
 
     def _infer_medium_from_path(self, path: Path) -> MediaType:
         """Inferiert Medium Type aus Datei-Pfad."""

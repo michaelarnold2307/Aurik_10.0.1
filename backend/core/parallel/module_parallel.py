@@ -140,7 +140,7 @@ class ModuleParallelProcessor:
 
         # Execute phases
         current_audio = audio.copy()
-        module_outputs = {}  # Store outputs for dependent modules
+        module_outputs: dict[str, np.ndarray] = {}  # Store outputs for dependent modules
 
         for phase_idx, phase_modules in enumerate(phases):
             phase_start = time.time()
@@ -148,11 +148,11 @@ class ModuleParallelProcessor:
             if len(phase_modules) == 1 or not self.enable_parallel:
                 # Sequential execution
                 phase_results = self._process_sequential(current_audio, sr, phase_modules, module_outputs)
-                self._processing_stats["sequential_phases"] += 1
+                self._processing_stats["sequential_phases"] += 1  # type: ignore[operator]
             else:
                 # Parallel execution
                 phase_results = self._process_parallel(current_audio, sr, phase_modules, module_outputs)
-                self._processing_stats["parallel_phases"] += 1
+                self._processing_stats["parallel_phases"] += 1  # type: ignore[operator]
 
             phase_time = time.time() - phase_start
 
@@ -174,7 +174,7 @@ class ModuleParallelProcessor:
             logger.debug("Phase %s complete: %s modules, %.3fs", phase_idx, len(phase_modules), phase_time)
 
         processing_time = time.time() - start_time
-        self._processing_stats["total_processed"] += 1
+        self._processing_stats["total_processed"] += 1  # type: ignore[operator]
 
         logger.debug(
             "Module pipeline complete: %.3fs, %s phases, %s modules", processing_time, len(phases), len(modules)
@@ -202,7 +202,7 @@ class ModuleParallelProcessor:
         # Topological sort to determine execution order
         phases = []
         remaining = {m.name for m in modules}
-        satisfied = set()  # Modules that have been executed
+        satisfied: set[str] = set()  # Modules that have been executed
 
         while remaining:
             # Find modules whose dependencies are satisfied
@@ -358,7 +358,7 @@ class ModuleParallelProcessor:
             "total_processed": self._processing_stats["total_processed"],
             "parallel_phases": self._processing_stats["parallel_phases"],
             "sequential_phases": self._processing_stats["sequential_phases"],
-            "total_phases": (self._processing_stats["parallel_phases"] + self._processing_stats["sequential_phases"]),
+            "total_phases": (self._processing_stats["parallel_phases"] + self._processing_stats["sequential_phases"]),  # type: ignore[operator]
         }
 
     def reset_stats(self):

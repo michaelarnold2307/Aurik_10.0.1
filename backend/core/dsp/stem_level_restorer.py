@@ -337,7 +337,7 @@ class StemLevelRestorer:
         try:
             arr = np.asarray(candidate, dtype=np.float32)
         except Exception:  # pylint: disable=broad-except
-            return np.zeros_like(ref, dtype=np.float32)
+            return np.zeros_like(ref, dtype=np.float32)  # type: ignore[no-any-return]
 
         arr = np.nan_to_num(arr, nan=0.0, posinf=0.0, neginf=0.0)
         if arr.ndim == 2 and ref.ndim == 2 and arr.T.shape == ref.shape:
@@ -348,7 +348,7 @@ class StemLevelRestorer:
             arr = np.repeat(arr[:, None], ref.shape[1], axis=1)
 
         if arr.ndim != ref.ndim:
-            return np.zeros_like(ref, dtype=np.float32)
+            return np.zeros_like(ref, dtype=np.float32)  # type: ignore[no-any-return]
         if arr.shape[0] < ref.shape[0]:
             pad_shape = list(arr.shape)
             pad_shape[0] = ref.shape[0] - arr.shape[0]
@@ -357,8 +357,8 @@ class StemLevelRestorer:
             arr = arr[: ref.shape[0]]
 
         if arr.shape != ref.shape:
-            return np.zeros_like(ref, dtype=np.float32)
-        return np.clip(arr.astype(np.float32), -1.0, 1.0)
+            return np.zeros_like(ref, dtype=np.float32)  # type: ignore[no-any-return]
+        return np.clip(arr.astype(np.float32), -1.0, 1.0)  # type: ignore[no-any-return]
 
     def _dsp_stem_split(self, audio: np.ndarray, sample_rate: int) -> tuple[np.ndarray, np.ndarray]:
         """DSP fallback stem split: vocal ≈ 150–8000 Hz bandpass; instr = residual."""

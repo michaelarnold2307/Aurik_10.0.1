@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
+# pylint: disable=import-outside-toplevel
 """
 aurik_debug.py — Standalone Debug-CLI für die Aurik-Pipeline.
+
+LEGACY_NON_RELEASE: Dieser Debug-CLI nutzt absichtlich einen direkten UV3-Bypass
+(`UnifiedRestorerV3.restore(...)`) für Telemetrie-Diagnosen. Er ist kein
+Desktop-Release-Einstieg und darf den Canonical Contract der Release-Pfade
+nicht ersetzen.
 
 Läuft die vollständige Restaurierungs-Pipeline mit aktiviertem Debug-Trace
 und gibt einen strukturierten Bericht aus — ohne Raten, ohne Suchen in Logs.
@@ -35,6 +41,7 @@ import logging
 import sys
 import time
 from pathlib import Path
+from typing import Any
 
 # Logging frühzeitig einrichten
 logging.basicConfig(
@@ -54,19 +61,33 @@ def _setup_workspace() -> bool:
     return True
 
 
-def _load_audio(path: str) -> tuple:
+def _load_audio(path: str) -> tuple[Any, int]:
     """Lädt Audio mit Aurik-konformem load_audio_file()."""
     try:
         from backend.file_import import load_audio_file
 
-        audio, sr = load_audio_file(path, do_carrier_analysis=False)
-        return audio, sr
+        payload = load_audio_file(path, do_carrier_analysis=False)
+        if payload is None:
+            raise RuntimeError("Audio-Import lieferte kein Ergebnisobjekt")
+        if not isinstance(payload, dict):
+            raise RuntimeError(f"Unerwartetes Import-Ergebnis: {type(payload)!r}")
+
+        err = payload.get("error")
+        if err:
+            raise RuntimeError(str(err))
+
+        audio = payload.get("audio")
+        sr = payload.get("sr")
+        if audio is None or sr is None:
+            raise RuntimeError("Audio-Import unvollständig: 'audio' oder 'sr' fehlt")
+
+        return audio, int(sr)
     except Exception as e:
         logger.error("Audio-Import fehlgeschlagen (%s): %s", path, e)
         raise
 
 
-def _run_restore(audio, sr: int, mode: str, verbose: bool) -> any:
+def _run_restore(audio: Any, sr: int, mode: str, verbose: bool) -> Any:
     """Führt Pipeline mit aktiviertem Debug-Trace aus."""
     try:
         from backend.core.unified_restorer_v3 import UnifiedRestorerV3
@@ -109,7 +130,7 @@ def _print_header(audio_path: str, mode: str) -> None:
     print(f"{'═' * 80}")
 
 
-def _print_summary(result: any) -> None:
+def _print_summary(result: Any) -> None:
     """Kurzübersicht ohne Trace-Import."""
     mat = getattr(result, "material_type", None)
     cfg = getattr(result, "config", None)
@@ -119,7 +140,7 @@ def _print_summary(result: any) -> None:
     meta = getattr(result, "metadata", {}) or {}
     fail_reasons = meta.get("fail_reasons", [])
 
-    print(f"\n  Material    : {mat.value if hasattr(mat, 'value') else mat or '?'}")
+    print(f"\n  Material    : {mat.value if hasattr(mat, 'value') else mat or '?'}")  # type: ignore[union-attr]
     print(f"  Mode        : {cfg.mode.value if cfg and hasattr(cfg.mode, 'value') else '?'}")
     print(f"  Zeit        : {getattr(result, 'total_time_seconds', 0):.1f}s  RT-Faktor: {rt:.2f}×")
     print(f"  Phasen      : {phases_ex} ausgeführt, {phases_sk} übersprungen")
@@ -129,7 +150,38 @@ def _print_summary(result: any) -> None:
             print(f"    • {fr}")
 
 
+def _resolve_debug_modes(raw_mode: str | None) -> tuple[str, str, str]:
+    """Normalisiert Legacy-CLI-Modi auf Denker- und Debug-Gate-Modi.
+
+    Returns:
+        tuple aus (denker_mode, goal_gate_mode, display_mode)
+    """
+    raw_norm = str(raw_mode or "restoration").strip().lower().replace("_", "").replace(" ", "")
+
+    # Legacy-Debug-Aliase (keine Release-Oberfläche) auf die zwei kanonischen Modi abbilden.
+    legacy_aliases = {
+        "fast": "restoration",
+        "balanced": "restoration",
+        "maximum": "studio2026",
+    }
+    if raw_norm in legacy_aliases:
+        denker_mode = legacy_aliases[raw_norm]
+    else:
+        try:
+            from backend.api.bridge import normalize_user_mode
+
+            canonical = normalize_user_mode(raw_mode)
+            denker_mode = "studio2026" if canonical == "Studio 2026" else "restoration"
+        except Exception:
+            denker_mode = "studio2026" if raw_norm in {"studio", "studio2026"} else "restoration"
+
+    goal_gate_mode = "studio_2026" if denker_mode == "studio2026" else "restoration"
+    display_mode = "Studio 2026" if denker_mode == "studio2026" else "Restoration"
+    return denker_mode, goal_gate_mode, display_mode
+
+
 def main(argv: list[str] | None = None) -> int:
+    """CLI-Einstieg für den Legacy-Debug-Bypass mit strukturierter Telemetrie."""
     parser = argparse.ArgumentParser(
         prog="aurik_debug",
         description="Aurik Pipeline Debug-CLI — vollständige Telemetrie ohne Raten",
@@ -206,6 +258,7 @@ Exit-Codes: 0=OK, 1=Goal-Fails, 2=Pipeline-Fehler, 3=Import-Fehler
     args = parser.parse_args(argv)
 
     _setup_workspace()
+    denker_mode, goal_gate_mode, display_mode = _resolve_debug_modes(args.mode)
 
     # --- Audio laden ---
     try:
@@ -216,8 +269,8 @@ Exit-Codes: 0=OK, 1=Goal-Fails, 2=Pipeline-Fehler, 3=Import-Fehler
 
     # --- Pipeline ---
     try:
-        _print_header(args.audio, args.mode)
-        result = _run_restore(audio, sr, args.mode, args.verbose)
+        _print_header(args.audio, display_mode)
+        result = _run_restore(audio, sr, denker_mode, args.verbose)
     except Exception as e:
         print(f"\n✗ Pipeline-Fehler: {e}", file=sys.stderr)
         if args.verbose:
@@ -231,9 +284,18 @@ Exit-Codes: 0=OK, 1=Goal-Fails, 2=Pipeline-Fehler, 3=Import-Fehler
         try:
             import soundfile as sf
 
+            from backend.api.bridge import export_guard
+
             _audio_out = getattr(result, "audio", None)
             if _audio_out is not None:
-                sf.write(args.out, _audio_out, 48000)
+                out_path = Path(args.out)
+                tmp_path = out_path.with_suffix(out_path.suffix + ".tmp")
+                try:
+                    sf.write(tmp_path, export_guard(_audio_out), 48000)
+                    tmp_path.replace(out_path)
+                finally:
+                    if tmp_path.exists():
+                        tmp_path.unlink(missing_ok=True)
                 print(f"\n✓ Audio gespeichert: {args.out}", file=sys.stderr)
             else:
                 print("\n⚠ Kein Audio in Result — --out ignoriert", file=sys.stderr)
@@ -266,7 +328,7 @@ Exit-Codes: 0=OK, 1=Goal-Fails, 2=Pipeline-Fehler, 3=Import-Fehler
     # --- JSON-Summary-Modus ---
     if args.summary_json:
         summary = get_debug_summary(result)
-        summary["goal_fails"] = get_goal_fails(result, args.mode)
+        summary["goal_fails"] = get_goal_fails(result, goal_gate_mode)
         summary["worst_phases"] = (
             get_worst_phases(result, n=5) if args.worst_phases == 0 else get_worst_phases(result, n=args.worst_phases)
         )
@@ -305,7 +367,7 @@ Exit-Codes: 0=OK, 1=Goal-Fails, 2=Pipeline-Fehler, 3=Import-Fehler
         print(_fmt_full(trace))
 
     # --- Goal-Fails prüfen (Exit-Code) ---
-    goal_fails = get_goal_fails(result, args.mode)
+    goal_fails = get_goal_fails(result, goal_gate_mode)
     if goal_fails:
         print(f"\n⚠ {len(goal_fails)} Goal(s) unter Schwellwert:")
         for gf in goal_fails:

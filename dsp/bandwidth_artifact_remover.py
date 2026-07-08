@@ -1,15 +1,15 @@
-import logging
-
 """
 bandwidth_artifact_remover.py - Bandbreiten-Artefakt-Remover für Aurik 6.0
 
 SOTA-konformer Bandbreiten-Artefakt-Remover mit DSPContract und Auditierbarkeit.
 """
 
+import logging
 from dataclasses import asdict, dataclass
 from typing import Any
 
 import numpy as np
+from scipy.signal import lfilter, remez
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +17,8 @@ logger = logging.getLogger(__name__)
 # DSPContract für Auditierbarkeit und SOTA-Konformität
 @dataclass(frozen=True)
 class DSPContractBandwidthArtifactRemover:
+    """Auditierbarer DSP-Vertrag für den Bandbreiten-Artefakt-Remover."""
+
     id: str = "bandwidth_artifact_remover"
     category: str = "bandwidth_artifact_remover"
     version: str = "1.0.0"
@@ -61,18 +63,20 @@ class BandwidthArtifactRemover:
     contract: DSPContractBandwidthArtifactRemover = bandwidth_artifact_remover_contract
 
     def __init__(self, mode: str = "auto"):  # "auto", "aliasing", "pre_echo", "compression"
+        """Initialisiert den Remover mit Betriebsmodus."""
         self.mode = mode
 
     def log_contract(self):
+        """Protokolliert den aktiven DSP-Vertrag für Audits."""
         logger.debug("[DSPContract] %s", asdict(self.contract))
 
     def process(self, audio: np.ndarray, sr: int) -> np.ndarray:
+        """Entfernt Bandbreiten- und Kompressionsartefakte materialschonend."""
         self.log_contract()  # Audit: Contract-Infos loggen (optional)
+        logger.debug("BandwidthArtifactRemover: mode=%s sr=%d", self.mode, sr)
         # SOTA-Entfernung von Bandbreiten-/Kompressionsartefakten
         if self.mode in ("auto", "aliasing"):
             # Adaptive Anti-Aliasing-Filterung (z. B. Parks-McClellan)
-            from scipy.signal import lfilter, remez
-
             numtaps = 101
             bands = [0, 0.45, 0.5, 1.0]
             desired = [1, 0]
@@ -85,8 +89,6 @@ class BandwidthArtifactRemover:
         elif self.mode == "compression":
             # Kompressionsartefakte: Deep-Learning-Integration (Platzhalter)
             try:
-                pass
-
                 # model = torch.jit.load('compression_artifact_remover.pt')
                 # audio_out = model(torch.tensor(audio).unsqueeze(0)).squeeze(0).numpy()
                 audio_out = audio  # Noch nicht implementiert
@@ -94,4 +96,5 @@ class BandwidthArtifactRemover:
                 audio_out = audio
         else:
             audio_out = audio
-        return audio_out
+        output: np.ndarray = np.asarray(audio_out, dtype=audio.dtype)
+        return output

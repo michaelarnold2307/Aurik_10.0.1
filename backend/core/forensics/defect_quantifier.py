@@ -28,21 +28,21 @@ logger = logging.getLogger(__name__)
 
 def _as_real_array(audio: np.ndarray) -> np.ndarray:
     """Gibt a contiguous real-valued ndarray for signal processing calls zurück."""
-    return np.asarray(audio, dtype=np.float64).reshape(-1)
+    return np.asarray(audio, dtype=np.float64).reshape(-1)  # type: ignore[no-any-return]
 
 
 def _analytic_envelope(audio: np.ndarray) -> np.ndarray:
     """Gibt absolute Hilbert envelope as ndarray with explicit typing zurück."""
     analytic = np.asarray(signal.hilbert(_as_real_array(audio)), dtype=np.complex128)
-    return np.abs(analytic)
+    return np.abs(analytic)  # type: ignore[no-any-return]
 
 
 def _sosfilt_array(sos: np.ndarray, audio: np.ndarray) -> np.ndarray:
     """Gibt only filtered audio ndarray from scipy.signal.sosfilt zurück."""
     filtered = signal.sosfilt(sos, _as_real_array(audio))
     if isinstance(filtered, tuple):
-        return np.asarray(filtered[0], dtype=np.float64)
-    return np.asarray(filtered, dtype=np.float64)
+        return np.asarray(filtered[0], dtype=np.float64)  # type: ignore[no-any-return]
+    return np.asarray(filtered, dtype=np.float64)  # type: ignore[no-any-return]
 
 
 def _rfft_magnitude(audio: np.ndarray, sample_rate: int) -> tuple[np.ndarray, np.ndarray]:
@@ -432,7 +432,7 @@ class DefectQuantifier:
             harmonic_spread = 0.0
 
         # THD+N (simplified: use RMS of full spectrum minus fundamental)
-        signal_power = np.sum(magnitudes**2)
+        signal_power: float = float(np.sum(magnitudes**2))
         thd_plus_noise_percent = (
             float(np.sqrt((signal_power - fundamental_power) / signal_power) * 100) if signal_power > 0 else 0.0
         )
@@ -576,9 +576,9 @@ class DefectQuantifier:
             # Average FFT of burst regions
             magnitudes, freqs = _rfft_magnitude(audio_hp, self.sample_rate)
 
-            low_energy = np.sum(magnitudes[freqs < 2000])
-            mid_energy = np.sum(magnitudes[(freqs >= 2000) & (freqs < 8000)])
-            high_energy = np.sum(magnitudes[freqs >= 8000])
+            low_energy: float = float(np.sum(magnitudes[freqs < 2000]))
+            mid_energy: float = float(np.sum(magnitudes[(freqs >= 2000) & (freqs < 8000)]))
+            high_energy: float = float(np.sum(magnitudes[freqs >= 8000]))
             total = low_energy + mid_energy + high_energy
 
             if total > 0:

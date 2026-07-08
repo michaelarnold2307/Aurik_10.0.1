@@ -151,7 +151,7 @@ class PerceptualAttentionModel:
         saliency = np.nan_to_num(saliency, nan=self.BASE_WEIGHT)
         saliency = np.clip(saliency, self.SALIENCY_MIN, self.SALIENCY_MAX)
 
-        return saliency.astype(np.float32)
+        return saliency.astype(np.float32)  # type: ignore[no-any-return]
 
     def apply_to_gain(
         self,
@@ -203,7 +203,7 @@ class PerceptualAttentionModel:
 
         result = np.nan_to_num(result, nan=0.0, posinf=0.0, neginf=0.0)
         result = np.clip(result, 0.0, None)
-        return result.astype(np.float32)
+        return result.astype(np.float32)  # type: ignore[no-any-return]
 
     def _compute_bark_saliency(self, frame: np.ndarray, sr: int) -> np.ndarray:
         """Bark-Bänder-Salienz aus FFT-Energie."""
@@ -226,23 +226,23 @@ class PerceptualAttentionModel:
                 np.clip(self.BASE_WEIGHT + rel_energy * N_BARK_BANDS * 0.5, self.SALIENCY_MIN, self.SALIENCY_MAX)
             )
 
-        return bark_weights
+        return bark_weights  # type: ignore[no-any-return]
 
     def _compute_percussive_energy(self, mono: np.ndarray, sr: int, hop_len: int, n_frames: int) -> np.ndarray:
         """Perkussive Energie pro Frame (HPSS-basiert)."""
         try:
             import librosa
 
-            _, percussive = librosa.effects.hpss(mono)
+            _, percussive = librosa.effects.hpss(mono)  # type: ignore[attr-defined]
             perc_energy = np.array(
                 [float(np.sqrt(np.mean(percussive[f * hop_len : (f + 1) * hop_len] ** 2))) for f in range(n_frames)],
                 dtype=np.float32,
             )
             # Normalisieren
             max_e = float(np.max(perc_energy)) + 1e-10
-            return perc_energy / max_e
+            return perc_energy / max_e  # type: ignore[no-any-return]
         except Exception:
-            return np.zeros(n_frames, dtype=np.float32)
+            return np.zeros(n_frames, dtype=np.float32)  # type: ignore[no-any-return]
 
     def _heuristic_vocal_detection(self, frame: np.ndarray, sr: int) -> bool:
         """ZCR + F0-Heuristik für wahrscheinliche Vokal-Segmente."""

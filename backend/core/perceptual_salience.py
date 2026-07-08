@@ -72,11 +72,27 @@ class PerceptualSalienceEstimator:
 
     _WINDOW_S = 0.4  # ITU-R BS.1770-5 momentary loudness (400 ms)
     _HOP_S = 0.1  # 100 ms hop for loudness profile
-    _FORWARD_MASK_S = 0.200  # forward masking duration (200 ms)
+    _FORWARD_MASK_S = 0.200  # forward masking duration (200 ms at 1 kHz, varies with frequency)
     _BACKWARD_MASK_S = 0.020  # backward masking duration (20 ms)
     _SIMULTANEOUS_THRESHOLD_DB = 12.0  # dB below context = masked
     _FORWARD_THRESHOLD_DB = 8.0
     _BACKWARD_THRESHOLD_DB = 6.0
+
+    @staticmethod
+    def _forward_mask_duration_ms(dominant_freq_hz: float = 1000.0) -> float:
+        """Frequency-dependent forward masking duration (Fastl & Zwicker 2007, Fig. 8.5).
+
+        Low-frequency maskers produce longer forward masking:
+        - 100 Hz  → ~400 ms
+        - 1000 Hz → ~200 ms (baseline)
+        - 8000 Hz → ~50 ms
+
+        Logarithmic interpolation between 100 Hz and 8 kHz, clamped to [50, 500] ms.
+        """
+        f = float(np.clip(dominant_freq_hz, 100.0, 8000.0))
+        log_f = np.log10(f / 100.0)
+        mask_ms = 400.0 - log_f * 185.0
+        return float(np.clip(mask_ms, 50.0, 500.0))
 
     def estimate(
         self,
@@ -273,14 +289,31 @@ class PerceptualSalienceEstimator:
             ds.metadata["n_salient_events"] = sum(1 for a in type_annotations if a.salience >= 0.5)
             ds.metadata["n_masked_events"] = sum(1 for a in type_annotations if a.salience < 0.3)
 
+            # Timing-Defekte sind Lautstärken-unabhängig: Loudness-Masking gilt NICHT für
+            # Pitch-/Zeitmodulationen (Houtsma et al. 1980; Hartmann 1991 — JND für
+            # Frequenzmodulation ist signalpegel-unabhängig). v9.15.1
+            _TIMING_DEFECTS_NO_SALIENCE_SCALE = frozenset(
+                {
+                    DefectType.WOW,
+                    DefectType.FLUTTER,
+                    DefectType.MULTIBAND_WOW_FLUTTER,
+                    DefectType.PITCH_DRIFT,
+                }
+            )
+
             # Scale severity: masked defects get reduced priority
             old_sev = ds.severity
-            ds.severity = float(
-                np.nan_to_num(
-                    min(1.0, old_sev * (0.3 + 0.7 * mean_sal)),
-                    nan=0.0,
+            if dt in _TIMING_DEFECTS_NO_SALIENCE_SCALE:
+                # Timing-Defekte: Severity wird NICHT durch Lautstärkekontext skaliert.
+                # Nur Metadaten-Annotation, keine Severity-Reduktion.
+                ds.metadata["salience_scale_skipped"] = "timing_defect"
+            else:
+                ds.severity = float(
+                    np.nan_to_num(
+                        min(1.0, old_sev * (0.3 + 0.7 * mean_sal)),
+                        nan=0.0,
+                    )
                 )
-            )
             if abs(ds.severity - old_sev) > 0.01:
                 logger.debug(
                     "Salience adjustment: %s severity %.3f → %.3f (salience=%.3f)",
@@ -319,7 +352,7 @@ class PerceptualSalienceEstimator:
             rms = np.sqrt(np.mean(mono[start:end] ** 2) + 1e-12)
             loudness[i] = 20.0 * np.log10(max(rms, 1e-10))
 
-        return loudness
+        return loudness  # type: ignore[no-any-return]
 
     def _time_to_frame(self, t: float, sr: int) -> int:
         """Konvertiert time in seconds to loudness profile frame index."""

@@ -105,7 +105,7 @@ def _hz_to_cents(f0_hz: np.ndarray, ref_hz: float = 440.0) -> np.ndarray:
     """F0 in Hz → Cent relativ zu ref_hz. 0 Hz → NaN."""
     with np.errstate(divide="ignore", invalid="ignore"):
         result = np.where(f0_hz > 0, 1200.0 * np.log2(f0_hz / ref_hz), np.nan)
-    return result
+    return result  # type: ignore[no-any-return]
 
 
 def _nearest_scale_distance_cents(cents: float) -> float:
@@ -153,7 +153,7 @@ def _detect_vibrato_segments(
         # Energie im Vibrato-Band
         vib_mask = (freqs >= _VIBRATO_FREQ_LOW_HZ) & (freqs <= _VIBRATO_FREQ_HIGH_HZ)
         total_energy = np.sum(fft**2) + 1e-12
-        vib_energy = np.sum(fft[vib_mask] ** 2)
+        vib_energy: float = float(np.sum(fft[vib_mask] ** 2))
         if vib_energy / total_energy > 0.40:  # > 40 % Energie im Vibrato-Band
             peak_freq = float(freqs[vib_mask][np.argmax(fft[vib_mask])]) if np.any(vib_mask) else 0.0
             vibrato_segs.append((i, i + win_frames, peak_freq))

@@ -34,7 +34,7 @@ Tier 6 immer sequenziell.
 
 | Phase | Datei | Funktion |
 | -------- | --------------------------- | --------------- |
-| phase_01 | `phase_01_click_removal.py` | Clicks/Impulse |
+| phase_01 | `phase_01_click_removal.py` | Clicks/Impulse, linked-stereo sparse patch repair |
 | phase_02 | `phase_02_hum_removal.py` | Brumm 50/60 Hz |
 | phase_03 | `phase_03_denoise.py` | Breitrauschen (OMLSA/IMCRA) |
 | phase_04 | `phase_04_eq_correction.py` | Frequenzgang-Korrektur |
@@ -73,7 +73,7 @@ Tier 6 immer sequenziell.
 | phase_37 | `phase_37_bass_enhancement.py` | Bass-Enhancement |
 | phase_38 | `phase_38_presence_boost.py` | Präsenz-Boost |
 | phase_39 | `phase_39_air_band_enhancement.py` | Air-Band (> 12 kHz) |
-| phase_40 | `phase_40_loudness_normalization.py` | LUFS-Normierung |
+| phase_40 | `phase_40_loudness_normalization.py` | LUFS-Normierung + Pegeldrift-Korrektur |
 | phase_41 | `phase_41_output_format_optimization.py` | Format-Optimierung |
 | phase_42 | `phase_42_vocal_enhancement.py` | Gesangs-Enhancement |
 | phase_43 | `phase_43_ml_deesser.py` | ML-De-Esser |

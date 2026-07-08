@@ -36,6 +36,68 @@ except Exception:  # ImportError, AttributeError, etc.
 _3X_RT_LIMIT: float = 32.0  # Maximaler RT-Faktor (Spec §9.5)
 
 
+# ─── Goal-Risk-Assessment (Muster D: gemeinsame Basis für prognostiziere + optimiere) ──
+# Zentral definierte Goal-Thresholds: beide Pfade nutzen dieselben Werte.
+
+
+_GOAL_THRESHOLDS: dict[str, float] = {
+    "authentizitaet": 0.70,
+    "natuerlichkeit": 0.70,  # naturalness
+    "brillanz": 0.65,
+    "timbre": 0.65,
+    "groove": 0.60,
+    "micro_dynamics": 0.60,
+    "artikulation": 0.65,
+    "waerme": 0.70,
+    "tiefe": 0.65,  # depth / räumliche Tiefe
+    "durchsetzung": 0.65,  # presence / Durchsetzung
+    "transparenz": 0.65,
+    "kohaerenz": 0.65,  # coherence
+    "fokus": 0.60,
+    "balance": 0.65,
+    "stimmung": 0.60,  # emotional mood
+}
+"""Zentrale Bestehensgrenzen für alle 15 Musical Goals.
+
+Ein Goal gilt als bestanden wenn sein Score ≥ diesem Wert liegt.
+Ein Goal gilt als risikobehaftet (repair-würdig) wenn sein Score < Wert × 0.85.
+"""
+
+
+@dataclass
+class GoalRiskAssessment:
+    """Einheitliche Risikobewertung eines Musical Goals.
+
+    Von ExzellenzDenker.bewerte_zielrisiko() erzeugt, sowohl von
+    prognostiziere() (DSP-Proxy) als auch optimiere() (full measurement) genutzt.
+    """
+
+    goal_name: str
+    """Name des Musical Goals (z. B. 'waerme', 'authentizitaet')."""
+
+    current_score: float
+    """Gemessener oder prognostizierter Score ∈ [0, 1]."""
+
+    threshold: float
+    """Bestehensgrenze aus _GOAL_THRESHOLDS."""
+
+    risk: float
+    """Risiko ∈ [0, 1]: 0 = sicher bestanden, 1 = sicher verletzt.
+    Berechnet als norm(threshold - score) mit Sigmoid-Charakter.
+    """
+
+    needs_protection: bool
+    """True wenn prophylaktische Phase injiziert werden sollte (risk ≥ 0.50)."""
+
+    needs_repair: bool
+    """True wenn reaktive Reparatur nötig ist (score < threshold × 0.85)."""
+
+    @property
+    def passed(self) -> bool:
+        """True wenn der Score über der Bestehensgrenze liegt."""
+        return self.current_score >= self.threshold
+
+
 # ─── Ergebnis-Datenklasse ────────────────────────────────────────────────────
 
 
@@ -332,38 +394,40 @@ class ExzellenzDenker:
                 logger.debug("ExzellenzDenker: VERSA post-repair Messung fehlgeschlagen: %s", _ve)
 
         # §2.53 Frisson-Index (Gänsehaut-Propensity) aus Goals-Proxy
-        # Literature: Blood & Zatorre 2001, Grewe 2007, Harrison & Loui 2014
-        # Proxy-Gewichte analog UV3 _compute_joy_runtime_index() fallback-Pfad
-        _fi_micro = float(goals.get("micro_dynamics", 0.0)) if goals else 0.0
-        _fi_emo = float(goals.get("emotionalitaet", 0.0)) if goals else 0.0
-        # emotional_arc ≈ Mittel aus emotionalitaet + micro_dynamics (kein direkter Goal)
-        _fi_arc = 0.5 * _fi_emo + 0.5 * _fi_micro
-        _fi_art = float(goals.get("artikulation", 0.0)) if goals else 0.0
-        _fi_spa = float(goals.get("spatial_depth", 0.0)) if goals else 0.0
-        _fi_trans = float(goals.get("transparenz", 0.0)) if goals else 0.0
-        _fi_tonal = float(goals.get("tonal_center", 0.0)) if goals else 0.0
-        frisson_index = float(
-            np.clip(
-                0.26 * _fi_arc
-                + 0.18 * _fi_micro
-                + 0.14 * _fi_emo
-                + 0.14 * _fi_art
-                + 0.10 * _fi_spa
-                + 0.08 * _fi_trans
-                + 0.10 * _fi_tonal,
-                0.0,
-                1.0,
+        # ── §v10 Gänsehaut-Faktor aus psychoakustischem Modell ──
+        # Ersetzt den alten frisson_index (Musical-Goal-Proxy), der nur technische
+        # Metriken kombinierte. Jetzt: echtes psychoakustisches Modell mit
+        # Dynamic Contrast, Harmonic Surprise, Spectral Shimmer, Temporal Breath,
+        # Frequency Warmth — basierend auf Sloboda 1991, Blood & Zatorre 2001.
+        frisson_index = 0.0
+        _goose_label = ""
+        try:
+            from backend.core.goosebumps_factor import compute_goosebumps
+            _goose_r = compute_goosebumps(optimiertes_audio, sr)
+            frisson_index = float(_goose_r.score)
+            _goose_label = _goose_r.label
+            logger.info(
+                "ExzellenzDenker frisson_index (Goosebumps)=%.3f (%s): "
+                "dynamic=%.2f harmonic=%.2f shimmer=%.2f breath=%.2f warmth=%.2f",
+                frisson_index, _goose_label,
+                _goose_r.dynamic_contrast, _goose_r.harmonic_surprise,
+                _goose_r.spectral_shimmer, _goose_r.temporal_breath,
+                _goose_r.frequency_warmth,
             )
-        )
-        logger.info(
-            "ExzellenzDenker frisson_index=%.3f (arc=%.2f micro=%.2f emo=%.2f art=%.2f spa=%.2f)",
-            frisson_index,
-            _fi_arc,
-            _fi_micro,
-            _fi_emo,
-            _fi_art,
-            _fi_spa,
-        )
+        except Exception:
+            # Fallback: Musical-Goal-Proxy (alt, aber besser als 0.0)
+            _fi_micro = float(goals.get("micro_dynamics", 0.0)) if goals else 0.0
+            _fi_emo = float(goals.get("emotionalitaet", 0.0)) if goals else 0.0
+            _fi_arc = 0.5 * _fi_emo + 0.5 * _fi_micro
+            _fi_art = float(goals.get("artikulation", 0.0)) if goals else 0.0
+            _fi_spa = float(goals.get("spatial_depth", 0.0)) if goals else 0.0
+            _fi_trans = float(goals.get("transparenz", 0.0)) if goals else 0.0
+            _fi_tonal = float(goals.get("tonal_center", 0.0)) if goals else 0.0
+            frisson_index = float(np.clip(
+                0.26 * _fi_arc + 0.18 * _fi_micro + 0.14 * _fi_emo
+                + 0.14 * _fi_art + 0.10 * _fi_spa + 0.08 * _fi_trans + 0.10 * _fi_tonal,
+                0.0, 1.0,
+            ))
 
         note = (
             f"Exzellenz-Optimierung abgeschlossen: Score {score:.3f}, "
@@ -387,12 +451,15 @@ class ExzellenzDenker:
             mert_proxy_used=bool(_metadata.get("mert_proxy_used", False)),
         )
 
-    def messe_ziele(self, audio: np.ndarray, sr: int) -> dict[str, float]:
+    def messe_ziele(self, audio: np.ndarray, sr: int, reference: np.ndarray | None = None) -> dict[str, float]:
         """Misst alle 15 Musical Goals für das übergebene Audio.
 
         Args:
-            audio: Audio-Signal (mono/stereo, float32)
-            sr:    Sample-Rate in Hz
+            audio:     Audio-Signal (mono/stereo, float32)
+            sr:        Sample-Rate in Hz
+            reference: Optionales Original-Audio (vor Restaurierung) — verbessert
+                       Präzision von tonal_center, timbre_authentizitaet, authentizitaet,
+                       separation_fidelity und artikulation erheblich (§S6).
 
         Returns:
             Dict mit Goal-Namen → Score ∈ [0, 1].
@@ -412,7 +479,7 @@ class ExzellenzDenker:
             # in any metric from blocking the pipeline forever.  120 s covers
             # all 15 metrics even on long tracks; normal run < 30 s.
             with _cf_mz.ThreadPoolExecutor(max_workers=1) as _exec_mz:
-                _fut_mz = _exec_mz.submit(checker.measure_all, audio, sr)
+                _fut_mz = _exec_mz.submit(checker.measure_all, audio, sr, reference)
                 try:
                     raw = _fut_mz.result(timeout=120.0)
                 except _cf_mz.TimeoutError:
@@ -426,6 +493,10 @@ class ExzellenzDenker:
         except Exception as exc:
             logger.warning("ExzellenzDenker: Goal-Messung fehlgeschlagen: %s", exc)
             return {}
+
+    def _get_surgical_zones(self, ctx: dict) -> list:
+        """§2.59: Bereits chirurgisch behandelte Zonen — nicht erneut anfassen."""
+        return ctx.get("surgical_defect_types", [])
 
     def messe_und_repariere(
         self,
@@ -523,6 +594,37 @@ class ExzellenzDenker:
         _P1P2_BLEND_GOALS: frozenset[str] = frozenset(
             {"authentizitaet", "timbre_authentizitaet", "timbre", "tonal_center", "transient_energie"}
         )
+        # Modus-kritische Ziele für robuste Gesamtbalance über stark unterschiedliche Songs.
+        # Restoration priorisiert Klangwahrheit + Defektfreiheit, Studio 2026 priorisiert
+        # zusätzlich räumliche/moderne Präsenzziele.
+        _MODE_CORE_GOALS: frozenset[str] = (
+            frozenset(
+                {
+                    "natuerlichkeit",
+                    "authentizitaet",
+                    "timbre_authentizitaet",
+                    "tonal_center",
+                    "artikulation",
+                    "transient_energie",
+                    "spatial_depth",
+                }
+            )
+            if not _is_studio
+            else frozenset(
+                {
+                    "natuerlichkeit",
+                    "authentizitaet",
+                    "timbre_authentizitaet",
+                    "tonal_center",
+                    "artikulation",
+                    "transient_energie",
+                    "spatial_depth",
+                    "brillanz",
+                    "separation_fidelity",
+                    "micro_dynamics",
+                }
+            )
+        )
 
         # §2.32 Inapplicable-Filter: Goals die GAF als physikalisch nicht messbar
         # markiert hat (z.B. brillanz bei BW<8kHz ohne AudioSR, bass_kraft bei
@@ -537,14 +639,32 @@ class ExzellenzDenker:
             return audio, {}
 
         # Step 1: Basis-Messung
-        goals_initial = self.messe_ziele(audio, sr)
+        goals_initial = self.messe_ziele(audio, sr, reference=reference_audio)
         if not goals_initial:
             return audio, {}
 
-        _passed_initial = sum(
-            1 for k, v in goals_initial.items() if math.isfinite(v) and v >= _thresholds.get(k, _FALLBACK_MIN)
-        )
-        _total = len(goals_initial)
+        def _count_passed(goals: dict[str, float]) -> int:
+            return sum(
+                1
+                for _k, _v in goals.items()
+                if _k not in _inappl  # §S5: inapplicable Goals nicht mitzählen
+                and math.isfinite(_v)
+                and _v >= _thresholds.get(_k, _FALLBACK_MIN)
+            )
+
+        def _deficit_sum(goals: dict[str, float], *, focus: frozenset[str] | None = None) -> float:
+            _acc = 0.0
+            for _k, _v in goals.items():
+                if focus is not None and _k not in focus:
+                    continue
+                if not math.isfinite(_v):
+                    continue
+                _thr = float(_thresholds.get(_k, _FALLBACK_MIN))
+                _acc += max(0.0, _thr - float(_v))
+            return float(_acc)
+
+        _passed_initial = _count_passed(goals_initial)
+        _total = len(goals_initial) - len(_inappl)  # §S5: inapplicable aus Gesamtzahl herausrechnen
 
         # P3-P5 violations with meaningful deficit (avoids micro-adjustments on borderline goals)
         _p35_violations: set[str] = {
@@ -585,17 +705,46 @@ class ExzellenzDenker:
 
         def _is_improvement(candidate_goals: dict[str, float]) -> bool:
             """Accept only if goals_passed ≥ before AND no goal regresses > 0.02 (§0)."""
-            _cand_passed = sum(
-                1 for k, v in candidate_goals.items() if math.isfinite(v) and v >= _thresholds.get(k, _FALLBACK_MIN)
-            )
+            _cand_passed = _count_passed(candidate_goals)
             if _cand_passed < _best_passed:
                 return False
+
+            # Lokaler Intent-Guard (Roadmap Phase 2.1, kleiner Scope):
+            # authentizitaet darf spatial_depth nicht unverhältnismäßig "bezahlen".
+            # So verhindern wir häufige Raumtiefe-Einbrüche bei nur kleinem Authentizitätsgewinn.
+            _init_auth = float(goals_initial.get("authentizitaet", 1.0))
+            _cand_auth = float(candidate_goals.get("authentizitaet", _init_auth))
+            _init_spa = float(goals_initial.get("spatial_depth", 1.0))
+            _cand_spa = float(candidate_goals.get("spatial_depth", _init_spa))
+            if all(math.isfinite(x) for x in (_init_auth, _cand_auth, _init_spa, _cand_spa)):
+                _auth_gain = _cand_auth - _init_auth
+                _spa_drop = _init_spa - _cand_spa
+                if _spa_drop > 0.008 and _auth_gain < min(0.02, _spa_drop * 1.5):
+                    return False
+
             # Regression guard for ALL goals (not just P1/P2)
             for _g, _v_init in goals_initial.items():
                 if math.isfinite(_v_init):
                     _v_cand = candidate_goals.get(_g, _v_init)
-                    if math.isfinite(_v_cand) and _v_cand < _v_init - 0.02:
+                    _max_drop = 0.02
+                    if _g in _MODE_CORE_GOALS:
+                        _max_drop = 0.015
+                    if _g in _P1P2_BLEND_GOALS:
+                        _max_drop = 0.01
+                    if math.isfinite(_v_cand) and _v_cand < _v_init - _max_drop:
                         return False
+
+            # Bei gleicher Anzahl bestandener Goals muss der Kandidat die
+            # globale Defizitsumme (und speziell Kernziele) verbessern.
+            if _cand_passed == _best_passed:
+                _cand_def = _deficit_sum(candidate_goals)
+                _best_def = _deficit_sum(_best_goals)
+                if _cand_def > _best_def + 1e-6:
+                    return False
+                _cand_core_def = _deficit_sum(candidate_goals, focus=_MODE_CORE_GOALS)
+                _best_core_def = _deficit_sum(_best_goals, focus=_MODE_CORE_GOALS)
+                if _cand_core_def > _best_core_def + 1e-6:
+                    return False
             return True
 
         # Step 2: Zeit-Domain-Reparatur (micro_dynamics + ola_edges — kein STFT)
@@ -624,9 +773,9 @@ class ExzellenzDenker:
                     -1.0,
                     1.0,
                 )
-                _td_goals = self.messe_ziele(_td_out, sr)
+                _td_goals = self.messe_ziele(_td_out, sr, reference=reference_audio)
                 if _td_goals and _is_improvement(_td_goals):
-                    _td_passed = sum(1 for v in _td_goals.values() if math.isfinite(v) and v >= _FALLBACK_MIN)
+                    _td_passed = _count_passed(_td_goals)
                     _best_audio = _td_out
                     _best_goals = _td_goals
                     _best_passed = _td_passed
@@ -661,11 +810,11 @@ class ExzellenzDenker:
                         -1.0,
                         1.0,
                     )
-                    _blend_goals = self.messe_ziele(_blended, sr)
+                    _blend_goals = self.messe_ziele(_blended, sr, reference=reference_audio)
                     if not _blend_goals:
                         continue
-                    _blend_passed = sum(1 for v in _blend_goals.values() if math.isfinite(v) and v >= _FALLBACK_MIN)
-                    if _is_improvement(_blend_goals) and _blend_passed > _best_passed:
+                    _blend_passed = _count_passed(_blend_goals)
+                    if _is_improvement(_blend_goals) and _blend_passed >= _best_passed:
                         _best_audio = _blended
                         _best_goals = _blend_goals
                         _best_passed = _blend_passed
@@ -700,11 +849,11 @@ class ExzellenzDenker:
                         -1.0,
                         1.0,
                     )
-                    _p12_goals = self.messe_ziele(_p12_blended, sr)
+                    _p12_goals = self.messe_ziele(_p12_blended, sr, reference=reference_audio)
                     if not _p12_goals:
                         continue
-                    _p12_passed = sum(1 for v in _p12_goals.values() if math.isfinite(v) and v >= _FALLBACK_MIN)
-                    if _is_improvement(_p12_goals) and _p12_passed > _best_passed:
+                    _p12_passed = _count_passed(_p12_goals)
+                    if _is_improvement(_p12_goals) and _p12_passed >= _best_passed:
                         _best_audio = _p12_blended
                         _best_goals = _p12_goals
                         _best_passed = _p12_passed
@@ -718,6 +867,67 @@ class ExzellenzDenker:
                         break
             except Exception as _p12_exc:
                 logger.debug("ExzellenzDenker P1/P2-Blend fehlgeschlagen: %s", _p12_exc)
+
+        # Step 5: Lokaler End-Gate-Backoff für spatial_depth/waerme
+        # Ziel: Restliche Defizite in Raumtiefe/Wärme glätten, ohne globale
+        # Kernziele zu verschlechtern. Akzeptanz nur wenn _is_improvement()
+        # AND lokaler Defizitvektor tatsächlich sinkt.
+        _LOCAL_RESCUE_GOALS: frozenset[str] = frozenset({"spatial_depth", "waerme"})
+        _needs_local_rescue = (
+            reference_audio is not None
+            and reference_audio.shape == _best_audio.shape
+            and str(material).lower() not in _HIGH_NOISE_MATERIALS
+        )
+        if _needs_local_rescue:
+            try:
+                _rescue_targets = {
+                    _g
+                    for _g in _LOCAL_RESCUE_GOALS
+                    if math.isfinite(float(_best_goals.get(_g, 1.0)))
+                    and float(_best_goals.get(_g, 1.0)) < float(_thresholds.get(_g, _FALLBACK_MIN))
+                }
+                if _rescue_targets:
+                    _ref_f32_local = np.nan_to_num(reference_audio.astype(np.float32), nan=0.0, posinf=0.0, neginf=0.0)
+                    _best_local_def = _deficit_sum(_best_goals, focus=frozenset(_rescue_targets))
+                    _waerme_focus = "waerme" in _rescue_targets
+                    _spa_now = float(_best_goals.get("spatial_depth", 1.0))
+                    _wae_now = float(_best_goals.get("waerme", 1.0))
+                    for _alpha_local in (0.985, 0.975, 0.965):
+                        _local_blended = np.clip(
+                            _alpha_local * _best_audio + (1.0 - _alpha_local) * _ref_f32_local,
+                            -1.0,
+                            1.0,
+                        )
+                        _local_goals = self.messe_ziele(_local_blended, sr, reference=reference_audio)
+                        if not _local_goals:
+                            continue
+                        _spa_cand = float(_local_goals.get("spatial_depth", _spa_now))
+                        _wae_cand = float(_local_goals.get("waerme", _wae_now))
+                        _cand_local_def = _deficit_sum(_local_goals, focus=frozenset(_rescue_targets))
+                        _cand_passed = _count_passed(_local_goals)
+                        # Bei waerme-Rettung erlauben wir kleinen Spatial-Tradeoff,
+                        # aber nur wenn waerme spuerbar steigt und spatial_depth nicht kippt.
+                        if _waerme_focus:
+                            _spa_drop_local = _spa_now - _spa_cand
+                            _wae_gain_local = _wae_cand - _wae_now
+                            if _spa_drop_local > 0.02:
+                                continue
+                            if _wae_gain_local < 0.015:
+                                continue
+                        if _cand_local_def + 1e-6 < _best_local_def and _is_improvement(_local_goals):
+                            _best_audio = _local_blended
+                            _best_goals = _local_goals
+                            _best_passed = _cand_passed
+                            logger.info(
+                                "ExzellenzDenker Local-Rescue (α=%.3f): local_def %.4f→%.4f (%s)",
+                                _alpha_local,
+                                _best_local_def,
+                                _cand_local_def,
+                                ", ".join(sorted(_rescue_targets)),
+                            )
+                            break
+            except Exception as _local_exc:
+                logger.debug("ExzellenzDenker Local-Rescue fehlgeschlagen: %s", _local_exc)
 
         return _best_audio, _best_goals
 
@@ -769,6 +979,7 @@ class ExzellenzDenker:
                     risk["natuerlichkeit"] = noise_risk
                     risk["authentizitaet"] = round(noise_risk * 0.80, 3)
             except Exception:
+                logger.debug("prognostiziere: silent except suppressed", exc_info=True)
                 pass
 
             # ── HF-Verlust → Brillanz / Timbre ───────────────────────────
@@ -788,6 +999,7 @@ class ExzellenzDenker:
                     risk["brillanz"] = hf_risk
                     risk["timbre"] = round(hf_risk * 0.70, 3)
             except Exception:
+                logger.debug("prognostiziere: silent except suppressed", exc_info=True)
                 pass
 
             # ── Transient-Armut → Groove / MicroDynamics ─────────────────
@@ -808,6 +1020,7 @@ class ExzellenzDenker:
                     risk["groove"] = round(transient_risk * 0.70, 3)
                     risk["micro_dynamics"] = round(transient_risk * 0.80, 3)
             except Exception:
+                logger.debug("prognostiziere: silent except suppressed", exc_info=True)
                 pass
 
             # ── Dropout-Schwere → Artikulation ──────────────────────────
@@ -823,6 +1036,7 @@ class ExzellenzDenker:
                     if dropout_sev > 0.0:
                         risk["artikulation"] = float(np.clip(dropout_sev, 0.0, 1.0))
             except Exception:
+                logger.debug("prognostiziere: silent except suppressed", exc_info=True)
                 pass
 
             logger.debug(
@@ -835,6 +1049,58 @@ class ExzellenzDenker:
         except Exception as exc:
             logger.debug("ExzellenzDenker.prognostiziere() fehlgeschlagen: %s", exc)
             return {}
+
+    def bewerte_zielrisiko(
+        self,
+        current_scores: dict[str, float],
+    ) -> dict[str, GoalRiskAssessment]:
+        """Einheitliche Risikobewertung aller Goals aus gemessenen/prognostizierten Scores.
+
+        Verwendet von:
+          - prognostiziere() für die prophylaktische Risikovorhersage (Stufe 5b)
+          - optimiere() für die reaktive Reparaturentscheidung (Stufe 9)
+
+        Beide Pfade nutzen DIESELBEN _GOAL_THRESHOLDS — keine abweichenden
+        Schwellen mehr zwischen Vorhersage und Messung.
+
+        Args:
+            current_scores: dict goal_name → Score ∈ [0, 1].
+                            Kann aus prognostiziere() (DSP-Proxy) oder
+                            messe_ziele() (full ML) stammen.
+
+        Returns:
+            dict goal_name → GoalRiskAssessment mit risk, needs_protection,
+            needs_repair und passed.
+        """
+        assessments: dict[str, GoalRiskAssessment] = {}
+        for goal_name, score in current_scores.items():
+            if not isinstance(score, (int, float)) or not math.isfinite(score):
+                continue
+            score = float(np.clip(score, 0.0, 1.0))
+            threshold = _GOAL_THRESHOLDS.get(goal_name, 0.65)
+
+            # Risiko mit logistischer Sigmoid-Charakteristik:
+            # Bei score = threshold → risk ≈ 0.50
+            # Bei score = 0 → risk ≈ 0.95
+            # Bei score = 1 → risk ≈ 0.01
+            deficit = threshold - score
+            if deficit <= 0:
+                risk = 0.05 * abs(deficit)  # minimal risk bei Überschreitung
+            else:
+                risk = float(np.clip(deficit / threshold, 0.0, 0.95))
+
+            risk = float(np.clip(risk, 0.0, 1.0))
+            repair_threshold = threshold * 0.85
+
+            assessments[goal_name] = GoalRiskAssessment(
+                goal_name=goal_name,
+                current_score=score,
+                threshold=threshold,
+                risk=risk,
+                needs_protection=risk >= 0.50,
+                needs_repair=score < repair_threshold,
+            )
+        return assessments
 
     # ── Interne Hilfsmethoden ────────────────────────────────────────────────
 

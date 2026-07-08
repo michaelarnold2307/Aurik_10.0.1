@@ -148,6 +148,21 @@ class TransientShaper(PhaseInterface):
 
     # pylint: disable-next=arguments-renamed
     def process(  # type: ignore[override]
+        self,
+        audio: np.ndarray,
+        sample_rate: int,
+        material: MaterialType | None = None,
+        **kwargs: Any,
+    ) -> PhaseResult:
+        # §v9.20.3 Fragile-Guard: Kein Transient Shaping auf bandbreiten-begrenztem Material.
+        # bw_loss > 0.8 → keine nutzbaren Transienten im HF-Bereich → skip.
+        _bw = float(kwargs.get("bandwidth_loss", 0.0))
+        if _bw > 0.80:
+            logger.info("Phase 36: skipped — bandwidth_loss=%.2f > 0.80 (fragile material)", _bw)
+            return PhaseResult(success=True, audio=audio, metadata={"skipped": "fragile"})
+        return self._process_impl(audio, sample_rate, material, **kwargs)
+
+    def _process_impl(  # type: ignore[override]
         self, audio: np.ndarray, sample_rate: int, material: MaterialType = MaterialType.CD_DIGITAL, **kwargs
     ) -> PhaseResult:
         """
@@ -213,10 +228,12 @@ class TransientShaper(PhaseInterface):
         config_raw = self.SHAPING_CONFIG.get(material, self.SHAPING_CONFIG[MaterialType.CD_DIGITAL])
         config = {
             "attack_gain_db": [  # type: ignore[attr-defined]
-                float(v * _effective_strength) for v in config_raw["attack_gain_db"]
+                float(v * _effective_strength)
+                for v in config_raw["attack_gain_db"]  # type: ignore[attr-defined]
             ],
             "sustain_gain_db": [  # type: ignore[attr-defined]
-                float(v * _effective_strength) for v in config_raw["sustain_gain_db"]
+                float(v * _effective_strength)
+                for v in config_raw["sustain_gain_db"]  # type: ignore[attr-defined]
             ],
             "attack_window_ms": config_raw["attack_window_ms"],
             "release_window_ms": config_raw["release_window_ms"],
@@ -254,6 +271,33 @@ class TransientShaper(PhaseInterface):
 
         shaped_audio = np.nan_to_num(shaped_audio, nan=0.0, posinf=0.0, neginf=0.0)
         shaped_audio = np.clip(shaped_audio, -1.0, 1.0)
+
+        # §2.46e HallucinationGuard: Additive Phase darf kein halluziniertes Material einführen (VERBOTEN)
+        try:
+            from backend.core.dsp.hallucination_guard import (  # pylint: disable=import-outside-toplevel
+                check_hallucination as _chk_hg36,
+            )
+
+            _hg_mode_36 = str(kwargs.get("mode", "restoration"))
+            _pre36_mono = (
+                audio.mean(axis=0)
+                if (audio.ndim == 2 and audio.shape[0] == 2 and audio.shape[1] > 2)
+                else (audio.mean(axis=1) if audio.ndim == 2 else audio)
+            )
+            _post36_mono = (
+                shaped_audio.mean(axis=0)
+                if (shaped_audio.ndim == 2 and shaped_audio.shape[0] == 2 and shaped_audio.shape[1] > 2)
+                else (shaped_audio.mean(axis=1) if shaped_audio.ndim == 2 else shaped_audio)
+            )
+            _hg36 = _chk_hg36(
+                _pre36_mono.astype(np.float32), _post36_mono.astype(np.float32), sr=sample_rate, mode=_hg_mode_36
+            )
+            if _hg36.requires_rollback:
+                shaped_audio = audio.copy()
+                logger.warning("§2.46e phase_36 HallucinationGuard: rollback (spectral_novelty > 0.15)")
+        except Exception as _hg36_exc:
+            logger.debug("§2.46e phase_36 HallucinationGuard (non-blocking): %s", _hg36_exc)
+
         return PhaseResult(
             success=True,
             audio=shaped_audio,
@@ -291,7 +335,7 @@ class TransientShaper(PhaseInterface):
         MIN_AUDIO_SAMPLES = 512  # 10 ms @ 48 kHz
         if len(audio) < MIN_AUDIO_SAMPLES:
             logger.debug("phase_36: audio too short (%d < %d), passthrough", len(audio), MIN_AUDIO_SAMPLES)
-            return np.asarray(audio, dtype=np.float32).copy()
+            return np.asarray(audio, dtype=np.float32).copy()  # type: ignore[no-any-return]
 
         # Split into bands
         bands = self._split_into_bands(audio, sample_rate)
@@ -479,7 +523,7 @@ class TransientShaper(PhaseInterface):
         x_full = np.arange(n)
         envelope = np.interp(x_full, x_ds, envelope_ds)
 
-        return envelope
+        return envelope  # type: ignore[no-any-return]
 
     def _detect_transients(self, envelope: np.ndarray, attack_samples: int) -> np.ndarray:
         """Erkennt transients based on envelope slope."""
@@ -528,7 +572,7 @@ class TransientShaper(PhaseInterface):
         else:
             extended_mask = transient_mask
 
-        return extended_mask
+        return extended_mask  # type: ignore[no-any-return]
 
     def _combine_bands(self, bands: list) -> np.ndarray:
         """Kombiniert frequency bands."""
@@ -560,6 +604,6 @@ class TransientShaper(PhaseInterface):
         envelope = np.abs(analytic)
 
         # Measure peak envelope energy
-        transient_energy = np.max(envelope)
+        transient_energy: float = float(np.max(envelope))
 
         return float(transient_energy)

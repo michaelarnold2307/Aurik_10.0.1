@@ -235,6 +235,31 @@ class DynamicRangeExpansion(PhaseInterface):
         phase_locality_factor = float(_strength_ctx["phase_locality_factor"])
         _effective_strength = float(_strength_ctx["effective_strength"])
 
+        # §V41 ForwardMaskingGuard: Stärke in post-transienten Masking-Fenstern erhöhen.
+        _panns_s_26 = float(kwargs.get("panns_singing", 0.0))
+        if _panns_s_26 >= 0.25 and _effective_strength > 0.0:
+            try:
+                from backend.core.dsp.temporal_masking import (
+                    get_forward_masking_guard as _fmg_fn_26,
+                )
+
+                _fmg_26 = _fmg_fn_26()
+                _fmz_26 = _fmg_26.compute_zones(audio, sample_rate)
+                if _fmz_26:
+                    _n_s_26 = audio.shape[-1] if audio.ndim > 1 else len(audio)
+                    _zone_samples_26 = sum(z.end_sample - z.start_sample for z in _fmz_26)
+                    _zone_frac_26 = float(np.clip(_zone_samples_26 / max(1, _n_s_26), 0.0, 1.0))
+                    _boost_26 = _zone_frac_26 * 0.15
+                    _effective_strength = float(np.clip(_effective_strength + _boost_26, 0.0, 1.0))
+                    logger.debug(
+                        "Phase26 §V41 ForwardMasking: zone_frac=%.2f boost=%.3f → eff_str=%.3f",
+                        _zone_frac_26,
+                        _boost_26,
+                        _effective_strength,
+                    )
+            except Exception as _fmg_exc_26:
+                logger.debug("Phase26 §V41 ForwardMaskingGuard non-blocking: %s", _fmg_exc_26)
+
         quality_mode = kwargs.get("quality_mode")
         restorability_score = kwargs.get("restorability_score", 50.0)
         material_key = str(getattr(material, "value", material) or "unknown")
@@ -322,7 +347,6 @@ class DynamicRangeExpansion(PhaseInterface):
         # §6.2b DR-Material-Ceiling — Expansion darf physikalisches Medium-Maximum nicht überschreiten
         _dr_ceiling_capped = False
         try:
-            # pylint: disable-next=import-outside-toplevel
             from backend.core.carrier_transfer_characteristics import get_dr_ceiling_db
 
             _mat_key = material.value if hasattr(material, "value") else str(material)
@@ -331,7 +355,7 @@ class DynamicRangeExpansion(PhaseInterface):
 
             _dr_ceil = get_dr_ceiling_db(_mat_key)
             if _is_studio:
-                _dr_ceil = _dr_ceil * 1.5  # Studio 2026: Soft-Cap at 1.5×
+                _dr_ceil = _dr_ceil * 1.5  # type: ignore[assignment]  # Studio 2026: Soft-Cap at 1.5×
 
             if dr_after > _dr_ceil:
                 _dr_after_uncapped = dr_after  # save before blend-back for logging
@@ -379,7 +403,7 @@ class DynamicRangeExpansion(PhaseInterface):
 
         # §2.46e Hallucination-Guard: DR-Expansion kann neue spektrale Energie einführen
         try:
-            from backend.core.dsp.hallucination_guard import check_hallucination as _check_hg26  # pylint: disable=import-outside-toplevel  # noqa: I001
+            from backend.core.dsp.hallucination_guard import check_hallucination as _check_hg26
 
             _mono_26 = (
                 expanded_audio.mean(axis=0)
@@ -412,6 +436,20 @@ class DynamicRangeExpansion(PhaseInterface):
                 )
         except Exception as _hg26_exc:
             logger.debug("§2.46e phase_26 Hallucination-Guard (non-blocking): %s", _hg26_exc)
+
+        # §V24 Spektralfarbe-Prüfung (§2.74, non-blocking): Dynamic-Expansion darf Spektralfarbe nicht verändern
+        try:
+            from backend.core.dsp.spectral_color_guard import (  # pylint: disable=import-outside-toplevel
+                check_spectral_color_preservation as _scg26,
+            )
+
+            _sc26 = _scg26(audio, expanded_audio, sample_rate)
+            if not _sc26.ok:
+                _sc26_wet = 0.70
+                expanded_audio = (_sc26_wet * expanded_audio + (1.0 - _sc26_wet) * audio).astype(np.float32)
+                logger.warning("§V24 phase_26 spectral_color non-ok → strength −30%%")
+        except Exception as _sc26_exc:
+            logger.debug("§V24 phase_26 spectral_color (non-blocking): %s", _sc26_exc)
 
         return PhaseResult(
             success=True,
@@ -542,16 +580,16 @@ class DynamicRangeExpansion(PhaseInterface):
         gain_linear = 10.0 ** (gain_db_smooth / 20.0)
         expanded_band = band * gain_linear
 
-        return expanded_band
+        return np.asarray(expanded_band, dtype=np.float32)  # type: ignore[no-any-return]
 
     def _compute_rms_envelope(self, audio: np.ndarray, window_samples: int) -> np.ndarray:
         """Berechnet RMS envelope."""
         audio_squared = audio**2
         # Use uniform filter for efficiency
-        from scipy.ndimage import uniform_filter1d  # pylint: disable=import-outside-toplevel
+        from scipy.ndimage import uniform_filter1d
 
         rms = np.sqrt(uniform_filter1d(audio_squared, window_samples, mode="nearest"))
-        return rms
+        return np.asarray(rms, dtype=np.float32)  # type: ignore[no-any-return]
 
     def _smooth_gain(self, gain_db: np.ndarray, sample_rate: int, attack_ms: float, release_ms: float) -> np.ndarray:
         """
@@ -578,7 +616,7 @@ class DynamicRangeExpansion(PhaseInterface):
                     smoothed[i] = attack_coeff * smoothed[i - 1] + (1 - attack_coeff) * gain_db[i]
                 else:
                     smoothed[i] = release_coeff * smoothed[i - 1] + (1 - release_coeff) * gain_db[i]
-            return smoothed
+            return smoothed  # type: ignore[no-any-return]
 
         # Downsample: preserve dominant gain per block (max |gain|)
         n_blocks = n // DS
@@ -605,13 +643,13 @@ class DynamicRangeExpansion(PhaseInterface):
         x_full = np.arange(n)
         smoothed = np.interp(x_full, x_ds, smoothed_ds)
 
-        return smoothed
+        return smoothed  # type: ignore[no-any-return]
 
     def _combine_bands(self, bands: list) -> np.ndarray:
         """Kombiniert frequency bands."""
         # Simple sum (Linkwitz-Riley crossovers maintain flat magnitude response)
         combined = sum(bands)
-        return combined
+        return np.asarray(combined, dtype=np.float32)  # type: ignore[no-any-return]
 
     def _measure_dynamic_range(self, audio: np.ndarray) -> float:
         """Misst dynamic range (dB)."""

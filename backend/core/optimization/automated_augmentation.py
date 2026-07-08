@@ -416,13 +416,13 @@ class AutoAugment:
 
             # Update best policies
             if avg_val_loss < best_val_loss:
-                best_val_loss = avg_val_loss
+                best_val_loss = avg_val_loss  # type: ignore[assignment]
                 best_policies = [AugmentationPolicy(p.operations, p.material_type) for p in self.policies]
 
             if iteration % 10 == 0:
                 logger.info("Iteration %s: Val Loss = %.4f, Best = %.4f", iteration, avg_val_loss, best_val_loss)
 
-        self.policies = best_policies
+        self.policies = best_policies  # type: ignore[assignment]
         logger.info("Policy search completed! Best val loss: %.4f", best_val_loss)
 
     def save_policies(self, path: Path) -> None:

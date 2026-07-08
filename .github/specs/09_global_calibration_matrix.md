@@ -1,6 +1,6 @@
 # Spec §09 — Globale Kalibrierungs-Matrix für reproduzierbare Optimalwerte
 
-**Aurik 9.11.14+ | Gültig ab: 18. April 2026 | Stand: 19. April 2026 (v9.11.14+) | Normativ übergeordnet über einzelne Phase-Konfigurationen**
+**Aurik 10.11.14+ | Gültig ab: 18. April 2026 | Stand: 19. April 2026 (v9.11.14+) | Normativ übergeordnet über einzelne Phase-Konfigurationen**
 
 ---
 
@@ -49,6 +49,41 @@ Dieses Dokument ist die **Single Source of Truth** für alle Aurik-globalen Para
 - Gate-Toleranzen (PMGG, CIG, AFG)
 - ML-Budget-Grenzen
 - Expected Quality Score (vorhersagbar)
+
+---
+
+## §09.0a [RELEASE_MUST] Maximal-Ausbaustufe fuer Defekt-Erkennen, Differenzieren, Dosieren
+
+Diese Invariante gilt **gleichzeitig fuer `Restoration` und `Studio 2026`**.
+
+**Leistungsziel (Weltspitze):**
+Defektintelligenz wird in beiden Modi auf die **hoechste jemals veroeffentlichte Ausbaustufe**
+festgelegt. Bewertungsziel ist ein Niveau ohne Konkurrenz in drei Dimensionen:
+Erkennungsabdeckung, kausale Differenzierungspraezision, lokale Dosiergenauigkeit.
+
+1. **Maximale Erkennungstiefe**: DefectScanner und CausalDefectReasoner muessen in beiden Modi
+    mit voller Defektabdeckung laufen (keine Modus-Reduktion der Analyse).
+2. **Maximale Differenzierungstiefe**: Defekte sind kausal getrennt zu behandeln,
+    sobald getrennte Ursachen und Reparaturpfade definiert sind; keine Sammelklassen,
+    wenn eine physikalisch spezifische Ursache vorliegt.
+3. **Maximale Dosierpraezision**: Strength-Parameter duerfen nicht global pro Defektklasse
+    fixiert werden; event-basierte lokale Orakel sind verpflichtend (Severity, Kontext,
+    Schutzmasken, Transfer-Chain, Material).
+4. **Modusunterschiede begrenzen nur das Zielbild**: `Restoration` bleibt subtraktiv/tragertreu,
+    `Studio 2026` darf erweiternde Phasen nutzen. Erkennungs- und Differenzierungs-Qualitaet
+    ist modusinvariant.
+5. **Unsicherheitsbehandlung**: Unsicherheit erhoeht zuerst die Evidenzfusion und lokale
+    Kausalpruefung, nicht die globale Aggressivitaet der Eingriffe.
+6. **Abdeckung aller bekannten Defekte**: Alle in Aurik bekannten Defektklassen,
+    DetectionTypes, Ursachen und Event-Unterformen sind in beiden Modi verpflichtend
+    vollstaendig zu erkennen, differenzieren und event-lokal zu dosieren.
+
+Referenz auf Umsetzungspfade:
+
+- `backend/core/defect_scanner.py`
+- `backend/core/causal_defect_reasoner.py`
+- `backend/core/defect_phase_mapper.py`
+- Per-Event-Strength-Oracles in `backend/core/phases/phase_*.py`
 
 ---
 
@@ -158,6 +193,10 @@ Diese werden als `adaptive_goal_thresholds` an **jeden** `wrap_phase()`-Aufruf, 
 
 Für jedes Importstück MUSS ein vollständiger Target-Vektor für alle **15** anwendbaren Musical Goals berechnet werden. Dieser Vektor ist die einzige normative Vergleichsgrundlage für `§GOAL_BASELINE_CHECK`, PMGG, FeedbackChain, End-Gate, UI und Analyse-Reports.
 
+Die songweiten Zielgewichte, die in diese Berechnung einfließen, stammen normativ aus
+`restoration_policy_profile`. `song_goal_weights` ist nur ein Kompatibilitäts-Fallback und darf
+nicht als konkurrierende Quelle gepflegt werden.
+
 ```python
 def resolve_effective_goal_targets(
     *,
@@ -209,6 +248,57 @@ def resolve_effective_goal_targets(
 | **Convenience** | `backend/core/calibration_matrix.py` | `dict[str, float]` | Pre-Analysis-Preview, Tests, Bridge/UI, einfache Scores |
 
 **Invariante**: `studio_goal_targets.estimate_song_goal_targets` ist die Pipeline-Referenz. Die Convenience-API darf nicht für PMGG-Integration oder Phase-Steering eingesetzt werden — dort fehlen Confidence, IBS und Chain-Depth-Pullback.
+
+### §09.2b Restoration-Prior-Payload (v9.15.4)
+
+Wenn `restoration_prior` an `estimate_song_goal_targets(...)` oder GP-Proposal-Pfade übergeben
+wird, ist die kanonische Struktur:
+
+- `phase_params`: numerische Best-Parameter aus dem erfolgreichen Vorlauf
+- `hpi_achieved`: HPI des Vorlaufs
+- optionale coalition-aware Felder in `phase_params`:
+    `_coalition_learning_factor`, `_dominant_phase_coalition_ratio`, `_phase_coalition_count`
+
+**Invarianten**:
+
+- Coalition-Felder sind advisory-only und dürfen die Zielwertberechnung nie außerhalb der
+    Material-/Era-/Restorability-Ceilings pushen.
+- Fehlende Coalition-Felder müssen auf neutrales Verhalten zurückfallen (`factor=1.0`).
+- PMGG/CIG/AFG/HPI bleiben normative Endinstanzen; restoration_prior darf nur initiale
+    Parametervorschläge und milde Gewichtung beeinflussen.
+
+### §09.2c Runtime-Metric-Reliability-Layer (v9.15.5)
+
+Der Closed-Loop-Stack darf Goal-Konfidenzen nicht nur aus statischen Proxys ableiten.
+Zusätzlich MUSS ein laufzeitnaher Reliability-Layer aus realen Phase-Deltas und PMGG-
+Metadaten gespeist werden.
+
+**Kanonische API**:
+
+```python
+from backend.core.metric_reliability_graph import get_metric_reliability_graph
+
+graph = get_metric_reliability_graph()
+graph.update_from_phase_delta(...)
+runtime_conf = graph.get_goal_reliability(...)
+base_w, runtime_w = graph.get_blend_weights(...)
+goal_conf = clip(base_w * base_conf + runtime_w * runtime_conf, 0.20, 0.98)
+```
+
+**Normative Quellen** (mindestens):
+
+- `phase_deltas[phase_id]["delta"]`
+- `pmgg_team_net_delta`
+- `pmgg_reconstruction_localized`
+- `pmgg_reconstruction_epistemic_confidence`
+
+**Sicherheitsgrenzen**:
+
+- Reliability-Layer ist advisory-only (kein Gate-Override).
+- Persistenz nur lokal/offline, atomar, non-blocking.
+- Kontext-Key umfasst `mode`, `material`, `era_bucket`, `tcci_bucket`.
+- Blend-Gewichte sind cross-run-adaptiv, normiert auf 1.0 und innerhalb
+    `base ∈ [0.40, 0.75]`, `runtime ∈ [0.25, 0.60]`.
 
 **Algorithmus**: `target[goal] = floor + kappa × bias + weight_shift`
 
@@ -478,6 +568,27 @@ Zur Vermeidung scheinbarer Praezision ohne Quellenpflicht werden Kern-Schwellen 
 
 PMGG prüft nach jeder Phase, ob die 15 Goals den effektiven Zielwert halten.
 
+### §09.4c Rekonstruktive Konfidenz und Threshold-Multiplikator [RELEASE_MUST v9.15.3]
+
+Rekonstruktive Phasen (`phase_23`, `phase_24`, `phase_50`, `phase_55`) dürfen nicht nur
+gegen den defektzentrierten Zielbereich bewertet werden. Für `passed_reconstruction_localized`
+gilt zusätzlich eine lokal gestützte Entscheidungskonfidenz aus Zielabdeckung, Kontrollfenster-
+Leckage und Threshold-Sicherheitsmarge.
+
+**Normative Metadaten**: `PhaseGateLogEntry.metadata` MUSS für rekonstruktive Entscheidungen
+die Felder `pmgg_reconstruction_localized`, `pmgg_reconstruction_confidence`,
+`pmgg_reconstruction_reason`, `pmgg_reconstruction_retry_budget_bias`,
+`pmgg_reconstruction_retry_budget_bias_reason`, `pmgg_reconstruction_transfer_chain_tcci`,
+`pmgg_reconstruction_material_family`, `pmgg_reconstruction_threshold_multiplier`,
+`pmgg_reconstruction_threshold_multiplier_reason`, `pmgg_reconstruction_threshold_multiplier_tcci`,
+`pmgg_reconstruction_target_coverage`, `pmgg_reconstruction_control_coverage` und
+`pmgg_reconstruction_control_regression` enthalten.
+
+**Invariante**: Der Threshold-Multiplikator ist kein freischwebender UI-Wert, sondern Teil der
+kanonischen Rekonstruktions-Telemetrie. Ein lokales `threshold_multiplier <= 1.0` darf die
+Entscheidung nicht fälschlich neutralisieren; bei kontextuell erfolgreicher Rekonstruktion bleibt
+die Entscheidung als lokal gestützt markiert.
+
 ### §09.4a Restorability-adaptive Regression-Thresholds
 
 ```python
@@ -525,6 +636,19 @@ PRIORITY_MAX_RETRIES = {
 
 # Nur ein Ziel mit Priority P ≥ X triggert Retry-Pfad für diese Priority.
 # Sub-Threshold Deltas (JND-unterschwellig) werden akzeptiert ohne Retry.
+```
+
+### §09.4d Goal-Koalitionen bei Recovery-Prioritäten [RELEASE_MUST v9.15.3]
+
+Wenn mehrere offene Goals dieselbe Primär-Recovery-Phase teilen, darf die
+Reschedule-Priorisierung nicht nur den numerischen Gap betrachten. Recovery-Phasen,
+die mehrere offene Goals zugleich bedienen können, erhalten einen kleinen Koalitionsbonus
+gegenüber isolierten Einzelfall-Phasen.
+
+**Invariante**: Der Koalitionsbonus ist advisory für die Reihenfolge, nicht für die
+Injektionsberechtigung. §2.45 Minimal-Intervention, §0a-Guards und Session-Limits bleiben
+unverändert.
+
 ```
 
 ---
@@ -1311,6 +1435,60 @@ if restorability_score < 30:
 
 ---
 
+## §09.13 [RELEASE_MUST] Chain-End-Codec-Floor-Override (v9.15.1)
+
+> **Problem**: `get_material_floor()` wird mit dem primären Träger aufgerufen (z.B. `cassette`).
+> Bei einer Transfer-Kette wie `cassette → mp3_low` ist der limitierende Faktor jedoch der
+> Codec am Kettenende — nicht der analoge Primärträger.
+> Resultat: `spatial_depth`-Boden für Kassette (~0.55) liegt über dem physikalisch erreichbaren
+> Wert für `mp3_low`-Joint-Stereo-komprimiertes Material (~0.38) → permanente false violations.
+
+### §09.13a Codec-Ceiling-Tabelle
+
+```python
+_CHAIN_END_GOAL_CEILINGS: dict[str, dict[str, float]] = {
+    "mp3_low":   {"spatial_depth": 0.38, "separation_fidelity": 0.68, "brillanz": 0.52, "transparenz": 0.75},
+    "mp3_high":  {"spatial_depth": 0.44, "separation_fidelity": 0.74, "brillanz": 0.62, "transparenz": 0.82},
+    "aac":       {"spatial_depth": 0.44, "separation_fidelity": 0.74, "brillanz": 0.60, "transparenz": 0.82},
+    "streaming": {"spatial_depth": 0.38, "separation_fidelity": 0.68, "brillanz": 0.50, "transparenz": 0.74},
+    "minidisc":  {"spatial_depth": 0.36, "separation_fidelity": 0.66, "brillanz": 0.48, "transparenz": 0.72},
+}
+```
+
+### §09.13b Algorithmus
+
+```python
+def get_material_floor(
+    material_type: str,
+    goal_name: str,
+    restorability_score: float | None = None,  # reserviert für §09.12-Kompatibilität
+    transfer_chain: list[str] | None = None,
+) -> float:
+    floor = _MATERIAL_GOAL_FLOORS.get(material_type, _DEFAULT_FLOORS).get(goal_name, 0.60)
+    # Chain-End-Codec-Override: Codec am Kettenende strenger als Primärträger?
+    if transfer_chain:
+        chain_last = transfer_chain[-1]
+        codec_floors = _CHAIN_END_GOAL_CEILINGS.get(chain_last, {})
+        codec_floor = codec_floors.get(goal_name)
+        if codec_floor is not None and codec_floor < floor:
+            floor = codec_floor
+    return float(floor)
+```
+
+### §09.13c Invarianten
+
+- **Chain-End-Override NUR wenn Codec strenger** (`codec_floor < primary_floor`): ein höherwertiger Codec (z.B. `mp3_high` auf Shellac-Basis) darf den Shellac-Boden nicht lockern.
+- **`transfer_chain=None` = kein Override**: bestehende Tests ohne Transfer-Chain schlagen nicht fehl (nicht-breaking).
+- **Cascading**: `get_effective_material_floor()` (§09.12) ruft `get_material_floor()` auf und erbt den Chain-End-Override automatisch.
+- **Zusammenspiel mit GAF §2.32a**: Beide Mechanismen sind orthogonal. §2.32a deaktiviert das Goal vollständig bei Near-Mono-Codec (corr ≥ 0.83). §09.13 setzt den Boden korrekt, wenn das Goal aktiv bleibt (corr < 0.83 oder Mono-Erkennung nicht greift).
+- **Test-Pflicht**: `test_get_material_floor_chain_end_codec_override()`:
+  - `('cassette', 'spatial_depth', None, ['mp3_low'])` → `0.38`
+  - `('cassette', 'spatial_depth', None, ['mp3_high'])` → `0.44`
+  - `('shellac', 'brillanz', None, ['mp3_low'])` → Shellac-Wert (Shellac bereits strenger)
+  - `('vinyl', 'spatial_depth', None, None)` → Vinyl-Standardboden
+
+---
+
 ## Referenzen
 
 - Spec §01: Musical Goals (15 Ziele)
@@ -1322,4 +1500,4 @@ if restorability_score < 30:
 
 ---
 
-**Version**: 1.0 | **Datum**: 18. April 2026 | **Status**: normativ
+**Version**: 1.1 | **Datum**: 25. Juni 2026 | **Status**: normativ

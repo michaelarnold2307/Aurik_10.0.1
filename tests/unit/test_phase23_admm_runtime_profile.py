@@ -110,3 +110,23 @@ def test_phase23_uses_npd_singleton_accessor(monkeypatch) -> None:
 
     assert result.success
     assert calls["count"] >= 1
+
+
+def test_phase23_defect_locality_profile_is_event_adaptive() -> None:
+    profile, coverage = SpectralRepair._build_defect_locality_profile(
+        n_samples=48_000 * 2,
+        sample_rate=48_000,
+        defect_locations={"pre_echo": [(0.20, 0.30)], "codec_artifact": [(1.20, 1.30)]},
+        defect_event_metadata={
+            "pre_echo": {"severity": 0.95, "confidence": 0.95},
+            "codec_artifact": {"severity": 0.30, "confidence": 0.65},
+        },
+    )
+
+    assert profile.shape == (48_000 * 2,)
+    assert 0.0 < coverage < 0.20
+    pre_echo_strength = float(np.mean(profile[int(0.22 * 48_000) : int(0.28 * 48_000)]))
+    codec_strength = float(np.mean(profile[int(1.22 * 48_000) : int(1.28 * 48_000)]))
+    clean_strength = float(np.mean(profile[int(0.70 * 48_000) : int(0.90 * 48_000)]))
+    assert pre_echo_strength > codec_strength * 1.25
+    assert clean_strength < 0.02

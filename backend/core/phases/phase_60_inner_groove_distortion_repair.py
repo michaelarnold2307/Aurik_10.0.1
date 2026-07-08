@@ -51,6 +51,76 @@ _MIN_IGD_SCORE: float = 0.10
 _N_SEGMENTS: int = 8  # Position segments for adaptive processing
 
 
+def _collect_protected_zones(kwargs: dict) -> list[tuple[float, float, float]]:
+    """Sammelt Vokal-/Performance-Schutzzonen fuer segmentlokale IGD-Caps."""
+    protected_zones: list[tuple[float, float, float]] = []
+    for zone in kwargs.get("vibrato_zones") or []:
+        try:
+            protected_zones.append((float(zone[0]), float(zone[1]), 0.20))
+        except Exception:
+            continue
+    for zone in kwargs.get("frisson_zones") or []:
+        try:
+            start_s = float(getattr(zone, "start_s", None) or zone[0])
+            end_s = float(getattr(zone, "end_s", None) or zone[1])
+            protected_zones.append((start_s, end_s, 0.30))
+        except Exception:
+            continue
+    for zone in kwargs.get("whisper_zones") or []:
+        try:
+            protected_zones.append((float(zone[0]), float(zone[1]), 0.25))
+        except Exception:
+            continue
+    for zone in kwargs.get("passaggio_zones") or []:
+        try:
+            protected_zones.append((float(zone[0]), float(zone[1]), 0.35))
+        except Exception:
+            continue
+    return protected_zones
+
+
+def _compute_igd_segment_strength(
+    seg_mag: np.ndarray,
+    freqs_hz: np.ndarray,
+    segment_audio: np.ndarray,
+    seg_idx: int,
+    n_segments: int,
+    base_strength: float,
+    sample_rate: int,
+    start_sample: int,
+    end_sample: int,
+    protected_zones: list[tuple[float, float, float]] | None = None,
+) -> float:
+    """Berechnet IGD-Reduktion pro Segment aus Position, Verzerrungsband und Aktivitaet."""
+    if base_strength < 1e-6:
+        return 0.0
+    position_factor = float(np.clip((seg_idx + 1) / max(1, n_segments), 0.0, 1.0))
+    igd_mask = (freqs_hz >= 2000.0) & (freqs_hz <= 8000.0)
+    ref_mask = (freqs_hz >= 300.0) & (freqs_hz < 2000.0)
+    if np.any(igd_mask) and np.any(ref_mask):
+        igd_energy = float(np.mean(seg_mag[igd_mask, :] ** 2))
+        ref_energy = float(np.mean(seg_mag[ref_mask, :] ** 2)) + 1e-12
+        igd_ratio_db = 10.0 * np.log10(igd_energy / ref_energy + 1e-12)
+        band_factor = float(np.clip((igd_ratio_db + 18.0) / 24.0, 0.0, 1.0))
+    else:
+        band_factor = 0.5
+
+    rms = float(np.sqrt(np.mean(segment_audio**2) + 1e-12))
+    activity_factor = float(np.clip((20.0 * np.log10(rms + 1e-12) + 48.0) / 30.0, 0.0, 1.0))
+    local_strength = float(
+        base_strength * np.clip(0.18 + 0.45 * position_factor + 0.28 * band_factor + 0.09 * activity_factor, 0.0, 1.0)
+    )
+
+    if protected_zones:
+        center_s = float(start_sample + end_sample) * 0.5 / float(max(1, sample_rate))
+        for zone_start, zone_end, zone_cap in protected_zones:
+            if float(zone_start) <= center_s <= float(zone_end):
+                local_strength = min(local_strength, float(zone_cap))
+                break
+
+    return float(np.clip(local_strength, 0.0, 1.0))
+
+
 def apply(
     audio: np.ndarray,
     sample_rate: int,
@@ -58,6 +128,7 @@ def apply(
     defect_scores: dict | None = None,
     min_igd_score: float = _MIN_IGD_SCORE,
     n_segments: int = _N_SEGMENTS,
+    protected_zones: list[tuple[float, float, float]] | None = None,
 ) -> np.ndarray:
     """Haupt-entry point for Phase 60."""
     assert sample_rate == 48000, f"SR must be 48000 Hz, got: {sample_rate}"
@@ -67,13 +138,21 @@ def apply(
         igd_score = float(defect_scores.get("inner_groove_distortion", 0.0))
         if igd_score < min_igd_score:
             logger.debug("Phase 60: IGD score %.3f < %.3f — skipped", igd_score, min_igd_score)
-            return np.clip(audio, -1.0, 1.0)
+            return np.clip(audio, -1.0, 1.0)  # type: ignore[no-any-return]
 
     stereo = audio.ndim == 2
     if stereo:
         # §2.51 Linked-Stereo: STFT-Gain-Maske aus Mid, identisch auf L+R
         mono_mix = (audio[0] + audio[1]) / 2.0
-        mono_repaired = apply(mono_mix, sample_rate, strength=strength, defect_scores=defect_scores)
+        mono_repaired = apply(
+            mono_mix,
+            sample_rate,
+            strength=strength,
+            defect_scores=defect_scores,
+            min_igd_score=min_igd_score,
+            n_segments=n_segments,
+            protected_zones=protected_zones,
+        )
         _eps_igd = 1e-10
         _gain_igd = np.where(
             np.abs(mono_mix) > _eps_igd,
@@ -81,7 +160,7 @@ def apply(
             1.0,
         )
         _gain_igd = np.clip(_gain_igd, 0.0, 10.0)
-        return np.clip(np.stack([audio[0] * _gain_igd, audio[1] * _gain_igd], axis=0), -1.0, 1.0).astype(np.float32)
+        return np.clip(np.stack([audio[0] * _gain_igd, audio[1] * _gain_igd], axis=0), -1.0, 1.0).astype(np.float32)  # type: ignore[no-any-return]
 
     x = np.asarray(audio, dtype=np.float32)
     n = len(x)
@@ -104,16 +183,24 @@ def apply(
         if len(segment) < n_fft:
             continue
 
-        # Position-adaptive strength: increases linearly from outer to inner groove
-        position_factor = (seg_idx + 1) / n_segments
-        local_strength = strength * position_factor
-
         # Vectorized STFT per segment — replaces inner Python frame-loop
         _, _, seg_stft = sps.stft(segment, fs=sr, window="hann", nperseg=n_fft, noverlap=n_fft - hop, boundary="even")
         seg_stft = seg_stft.astype(np.complex64)
 
         seg_mag = np.abs(seg_stft).astype(np.float32)
         seg_phase = np.angle(seg_stft).astype(np.float32)
+        local_strength = _compute_igd_segment_strength(
+            seg_mag,
+            freqs_rfft,
+            segment,
+            seg_idx,
+            n_segments,
+            strength,
+            sample_rate,
+            start,
+            end,
+            protected_zones,
+        )
 
         # Suppress harmonics H3+ (2–8 kHz range where IGD is worst) — vectorized over all frames
         gain = np.ones_like(seg_mag)
@@ -134,7 +221,7 @@ def apply(
 
     # Crossfade segments (10 ms Hanning)
     result = np.nan_to_num(out, nan=0.0, posinf=0.0, neginf=0.0)
-    return np.clip(result, -1.0, 1.0).astype(np.float32)
+    return np.clip(result, -1.0, 1.0).astype(np.float32)  # type: ignore[no-any-return]
 
 
 # ─── PhaseInterface ────────────────────────────────────────────────────────────
@@ -218,6 +305,24 @@ class InnerGrooveDistortionRepairPhase(PhaseInterface):
         phase_locality_factor = float(np.clip(float(kwargs.get("phase_locality_factor", 1.0)), 0.35, 1.0))
         _pmgg_strength = float(kwargs.get("strength", 0.6))
         _effective_strength = float(np.clip(_pmgg_strength * phase_locality_factor, 0.0, 1.0))
+
+        # §V41 ForwardMaskingGuard — Enhancement-Stärke in post-transienten Masking-Zonen erhöhen
+        _panns_s_60 = float(kwargs.get("panns_singing", 0.0))
+        if _panns_s_60 >= 0.25 and _effective_strength > 0.0:
+            try:
+                from backend.core.dsp.temporal_masking import (
+                    get_forward_masking_guard as _fmg_fn_60,
+                )
+
+                _fmz_60 = kwargs.get("forward_masking_zones") or _fmg_fn_60().compute_zones(audio, sample_rate)
+                if _fmz_60:
+                    _n_s_60 = audio.shape[-1] if audio.ndim > 1 else len(audio)
+                    _zone_s_60 = sum(z.end_sample - z.start_sample for z in _fmz_60)
+                    _zone_frac_60 = float(np.clip(_zone_s_60 / max(1, _n_s_60), 0.0, 1.0))
+                    _effective_strength = float(np.clip(_effective_strength + _zone_frac_60 * 0.15, 0.0, 1.0))
+            except Exception as _fmg_exc_60:
+                logger.debug("Phase60 §V41 ForwardMaskingGuard non-blocking: %s", _fmg_exc_60)
+
         _profile_60 = self._compute_igd_profile(
             str(material_type or kwargs.get("material") or "unknown"),
             str(kwargs.get("quality_mode", "balanced")),
@@ -250,7 +355,8 @@ class InnerGrooveDistortionRepairPhase(PhaseInterface):
             strength=_effective_strength,
             defect_scores=_defect_scores,
             min_igd_score=_profile_60["min_igd_score"],
-            n_segments=_profile_60["n_segments"],
+            n_segments=int(_profile_60["n_segments"]),
+            protected_zones=_collect_protected_zones(kwargs),
         )
         elapsed = _time.perf_counter() - t0
 

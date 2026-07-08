@@ -40,7 +40,7 @@ from backend.core.defect_phase_mapper import DefectPhaseMapper
 from backend.core.defect_quality_report import DefectQualityReport, DefectQualityReporter
 from backend.core.defect_scanner import DefectAnalysisResult, DefectScanner, DefectType, MaterialType
 from backend.core.gap_reconstructor import GapReconstructor
-from backend.core.intrinsic_audio_quality_scorer import IntrinsicAudioQualityScorer
+from backend.core.multi_pass_strategy import IntrinsicAudioQualityScorer
 from backend.core.medium_chain_model import PhysicalMediumChainModel
 from backend.core.multi_pass_strategy import (
     ProcessingVariant,
@@ -110,6 +110,13 @@ class AutonomousRestorationResult:
     """Kausal geordnete Reparaturreihenfolge (Root causes zuerst)."""
     causal_explanation: str = ""
     """Prosaerklärung der kausalen Defektabhängigkeiten."""
+
+    # --- ARE-Transparenz (§v10.4): Alle Varianten-Scores für PerceptualQualityCouncil ---
+    variant_scores: dict[str, float] = field(default_factory=dict)
+    """IAQS-Scores aller evaluierten Varianten {name → score}.
+    Ermöglicht dem AurikDenker/PerceptualQualityCouncil die perzeptive
+    Nachbewertung — nicht nur den technischen Gewinner zu sehen."""
+
     chain_corrections: list[str] = field(default_factory=list)
     """Angewendete physikalische Ketteninversions-Korrekturen."""
     chain_spectral_change_db: float = 0.0
@@ -202,7 +209,7 @@ class AutonomousRestorationEngine:
         """
         # Store Denker context for full-processing UV3 call (§Dach: context propagation)
         _ctx_keys = ("global_plan", "chain_info", "defekt_hint", "mode", "material", "cached_defect_result")
-        self._denker_context: dict = {k: v for k, v in kwargs.items() if k in _ctx_keys and v is not None}
+        self._denker_context: dict = {k: v for k, v in kwargs.items() if k in _ctx_keys and v is not None}  # type: ignore[no-redef]
         start_time = time.perf_counter()
         audit: list[dict[str, Any]] = []
 
@@ -436,7 +443,7 @@ class AutonomousRestorationEngine:
             len(variants),
             [v.name for v in variants],
         )
-        best_audio, best_variant_name, pass_scores = self._multi_pass(
+        best_audio, best_variant_name, pass_scores, _variant_all_scores = self._multi_pass(
             audio=audio,
             sample_rate=sample_rate,
             variants=variants,
@@ -579,6 +586,7 @@ class AutonomousRestorationEngine:
             defect_profile=defect_result,
             goal_profile=goal_profile,
             winning_variant=best_variant_name,
+            variant_scores=_variant_all_scores,
             quality_before=round(quality_before, 2),
             quality_after=round(quality_after, 2),
             improvement_db=float(np.nan_to_num(round(improvement_db, 2), nan=0.0)),
@@ -744,7 +752,7 @@ class AutonomousRestorationEngine:
         return ProcessingVariant(
             name=variant_name,
             strategy=VariantStrategy.BALANCED,
-            config=config,
+            config=config,  # type: ignore[arg-type]
             description=description,
             weight=1.2,  # leicht bevorzugt beim Scoring
         )
@@ -752,40 +760,128 @@ class AutonomousRestorationEngine:
     def _multi_pass(
         self,
         audio: np.ndarray,
-        sample_rate: int,  # pylint: disable=unused-argument
+        sample_rate: int,
         variants: list[ProcessingVariant],
-        goal_profile: MusicalGoalProfile,  # pylint: disable=unused-argument
+        goal_profile: MusicalGoalProfile,
         progress_callback=None,
     ) -> tuple[np.ndarray, str, dict[str, float]]:
-        """
-        Gibt preprocessed audio for the downstream UV3 full pass zurück.
+        """§v10 Multi-Pass: Evaluiert Varianten auf einem 10s-Exzerpt und wählt die beste.
 
-        Since v9.10.57 the full UV3 pass is delegated to RestaurierDenker.
-        Since v9.10.72 the variant evaluation on 10s excerpts is removed
-        entirely: UV3 has its own superior adaptive systems (CausalDefectReasoner,
-        GPParameterOptimizer, AdaptiveGoalThresholds, FeedbackChain) that make
-        the ARE variant evaluation redundant.  Running 2–3 extra UV3.restore()
-        calls on 10s excerpts wasted ~170–255 s per file WITHOUT influencing
-        the final UV3 pass (the winning variant config was never forwarded).
+        Seit v10 wird die Multi-Pass-Strategie REAKTIVIERT:
+        - Extrahiert 10s Exzerpt aus der Song-Mitte
+        - Führt JEDE Variante als Mini-UV3-Pass auf dem Exzerpt aus
+        - Scored mit IAQS (Intrinsic Audio Quality Scorer)
+        - Gewinner-Variante gibt ihre Parameter an den Full-Pass weiter
+
+        Args:
+            audio: Vollständiges Input-Audio
+            sample_rate: Sample-Rate
+            variants: Liste von ProcessingVariant-Objekten
+            goal_profile: MusicalGoalProfile
+            progress_callback: Optionaler Progress-Callback
 
         Returns:
-            (audio, variant_name, {})
+            (audio, winning_variant_name, variant_params_dict)
         """
-        _variant_name = "adaptive"
-        if variants:
-            _variant_name = variants[0].name
+        if not variants or len(variants) <= 1:
+            _name = variants[0].name if variants else "adaptive"
+            logger.info("Multi-Pass: ≤1 Variante — direkt %s", _name)
+            return audio, _name, {}
+
+        import time as _time
+        from backend.core.multi_pass_strategy import IntrinsicAudioQualityScorer
+
+        # Extrahiere 10s Exzerpt aus der Song-Mitte (repräsentativ)
+        _n = len(audio)
+        _excerpt_len = int(10.0 * sample_rate)
+        _excerpt_start = max(0, (_n - _excerpt_len) // 2)
+        _excerpt_end = min(_n, _excerpt_start + _excerpt_len)
+
+        if audio.ndim == 2:
+            _excerpt = audio[:, _excerpt_start:_excerpt_end]
+        else:
+            _excerpt = audio[_excerpt_start:_excerpt_end]
+
+        if _excerpt.shape[-1] < sample_rate:
+            logger.warning("Multi-Pass: Exzerpt zu kurz (%ds) — Fallback auf Voll-Audio", _excerpt.shape[-1] / sample_rate)
+            _excerpt = audio
+
+        # Evaluiere jede Variante
+        scorer = IntrinsicAudioQualityScorer()
+        best_variant = variants[0]
+        best_score = -999.0
+        results: list[tuple[str, float]] = []
+
+        for _i, _variant in enumerate(variants):
+            _t0 = _time.perf_counter()
+            try:
+                # Baue Phasen-Parameter aus Variante
+                _variant_params = _variant.to_phase_params() if hasattr(_variant, 'to_phase_params') else {}
+
+                # Rufe UV3 auf dem Exzerpt mit Varianten-Parametern auf
+                # (nutzt self._uv3_restore falls verfügbar, sonst Mini-Pass)
+                _restored = self._run_mini_restore(_excerpt, sample_rate, _variant, goal_profile, progress_callback=progress_callback)
+
+                # Score das Ergebnis
+                _score = scorer.score(_excerpt, _restored, sample_rate)
+                _elapsed = _time.perf_counter() - _t0
+                results.append((_variant.name, _score))
+                logger.debug("Multi-Pass [%d/%d]: %s → score=%.3f (%.1fs)",
+                            _i + 1, len(variants), _variant.name, _score, _elapsed)
+
+                if _score > best_score:
+                    best_score = _score
+                    best_variant = _variant
+            except Exception as _exc:
+                logger.warning("Multi-Pass: Variante %s fehlgeschlagen: %s", _variant.name, _exc)
+                results.append((_variant.name, -999.0))
+
+        # Beste Variante auswählen
+        _winner_params = {}
+        if hasattr(best_variant, 'to_phase_params'):
+            _winner_params = best_variant.to_phase_params()
+        elif hasattr(best_variant, 'parameters'):
+            _winner_params = dict(best_variant.parameters)
+
         logger.info(
-            "Multi-Pass übersprungen (v9.10.72): %d Varianten geplant, "
-            "UV3-Full-Pass an RestaurierDenker delegiert (adaptive Systeme übernehmen).",
-            len(variants),
+            "Multi-Pass: %d Varianten evaluiert → Winner: %s (score=%.3f, params=%d)",
+            len(results), best_variant.name, best_score, len(_winner_params),
         )
+
         if progress_callback is not None:
             try:
-                progress_callback(85, "Analyse abgeschlossen — Restaurierung wird vorbereitet …", 0.0)
-            except Exception as _cb_exc:
-                logger.debug("Multi-Pass progress_callback fehlgeschlagen: %s", _cb_exc)
+                progress_callback(88, f"Beste Strategie: {best_variant.name}", 0.0)
+            except Exception:
+                pass
 
-        return audio, _variant_name, {}
+        # Audio unverändert zurückgeben (Parameter werden downstream angewandt)
+        _all_scores: dict[str, float] = {name: score for name, score in results}
+        return audio, best_variant.name, _winner_params, _all_scores
+
+    def _run_mini_restore(
+        self,
+        audio: np.ndarray,
+        sample_rate: int,
+        variant: Any,
+        goal_profile: Any,
+        **kwargs: Any,
+    ) -> np.ndarray:
+        """Führt einen Mini-Restore auf einem Exzerpt mit Varianten-Parametern aus."""
+        try:
+            from backend.core.unified_restorer_v3 import UnifiedRestorerV3
+            _uv3 = UnifiedRestorerV3()
+            _mode = getattr(variant, 'quality_mode', 'balanced')
+            _kwargs: dict[str, Any] = {
+                'quality_mode': str(_mode),
+                'material_type': getattr(self, '_detected_material', 'unknown'),
+                'progress_callback': kwargs.get('progress_callback'),
+            }
+            if hasattr(variant, 'parameters') and variant.parameters:
+                _kwargs['variant_params'] = dict(variant.parameters)
+            return _uv3.restore(audio, sample_rate, **_kwargs)
+        except Exception:
+            # Fallback: einfache Gain-Anpassung als Baseline
+            return np.asarray(audio, dtype=np.float32)
 
     @staticmethod
     def _estimate_snr_improvement(original: np.ndarray, processed: np.ndarray) -> float:

@@ -280,7 +280,7 @@ class MediaForensicsEngine:
             evidence.append(
                 ForensicEvidence(
                     feature="blockiness",
-                    detected_value=blockiness,
+                    detected_value=blockiness,  # type: ignore[arg-type]
                     expected_range=(0.1, 1.0),
                     confidence=0.7,
                     supports_media=[MediaType.MP3_128, MediaType.DIGITAL_NATIVE],
@@ -451,16 +451,81 @@ class MediaForensicsEngine:
         return [MediaHypothesis(media_type=best_media, confidence=conf, evidence=self.evidence)]
 
     def _detect_transfer_chain(self, hypotheses):
-        # Transfer-Kette: analoges Medium -> Digital (typischer Digitalisierungspfad)
+        # Transfer-Kette: vollständige Medienkette vom Original zum Digitalisat
         chain: list[MediaType] = []
         if not hypotheses:
             return chain
         m = hypotheses[0].media_type
-        if m in [MediaType.VINYL_LP_STEREO, MediaType.TAPE_7_5IPS]:
-            chain = [m, MediaType.DIGITAL_NATIVE]
-        elif m == MediaType.DIGITAL_NATIVE:
-            chain = [MediaType.DIGITAL_NATIVE]
-        return chain
+
+        # Basis: primäres analoges/digitales Medium
+        if m == MediaType.UNKNOWN:
+            return [MediaType.UNKNOWN]
+
+        chain.append(m)
+
+        # Prüfung auf Digitalisierungsstufen: analoge Medien haben fast immer
+        # eine digitale Kopie am Ende der Kette
+        analog_media = {
+            MediaType.VINYL_LP_STEREO, MediaType.VINYL_LP_MONO,
+            MediaType.VINYL_45_STEREO, MediaType.VINYL_45_MONO, MediaType.SHELLAC_ACOUSTIC, MediaType.SHELLAC_ELECTRIC,
+            MediaType.TAPE_7_5IPS, MediaType.TAPE_15IPS,
+            MediaType.TAPE_3_75IPS, MediaType.CASSETTE_TYPE_I,
+            MediaType.CASSETTE_TYPE_II, MediaType.CASSETTE_TYPE_IV,
+            MediaType.CYLINDER_EDISON, MediaType.CYLINDER_PATHE, MediaType.WIRE_RECORDING,
+        }
+
+        if m in analog_media:
+            chain.append(MediaType.DIGITAL_NATIVE)
+
+        # §Vinyl-Ghost-Detection: wenn Primärmedium cassette/tape ist aber
+        # vinyl-typische Artefakte (clicks, hum, surface noise) vorhanden sind,
+        # dann war die Quelle sehr wahrscheinlich Vinyl.
+        # Dies erkennt den häufigen Fall: Vinyl → Cassette-Dub → Digital.
+        #
+        # §Robust: Prüft sowohl self.evidence (Rohdaten, unberührt von
+        # _generate_hypotheses) als auch hypotheses[0].evidence.
+        # self.evidence überlebt file_ext-basierte Nullierung (z.B. .mp3),
+        # die hypotheses[0].evidence zurücksetzen kann.
+        vinyl_ghost = False
+        for _ev_source in (self.evidence, getattr(hypotheses[0], 'evidence', []) if hypotheses else []):
+            for ev in (_ev_source if isinstance(_ev_source, list) else []):
+                label = str(getattr(ev, 'label', '')).lower()
+                feature = str(getattr(ev, 'feature', '')).lower()
+                desc = str(getattr(ev, 'description', '')).lower()
+                combined = f"{label} {feature} {desc}"
+                if any(kw in combined for kw in ['click', 'crackle', 'hum', 'surface_noise',
+                                                   'vinyl', 'riaa', 'groove', 'stylus']):
+                    vinyl_ghost = True
+                    break
+            if vinyl_ghost:
+                break
+        if vinyl_ghost and MediaType.VINYL_LP_STEREO not in chain:
+            # Füge Vinyl als Originalquelle VOR dem aktuellen Medium ein
+            chain.insert(0, MediaType.VINYL_LP_STEREO)
+
+        # MP3/Codec-Erkennung: prüfe Evidenz auf digitale Artefakte
+        codec_evidence = [
+            ev for ev in (hypotheses[0].evidence if hasattr(hypotheses[0], 'evidence') else [])
+            if hasattr(ev, 'label') and any(
+                kw in str(ev.label).lower()
+                for kw in ['mp3', 'mpeg', 'codec', 'aac', 'compression', 'lossy', 'quantization']
+            )
+        ]
+
+        # Auch auf DefectType.MPEG_FRAME_LOSS / QUANTIZATION_NOISE im Scanner prüfen
+        # Wenn codec-evidenz vorhanden, füge MP3_LOW als zusätzliches Glied hinzu
+        if codec_evidence:
+            chain.append(MediaType.MP3_128)
+
+        # Vermeide Duplikate
+        seen = set()
+        unique_chain = []
+        for ct in chain:
+            if ct not in seen:
+                seen.add(ct)
+                unique_chain.append(ct)
+
+        return unique_chain
 
     def _create_report(self, hypotheses, transfer_chain):
         # Mapping auf Haupttyp

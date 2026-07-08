@@ -134,7 +134,7 @@ class SileroPlugin:
             n_frames = len(frame_probs)
             n_samples = len(mono16)
             if n_frames < 1:
-                return np.ones(n_samples, dtype=bool)
+                return np.ones(n_samples, dtype=bool)  # type: ignore[no-any-return]
             # Map each sample to its frame
             sample_indices = np.arange(n_samples)
             frame_indices = np.clip((sample_indices * n_frames / n_samples).astype(int), 0, n_frames - 1)
@@ -153,7 +153,7 @@ class SileroPlugin:
             e = min(s + _CHUNK, len(mono16))
             if self._energy_vad(mono16[s:e]) >= self._threshold:
                 mask[s:e] = True
-        return mask
+        return mask  # type: ignore[no-any-return]
 
     def _vad_onnx(self, chunk: np.ndarray) -> float:
         if len(chunk) < 1:
@@ -221,7 +221,7 @@ def _silero_synthesize(self, text: str, speaker: str = "default", sr: int = 4800
     import numpy as np
 
     samples = np.zeros(sr, dtype=np.float32)  # 1 s Stille
-    return samples.tobytes()
+    return samples.tobytes()  # type: ignore[no-any-return]
 
 
 SileroPlugin.synthesize = _silero_synthesize  # type: ignore[attr-defined]

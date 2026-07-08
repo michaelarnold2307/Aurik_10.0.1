@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import logging
 import time as _time
+from typing import cast
 
 import numpy as np
 import scipy.signal as sps
@@ -98,7 +99,7 @@ def _build_imd_notch_mask(
     peak_indices = [int(i) for i in np.where(peak_mask)[0]]
     if len(peak_indices) < 2:
         proc_freqs = np.fft.rfftfreq(_PROC_NFFT, 1.0 / sample_rate)
-        return np.ones(len(proc_freqs), dtype=np.float32)
+        return np.ones(len(proc_freqs), dtype=np.float32)  # type: ignore[no-any-return]
 
     # Cluster nearby peaks → fundamental frequencies
     clusters: list[int] = []
@@ -153,7 +154,7 @@ def _build_imd_notch_mask(
 
     if not imd_targets:
         proc_freqs = np.fft.rfftfreq(_PROC_NFFT, 1.0 / sample_rate)
-        return np.ones(len(proc_freqs), dtype=np.float32)
+        return np.ones(len(proc_freqs), dtype=np.float32)  # type: ignore[no-any-return]
 
     # Build notch mask at PROC_NFFT resolution
     proc_freqs = np.fft.rfftfreq(_PROC_NFFT, 1.0 / sample_rate)
@@ -172,7 +173,7 @@ def _build_imd_notch_mask(
             notch_depth = float(np.clip(1.0 - strength * (1.0 - dist**2), 0.15, 1.0))
             gain_mask[k] = min(gain_mask[k], notch_depth)
 
-    return gain_mask
+    return gain_mask  # type: ignore[no-any-return]
 
 
 def _apply_stft_mask(
@@ -190,7 +191,7 @@ def _apply_stft_mask(
     while n_frames > 0 and (n_frames - 1) * hop + n_fft > n:
         n_frames -= 1
     if n_frames == 0:
-        return x.astype(np.float32)
+        return x.astype(np.float32)  # type: ignore[no-any-return]
 
     # Batch STFT: stride_tricks framing + vectorised rfft
     x_f32 = np.asarray(x, dtype=np.float32)
@@ -209,7 +210,7 @@ def _apply_stft_mask(
 
     win_sum = np.maximum(win_sum, 1e-8)
     out /= win_sum
-    return out
+    return out  # type: ignore[no-any-return]
 
 
 def apply(
@@ -228,7 +229,7 @@ def apply(
         imd_score = float(defect_scores.get("intermodulation_distortion", 0.0))
         if imd_score < min_imd_score:
             logger.debug("Phase 63: IMD score %.3f < %.3f — skipped", imd_score, min_imd_score)
-            return np.clip(audio, -1.0, 1.0)
+            return np.clip(audio, -1.0, 1.0)  # type: ignore[no-any-return]
 
     stereo = audio.ndim == 2
     if stereo:
@@ -261,16 +262,16 @@ def apply(
         right_out = np.nan_to_num(right_out, nan=0.0, posinf=0.0, neginf=0.0)
 
         if channels_first:
-            return np.stack([left_out, right_out], axis=0).astype(np.float32)
+            return np.stack([left_out, right_out], axis=0).astype(np.float32)  # type: ignore[no-any-return]
         else:
-            return np.stack([left_out, right_out], axis=1).astype(np.float32)
+            return np.stack([left_out, right_out], axis=1).astype(np.float32)  # type: ignore[no-any-return]
 
     # Mono path
     x = audio.astype(np.float32)
     gain_mask = _build_imd_notch_mask(x, sample_rate, strength, notch_width_hz)
     out = _apply_stft_mask(x, gain_mask, sample_rate)
     result = np.nan_to_num(out, nan=0.0, posinf=0.0, neginf=0.0)
-    return np.clip(result, -1.0, 1.0).astype(np.float32)
+    return np.clip(result, -1.0, 1.0).astype(np.float32)  # type: ignore[no-any-return]
 
 
 # ─── PhaseInterface ────────────────────────────────────────────────────────────
@@ -344,6 +345,107 @@ class IntermodulationReductionPhase(PhaseInterface):
             "min_imd_score": float(np.clip(min_imd_score, 0.05, 0.30)),
             "notch_width_hz": float(np.clip(notch_width_hz, 20.0, 120.0)),
         }
+
+    @staticmethod
+    def _local_event_strength(key: str, loc: tuple[float, float], event_metadata: dict[str, dict] | None) -> float:
+        duration_s = max(0.0, float(loc[1]) - float(loc[0]))
+        duration_factor = float(np.clip(duration_s / 0.65, 0.28, 1.0))
+        key_factor = {
+            "intermodulation_distortion": 1.0,
+            "imd": 1.0,
+            "digital_artifacts": 0.62,
+            "overload_distortion": 0.46,
+        }.get(key, 0.64)
+        severity = 0.55
+        confidence = 0.78
+        meta_obj = (event_metadata or {}).get(key)
+        if isinstance(meta_obj, dict):
+            severity = float(np.clip(float(meta_obj.get("severity", severity)), 0.0, 1.0))
+            confidence = float(np.clip(float(meta_obj.get("confidence", confidence)), 0.0, 1.0))
+        return float(np.clip(key_factor * (0.34 + 0.46 * severity + 0.20 * confidence) * duration_factor, 0.12, 1.0))
+
+    @staticmethod
+    def _collect_protected_zones(kwargs: dict) -> list[tuple[float, float, float]]:
+        zones: list[tuple[float, float, float]] = []
+        for key, cap in (
+            ("vibrato_zones", 0.20),
+            ("frisson_zones", 0.30),
+            ("whisper_zones", 0.25),
+            ("passaggio_zones", 0.35),
+        ):
+            for zone in kwargs.get(key) or []:
+                try:
+                    start_s = float(getattr(zone, "start_s", None) or zone[0])
+                    end_s = float(getattr(zone, "end_s", None) or zone[1])
+                    if end_s > start_s:
+                        zones.append((start_s, end_s, cap))
+                except Exception:
+                    continue
+        return zones
+
+    @staticmethod
+    def _build_locality_profile(
+        n_samples: int,
+        sample_rate: int,
+        defect_locations: dict[str, list[tuple[float, float]]] | None,
+        event_metadata: dict[str, dict] | None = None,
+        protected_zones: list[tuple[float, float, float]] | None = None,
+    ) -> tuple[np.ndarray, float]:
+        if n_samples <= 0 or sample_rate <= 0:
+            return np.zeros(0, dtype=np.float32), 0.0
+        if not isinstance(defect_locations, dict) or not defect_locations:
+            return np.ones(n_samples, dtype=np.float32), 0.0
+
+        keys = ("intermodulation_distortion", "imd", "digital_artifacts", "overload_distortion")
+        mask = np.zeros(n_samples, dtype=np.float32)
+        for key in keys:
+            pad = int((0.040 if key in {"intermodulation_distortion", "imd"} else 0.025) * sample_rate)
+            for loc in defect_locations.get(key) or []:
+                if not isinstance(loc, tuple) or len(loc) != 2:
+                    continue
+                try:
+                    start = int(max(0.0, float(loc[0])) * sample_rate)
+                    end = int(max(0.0, float(loc[1])) * sample_rate)
+                except Exception:
+                    continue
+                if end <= start:
+                    continue
+                start = max(0, start - pad)
+                end = min(n_samples, end + pad)
+                if end > start:
+                    strength = IntermodulationReductionPhase._local_event_strength(key, loc, event_metadata)
+                    mask[start:end] = np.maximum(mask[start:end], strength)
+
+        if float(np.mean(mask)) <= 1e-6:
+            return np.ones(n_samples, dtype=np.float32), 0.0
+
+        smooth = max(16, int(0.018 * sample_rate))
+        mask = np.convolve(mask, np.ones(smooth, dtype=np.float32) / float(smooth), mode="same")
+        mask = np.clip(mask, 0.0, 1.0).astype(np.float32)
+        if protected_zones:
+            for start_s, end_s, cap in protected_zones:
+                start = int(max(0.0, float(start_s)) * sample_rate)
+                end = int(max(0.0, float(end_s)) * sample_rate)
+                if end > start:
+                    mask[start : min(n_samples, end)] = np.minimum(mask[start : min(n_samples, end)], float(cap))
+        return mask, float(np.mean(mask))
+
+    @staticmethod
+    def _blend_with_locality(reference: np.ndarray, candidate: np.ndarray, profile: np.ndarray) -> np.ndarray:
+        if reference.shape != candidate.shape or profile.size == 0:
+            return candidate
+        wet: np.ndarray
+        if reference.ndim == 1:
+            wet = np.asarray(profile, dtype=np.float32)
+        elif reference.ndim == 2 and reference.shape[0] == profile.size and reference.shape[1] <= 8:
+            wet = np.asarray(profile[:, np.newaxis], dtype=np.float32)
+        elif reference.ndim == 2 and reference.shape[1] == profile.size:
+            wet = np.asarray(profile[np.newaxis, :], dtype=np.float32)
+        else:
+            return candidate
+        blended = cast(np.ndarray, reference + wet * (candidate - reference))
+        clipped = cast(np.ndarray, np.clip(np.nan_to_num(blended, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0))
+        return cast(np.ndarray, clipped.astype(np.float32))
 
     def process(
         self,
@@ -420,6 +522,18 @@ class IntermodulationReductionPhase(PhaseInterface):
             min_imd_score=_profile_63["min_imd_score"],
             notch_width_hz=_profile_63["notch_width_hz"],
         )
+        _n_samples63 = (
+            audio.shape[1] if audio.ndim == 2 and audio.shape[0] == 2 and audio.shape[1] > 2 else audio.shape[0]
+        )
+        _local_profile63, _local_coverage63 = self._build_locality_profile(
+            int(_n_samples63),
+            sample_rate,
+            kwargs.get("defect_locations"),
+            kwargs.get("defect_event_metadata"),
+            self._collect_protected_zones(kwargs),
+        )
+        if _local_coverage63 > 0.0:
+            result_audio = self._blend_with_locality(audio, result_audio, _local_profile63)
         elapsed = _time.perf_counter() - t0
 
         # §4.5 Psychoacoustic Masking Clamp — only reduce audible intermodulation
@@ -445,11 +559,13 @@ class IntermodulationReductionPhase(PhaseInterface):
             try:
                 from backend.core.dsp.mikrodynamik_guard import (
                     frame_energy_correlation,  # pylint: disable=import-outside-toplevel
+                    recommend_mikrodynamik_wet,
                 )
 
                 _corr63 = frame_energy_correlation(audio, result_audio, sample_rate, frame_ms=10.0)
                 if _corr63 < 0.97:
-                    _wet63 = min(1.0, (_corr63 - 0.90) / 0.07) if _corr63 > 0.90 else 0.0
+                    _need63 = float(kwargs.get("mikrodynamik_global_need", kwargs.get("global_need", 0.0)) or 0.0)
+                    _wet63 = recommend_mikrodynamik_wet(_corr63, _panns63, global_need=_need63)
                     result_audio = (_wet63 * result_audio + (1.0 - _wet63) * audio).astype(np.float32)
                     logger.warning(
                         "Phase63 V20 Mikrodynamik-Korr=%.3f < 0.97 → wet=%.3f Blend",
@@ -498,6 +614,36 @@ class IntermodulationReductionPhase(PhaseInterface):
         except Exception as _npa63_exc:
             logger.debug("§2.46f phase_63 NPA-Guard (non-blocking): %s", _npa63_exc)
 
+        # §V19 Noise-Textur-Invariante (VERBOTEN-V19): Residual bewahrt Materialcharakter
+        _mat63_str = str(material_type or "unknown").lower()
+        try:
+            from backend.core.dsp.noise_texture_guard import (  # pylint: disable=import-outside-toplevel
+                compute_noise_texture_distance as _nt63_fn,
+            )
+
+            if result_audio.shape == audio.shape:
+                _nt63_d = _nt63_fn(
+                    audio.astype(np.float32) - result_audio.astype(np.float32), _mat63_str, sr=sample_rate
+                )
+                if _nt63_d > 0.25:
+                    result_audio = (0.5 * result_audio + 0.5 * audio).astype(np.float32)
+                    logger.warning("§V19 phase_63 noise_texture dist=%.3f > 0.25 → 50%%-Blend", _nt63_d)
+        except Exception as _nt63_exc:
+            logger.debug("§V19 phase_63 noise_texture_guard (non-blocking): %s", _nt63_exc)
+
+        # §V24 Spektralfarbe-Prüfung (VERBOTEN-V24): 1/3-Oktav-Profil darf nicht verfärbt werden
+        try:
+            from backend.core.dsp.spectral_color_guard import (  # pylint: disable=import-outside-toplevel
+                check_spectral_color_preservation as _scg63,
+            )
+
+            if result_audio.shape == audio.shape:
+                _sc63 = _scg63(audio.astype(np.float32), result_audio.astype(np.float32), sample_rate)
+                if not _sc63.ok:
+                    result_audio = (0.70 * result_audio + 0.30 * audio).astype(np.float32)
+        except Exception as _sc63_exc:
+            logger.debug("§V24 phase_63 spectral_color_guard (non-blocking): %s", _sc63_exc)
+
         _rms_out_db = _rms_dbfs_gated(result_audio)
         _rms_drop = (_rms_out_db - _rms_in_db) if _rms_in_db > -80.0 else 0.0
         return PhaseResult(
@@ -513,6 +659,7 @@ class IntermodulationReductionPhase(PhaseInterface):
                 "imd_profile": dict(_profile_63),
                 "imd_threshold": float(_profile_63["min_imd_score"]),
                 "notch_width_hz": float(_profile_63["notch_width_hz"]),
+                "repair_locality_coverage": round(float(_local_coverage63), 6),
                 "phase_locality_factor": phase_locality_factor,
                 "effective_strength": _effective_strength,
                 "rms_drop_db": round(float(min(0.0, _rms_drop)), 3),

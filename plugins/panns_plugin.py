@@ -26,6 +26,7 @@ import logging
 import math
 import threading
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -129,58 +130,168 @@ class PANNsPlugin:
 
     def __init__(self) -> None:
         self._session: object | None = None
+        self._torch_model: object | None = None  # PyTorch fallback model
+        self._device: str = "cpu"
+        self._use_fp16: bool = False
         self._load_onnx()
+
+    # ------------------------------------------------------------------
+    # GPU-Erkennung
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _detect_gpu() -> tuple[str, bool]:
+        """Erkennt verfügbare GPU (CUDA oder ROCm).
+
+        Returns:
+            (device_name, fp16_supported)
+        """
+        try:
+            import torch  # pylint: disable=import-outside-toplevel
+
+            if torch.cuda.is_available():
+                device = "cuda"
+                # Prüfe auf fp16-Unterstützung (ab Compute Capability 5.3 bzw. Volta+)
+                fp16_ok = torch.cuda.get_device_capability(0)[0] >= 7
+                logger.info("PANNs GPU: CUDA erkannt (Compute Capability %s), fp16=%s",
+                            torch.cuda.get_device_capability(0), fp16_ok)
+                return device, fp16_ok
+        except Exception:
+            pass
+
+        try:
+            import torch  # pylint: disable=import-outside-toplevel
+
+            # ROCm: torch.cuda.is_available() returns True for AMD GPUs too
+            # but we also check for MIOpen/ROCm via HIP
+            if hasattr(torch, 'hip') and torch.hip.is_available():
+                logger.info("PANNs GPU: ROCm/HIP erkannt")
+                return "cuda", True  # ROCm GPUs support fp16 well
+        except Exception:
+            pass
+
+        logger.info("PANNs GPU: Keine GPU erkannt — CPU-Inferenz")
+        return "cpu", False
 
     # ------------------------------------------------------------------
     # ONNX-Laden
     # ------------------------------------------------------------------
 
     def _load_onnx(self) -> None:
-        """Lädt ONNX-Session einmalig lazy; warnt bei Fehler, kein Absturz."""
+        """Lädt ONNX-Session einmalig lazy; GPU-beschleunigt wenn verfügbar; warnt bei Fehler, kein Absturz."""
         try:
             import onnxruntime as ort
 
             try:
                 from backend.core.ml_memory_budget import try_allocate as _try_alloc
 
-                if not _try_alloc("PANNs", size_gb=0.66):
+                budget_gb = 0.66
+                if not _try_alloc("PANNs", size_gb=budget_gb):
                     logger.warning("PANNs: ML-Budget erschöpft — Spektral-Fallback.")
                     return
             except Exception as _exc:
                 logger.debug("Operation failed (non-critical): %s", _exc)
+
+            # GPU-Provider-Präferenz: CUDA > ROCm > CPU
+            device, fp16_ok = self._detect_gpu()
+            self._device = device
+            self._use_fp16 = fp16_ok
 
             try:
                 from backend.core.ml_device_manager import get_ort_providers as _get_prov
 
                 _providers = _get_prov("PANNs")
             except Exception:
-                _providers = ["CPUExecutionProvider"]
+                # Build provider list with GPU preference
+                _providers = []
+                if device == "cuda":
+                    _providers.append("CUDAExecutionProvider")
+                _providers.append("CPUExecutionProvider")
+
+            # ONNX Session options for GPU optimization
+            sess_options = ort.SessionOptions()
+            if device == "cuda":
+                # Enable graph optimization for GPU
+                sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+                logger.info("PANNs ONNX: GPU-Inferenz aktiviert (CUDAExecutionProvider)")
+            else:
+                sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_BASIC
+                logger.info("PANNs ONNX: CPU-Inferenz")
+
             self._session = ort.InferenceSession(
                 str(self._ONNX_PATH),
+                sess_options=sess_options,
                 providers=_providers,
             )
             logger.info(
-                "panns_plugin: CNN14 ONNX model loaded (%s, §4.4 primary genre/tagging)",
+                "panns_plugin: CNN14 ONNX model loaded (%s, device=%s, fp16=%s, §4.4 primary genre/tagging)",
                 self._ONNX_PATH.name,
+                self._device,
+                self._use_fp16,
             )
             try:
                 from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm
 
-                _reg_plm("PANNs", size_gb=0.66, unload_fn=lambda s=self: setattr(s, "_session", None))
+                _reg_plm("PANNs", size_gb=0.66, unload_fn=lambda s=self: setattr(s, "_session", None))  # type: ignore[misc]
             except Exception as _exc:
                 logger.debug("Operation failed (non-critical): %s", _exc)
         except Exception as exc:
             logger.warning(
-                "PANNs ONNX nicht verfügbar — Instrument-Gate inaktiv (alle Phasen sind aktiv): %s",
+                "PANNs ONNX nicht verfügbar — versuche PyTorch-Fallback: %s",
                 exc,
             )
             self._session = None
+            self._try_load_torch_panns()
             try:
                 from backend.core.ml_memory_budget import release as _rel
 
                 _rel("PANNs")
             except Exception as _exc:
                 logger.debug("Operation failed (non-critical): %s", _exc)
+
+    def _try_load_torch_panns(self) -> None:
+        """Versucht PANNs CNN14 als PyTorch-Modell zu laden (GPU-Fallback).
+
+        Nutzt `torch.hub.load` für das pretrained CNN14-Modell von
+        qiuqiangkong/audioset_tagging_cnn. Bei Erfolg wird das Modell
+        auf GPU geschoben (falls verfügbar).
+        """
+        try:
+            import torch  # pylint: disable=import-outside-toplevel
+
+            device, fp16_ok = self._detect_gpu()
+            self._device = device
+            self._use_fp16 = fp16_ok
+
+            # Load pretrained CNN14 from torch hub
+            self._torch_model = torch.hub.load(
+                'qiuqiangkong/audioset_tagging_cnn',
+                'Cnn14',
+                pretrained=True,
+                trust_repo=True,
+            )
+            self._torch_model.eval()
+
+            # Move to GPU if available
+            if device == "cuda":
+                self._torch_model = self._torch_model.to(device)
+                if fp16_ok:
+                    self._torch_model = self._torch_model.half()
+                    logger.info("PANNs PyTorch: GPU fp16-Inferenz aktiviert")
+                else:
+                    logger.info("PANNs PyTorch: GPU fp32-Inferenz aktiviert")
+            else:
+                logger.info("PANNs PyTorch: CPU-Inferenz")
+
+            logger.info("PANNs PyTorch CNN14 geladen (device=%s, fp16=%s)", self._device, self._use_fp16)
+        except Exception as exc:
+            logger.warning(
+                "PANNs auch als PyTorch-Modell nicht verfügbar — Instrument-Gate inaktiv: %s",
+                exc,
+            )
+            self._torch_model = None
+            self._device = "cpu"
+            self._use_fp16 = False
 
     # ------------------------------------------------------------------
     # Audio-Aufbereitung
@@ -244,7 +355,7 @@ class PANNsPlugin:
             start = max(0, int((n - self._MODEL_SAMPLES) * float(np.clip(position_ratio, 0.0, 1.0))))
             audio = audio[start : start + self._MODEL_SAMPLES]
 
-        return audio[np.newaxis, :].astype(np.float32)  # [1, 320000]
+        return audio[np.newaxis, :].astype(np.float32)  # type: ignore[no-any-return]  # [1, 320000]
 
     def _to_model_input_from_resampled(self, audio_mono_rs: np.ndarray, position_ratio: float) -> np.ndarray:
         """Extrahiert Fenster aus bereits resampeltem Mono-Array (spart Resample-Overhead bei Multi-Window).
@@ -267,7 +378,7 @@ class PANNsPlugin:
             start = max(0, int((n - self._MODEL_SAMPLES) * float(np.clip(position_ratio, 0.0, 1.0))))
             chunk = chunk[start : start + self._MODEL_SAMPLES]
 
-        return chunk[np.newaxis, :].astype(np.float32)
+        return chunk[np.newaxis, :].astype(np.float32)  # type: ignore[no-any-return]
 
     # ------------------------------------------------------------------
     # Haupt-Inferenz-Methode
@@ -335,9 +446,9 @@ class PANNsPlugin:
 
             # Primär-Inferenz: Mitte (position_ratio=0.5)
             model_input = self._to_model_input(audio, sr, position_ratio=0.5)
-            ort_out = self._session.run(
+            ort_out = self._session.run(  # type: ignore[attr-defined]
                 None,
-                {self._session.get_inputs()[0].name: model_input},
+                {self._session.get_inputs()[0].name: model_input},  # type: ignore[attr-defined]
             )
             scores: np.ndarray = ort_out[0][0].copy()  # [527] float32
 
@@ -353,7 +464,7 @@ class PANNsPlugin:
                     try:
                         assert _mono_rs is not None
                         _inp = self._to_model_input_from_resampled(_mono_rs, _pos)
-                        _out = self._session.run(None, {self._session.get_inputs()[0].name: _inp})
+                        _out = self._session.run(None, {self._session.get_inputs()[0].name: _inp})  # type: ignore[attr-defined]
                         scores = np.maximum(scores, _out[0][0])
                     except Exception as _mw_exc:
                         logger.debug("PANNs Multi-Window pos=%.2f fehlgeschlagen: %s", _pos, _mw_exc)
@@ -425,8 +536,11 @@ class PANNsPlugin:
             from backend.file_import import load_audio_file
 
             _res = load_audio_file(str(input_wav), do_carrier_analysis=False)
-            audio = np.asarray(_res["audio"], dtype=np.float32)
-            sr = int(_res["sr"])
+            if not isinstance(_res, dict):
+                raise TypeError("load_audio_file() muss ein Dict mit audio/sr liefern")
+            _payload: dict[str, Any] = _res
+            audio = np.asarray(_payload["audio"], dtype=np.float32)
+            sr = int(_payload["sr"])
         except Exception as exc:
             logger.error("PANNsPlugin.tag: Datei nicht lesbar '%s': %s", input_wav, exc)
             return {}
@@ -454,6 +568,11 @@ def get_panns_plugin() -> PANNsPlugin:
         with _lock:
             if _instance is None:
                 _instance = PANNsPlugin()
+    return _instance
+
+
+def get_loaded_panns_plugin() -> PANNsPlugin | None:
+    """Gibt nur eine bereits geladene PANNs-Instanz zurück, ohne Lazy-Load."""
     return _instance
 
 
@@ -487,7 +606,10 @@ if __name__ == "__main__":
     from backend.file_import import load_audio_file
 
     _res = load_audio_file(sys.argv[1])
-    _audio, _sr = _res["audio"], int(_res["sr"])
+    if not isinstance(_res, dict):
+        raise TypeError("load_audio_file() muss ein Dict mit audio/sr liefern")
+    _payload: dict[str, Any] = _res
+    _audio, _sr = _payload["audio"], int(_payload["sr"])
     _tags = classify_audio(_audio, _sr)
     logger.debug("PANNs CNN14 — %s", sys.argv[1])
     for _tag, _score in sorted(_tags.items(), key=lambda x: -x[1]):

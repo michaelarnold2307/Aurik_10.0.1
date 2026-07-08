@@ -243,7 +243,7 @@ class StereoParallelProcessor:
 
     def _update_stats(self, total_time: float, result_left: ProcessingResult, result_right: ProcessingResult):
         """Aktualisiert processing statistics."""
-        self._processing_stats["total_processed"] += 1
+        self._processing_stats["total_processed"] += 1  # type: ignore[operator]
 
         # Calculate speedup (theoretical max = 2×, practical ~1.8×)
         max_channel_time = max(result_left.processing_time, result_right.processing_time)
@@ -251,7 +251,7 @@ class StereoParallelProcessor:
 
         if max_channel_time > 0:
             speedup = sequential_time / total_time
-            self._processing_stats["parallel_speedup"].append(speedup)
+            self._processing_stats["parallel_speedup"].append(speedup)  # type: ignore[attr-defined]
 
     def get_average_speedup(self) -> float:
         """
@@ -263,7 +263,7 @@ class StereoParallelProcessor:
         speedups = self._processing_stats["parallel_speedup"]
         if not speedups:
             return 0.0
-        return sum(speedups) / len(speedups)
+        return sum(speedups) / len(speedups)  # type: ignore[no-any-return,call-overload,arg-type]
 
     def get_stats(self) -> dict[str, Any]:
         """
@@ -275,8 +275,8 @@ class StereoParallelProcessor:
         return {
             "total_processed": self._processing_stats["total_processed"],
             "average_speedup": self.get_average_speedup(),
-            "speedup_history": self._processing_stats["parallel_speedup"].copy(),
-            "error_count": len(self._processing_stats["errors"]),
+            "speedup_history": self._processing_stats["parallel_speedup"].copy(),  # type: ignore[attr-defined]
+            "error_count": len(self._processing_stats["errors"]),  # type: ignore[arg-type]
         }
 
     def reset_stats(self):
@@ -326,7 +326,7 @@ class StereoProcessingPipeline:
         # Check if stereo
         if audio.ndim == 1:
             # Mono - use original pipeline
-            return self.pipeline.process(audio, sr)
+            return self.pipeline.process(audio, sr)  # type: ignore[no-any-return]
 
         elif audio.ndim == 2 and audio.shape[0] == 2:
             # Stereo - parallel processing
@@ -338,7 +338,7 @@ class StereoProcessingPipeline:
 
             left_out, right_out = self.processor.process_stereo(left, right, sr, process_channel)
 
-            return np.stack([left_out, right_out], axis=0)
+            return np.stack([left_out, right_out], axis=0)  # type: ignore[no-any-return]
 
         else:
             raise ValueError(f"Invalid audio shape: {audio.shape}")

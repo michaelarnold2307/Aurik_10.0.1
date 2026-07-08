@@ -627,7 +627,7 @@ class SourceFidelityReconstructor:
         correction *= scale
 
         # --- Sicherheits-Cap ---
-        return np.minimum(correction, _MAX_CORRECTION_DB)
+        return np.minimum(correction, _MAX_CORRECTION_DB)  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------
@@ -745,7 +745,7 @@ class SourceFidelityEQProcessor:
             target.confidence,
             eff_str,
         )
-        return result.astype(orig_dtype)
+        return result.astype(orig_dtype)  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------

@@ -251,56 +251,68 @@ def map_panns_to_profile(panns_tags: dict[str, float]) -> str:
 # ─── Datenklassen ────────────────────────────────────────────────────────────
 
 
-@dataclass
-class ExcellenceContext:
-    """Schnell berechneter Audio-Kontext für adaptives Processing."""
+if "ExcellenceContext" not in globals():
 
-    sample_rate: int
-    is_stereo: bool
-    rms_db: float  # Gesamt-RMS in dBFS
-    noise_floor_db: float  # Geschätzter Rauschboden in dBFS
-    snr_estimate_db: float  # Geschätzter SNR
-    harmonicity: float  # Harmonizitäts-Grad [0, 1]
-    transient_density: float  # Anteil transienter Frames [0, 1]
-    spectral_centroid_mean: float  # Mittlere Spektralzentroids-Frequenz Hz
-    dynamic_cv: float  # Koeffizient der Variation der RMS (micro-dynamics)
+    @dataclass
+    class ExcellenceContext:
+        """Schnell berechneter Audio-Kontext für adaptives Processing."""
 
-    @property
-    def needs_continuity_fix(self) -> bool:
-        """Signalisiert Bedarf an Spectral-Continuity-Enhancement."""
-        return 20 < self.snr_estimate_db < 45 and self.transient_density < 0.40  # v9.15-C2: obere SNR-Grenze 45 dB
+        sample_rate: int
+        is_stereo: bool
+        rms_db: float  # Gesamt-RMS in dBFS
+        noise_floor_db: float  # Geschätzter Rauschboden in dBFS
+        snr_estimate_db: float  # Geschätzter SNR
+        harmonicity: float  # Harmonizitäts-Grad [0, 1]
+        transient_density: float  # Anteil transienter Frames [0, 1]
+        spectral_centroid_mean: float  # Mittlere Spektralzentroids-Frequenz Hz
+        dynamic_cv: float  # Koeffizient der Variation der RMS (micro-dynamics)
 
-    @property
-    def needs_micro_dynamics(self) -> bool:
-        """Signalisiert Bedarf an Micro-Dynamic Re-injection."""
-        return self.dynamic_cv < _TARGET_CV_MIN  # v9.12: SNR-Gate entfernt — Mikrodynamik-Injektion unabhängig von SNR
+        @property
+        def needs_continuity_fix(self) -> bool:
+            """Signalisiert Bedarf an Spectral-Continuity-Enhancement."""
+            return 20 < self.snr_estimate_db < 45 and self.transient_density < 0.40  # v9.15-C2: obere SNR-Grenze 45 dB
 
-    @property
-    def needs_harmonic_boost(self) -> bool:
-        """Signalisiert Bedarf an Harmonic Reinforcement."""
-        return self.harmonicity < 0.60 and self.rms_db > -40  # v9.12: Schwelle ↑0.45→0.60 — mehr Signale erhalten Boost
+        @property
+        def needs_micro_dynamics(self) -> bool:
+            """Signalisiert Bedarf an Micro-Dynamic Re-injection."""
+            return (
+                self.dynamic_cv < _TARGET_CV_MIN
+            )  # v9.12: SNR-Gate entfernt — Mikrodynamik-Injektion unabhängig von SNR
+
+        @property
+        def needs_harmonic_boost(self) -> bool:
+            """Signalisiert Bedarf an Harmonic Reinforcement."""
+            return (
+                self.harmonicity < 0.60 and self.rms_db > -40
+            )  # v9.12: Schwelle ↑0.45→0.60 — mehr Signale erhalten Boost
 
 
-@dataclass
-class ExcellenceResult:
-    """Ergebnis des Excellence-Optimizers."""
+if "ExcellenceResult" not in globals():
 
-    applied_steps: list[str] = field(default_factory=list)
-    delta_rms_db: float = 0.0
-    continuity_smoothing_applied: bool = False
-    micro_dynamic_injected: bool = False
-    harmonic_reinforcement_db: float = 0.0
-    ola_crossfades: int = 0
+    @dataclass
+    class ExcellenceResult:
+        """Ergebnis des Excellence-Optimizers."""
 
-    def summary(self) -> str:
-        return (
-            f"ExcellenceOptimizer: steps={self.applied_steps}, "
-            f"Δrms={self.delta_rms_db:+.2f}dB, "
-            f"continuity={self.continuity_smoothing_applied}, "
-            f"microdyn={self.micro_dynamic_injected}, "
-            f"harm={self.harmonic_reinforcement_db:+.2f}dB, "
-            f"ola_xfades={self.ola_crossfades}"
-        )
+        applied_steps: list[str] = field(default_factory=list)
+        delta_rms_db: float = 0.0
+        continuity_smoothing_applied: bool = False
+        micro_dynamic_injected: bool = False
+        harmonic_reinforcement_db: float = 0.0
+        ola_crossfades: int = 0
+        core_guard_triggered: bool = False
+        core_guard_regressions: list[str] = field(default_factory=list)
+        pareto_conflicts: list[str] = field(default_factory=list)
+
+        def summary(self) -> str:
+            return (
+                f"ExcellenceOptimizer: steps={self.applied_steps}, "
+                f"Δrms={self.delta_rms_db:+.2f}dB, "
+                f"continuity={self.continuity_smoothing_applied}, "
+                f"microdyn={self.micro_dynamic_injected}, "
+                f"harm={self.harmonic_reinforcement_db:+.2f}dB, "
+                f"ola_xfades={self.ola_crossfades}, "
+                f"core_guard={self.core_guard_triggered}"
+            )
 
 
 # ─── Hilfsfunktionen ─────────────────────────────────────────────────────────
@@ -309,8 +321,9 @@ class ExcellenceResult:
 def _to_mono(audio: np.ndarray) -> np.ndarray:
     """Konvertiert zu Mono (Mittelkanal); gibt Originalform zurück wenn mono."""
     if audio.ndim == 1:
-        return audio
-    return np.mean(audio, axis=1) if audio.shape[1] <= audio.shape[0] else np.mean(audio, axis=0)
+        return np.asarray(audio)  # type: ignore[no-any-return]
+    mono = np.mean(audio, axis=1) if audio.shape[1] <= audio.shape[0] else np.mean(audio, axis=0)
+    return np.asarray(mono)  # type: ignore[no-any-return]
 
 
 def _stft(audio: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -328,17 +341,17 @@ def _istft(Zxx: np.ndarray, orig_len: int) -> np.ndarray:
 def _match_length(a: np.ndarray, target_len: int) -> np.ndarray:
     """Passt Array-Länge an target_len an (Pad oder Trim)."""
     if len(a) >= target_len:
-        return a[:target_len]
-    return np.pad(a, (0, target_len - len(a)))
+        return np.asarray(a[:target_len])  # type: ignore[no-any-return]
+    return np.asarray(np.pad(a, (0, target_len - len(a))))  # type: ignore[no-any-return]
 
 
 def _frame_rms(audio: np.ndarray, frame_size: int = 512) -> np.ndarray:
     """RMS-Verlauf als 1D-Array (ein Wert pro Frame)."""
     n_frames = len(audio) // frame_size
     if n_frames == 0:
-        return np.array([np.sqrt(np.mean(audio**2))])
+        return np.asarray([np.sqrt(np.mean(audio**2))])  # type: ignore[no-any-return]
     shaped = audio[: n_frames * frame_size].reshape(n_frames, frame_size)
-    return np.sqrt(np.mean(shaped**2, axis=1)) + 1e-10
+    return np.asarray(np.sqrt(np.mean(shaped**2, axis=1)) + 1e-10)  # type: ignore[no-any-return]
 
 
 # ─── Kontext-Analyse ─────────────────────────────────────────────────────────
@@ -401,7 +414,7 @@ def analyze_context(audio: np.ndarray, sample_rate: int) -> ExcellenceContext:
         try:
             from backend.core.transient_decoupled_processor import separate_transients
 
-            perc, harm = separate_transients(mono, sample_rate)
+            perc, _harm = separate_transients(mono, sample_rate)
             perc_energy = float(np.sum(perc**2))
             total_energy = float(np.sum(mono**2)) + 1e-10
             transient_density = float(np.clip(perc_energy / total_energy, 0.0, 1.0))
@@ -502,9 +515,18 @@ def _enhance_spectral_continuity(
     # §9.10.119: PGHI phase reconstruction after magnitude modification
     # (Perraudin et al. 2013 — magnitude-only ISTFT with original phase
     # introduces phase inconsistency; PGHI corrects this).
-    if _PGHI_AVAILABLE_EX:
+    _pghi_fn = _pghi_excellence
+    if _PGHI_AVAILABLE_EX and callable(_pghi_fn):
         try:
-            Zxx_new = _pghi_excellence(Zxx_new, hop_length=_HOP)
+            _pghi_out = _pghi_fn(Zxx_new, hop=_HOP, n_samples=len(_audio_proc))
+            if isinstance(_pghi_out, np.ndarray) and _pghi_out.ndim == 1:
+                smoothed = _match_length(np.asarray(_pghi_out, dtype=np.float32), len(_audio_proc))
+                if len(audio) > _max_cont_samples:
+                    out = audio.copy()
+                    out[:_max_cont_samples] = smoothed
+                    return out
+                return smoothed
+            Zxx_new = _pghi_out
         except Exception:
             pass  # fallback: use original-phase reconstruction
     smoothed = _istft(Zxx_new, len(_audio_proc))
@@ -572,12 +594,14 @@ def _inject_micro_dynamics(
             modulation[_fs - _xf // 2 : _fs - _xf // 2 + _xf] = _fade
 
     if audio.ndim == 1:
-        return (audio * modulation).astype(audio.dtype)
-    else:
-        # Stereo: gleiche Modulation auf beide Kanäle
-        return (
+        return np.asarray((audio * modulation).astype(audio.dtype))  # type: ignore[no-any-return]
+
+    # Stereo: gleiche Modulation auf beide Kanäle
+    return np.asarray(  # type: ignore[no-any-return]
+        (
             audio * modulation[:, np.newaxis] if audio.shape[1] <= audio.shape[0] else audio * modulation[np.newaxis, :]
         ).astype(audio.dtype)
+    )
 
 
 def _reinforce_harmonics(
@@ -623,8 +647,6 @@ def _reinforce_harmonics(
         t_end = t_start + _WIN_LEN
         if t_end > len(mono):
             break
-        mono[t_start:t_end]
-
         # F0-Detektion: stärkste Komponente unter F0_FREQ_MAX
         frame_mag = mag[:, t]
         low_mask = freqs < _F0_FREQ_MAX
@@ -650,9 +672,18 @@ def _reinforce_harmonics(
 
     Zxx_new = mag * np.exp(1j * phase)
     # §9.10.119: PGHI after harmonic boost magnitude changes
-    if _PGHI_AVAILABLE_EX:
+    _pghi_fn = _pghi_excellence
+    if _PGHI_AVAILABLE_EX and callable(_pghi_fn):
         try:
-            Zxx_new = _pghi_excellence(Zxx_new, hop_length=_HOP)
+            _pghi_out = _pghi_fn(Zxx_new, hop=_HOP, n_samples=len(_audio_proc))
+            if isinstance(_pghi_out, np.ndarray) and _pghi_out.ndim == 1:
+                boosted = _match_length(np.asarray(_pghi_out, dtype=np.float32), len(_audio_proc))
+                if len(audio) > _max_harm_samples:
+                    out = audio.copy()
+                    out[:_max_harm_samples] = boosted
+                    return out
+                return boosted
+            Zxx_new = _pghi_out
         except Exception as _pghi_exc:
             logger.debug("PGHI excellence harmonic boost failed, using unmodified phase: %s", _pghi_exc)
     boosted = _istft(Zxx_new, len(_audio_proc))
@@ -813,15 +844,12 @@ class ExcellenceOptimizer:
         # Optional: MERT-Analyse verbessert die Context-Felder (harmonicity)  # v9.15-C3: dynamic_cv korrigiert (MertAnalysis hat kein dynamic_cv-Feld)
         if self.use_mert and context is None:
             try:
-                import os
-                import sys
+                from plugins.mert_plugin import get_loaded_mert_plugin, get_mert_plugin  # pylint: disable=import-outside-toplevel  # noqa: I001
 
-                _plugins_dir = os.path.join(os.path.dirname(__file__), "..", "..", "plugins")
-                if _plugins_dir not in sys.path:
-                    sys.path.insert(0, os.path.abspath(_plugins_dir))
-                from mert_plugin import MertPlugin
+                _mert = get_loaded_mert_plugin()
+                if _mert is None:
+                    _mert = get_mert_plugin()
 
-                _mert = MertPlugin()
                 _analysis = _mert.analyze(audio, self.sample_rate)
                 # MERT-Harmonizität überschreibt DSP-Schätzung (genauer)
                 ctx = ExcellenceContext(
@@ -913,10 +941,6 @@ class ExcellenceOptimizer:
             except Exception as exc:
                 logger.warning("ExcellenceOptimizer: ola_crossfade failed: %s", exc)
 
-        # RMS-Delta berechnen
-        rms_after = float(np.sqrt(np.mean(out.astype(np.float64) ** 2)) + 1e-10)
-        result.delta_rms_db = float(20 * np.log10(rms_after / rms_before))
-
         # §2.34 GoalPriorityProtocol: Pareto-Konflikt-Logging (MOO, §2.5)
         # Natürlichkeit/Authentizität (Stufe 1) dürfen nicht für Brillanz/Raumtiefe (Stufe 5) geopfert werden.
         try:
@@ -927,6 +951,16 @@ class ExcellenceOptimizer:
             _checker = MusicalGoalsChecker()
             _goals_before = _checker.measure_all(audio, self.sample_rate)
             _goals_after = _checker.measure_all(out.astype(audio.dtype), self.sample_rate)
+            _core_goals = {
+                "natuerlichkeit",
+                "authentizitaet",
+                "timbre_authentizitaet",
+                "tonal_center",
+                "artikulation",
+                "transient_energie",
+                "spatial_depth",
+            }
+            _core_drop_threshold = 0.015
             # Prüfe alle Paare auf Pareto-Konflikte (Stufe-1-Ziele besonders schützen)
             _priority_log: list[str] = []
             for _ga, _gb in [
@@ -943,11 +977,37 @@ class ExcellenceOptimizer:
                         f"→ {_conflict.winner} priorisiert (Stufe {_conflict.priority_winner})"
                     )
                     _priority_log.append(_entry)
+                    result.pareto_conflicts.append(_entry)
                     logger.warning("⚠ %s", _entry)
+
+            # Aktiver Core-Guard: Wenn Kernziele hörbar regressieren, dann
+            # wird der Optimizer-Schritt verworfen (Primum non nocere, §0).
+            _core_regressions: list[str] = []
+            for _g in _core_goals:
+                _before = float(_goals_before.get(_g, 1.0))
+                _after = float(_goals_after.get(_g, _before))
+                if np.isfinite(_before) and np.isfinite(_after) and (_after < _before - _core_drop_threshold):
+                    _core_regressions.append(f"{_g}:{_before:.3f}->{_after:.3f}")
+
+            if _core_regressions:
+                logger.warning(
+                    "ExcellenceOptimizer Core-Guard: Rollback wegen Kernziel-Regressionen (%s)",
+                    ", ".join(_core_regressions[:6]),
+                )
+                out = audio.astype(np.float64) if audio.dtype != np.float64 else audio.copy()
+                result.core_guard_triggered = True
+                result.core_guard_regressions = list(_core_regressions)
+                result.applied_steps.append("core_guard_rollback")
+
             if _priority_log:
                 result.applied_steps.extend(_priority_log)
         except Exception as _gpp_exc:
             logger.debug("GoalPriorityProtocol in ExcellenceOptimizer nicht verfügbar: %s", _gpp_exc)
+
+        # RMS-Delta auf dem finalen Output berechnen (auch nach Rollback korrekt).
+        rms_after = float(np.sqrt(np.mean(out.astype(np.float64) ** 2)) + 1e-10)
+        _raw_delta_rms_db = float(20 * np.log10(rms_after / rms_before))
+        result.delta_rms_db = float(np.clip(_raw_delta_rms_db, -6.0, 6.0))
 
         # Sicherheits-Clipping: niemals über 0 dBFS, NaN-safe
         out = np.clip(np.nan_to_num(out, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0)
@@ -996,7 +1056,7 @@ def optimize_for_excellence(
 
 # ─── Singleton-Accessor (gem. Aurik-9-Standard §3.2) ───────────────────────────────────
 
-_optimizer_instance: ExcellenceOptimizer | None = None
+_optimizer_holder: list[ExcellenceOptimizer | None] = [None]
 _optimizer_lock = threading.Lock()
 
 
@@ -1019,11 +1079,10 @@ def get_excellence_optimizer(
     Returns:
         Singleton-Instanz von :class:`ExcellenceOptimizer`.
     """
-    global _optimizer_instance
-    if _optimizer_instance is None:
+    if _optimizer_holder[0] is None:
         with _optimizer_lock:
-            if _optimizer_instance is None:
-                _optimizer_instance = ExcellenceOptimizer(
+            if _optimizer_holder[0] is None:
+                _optimizer_holder[0] = ExcellenceOptimizer(
                     sample_rate=sample_rate,
                     material=material,
                     use_mert=use_mert,
@@ -1033,4 +1092,4 @@ def get_excellence_optimizer(
                     sample_rate,
                     material,
                 )
-    return _optimizer_instance
+    return _optimizer_holder[0]  # type: ignore[return-value]

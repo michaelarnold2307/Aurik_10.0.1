@@ -82,7 +82,7 @@ def _f0_from_autocorr(mono: np.ndarray, sr: int) -> np.ndarray:
             confidence = 0.0
         if confidence > 0.3:
             f0s[i] = float(sr) / peak_lag
-    return f0s
+    return f0s  # type: ignore[no-any-return]
 
 
 def _measure_vibrato_depth(f0: np.ndarray) -> float:

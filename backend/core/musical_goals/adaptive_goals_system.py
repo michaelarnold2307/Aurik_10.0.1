@@ -334,7 +334,7 @@ class MaterialQualityAnalyzer:
         # Normalize to 0-1 scale
         noise_level = min(1.0, noise_floor * 100)  # Rough scaling
 
-        return float(noise_level)
+        return float(noise_level)  # type: ignore[arg-type]
 
     def _measure_bandwidth_limitation(self, audio: np.ndarray, sr: int) -> float:
         """
@@ -397,7 +397,7 @@ class MaterialQualityAnalyzer:
 
         # Count anomalous peaks
         threshold = np.mean(diff) + 3 * np.std(diff)
-        artifacts = np.sum(diff > threshold)
+        artifacts: int = int(np.sum(diff > threshold))
 
         # Normalize by length
         artifact_density = artifacts / len(audio) * 1000  # per 1000 samples
@@ -411,7 +411,7 @@ class MaterialQualityAnalyzer:
         """Messe Dynamic Range in dB"""
         # RMS-based dynamic range
         rms = np.sqrt(np.mean(audio**2))
-        peak = np.max(np.abs(audio))
+        peak: float = float(np.max(np.abs(audio)))
 
         dr_db = 20 * np.log10(peak / rms) if rms > 0 else 0.0
 

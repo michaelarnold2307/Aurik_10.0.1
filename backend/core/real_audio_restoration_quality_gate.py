@@ -150,7 +150,7 @@ def _required_actions(case: dict[str, Any], fail_codes: tuple[str, ...]) -> tupl
         actions.append("frisson_goosebumps_protection")
     if _VQI in fail_codes:
         actions.append("vocal_vqi_recovery")
-    if _optional_float(case.get("hpi")) is not None and float(case.get("hpi")) < 0.72:
+    if _optional_float(case.get("hpi")) is not None and float(case.get("hpi")) < 0.72:  # type: ignore[arg-type]
         actions.append("hpi_quality_candidate_ranking")
     return tuple(dict.fromkeys(actions))
 
@@ -168,9 +168,9 @@ def _case_from_execution(case: dict[str, Any]) -> RestorationQualityCaseResult:
     vocal_ok = (not vocal_required) or _VQI not in fail_codes
     hpi = _optional_float(case.get("hpi"))
     metadata = case.get("metadata") if isinstance(case.get("metadata"), dict) else {}
-    quality_estimate = _optional_float(metadata.get("quality_estimate"))
+    quality_estimate = _optional_float(metadata.get("quality_estimate"))  # type: ignore[union-attr]
     vqi = _optional_float(case.get("vqi"))
-    vqi_floor = _optional_float(metadata.get("vqi_floor"))
+    vqi_floor = _optional_float(metadata.get("vqi_floor"))  # type: ignore[union-attr]
     final_quality_passed = bool(non_degraded and unblocked and musical_ok and noise_ok and goosebumps_ok and vocal_ok)
 
     return RestorationQualityCaseResult(
@@ -189,8 +189,8 @@ def _case_from_execution(case: dict[str, Any]) -> RestorationQualityCaseResult:
         fail_reasons=fail_codes,
         required_actions=_required_actions(case, fail_codes),
         metadata={
-            "path": metadata.get("path"),
-            "material": metadata.get("material"),
+            "path": metadata.get("path"),  # type: ignore[union-attr]
+            "material": metadata.get("material"),  # type: ignore[union-attr]
             "degradation_status": degradation,
             "export_strategy": export_strategy,
             "vocal_required": vocal_required,
@@ -248,7 +248,7 @@ def evaluate_restoration_quality_gate(
     hpi_values = [case.hpi for case in cases if isinstance(case.hpi, (int, float))]
     quality_values = [case.quality_estimate for case in cases if isinstance(case.quality_estimate, (int, float))]
     execution_gate = execution_report.get("gate") if isinstance(execution_report.get("gate"), dict) else {}
-    runtime_factor = float(execution_gate.get("runtime_factor", 0.0) or 0.0)
+    runtime_factor = float(execution_gate.get("runtime_factor", 0.0) or 0.0)  # type: ignore[union-attr]
 
     non_degraded_rate = _rate(cases, "non_degraded_export")
     unblocked_rate = _rate(cases, "unblocked_export")

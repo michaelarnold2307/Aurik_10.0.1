@@ -86,7 +86,7 @@ def apply(
                 mn_score,
                 min_modulation_noise_score,
             )
-            return np.clip(audio, -1.0, 1.0)
+            return np.clip(audio, -1.0, 1.0)  # type: ignore[no-any-return]
 
     stereo = audio.ndim == 2
     if stereo:
@@ -100,7 +100,7 @@ def apply(
             1.0,
         )
         _gain_mn = np.clip(_gain_mn, 0.0, 10.0)
-        return np.clip(np.stack([audio[0] * _gain_mn, audio[1] * _gain_mn], axis=0), -1.0, 1.0).astype(np.float32)
+        return np.clip(np.stack([audio[0] * _gain_mn, audio[1] * _gain_mn], axis=0), -1.0, 1.0).astype(np.float32)  # type: ignore[no-any-return]
 
     x = np.asarray(audio, dtype=np.float32)
     n = len(x)
@@ -160,7 +160,7 @@ def apply(
     # Wet/dry blend
     result = x * (1.0 - strength) + out * strength
     result = np.nan_to_num(result, nan=0.0, posinf=0.0, neginf=0.0)
-    return np.clip(result, -1.0, 1.0).astype(np.float32)
+    return np.clip(result, -1.0, 1.0).astype(np.float32)  # type: ignore[no-any-return]
 
 
 class ModulationNoiseReductionPhase(PhaseInterface):
@@ -228,6 +228,99 @@ class ModulationNoiseReductionPhase(PhaseInterface):
             "g_floor": float(np.clip(g_floor, 0.05, 0.30)),  # §2.62: quality_mode darf < 0.10 (bis 0.05)
         }
 
+    @staticmethod
+    def _local_event_strength(key: str, loc: tuple[float, float], event_metadata: dict[str, dict] | None) -> float:
+        duration_s = max(0.0, float(loc[1]) - float(loc[0]))
+        duration_factor = float(np.clip(duration_s / 1.20, 0.30, 1.0))
+        key_factor = {
+            "modulation_noise": 1.0,
+            "signal_dependent_noise": 0.90,
+            "nr_breathing_artifact": 0.72,
+            "tape_noise_modulation": 0.95,
+        }.get(str(key).strip().lower(), 0.80)
+        severity = 0.55
+        confidence = 0.75
+        meta_obj = (event_metadata or {}).get(key) or (event_metadata or {}).get(str(key).strip().lower())
+        if isinstance(meta_obj, dict):
+            severity = float(np.clip(float(meta_obj.get("severity", severity)), 0.0, 1.0))
+            confidence = float(np.clip(float(meta_obj.get("confidence", confidence)), 0.0, 1.0))
+        return float(np.clip(key_factor * (0.35 + 0.45 * severity + 0.20 * confidence) * duration_factor, 0.12, 1.0))
+
+    @staticmethod
+    def _collect_protected_zones(kwargs: dict) -> list[tuple[float, float, float]]:
+        zones: list[tuple[float, float, float]] = []
+        for key, cap in (
+            ("vibrato_zones", 0.20),
+            ("frisson_zones", 0.30),
+            ("whisper_zones", 0.25),
+            ("passaggio_zones", 0.35),
+        ):
+            for zone in kwargs.get(key) or []:
+                try:
+                    start_s = float(getattr(zone, "start_s", None) or zone[0])
+                    end_s = float(getattr(zone, "end_s", None) or zone[1])
+                    if end_s > start_s:
+                        zones.append((start_s, end_s, cap))
+                except Exception:
+                    continue
+        return zones
+
+    @staticmethod
+    def _build_locality_profile(
+        n_samples: int,
+        sample_rate: int,
+        defect_locations: dict[str, list[tuple[float, float]]] | None,
+        event_metadata: dict[str, dict] | None = None,
+        protected_zones: list[tuple[float, float, float]] | None = None,
+    ) -> tuple[np.ndarray, float]:
+        if n_samples <= 0:
+            return np.zeros(0, dtype=np.float32), 0.0
+        if not defect_locations:
+            return np.ones(n_samples, dtype=np.float32), 1.0
+
+        keys = ("modulation_noise", "signal_dependent_noise", "nr_breathing_artifact", "tape_noise_modulation")
+        mask = np.zeros(n_samples, dtype=np.float32)
+        pad = int(0.10 * sample_rate)
+        for key in keys:
+            for loc in defect_locations.get(key, []) or []:
+                try:
+                    start_s, end_s = float(loc[0]), float(loc[1])
+                except Exception:
+                    continue
+                s = int(max(0.0, start_s) * sample_rate)
+                e = int(max(0.0, end_s) * sample_rate)
+                s = max(0, s - pad)
+                e = min(n_samples, e + pad)
+                if e > s:
+                    strength = ModulationNoiseReductionPhase._local_event_strength(key, loc, event_metadata)
+                    mask[s:e] = np.maximum(mask[s:e], strength)
+        if not np.any(mask):
+            return np.ones(n_samples, dtype=np.float32), 1.0
+
+        smooth = max(16, int(0.04 * sample_rate))
+        mask = np.convolve(mask, np.ones(smooth, dtype=np.float32) / float(smooth), mode="same")
+        mask = np.clip(mask, 0.0, 1.0).astype(np.float32)
+        if protected_zones:
+            for start_s, end_s, cap in protected_zones:
+                s = int(max(0.0, float(start_s)) * sample_rate)
+                e = int(max(0.0, float(end_s)) * sample_rate)
+                if e > s:
+                    mask[s : min(n_samples, e)] = np.minimum(mask[s : min(n_samples, e)], float(cap))
+        return mask, float(np.mean(mask))
+
+    @staticmethod
+    def _blend_with_locality(audio: np.ndarray, candidate: np.ndarray, profile: np.ndarray) -> np.ndarray:
+        if profile.size == 0 or profile.size == 1:
+            return candidate
+        if audio.ndim == 2 and audio.shape[0] == profile.size:
+            profile_2d = profile[:, np.newaxis]
+        elif audio.ndim == 2 and audio.shape[-1] == profile.size:
+            profile_2d = profile[np.newaxis, :]
+        else:
+            profile_2d = profile
+        blended: np.ndarray = np.asarray(np.clip(audio + profile_2d * (candidate - audio), -1.0, 1.0), dtype=np.float32)
+        return blended
+
     def process(
         self,
         audio: np.ndarray,
@@ -250,6 +343,33 @@ class ModulationNoiseReductionPhase(PhaseInterface):
         phase_locality_factor = float(np.clip(float(kwargs.get("phase_locality_factor", 1.0)), 0.35, 1.0))
         _pmgg_strength = float(kwargs.get("strength", strength))
         _effective_strength = float(np.clip(_pmgg_strength * phase_locality_factor, 0.0, 1.0))
+
+        # §V40 NMR-Feedback: NR-Stärke adaptiv anpassen (FeedbackChain-aware).
+        try:
+            from backend.core.dsp.nmr_feedback import (
+                compute_nmr_score as _nmr_fn_59,  # pylint: disable=import-outside-toplevel
+            )
+
+            _nmr_result_59 = _nmr_fn_59(audio, sample_rate)
+            if not _nmr_result_59.ok:
+                logger.warning(
+                    "Phase59 §V40 NMR: nmr_above_masking → §2.45 Minimal-Intervention prüfen",
+                )
+            _effective_strength = float(
+                np.clip(
+                    _effective_strength + _nmr_result_59.recommended_nr_strength_delta,
+                    0.0,
+                    1.0,
+                )
+            )
+            logger.debug(
+                "Phase59 §V40 NMR: delta=%.3f → eff_str=%.3f",
+                _nmr_result_59.recommended_nr_strength_delta,
+                _effective_strength,
+            )
+        except Exception as _nmr_exc_59:  # pylint: disable=broad-except
+            logger.debug("Phase59 §V40 NMR non-blocking: %s", _nmr_exc_59)
+
         if _effective_strength <= 0.0:
             passthrough = np.nan_to_num(audio.copy(), nan=0.0, posinf=0.0, neginf=0.0)
             passthrough = np.clip(passthrough, -1.0, 1.0)
@@ -279,6 +399,15 @@ class ModulationNoiseReductionPhase(PhaseInterface):
             min_modulation_noise_score=_profile_59["min_modulation_noise_score"],
             g_floor=_profile_59["g_floor"],
         )
+        _n_profile_samples = audio.shape[-1] if audio.ndim == 2 and audio.shape[0] == 2 else audio.shape[0]
+        _locality_profile, _locality_coverage = self._build_locality_profile(
+            n_samples=int(_n_profile_samples),
+            sample_rate=sample_rate,
+            defect_locations=kwargs.get("defect_locations"),
+            event_metadata=kwargs.get("defect_event_metadata"),
+            protected_zones=self._collect_protected_zones(kwargs),
+        )
+        result_audio = self._blend_with_locality(audio, result_audio, _locality_profile)
         elapsed = _time.perf_counter() - t0
 
         # §4.5 Psychoacoustic Masking Clamp — only reduce audible modulation noise
@@ -397,10 +526,14 @@ class ModulationNoiseReductionPhase(PhaseInterface):
                 from backend.core.dsp.mikrodynamik_guard import (  # pylint: disable=import-outside-toplevel
                     frame_energy_correlation as _fec59,
                 )
+                from backend.core.dsp.mikrodynamik_guard import (
+                    recommend_mikrodynamik_wet as _recommend_mkk_wet,
+                )
 
                 _corr59 = _fec59(audio, result_audio, sample_rate, frame_ms=10.0)
                 if _corr59 < 0.97:
-                    _wet59 = float(np.clip((_corr59 - 0.90) / 0.07, 0.0, 1.0))
+                    _need59 = float(kwargs.get("mikrodynamik_global_need", kwargs.get("global_need", 0.0)) or 0.0)
+                    _wet59 = _recommend_mkk_wet(_corr59, _p59_panns, global_need=_need59)
                     result_audio = (_wet59 * result_audio + (1.0 - _wet59) * audio).astype(np.float32)
                     logger.warning("§V20 phase_59: mikrodynamik_corr=%.4f < 0.97 → wet=%.3f", _corr59, _wet59)
             except Exception as _v20_59_exc:
@@ -470,6 +603,7 @@ class ModulationNoiseReductionPhase(PhaseInterface):
                 "min_modulation_noise_score": float(_profile_59["min_modulation_noise_score"]),
                 "g_floor": float(_profile_59["g_floor"]),
                 "phase_locality_factor": phase_locality_factor,
+                "repair_locality_coverage": float(_locality_coverage),
                 "effective_strength": _effective_strength,
                 "rms_drop_db": round(float(min(0.0, _rms_drop)), 3),
                 "loudness_makeup_db": 0.0,

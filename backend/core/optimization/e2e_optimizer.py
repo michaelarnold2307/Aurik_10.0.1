@@ -451,7 +451,7 @@ class E2EOptimizationFramework:
         # Optimizer step
         optimizer.step()
 
-        return loss_details
+        return loss_details  # type: ignore[no-any-return]
 
     def train_epoch(self, dataloader: Any, epoch: int) -> dict[str, float]:
         """
@@ -485,7 +485,7 @@ class E2EOptimizationFramework:
         for key in epoch_losses[0]:
             avg_losses[key] = np.mean([l[key] for l in epoch_losses])
 
-        return avg_losses
+        return avg_losses  # type: ignore[return-value]
 
     def validate(self, dataloader: Any) -> dict[str, float]:
         """
@@ -519,7 +519,7 @@ class E2EOptimizationFramework:
         for key in val_losses[0]:
             avg_losses[key] = np.mean([l[key] for l in val_losses])
 
-        return avg_losses
+        return avg_losses  # type: ignore[return-value]
 
     def save_checkpoint(self, epoch: int, metrics: dict[str, float]):
         """Speichert training checkpoint."""
@@ -538,7 +538,9 @@ class E2EOptimizationFramework:
 
     def load_checkpoint(self, checkpoint_path: Path):
         """Lädt training checkpoint."""
-        checkpoint = torch.load(checkpoint_path, map_location=self.device)  # nosec B614 — interner Checkpoint aus models/
+        checkpoint = torch.load(
+            checkpoint_path, map_location=self.device, weights_only=True
+        )  # nosec B614 — interner Tensor-Checkpoint aus models/
 
         self.trainable_modules.load_state_dict(checkpoint["model_state_dict"])
         if self.optimizer is not None:

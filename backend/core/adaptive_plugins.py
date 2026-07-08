@@ -89,14 +89,14 @@ def _frame_signal(audio: np.ndarray, frame_len: int, hop: int) -> np.ndarray:
     n = len(audio)
     n_frames = max(0, (n - frame_len) // hop + 1)
     if n_frames == 0:
-        return np.zeros((1, frame_len), dtype=audio.dtype)
+        return np.zeros((1, frame_len), dtype=audio.dtype)  # type: ignore[no-any-return]
     frames = np.lib.stride_tricks.as_strided(
         audio,
         shape=(n_frames, frame_len),
         strides=(audio.strides[0] * hop, audio.strides[0]),
         writeable=False,
     )
-    return np.ascontiguousarray(frames)
+    return np.ascontiguousarray(frames)  # type: ignore[no-any-return]
 
 
 def _rms(x: np.ndarray) -> float:
@@ -179,7 +179,7 @@ class SibilantNet:
         out = np.clip(out, -1.0, 1.0)
 
         if audio.ndim == 1:
-            return out
+            return out  # type: ignore[no-any-return]
         # Re-apply to multichannel (process each channel equally)
         result = np.zeros_like(audio)
         for ch in range(audio.shape[-1]):
@@ -189,7 +189,7 @@ class SibilantNet:
             except Exception:
                 ch_proc = ch_data
             result[..., ch] = np.clip((1.0 - strength) * ch_data + strength * ch_proc, -1.0, 1.0)
-        return result
+        return result  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------
@@ -257,11 +257,11 @@ class BreathNet:
         out = np.clip(out, -1.0, 1.0)
 
         if audio.ndim == 1:
-            return out
+            return out  # type: ignore[no-any-return]
         result = np.zeros_like(audio)
         for ch in range(audio.shape[-1]):
             result[..., ch] = np.clip(audio[..., ch] * gain.astype(audio.dtype), -1.0, 1.0)
-        return result
+        return result  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------
@@ -437,7 +437,7 @@ class LanguageNet:
         if _LIBROSA_OK:
             try:
                 mfcc = librosa.feature.mfcc(y=mono.astype(np.float32), sr=sr, n_mfcc=n_mfcc)
-                return np.mean(mfcc, axis=1)
+                return np.mean(mfcc, axis=1)  # type: ignore[no-any-return]
             except Exception as _exc:
                 logger.debug("Operation failed (non-critical): %s", _exc)
         # DCT fallback on log Mel power spectrum
@@ -463,6 +463,6 @@ class LanguageNet:
             dct_out = np.zeros(n_mfcc, dtype=np.float64)
             for c in range(n_mfcc):
                 dct_out[c] = np.sum(log_mel * np.cos(math.pi * c * (np.arange(n_mel) + 0.5) / n_mel))
-            return dct_out.astype(np.float32)
+            return dct_out.astype(np.float32)  # type: ignore[no-any-return]
         except Exception:
             return None

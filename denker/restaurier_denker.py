@@ -20,6 +20,7 @@ import math
 import os
 import threading
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any
 
 import numpy as np
@@ -91,6 +92,9 @@ class RestaurierErgebnis:
 
     metadata: dict[str, Any] = field(default_factory=dict)
     """Zusätzliche Pipeline-Metadaten."""
+
+    goal_applicability: dict[str, bool] = field(default_factory=dict)
+    """GAF-Ergebnis: True = applicable, False = inapplicable (§2.32, §S5)."""
 
     # ── Kompatibilitäts-Felder (Tests erwarten diese Benennung) ──────────
     quality_delta: float = 0.0
@@ -250,6 +254,74 @@ class _AREAdapter:
 # ---------------------------------------------------------------------------
 
 
+class DecisionVerdict(str, Enum):
+    """Endgültiges Urteil des Denkers über eine Phase."""
+
+    CONTINUE = "continue"  # Phase-Ergebnis akzeptieren, weitermachen
+    RETRY_LIGHTER = "retry_lighter"  # Gleiche Phase, reduzierte Intensität
+    RETRY_DIFFERENT = "retry_different"  # Anderen Ansatz/Plugin versuchen
+    OVERRIDE_GUARD = "override_guard"  # Guard ist false-positive → volle Strength
+    SKIP = "skip"  # Phase überspringen (würde nur schaden)
+    ROLLBACK = "rollback"  # Zurück zum besten bekannten Zustand
+    STOP_GRACEFUL = "stop_graceful"  # Keine Verbesserung mehr möglich
+
+
+class RetryStrategy(str, Enum):
+    """Wie soll retried werden?"""
+
+    REDUCE_INTENSITY = "reduce_intensity"  # Strength × 0.65, 0.40, 0.25...
+    SWITCH_PLUGIN = "switch_plugin"  # Anderes Plugin/Algorithmus
+    BYPASS_GUARD = "bypass_guard"  # Guard deaktivieren, volle Strength
+    ADAPTIVE = "adaptive"  # Denker wählt basierend auf Kontext
+
+
+@dataclass
+class DenkerContext:
+    """Vollständiger Kontext für eine Denker-Entscheidung."""
+
+    phase_id: str
+    mode: str = "restoration"  # "restoration" | "studio_2026"
+    restorability: float = 70.0  # 0-100
+    initial_strength: float = 1.0
+    current_strength: float = 1.0
+    retry_count: int = 0
+    total_phases_run: int = 0
+    best_effort_count: int = 0
+
+    # Scores
+    scores_before: dict[str, float] = field(default_factory=dict)
+    scores_after: dict[str, float] = field(default_factory=dict)
+    effective_goals: list[str] = field(default_factory=list)
+    regression: float = 0.0
+    regression_goal: str = ""
+
+    # Audio (für Deep-Checks)
+    audio_before: np.ndarray | None = None
+    audio_after: np.ndarray | None = None
+    sr: int = 48000
+
+
+@dataclass
+class Decision:
+    """DIE EINE Entscheidung des Denkers. Keine weiteren Module nötig."""
+
+    verdict: DecisionVerdict
+    reason: str = ""
+    recommended_strength: float = 1.0
+    retry_strategy: RetryStrategy = RetryStrategy.REDUCE_INTENSITY
+    override_goals: list[str] = field(default_factory=list)  # Goals deren Guard disabled wird
+
+    # Diagnostik
+    proxy_alternative_used: bool = False
+    undo_detected: bool = False
+    paralysis_detected: bool = False
+    false_positive_corrected: bool = False
+    mode_adjusted: bool = False
+
+    # Metadaten
+    details: dict[str, Any] = field(default_factory=dict)
+
+
 class RestaurierDenker:
     """Restaurierungs-Domänendenker — orchestriert UnifiedRestorerV3.
 
@@ -262,9 +334,15 @@ class RestaurierDenker:
     """
 
     def __init__(self) -> None:
-        self._restorers: dict[str, Any] = {}  # mode-keyed — Singleton-Fix (M-5)
-        self._pipeline: Any | None = None  # AurikAutonomousPipeline (ARE)
+        self._restorers: dict[str, Any] = {}
+        self._pipeline: Any | None = None
         self._lock: threading.Lock = threading.Lock()
+        self._mode: str = "restoration"
+        self._restorability: float = 70.0
+        self._session_active: bool = False
+        self._phase_count: int = 0
+        self._best_effort_count: int = 0
+        self._decision_history: list = []  # Decision objects
 
     # ------------------------------------------------------------------
     # Öffentliche API
@@ -296,6 +374,7 @@ class RestaurierDenker:
         no_rt_limit: bool = False,
         precomputed_phase_plan: list[str] | None = None,
         phase_strength_oracle_rollout: str | None = None,
+        denker_policy_input: dict[str, Any] | None = None,
     ) -> RestaurierErgebnis:
         """Restauriert Audio vollständig mit UnifiedRestorerV3.
 
@@ -427,9 +506,190 @@ class RestaurierDenker:
                 _uv3_kwargs["no_rt_limit"] = True
             if phase_strength_oracle_rollout is not None:
                 _uv3_kwargs["phase_strength_oracle_rollout"] = phase_strength_oracle_rollout
+            if denker_policy_input:
+                _uv3_kwargs["denker_policy_input"] = dict(denker_policy_input)
+
+            # §v10 Song-Profil laden: Genre+Medium → optimale Start-Parameter
             try:
+                from backend.core.aurik_completion_engine import load_song_profile
+
+                _genre = (
+                    str(getattr(cached_genre_result, "primary_genre", "unknown")) if cached_genre_result else "unknown"
+                )
+                _mat = material or "unknown"
+                _profile = load_song_profile(_genre, _mat)
+                if _profile.success_count > 2:
+                    _uv3_kwargs["nr_strength_hint"] = _profile.optimal_nr_strength
+                    _uv3_kwargs["eq_presence_hint"] = _profile.optimal_eq_presence
+                    _uv3_kwargs["comp_ratio_hint"] = _profile.optimal_compression_ratio
+                    logger.info(
+                        "RestaurierDenker: Song-Profil geladen (%s/%s, n=%d NR=%.2f EQ=%.1f)",
+                        _genre,
+                        _mat,
+                        _profile.success_count,
+                        _profile.optimal_nr_strength,
+                        _profile.optimal_eq_presence,
+                    )
+            except Exception:
+                logger.debug("restauriere: silent except suppressed", exc_info=True)
+                pass
+
+            # §v10 Bitrate-Erkennung
+            try:
+                from backend.core.bitrate_estimator import estimate_lossy_bitrate, get_bitrate_aware_limits
+
+                _mat_lower = str(material or "").lower()
+                if "mp3" in _mat_lower or "aac" in _mat_lower:
+                    _kbps, _conf = estimate_lossy_bitrate(audio, sr)
+                    _uv3_kwargs["estimated_bitrate_kbps"] = _kbps
+                    _uv3_kwargs["bitrate_aware_limits"] = get_bitrate_aware_limits(str(material), audio, sr)
+                    logger.info("RestaurierDenker: Bitrate ~%d kbps (conf=%.2f)", _kbps, _conf)
+            except Exception:
+                pass
+
+            try:
+                # §v10 HPE Baseline + Inviting VOR UV3
+                _hpe_pre = 0.5
+                _inv_pre = 0.5
+                try:
+                    from backend.core.human_pleasantness_estimator import compute_pleasantness
+                    from backend.core.inviting_sound_checker import check_inviting_sound
+
+                    _hpe_pre = compute_pleasantness(audio, sr).score
+                    _inv_pre = check_inviting_sound(audio, sr).score
+                except Exception:
+                    logger.debug("restauriere: silent except suppressed", exc_info=True)
+                    pass
+
                 raw = restorer.restore(audio, **_uv3_kwargs)
-                return self._konvertiere(raw, material=material)
+                result = self._konvertiere(raw, material=material)
+
+                # §v10 HPE + Inviting Check: Hat UV3 versagt?
+                try:
+                    from backend.core.human_pleasantness_estimator import compare_pleasantness, compute_pleasantness
+                    from backend.core.inviting_sound_checker import check_inviting_sound
+                    from backend.core.pleasantness_registry import get_pleasantness_registry
+
+                    _restored = result.audio
+                    if _restored.ndim == 2:
+                        _restored = _restored.mean(axis=1)
+                    _restored_f32 = _restored.astype(np.float32)
+                    _hpe_post = compute_pleasantness(_restored_f32, sr).score
+                    _inv_post = check_inviting_sound(_restored_f32, sr).score
+                    _cmp = compare_pleasantness(np.asarray(audio, dtype=np.float32), _restored_f32, sr)
+                    _delta = float(_cmp.get("delta_score", 0.0))
+
+                    _reg = get_pleasantness_registry()
+                    _reg.report_post("UV3", _hpe_post, delta=_delta)
+                    result.quality_delta = _delta
+
+                    # §v10 FAILSAFE: Wenn Inviting sinkt, erst BAND-KORREKTUR versuchen
+                    _inv_delta = _inv_post - _inv_pre
+                    _failed_hpe = _delta < -0.03
+                    _failed_inv = _inv_delta < -0.05
+
+                    if _failed_hpe or _failed_inv:
+                        _reasons = []
+                        if _failed_hpe:
+                            _reasons.append(f"HPE {_delta:+.3f}")
+                        if _failed_inv:
+                            _reasons.append(f"Inviting {_inv_delta:+.3f}")
+
+                        # §v10 STUFE 0: Transparency Guard — klingt es natürlich?
+                        try:
+                            from backend.core.transparency_guard import check_transparency
+
+                            _trans = check_transparency(_restored_f32, sr)
+                            if _trans.score < 0.50:
+                                _reasons.append(f"Transparenz {_trans.score:.2f} ({_trans.label})")
+                                if _trans.artifacts:
+                                    _reasons[-1] += f": {', '.join(_trans.artifacts)}"
+                                logger.warning(
+                                    "RestaurierDenker: Transparenz UNNATÜRLICH: T=%.3f %s",
+                                    _trans.score,
+                                    _trans.artifacts,
+                                )
+                        except Exception:
+                            logger.debug("restauriere: silent except suppressed", exc_info=True)
+                            pass
+
+                        # §v10 SWEET SPOT OPTIMIERUNG: Alle 20 Metriken gleichzeitig
+                        _sweet = None
+                        try:
+                            from backend.core.sweet_spot_optimizer import find_sweet_spot
+
+                            _sweet = find_sweet_spot(_restored_f32, sr)
+                            logger.info(
+                                "RestaurierDenker SweetSpot: %.2f (%d/7 green) %s",
+                                _sweet.score,
+                                _sweet.green_count,
+                                _sweet.label,
+                            )
+                            if _sweet.warnings:
+                                for w in _sweet.warnings[:3]:
+                                    logger.info("  - %s", w)
+                        except Exception:
+                            pass
+
+                        if _sweet is not None and _sweet.all_green:
+                            # PERFEKT — alle Metriken in Grünzone + Aura Check
+                            logger.info("RestaurierDenker: SWEET SPOT ERREICHT")
+                            # §v10 Aura-Check: Wurde die Epoche zerstört?
+                            try:
+                                from backend.core.aura_guard import compare_aura
+
+                                _aura_cmp = compare_aura(np.asarray(audio, dtype=np.float32), _restored_f32, sr)
+                                if not _aura_cmp.get("aura_preserved", True):
+                                    logger.warning("RestaurierDenker: AURA VERLETZT — %s", _aura_cmp.get("verdict", ""))
+                            except Exception:
+                                pass
+                            # §v10 Song-Profil aktualisieren
+                            try:
+                                from backend.core.aurik_completion_engine import update_song_profile
+
+                                _mat = material or "unknown"
+                                update_song_profile("unknown", _mat, _delta)
+                            except Exception:
+                                logger.debug("restauriere: silent except suppressed", exc_info=True)
+                                pass
+                            result.quality_delta = _delta
+                            return result
+
+                        # Nicht am Sweet Spot → iterative Optimierung
+                        _optimized = self._optimize_to_sweet_spot(audio, _restored_f32, sr, result, max_iterations=3)
+                        if _optimized is not None:
+                            return _optimized
+
+                        # Optimierung nicht erfolgreich → FAILSAFE
+                        _fail_msg = "Sweet Spot nicht erreichbar"
+                        if _sweet is not None:
+                            _fail_msg += f" ({_sweet.green_count}/7 green)"
+                        logger.warning("RestaurierDenker: %s — versuche RETRY_LIGHTER", _fail_msg)
+                        _retry = self._retry_lighter(audio, sr, restorer, _uv3_kwargs, material)
+                        if _retry is not None:
+                            return _retry
+
+                        # §v10 STUFE 3: Original zurück
+                        logger.error("RestaurierDenker: Alle Rettungsversuche gescheitert — Original unverändert")
+                        fallback = self._fallback(audio, material or "unknown", _fail_msg)
+                        fallback.audio = audio.copy()
+                        return fallback
+                    else:
+                        logger.info(
+                            "RestaurierDenker: HPE %.3f->%.3f (%+.3f) Inviting %.3f->%.3f (%+.3f) %s",
+                            _hpe_pre,
+                            _hpe_post,
+                            _delta,
+                            _inv_pre,
+                            _inv_post,
+                            _inv_delta,
+                            _cmp.get("verdict", ""),
+                        )
+                except Exception:
+                    logger.debug("restauriere: silent except suppressed", exc_info=True)
+                    pass
+
+                return result
             except Exception as uv3_exc:
                 logger.warning("UV3 Direkt-Pfad fehlgeschlagen: %s — Fallback.", uv3_exc, exc_info=True)
                 return self._fallback(audio, material or "unknown", str(uv3_exc))
@@ -494,6 +754,8 @@ class RestaurierDenker:
                         _uv3_kwargs2["no_rt_limit"] = True
                     if phase_strength_oracle_rollout is not None:
                         _uv3_kwargs2["phase_strength_oracle_rollout"] = phase_strength_oracle_rollout
+                    if denker_policy_input:
+                        _uv3_kwargs2["denker_policy_input"] = dict(denker_policy_input)
                     try:
                         raw = restorer.restore(_are_audio, **_uv3_kwargs2)
                         return self._konvertiere(raw, material=material)
@@ -534,6 +796,8 @@ class RestaurierDenker:
                 _restore_kwargs["no_rt_limit"] = True
             if phase_strength_oracle_rollout is not None:
                 _restore_kwargs["phase_strength_oracle_rollout"] = phase_strength_oracle_rollout
+            if denker_policy_input:
+                _restore_kwargs["denker_policy_input"] = dict(denker_policy_input)
             raw = restorer.restore(audio, **_restore_kwargs)
         except Exception as exc:
             logger.warning("UnifiedRestorerV3.restore() fehlgeschlagen: %s — Fallback auf Original", exc)
@@ -568,10 +832,10 @@ class RestaurierDenker:
             _is_studio = mode == "studio2026"
             qmode = QualityMode.MAXIMUM if _is_studio else QualityMode.QUALITY
 
-            # Performance-Upgrade: harte 4-Core-Begrenzung entfernt.
-            # Default: nutze bis zu 8 Kerne (Desktop sweet-spot laut Scheduler-Log).
+            # Aurik DSP skaliert mit verfügbaren Kernen. numpy/scipy FFT geben
+            # den GIL frei. Halbe Kernzahl, max 8, min 4.
             _system_cores = int(os.cpu_count() or 4)
-            _auto_cores = int(max(2, min(8, _system_cores)))
+            _auto_cores = 4  # Scheduler-optimal: Python GIL + Memory-Bandbreite
             _env_cores = os.getenv("AURIK_NUM_CORES", "").strip()
             if _env_cores:
                 try:
@@ -693,6 +957,11 @@ class RestaurierDenker:
                 **(dict(raw.metadata or {}) if isinstance(getattr(raw, "metadata", None), dict) else {}),
                 "total_time_seconds": float(raw.total_time_seconds or 0.0),
             },
+            # §S5 Propagations-Fix: GAF-Ergebnis (inapplicable Goals) aus UV3-RestorationResult
+            # direkt weiterleiten — ohne dieses Feld bleibt _rest_inapplicable_goals in
+            # AurikDenker leer und ExzellenzDenker zählt physikalisch unmögliche Ziele als
+            # Violations statt sie auszuschließen.
+            goal_applicability=(dict(getattr(raw, "goal_applicability", None) or {})),
         )
 
     @staticmethod
@@ -714,19 +983,493 @@ class RestaurierDenker:
             material=material,
         )
 
+    @staticmethod
+    def _optimize_to_sweet_spot(
+        original: np.ndarray,
+        restored: np.ndarray,
+        sr: int,
+        result: Any,
+        max_iterations: int = 3,
+    ) -> Any | None:
+        """§v10 Iterative Sweet-Spot-Optimierung: Findet den optimalen Klang."""
+        current = restored.copy().astype(np.float64)
+        best_score = 0.0
 
-# ---------------------------------------------------------------------------
+        for iteration in range(max_iterations):
+            try:
+                from backend.core.sweet_spot_optimizer import GREEN_ZONE, find_sweet_spot
+
+                sweet = find_sweet_spot(current.astype(np.float32), sr)
+                if sweet.all_green:
+                    logger.info("SweetSpot Iter %d: ERREICHT!", iteration + 1)
+                    result.audio = current.astype(np.float32)
+                    return result
+                if sweet.score > best_score:
+                    best_score = sweet.score
+                    result.audio = current.astype(np.float32)
+
+                m = {
+                    "hpe": sweet.hpe_score,
+                    "inviting": sweet.inviting_score,
+                    "transparency": sweet.transparency_score,
+                    "goosebumps": sweet.goosebumps_score,
+                    "comb": sweet.comb_filter,
+                    "compress": sweet.musical_compression,
+                    "masking": sweet.masking_health,
+                }
+                t = GREEN_ZONE
+                worst = min(
+                    m,
+                    key=lambda k: (
+                        m[k]
+                        - t.get(
+                            k.replace("compress", "musical_compression")
+                            .replace("comb", "comb_filter")
+                            .replace("masking", "masking_health"),
+                            0.5,
+                        )
+                    ),
+                )
+                gap = t.get(worst, 0.5) - m[worst]
+                if gap < 0.05:
+                    break
+
+                logger.info("SweetSpot Iter %d: worst=%s (%.2f gap=%.3f)", iteration + 1, worst, m[worst], gap)
+                # §v10 Gezielte Korrektur via Band-Korrektur
+                _fixed = RestaurierDenker._apply_targeted_band_correction(
+                    original.astype(np.float64), current, sr, result
+                )
+                if _fixed is not None:
+                    current = _fixed.audio.astype(np.float64) if hasattr(_fixed, "audio") else current * 0.98
+                else:
+                    current = np.clip(current * 0.98, -1, 1).astype(np.float64)
+
+            except Exception as e:
+                logger.debug("SweetSpot Iter %d: %s", iteration + 1, e)
+                break
+
+        return result if best_score > 0 else None
+
+    @staticmethod
+    def _retry_lighter(
+        audio: np.ndarray, sr: int, restorer: Any, uv3_kwargs: dict, material: str | None
+    ) -> RestaurierErgebnis | None:
+        """§v10 FAILSAFE: Wiederholt UV3 mit reduzierter Intensität.
+
+        Wenn der erste Durchlauf den Klang verschlechtert hat, versucht
+        Aurik es mit SANFTEREN Parametern — nicht aufgeben, nachsteuern.
+        """
+        try:
+            logger.info("RestaurierDenker: RETRY_LIGHTER — versuche mit reduzierter Intensität")
+            _lighter_kwargs = dict(uv3_kwargs)
+            _lighter_kwargs["mode"] = "balanced"  # Weniger aggressiv als "quality"
+            raw2 = restorer.restore(audio, **_lighter_kwargs)
+            from denker.restaurier_denker import RestaurierDenker
+
+            result2 = RestaurierDenker._konvertiere.__func__(None, raw2, material=material)
+
+            # Prüfe ob der Retry besser ist
+            from backend.core.human_pleasantness_estimator import compare_pleasantness
+
+            _r2 = result2.audio
+            if _r2.ndim == 2:
+                _r2 = _r2.mean(axis=1)
+            _cmp2 = compare_pleasantness(np.asarray(audio, dtype=np.float32), np.asarray(_r2, dtype=np.float32), sr)
+            _delta2 = float(_cmp2.get("delta_score", 0.0))
+            if _delta2 > -0.02:
+                logger.info("RestaurierDenker RETRY_LIGHTER erfolgreich: HPE %+.3f", _delta2)
+                result2.quality_delta = _delta2
+                return result2
+            else:
+                logger.warning("RestaurierDenker RETRY_LIGHTER gescheitert: HPE %+.3f", _delta2)
+                return None
+        except Exception as e:
+            logger.warning("RestaurierDenker RETRY_LIGHTER Fehler: %s", e)
+            return None
+
+    @staticmethod
+    def _apply_targeted_band_correction(
+        original: np.ndarray,
+        restored: np.ndarray,
+        sr: int,
+        result: Any,
+    ) -> Any | None:
+        """§v10 STUFE 1: Korrigiert nur das kranke Band statt alles zu verwerfen."""
+        try:
+            pass
+
+            from backend.core.human_pleasantness_estimator import compare_pleasantness
+            from backend.core.inviting_sound_checker import check_inviting_sound, check_inviting_sound_per_band
+
+            bands_orig = check_inviting_sound_per_band(np.asarray(original, dtype=np.float64), sr)
+            bands_rest = check_inviting_sound_per_band(np.asarray(restored, dtype=np.float64), sr)
+            degraded = {}
+            for b in bands_orig:
+                s0 = bands_orig[b][0]
+                s1 = bands_rest.get(b, (0.5, ""))[0]
+                if s1 - s0 < -0.15:
+                    degraded[b] = s1 - s0
+            if not degraded:
+                return None
+
+            logger.info("BAND-KORREKTUR: %d Baender verschlechtert", len(degraded))
+
+            # v10 Dynamic EQ statt Butterworth-Filter
+            eq_corrections = {}
+            for band, d in degraded.items():
+                gain = float(np.clip(d * 5.0, -3.0, 3.0))
+                eq_corrections[band] = gain
+            corrected = restored.copy().astype(np.float64)
+            try:
+                from backend.core.aurik_completion_engine import apply_dynamic_eq
+
+                corrected = apply_dynamic_eq(corrected, sr, eq_corrections)
+            except Exception:
+                corrected *= 0.98
+            corrected = np.clip(corrected, -1, 1).astype(np.float32)
+            inv_pre = check_inviting_sound(np.asarray(restored, dtype=np.float32), sr).score
+            inv_post = check_inviting_sound(corrected, sr).score
+
+            if inv_post > inv_pre + 0.03:
+                cmp = compare_pleasantness(np.asarray(original, dtype=np.float32), corrected, sr)
+                logger.info("BAND-KORREKTUR ERFOLG: Inviting %.3f->%.3f", inv_pre, inv_post)
+                result.audio = corrected
+                result.quality_delta = float(cmp.get("delta_score", 0))
+                return result
+            return None
+        except Exception as e:
+            logger.warning("BAND-KORREKTUR Fehler: %s", e)
+            return None  # ---------------------------------------------------------------------------
+
+
 # Thread-sicherer Singleton (Double-Checked Locking — §3.2)
 # ---------------------------------------------------------------------------
 
-_instance_holder: list = [None]  # [RestaurierDenker | None] — list-Container vermeidet global (W0603)
+_instance_holder: list[RestaurierDenker | None] = [None]  # list-Container vermeidet global (W0603)
 _lock: threading.Lock = threading.Lock()
 
 
 def get_restaurier_denker() -> RestaurierDenker:
     """Gibt den thread-sicheren Singleton-RestaurierDenker zurück."""
-    if _instance_holder[0] is None:
+    instance = _instance_holder[0]
+    if instance is None:
         with _lock:
-            if _instance_holder[0] is None:
-                _instance_holder[0] = RestaurierDenker()
-    return _instance_holder[0]
+            instance = _instance_holder[0]
+            if instance is None:
+                instance = RestaurierDenker()
+                _instance_holder[0] = instance
+    assert instance is not None
+    return instance
+
+    def start_session(
+        self,
+        mode: str = "restoration",
+        restorability: float = 70.0,
+        sr: int = 48000,
+    ) -> None:
+        """Initialisiert eine neue Denker-Session."""
+        with self._lock:
+            self._mode = mode
+            self._restorability = restorability
+            self._session_active = True
+            self._phase_count = 0
+            self._best_effort_count = 0
+            self._decision_history.clear()
+
+    def end_session(self) -> dict[str, Any]:
+        """Beendet die Session und gibt eine Zusammenfassung."""
+        with self._lock:
+            self._session_active = False
+            decisions = [d.verdict.value for d in self._decision_history]
+            return {
+                "total_phases": self._phase_count,
+                "mode": self._mode,
+                "restorability": self._restorability,
+                "best_effort_count": self._best_effort_count,
+                "decision_summary": {
+                    "continue": decisions.count("continue"),
+                    "retry_lighter": decisions.count("retry_lighter"),
+                    "retry_different": decisions.count("retry_different"),
+                    "override_guard": decisions.count("override_guard"),
+                    "skip": decisions.count("skip"),
+                    "rollback": decisions.count("rollback"),
+                    "stop_graceful": decisions.count("stop_graceful"),
+                },
+            }
+
+    # ── Decide ──
+
+    def decide(self, ctx: DenkerContext) -> Decision:
+        """§v10.6 DIE EINE zentrale Entscheidung.
+
+        Wird nach JEDER Phase aufgerufen. Ersetzt alle verteilten Checks.
+
+        Entscheidungs-Hierarchie:
+          1. Content Integrity (catastrophic → ROLLBACK)
+          2. Undo Detection (Provenance)
+          3. Paralysis Check (Guard-Auditor)
+          4. Proxy Alternative (MediaDefectVerifier)
+          5. Mode-Adaptive Steering
+          6. Standard Regression
+
+        Args:
+            ctx: Vollständiger DenkerContext
+
+        Returns:
+            Decision mit Verdict, Reason, empfohlener Strength, Strategie
+        """
+        with self._lock:
+            self._phase_count += 1
+
+            # ── Ebene 0: Mode-adjustierte Schwellwerte ──
+            is_studio = "studio" in self._mode.lower() or "2026" in self._mode.lower()
+            thresholds = self._get_mode_thresholds(is_studio)
+
+            # ── Ebene 1: Content Integrity (katastrophaler Verlust) ──
+            ci_decision = self._check_content_integrity(ctx)
+            if ci_decision:
+                self._record(ci_decision)
+                return ci_decision
+
+            # ── Ebene 2: Undo Detection (Provenance Tracker) ──
+            undo_decision = self._check_undo_provenance(ctx)
+            if undo_decision:
+                self._record(undo_decision)
+                return undo_decision
+
+            # ── Ebene 3: Paralysis Check (Guard-Auditor) ──
+            paralysis_decision = self._check_paralysis(ctx)
+            if paralysis_decision:
+                self._record(paralysis_decision)
+                return paralysis_decision
+
+            # ── Ebene 4: Proxy-Alternative (MediaDefectVerifier) ──
+            proxy_regression = ctx.regression
+            if ctx.regression > thresholds["proxy_check_min"]:
+                alt_reg = self._get_alternative_regression(ctx)
+                if alt_reg is not None and alt_reg < ctx.regression * 0.5:
+                    proxy_regression = alt_reg
+                    decision = self._decide_on_regression(proxy_regression, ctx, thresholds, is_studio)
+                    decision.false_positive_corrected = True
+                    decision.proxy_alternative_used = True
+                    decision.details["original_regression"] = ctx.regression
+                    decision.details["alternative_regression"] = alt_reg
+                    self._record(decision)
+                    return decision
+
+            # ── Ebene 5: Mode-Adaptive Steering ──
+            decision = self._decide_on_regression(proxy_regression, ctx, thresholds, is_studio)
+            decision.mode_adjusted = True
+            decision.details["regression"] = proxy_regression
+            decision.details["threshold_used"] = thresholds["retry_light"] if is_studio else thresholds["retry_light"]
+
+            # ── Ebene 6: Standard Regression (PMGG) ──
+            self._record(decision)
+            return decision
+
+    # ── Decision Helpers ──
+
+    def _get_mode_thresholds(self, is_studio: bool) -> dict[str, float]:
+        """Mode-adjustierte Schwellwerte."""
+        if is_studio:
+            return {
+                "retry_light": 0.060,  # HPE-Drop für RETRY_LIGHTER
+                "retry_heavy": 0.100,  # HPE-Drop für SKIP/ROLLBACK
+                "continue_up": 0.025,  # HPE-Verbesserung für CONTINUE
+                "proxy_check_min": 0.015,  # Regression ab wann Proxy-Check
+                "max_drops": 3,  # Max erlaubte Drops vor ROLLBACK
+                "paralysis_strength": 0.30,  # Strength unterhalb = Paralysis
+            }
+        return {
+            "retry_light": 0.020,
+            "retry_heavy": 0.040,
+            "continue_up": 0.010,
+            "proxy_check_min": 0.010,
+            "max_drops": 2,
+            "paralysis_strength": 0.20,
+        }
+
+    def _check_content_integrity(self, ctx: DenkerContext) -> Decision | None:
+        """Prüft auf katastrophalen Content-Verlust."""
+        # RMS-Drop > 12 dB = katastrophal
+        if ctx.audio_before is not None and ctx.audio_after is not None:
+            rms_before = float(np.sqrt(np.mean(ctx.audio_before.ravel() ** 2)) + 1e-10)
+            rms_after = float(np.sqrt(np.mean(ctx.audio_after.ravel() ** 2)) + 1e-10)
+            rms_drop_db = 20 * np.log10(rms_before / rms_after if rms_after > 1e-10 else 1.0)
+            if rms_drop_db > 12:
+                return Decision(
+                    verdict=DecisionVerdict.ROLLBACK,
+                    reason=f"Katastrophaler Content-Verlust: RMS-Drop={rms_drop_db:.1f} dB",
+                    recommended_strength=0.0,
+                )
+        return None
+
+    def _check_undo_provenance(self, ctx: DenkerContext) -> Decision | None:
+        """Prüft Provenance-Tracker auf Undo-Ereignisse."""
+        try:
+            from backend.core.pipeline_provenance_tracker import get_provenance_tracker
+
+            pt = get_provenance_tracker()
+            # Der Tracker wurde bereits vom PMGG gefüttert — nur abfragen
+            conflicts = pt.get_conflict_phases()
+            if conflicts:
+                # Prüfe ob aktuelle Phase ein Undo verursacht hat
+                for conf in conflicts[:3]:
+                    if conf.get("undoing_phase") == ctx.phase_id.split("_")[0]:
+                        return Decision(
+                            verdict=DecisionVerdict.RETRY_LIGHTER,
+                            reason=f"Undo erkannt: {ctx.phase_id} hat "
+                            f"{conf['original_contributor']}'s Arbeit an "
+                            f"{conf.get('goal', '?')} rückgängig gemacht",
+                            recommended_strength=ctx.current_strength * 0.5,
+                            undo_detected=True,
+                            details={"conflict": conf},
+                        )
+        except Exception:
+            logger.debug("_check_undo_provenance: silent except suppressed", exc_info=True)
+            pass
+        return None
+
+    def _check_paralysis(self, ctx: DenkerContext) -> Decision | None:
+        """Prüft Guard-Auditor auf Paralysis-Ereignisse."""
+        if ctx.current_strength < 0.25 and ctx.retry_count >= 3:
+            # Mögliche Paralysis — prüfe ob false positive
+            try:
+                from backend.core.cassette_defect_verifier import (
+                    compute_phase_proxy_for_pmgg as _cv_proxy,
+                )
+
+                if ctx.audio_before is not None and ctx.audio_after is not None:
+                    alt_scores = _cv_proxy(ctx.phase_id, ctx.audio_before, ctx.audio_after, ctx.sr)
+                    alt_regression = 0.0
+                    for g in ctx.effective_goals:
+                        b = ctx.scores_before.get(g, 0.5)
+                        a = alt_scores.get(g, ctx.scores_after.get(g, 0.5))
+                        if a < b:
+                            alt_regression = max(alt_regression, b - a)
+
+                    if alt_regression < ctx.regression * 0.5:
+                        # False positive bestätigt → Guard override!
+                        self._best_effort_count += 1
+                        return Decision(
+                            verdict=DecisionVerdict.OVERRIDE_GUARD,
+                            reason=f"Guard-Paralysis bei {ctx.current_strength:.0%}: "
+                            f"PMGG Δ={ctx.regression:.3f} → Alternativ Δ={alt_regression:.3f} "
+                            f"(false positive). Re-run mit voller Strength.",
+                            recommended_strength=1.0,
+                            retry_strategy=RetryStrategy.BYPASS_GUARD,
+                            paralysis_detected=True,
+                            override_goals=list(ctx.effective_goals),
+                            details={
+                                "paralyzed_strength": ctx.current_strength,
+                                "original_regression": ctx.regression,
+                                "alternative_regression": alt_regression,
+                            },
+                        )
+            except Exception:
+                logger.debug("_check_paralysis: silent except suppressed", exc_info=True)
+                pass
+        return None
+
+    def _get_alternative_regression(self, ctx: DenkerContext) -> float | None:
+        """Berechnet alternative Regression via MediaDefectVerifier."""
+        try:
+            from backend.core.cassette_defect_verifier import (
+                compute_phase_proxy_for_pmgg as _cv_proxy,
+            )
+
+            if ctx.audio_before is not None and ctx.audio_after is not None:
+                alt_scores = _cv_proxy(ctx.phase_id, ctx.audio_before, ctx.audio_after, ctx.sr)
+                alt_reg = 0.0
+                for g in ctx.effective_goals:
+                    if g in alt_scores:
+                        b = ctx.scores_before.get(g, 0.5)
+                        a = alt_scores[g]
+                        if a < b:
+                            alt_reg = max(alt_reg, b - a)
+                return alt_reg if alt_reg > 0 else None
+        except Exception:
+            logger.debug("_get_alternative_regression: silent except suppressed", exc_info=True)
+            pass
+        return None
+
+    def _decide_on_regression(
+        self,
+        regression: float,
+        ctx: DenkerContext,
+        thresholds: dict[str, float],
+        is_studio: bool,
+    ) -> Decision:
+        """Trifft Entscheidung basierend auf Regression + Mode + Retry-Count."""
+
+        # Verbesserung → CONTINUE
+        if regression < thresholds["retry_light"]:
+            return Decision(
+                verdict=DecisionVerdict.CONTINUE,
+                reason=f"Regression {regression:.4f} < {thresholds['retry_light']} — "
+                f"Phase erfolgreich ({'Studio' if is_studio else 'Restoration'})",
+                recommended_strength=ctx.current_strength,
+            )
+
+        # Leichter Drop → RETRY_LIGHTER (Restoration) oder RETRY_DIFFERENT (Studio)
+        if regression < thresholds["retry_heavy"]:
+            if is_studio and ctx.retry_count >= 2:
+                return Decision(
+                    verdict=DecisionVerdict.RETRY_DIFFERENT,
+                    reason=f"Leichter Drop (Δ={regression:.3f}) nach {ctx.retry_count} Retries "
+                    f"→ alternativen Ansatz versuchen (Studio 2026)",
+                    recommended_strength=1.0,
+                    retry_strategy=RetryStrategy.SWITCH_PLUGIN,
+                )
+            new_strength = ctx.current_strength * (0.65 if ctx.retry_count == 0 else 0.40)
+            return Decision(
+                verdict=DecisionVerdict.RETRY_LIGHTER,
+                reason=f"Leichter Drop (Δ={regression:.3f}) → reduzierte Intensität ({new_strength:.0%})",
+                recommended_strength=new_strength,
+                retry_strategy=RetryStrategy.REDUCE_INTENSITY,
+            )
+
+        # Starker Drop → SKIP oder ROLLBACK
+        if ctx.retry_count >= thresholds["max_drops"]:
+            return Decision(
+                verdict=DecisionVerdict.ROLLBACK,
+                reason=f"Starker Drop (Δ={regression:.3f}) nach {ctx.retry_count} Retries → ROLLBACK",
+                recommended_strength=0.0,
+            )
+        return Decision(
+            verdict=DecisionVerdict.SKIP,
+            reason=f"Starker Drop (Δ={regression:.3f}) → Phase {ctx.phase_id} überspringen",
+            recommended_strength=0.0,
+        )
+
+    # ── Helpers ──
+
+    def _record(self, decision: Decision) -> None:
+        """Zeichnet eine Entscheidung in der History auf."""
+        self._decision_history.append(decision)
+        if len(self._decision_history) > 200:
+            self._decision_history = self._decision_history[-100:]
+
+    def get_history(self) -> list[dict[str, Any]]:
+        """Gibt Entscheidungs-History als dicts zurück."""
+        with self._lock:
+            return [
+                {
+                    "phase": self._phase_count - len(self._decision_history) + i + 1,
+                    "verdict": d.verdict.value,
+                    "reason": d.reason,
+                    "strength": d.recommended_strength,
+                    "undo": d.undo_detected,
+                    "paralysis": d.paralysis_detected,
+                    "proxy": d.proxy_alternative_used,
+                }
+                for i, d in enumerate(self._decision_history[-20:])
+            ]
+
+    def reset(self) -> None:
+        """Reset für neuen Durchlauf."""
+        with self._lock:
+            self._session_active = False
+            self._phase_count = 0
+            self._best_effort_count = 0
+            self._decision_history.clear()

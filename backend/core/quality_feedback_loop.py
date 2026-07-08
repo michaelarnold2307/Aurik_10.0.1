@@ -26,9 +26,139 @@ from typing import Any
 import numpy as np
 
 from backend.core.phases.phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult
-from backend.core.psychoacoustic_metrics import PsychoAcousticMetrics
+from backend.core.comprehensive_metrics import PsychoAcousticMetrics
 
 logger = logging.getLogger(__name__)
+
+
+# ── §v10 Steering-Regel (ersetzt Stop-Regel) ──
+# Ziel ist nicht Abbruch, sondern VERBESSERUNG.
+# Wenn Angenehmheit sinkt → Parameter anpassen, nicht aufgeben.
+
+_PMGG_CONSECUTIVE_NO_IMPROVEMENT: int = 0
+_PLEASANTNESS_DECLINING_COUNT: int = 0
+_BEST_PLEASANTNESS: float = 0.0
+
+class SteerAction:
+    """§v10 Steering-Aktionen — wie ein Toningenieur reagiert."""
+    CONTINUE = "continue"           # Alles gut, weitermachen
+    RETRY_LIGHTER = "retry_lighter" # Gleicher Schritt mit reduzierter Intensität
+    RETRY_DIFFERENT = "retry_different" # Alternativer Ansatz versuchen
+    SKIP = "skip"                   # Schritt überspringen (würde nur verschlechtern)
+    ROLLBACK = "rollback"           # Zurück zum besten Zustand
+    STOP_GRACEFUL = "stop_graceful" # Keine weitere Verbesserung möglich
+
+
+def steer_pipeline(pmgg_delta: float, pleasantness_delta: float, phase_id: str,
+                   step_index: int, total_steps: int,
+                   pmgg_threshold: float = 0.01, max_pmgg_noop: int = 3,
+                   max_pleasantness_drops: int = 2,
+                   mode: str = "restoration") -> tuple[str, str]:
+    """§v10 Steering: Nicht stoppen, sondern nachsteuern.
+
+    Wie ein Toningenieur: „Das klang nicht gut — ich versuch's mit weniger."
+    Nicht: „Das klang nicht gut — ich hör auf."
+
+    §v10.1 MODE-AWARE:
+      RESTORATION: Konservativ. Aura heilig. RETRY_LIGHTER schon bei -0.01.
+                   STOP_GRACEFUL früh. Original-Klangfarbe unantastbar.
+      STUDIO 2026: Aggressiv. Moderner Klang zählt. Toleriert HPE-Drops bis
+                   -0.06 vor SKIP. RETRY_DIFFERENT statt nur RETRY_LIGHTER.
+                   Das beste Ergebnis zählt, nicht die Original-Treue.
+
+    Returns: (Aktion, Begründung)
+    """
+    global _PMGG_CONSECUTIVE_NO_IMPROVEMENT, _PLEASANTNESS_DECLINING_COUNT, _BEST_PLEASANTNESS
+
+    is_studio = "studio" in str(mode).lower() or "2026" in str(mode).lower()
+
+    # Mode-adjustierte Schwellwerte (§v10.1)
+    if is_studio:
+        hpe_up_threshold = 0.025       # Studio: braucht starke Evidenz zum Weitermachen
+        hpe_light_drop = 0.060         # Studio: toleriert leichte Einbrüche
+        hpe_heavy_drop = 0.100         # Studio: erst starker Einbruch triggert SKIP
+        max_drops = max_pleasantness_drops + 1
+    else:
+        hpe_up_threshold = 0.010       # Restoration: jede Verbesserung = gut
+        hpe_light_drop = 0.020         # Restoration: kleinster Drop → RETRY
+        hpe_heavy_drop = 0.040         # Restoration: moderater Drop → SKIP
+        max_drops = max_pleasantness_drops
+
+    # Track best pleasantness
+    if pleasantness_delta > 0:
+        _BEST_PLEASANTNESS = max(_BEST_PLEASANTNESS, pleasantness_delta)
+
+    # ── Angenehmheit STEIGT → weitermachen ──
+    if pleasantness_delta > hpe_up_threshold:
+        _PLEASANTNESS_DECLINING_COUNT = max(0, _PLEASANTNESS_DECLINING_COUNT - 1)
+        _PMGG_CONSECUTIVE_NO_IMPROVEMENT = 0
+        return SteerAction.CONTINUE, f"HPE ↑ (ΔP=+{pleasantness_delta:.3f})"
+
+    # ── Angenehmheit fällt LEICHT → RETRY_LIGHTER (Restoration) oder RETRY_DIFFERENT (Studio) ──
+    if -hpe_heavy_drop < pleasantness_delta <= -hpe_light_drop:
+        _PLEASANTNESS_DECLINING_COUNT += 1
+        if is_studio and _PLEASANTNESS_DECLINING_COUNT >= 2:
+            return SteerAction.RETRY_DIFFERENT, (
+                f"HPE ↓ (ΔP={pleasantness_delta:+.3f}) — versuche alternativen Ansatz"
+            )
+        return SteerAction.RETRY_LIGHTER, (
+            f"HPE ↓ (ΔP={pleasantness_delta:+.3f}) — versuche reduzierte Intensität"
+        )
+
+    # ── Angenehmheit fällt STARK → SKIP ──
+    if pleasantness_delta <= -hpe_heavy_drop:
+        _PLEASANTNESS_DECLINING_COUNT += 1
+        if _PLEASANTNESS_DECLINING_COUNT >= max_drops:
+            return SteerAction.ROLLBACK, (
+                f"HPE ↓↓ seit {_PLEASANTNESS_DECLINING_COUNT} Schritten "
+                f"— ROLLBACK zum besten Zustand (max ΔP=+{_BEST_PLEASANTNESS:.3f})"
+            )
+        return SteerAction.SKIP, (
+            f"HPE ↓↓ (ΔP={pleasantness_delta:+.3f}) — Schritt {phase_id} überspringen"
+        )
+
+    # ── PMGG konvergiert → STOP_GRACEFUL ──
+    if abs(pmgg_delta) < pmgg_threshold:
+        _PMGG_CONSECUTIVE_NO_IMPROVEMENT += 1
+        if _PMGG_CONSECUTIVE_NO_IMPROVEMENT >= max_pmgg_noop:
+            return SteerAction.STOP_GRACEFUL, (
+                f"PMGG konvergiert — Bearbeitung optimal abgeschlossen."
+            )
+
+    # ── Pipeline-Ende erreicht ──
+    if step_index >= total_steps - 1:
+        return SteerAction.STOP_GRACEFUL, "Pipeline vollständig — Ergebnis optimal."
+
+    return SteerAction.CONTINUE, "Weitermachen."
+
+
+def reset_steer_state():
+    """Setzt alle Steering-Zähler zurück."""
+    global _PMGG_CONSECUTIVE_NO_IMPROVEMENT, _PLEASANTNESS_DECLINING_COUNT, _BEST_PLEASANTNESS
+    _PMGG_CONSECUTIVE_NO_IMPROVEMENT = 0
+    _PLEASANTNESS_DECLINING_COUNT = 0
+    _BEST_PLEASANTNESS = 0.0
+
+
+# ── Legacy-Kompatibilität ──
+def should_stop_pipeline(pmgg_delta, phase_id, threshold=0.01, max_consecutive=3,
+                         pleasantness_delta=0.0, max_pleasantness_drops=2):
+    """§v10 Legacy-Wrapper: Verwende steer_pipeline() für intelligentes Nachsteuern."""
+    action, reason = steer_pipeline(
+        pmgg_delta, pleasantness_delta, phase_id,
+        step_index=0, total_steps=max_consecutive,
+        pmgg_threshold=threshold,
+        max_pleasantness_drops=max_pleasantness_drops,
+    )
+    if action in (SteerAction.STOP_GRACEFUL, SteerAction.ROLLBACK):
+        return True, reason
+    return False, ""
+
+
+def reset_stop_rule_state():
+    """Legacy-Wrapper für reset_steer_state."""
+    reset_steer_state()
+
 
 
 class QualityFeedbackLoop:
@@ -243,6 +373,7 @@ class QualityFeedbackLoop:
             True if feedback would be beneficial
         """
         metadata = phase.get_metadata()
+        phase_id = metadata.phase_id.lower()
 
         # High-impact phases benefit from feedback
         high_impact_phases = [
@@ -255,7 +386,7 @@ class QualityFeedbackLoop:
         ]
 
         for phase_name in high_impact_phases:
-            if phase_name in metadata.phase_id.lower():
+            if phase_name in phase_id:
                 return True
 
         # Check if audio has defects (quick heuristic)
@@ -318,14 +449,22 @@ class QualityGating:
         metadata = phase.get_metadata()
         self.metrics.sample_rate = sample_rate
 
+        phase_id = metadata.phase_id.lower()
+
+        # Tape/Hiss-Phasen können bei eindeutig nicht-tape Material sofort verworfen werden.
+        # Das ändert keine Qualitätsentscheidung, spart aber die teure Metrikberechnung.
+        if "tape" in phase_id or "hiss" in phase_id:
+            material = kwargs.get("material", "unknown")
+            if "tape" not in str(material).lower():
+                logger.info("⏭️  Skipping %s: Not tape material (%s)", metadata.name, material)
+                return False
+
         # Quick quality estimate
         try:
             quality = self.metrics.calculate_naturalness_score(audio)
             naturalness = quality["naturalness_overall"]
 
             # Phase-specific heuristics
-            phase_id = metadata.phase_id.lower()
-
             # Denoise: Skip if already clean (high SNR)
             if "denoise" in phase_id:
                 # Estimate SNR from noise floor
@@ -343,13 +482,6 @@ class QualityGating:
                         metadata.name,
                         temporal_smoothness,
                     )
-                    return False
-
-            # Tape hiss: Skip if not tape material or already bright
-            if "tape" in phase_id or "hiss" in phase_id:
-                material = kwargs.get("material", "unknown")
-                if "tape" not in str(material).lower():
-                    logger.info("⏭️  Skipping %s: Not tape material (%s)", metadata.name, material)
                     return False
 
             # General: Skip if quality already excellent

@@ -40,8 +40,9 @@ class DynamicRangeExpander:
             padded = np.pad(sq, (left, right), mode="edge")
             csum = np.cumsum(np.concatenate(([0.0], padded)))
             avg = (csum[window:] - csum[:-window]) / float(window)
-            return np.sqrt(np.maximum(avg, 0.0))
-        return np.apply_along_axis(lambda ch: DynamicRangeExpander._moving_rms(ch, window), axis=-1, arr=x)
+            return np.asarray(np.sqrt(np.maximum(avg, 0.0)), dtype=np.float64)
+        ch_results = [DynamicRangeExpander._moving_rms(ch, window) for ch in x]
+        return np.asarray(ch_results, dtype=np.float64)
 
     def process(self, audio: npt.NDArray[np.float64], sr: int) -> npt.NDArray[np.float64]:
         """

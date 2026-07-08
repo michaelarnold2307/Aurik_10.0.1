@@ -194,7 +194,7 @@ class MicrodynamicsAnalyzer:
         else:
             score = variance_db / 1.5 * 0.7  # Linear scaling
 
-        return np.clip(score, 0.0, 1.0)
+        return np.clip(score, 0.0, 1.0)  # type: ignore[no-any-return]
 
     def _measure_envelope_modulation(self, audio: np.ndarray, sr: int) -> float:
         """
@@ -247,7 +247,7 @@ class MicrodynamicsAnalyzer:
         else:
             score = modulation_depth_db / 6.0 * 0.6
 
-        return np.clip(score, 0.0, 1.0)
+        return np.clip(score, 0.0, 1.0)  # type: ignore[no-any-return]
 
     def _measure_crest_variability(self, audio: np.ndarray, sr: int) -> float:
         """
@@ -296,11 +296,11 @@ class MicrodynamicsAnalyzer:
         if crest_std > 2.0:
             score = 1.0
         elif crest_std > 1.0:
-            score = 0.6 + (crest_std - 1.0) / 1.0 * 0.4
+            score = 0.6 + (crest_std - 1.0) / 1.0 * 0.4  # type: ignore[assignment]
         else:
-            score = crest_std / 1.0 * 0.6
+            score = crest_std / 1.0 * 0.6  # type: ignore[assignment]
 
-        return np.clip(score, 0.0, 1.0)
+        return np.clip(score, 0.0, 1.0)  # type: ignore[no-any-return]
 
     def _measure_transient_diversity(self, audio: np.ndarray, sr: int) -> float:
         """
@@ -316,10 +316,10 @@ class MicrodynamicsAnalyzer:
             Transient diversity score: 0.0 = few/monotone, 1.0 = many/diverse
         """
         # Compute onset strength envelope
-        onset_env = librosa.onset.onset_strength(y=audio, sr=sr, hop_length=512)
+        onset_env = librosa.onset.onset_strength(y=audio, sr=sr, hop_length=512)  # type: ignore[attr-defined]
 
         # Detect transients (peaks in onset envelope)
-        transient_frames = librosa.onset.onset_detect(onset_envelope=onset_env, sr=sr, hop_length=512, backtrack=False)
+        transient_frames = librosa.onset.onset_detect(onset_envelope=onset_env, sr=sr, hop_length=512, backtrack=False)  # type: ignore[attr-defined]
 
         if len(transient_frames) < 5:
             # Very few transients
@@ -353,7 +353,7 @@ class MicrodynamicsAnalyzer:
         # Combined score (equal weighting)
         transient_score = 0.5 * density_score + 0.5 * diversity_score
 
-        return np.clip(transient_score, 0.0, 1.0)
+        return np.clip(transient_score, 0.0, 1.0)  # type: ignore[no-any-return]
 
     def check_preservation(
         self, original: np.ndarray, processed: np.ndarray, sr: int

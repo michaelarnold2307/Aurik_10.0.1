@@ -35,6 +35,8 @@ VS Code-Volltest-Stabilität (Anti-OOM + Anti-Pipe-Flood):
 import gc as _gc
 import os
 import sys as _sys
+import threading as _threading
+import time as _time
 import warnings as _warnings
 
 import pytest
@@ -59,6 +61,9 @@ _VSCODE_LAST_FILE: str = ""
 _VSCODE_TEST_COUNTER: int = 0
 _VSCODE_GC_INTERVAL: int = 100
 _VSCODE_FULL_GC_INTERVAL: int = int(os.environ.get("AURIK_TEST_FULL_GC_INTERVAL", "0"))
+
+if any(_hint in " ".join(_sys.argv) for _hint in ("tests/integration", "tests/normative")):
+    os.environ.setdefault("AURIK_SAFE_VALIDATION_PROFILE", "1")
 
 
 def pytest_configure(config) -> None:
@@ -88,6 +93,13 @@ def pytest_configure(config) -> None:
 
     # Marker-Deklarationen für saubere Selektions-/Filter-UX.
     config.addinivalue_line("markers", "gui: tests that require Qt GUI runtime / display stack")
+
+    # Integration-/Normative-Gates laufen in einem Safe-Validation-Profil,
+    # damit teure Reporting-Nacharbeit und Neben-Threads die Gate-Laufzeit
+    # nicht künstlich aufblasen.
+    _pytest_targets = " ".join(str(arg) for arg in getattr(config, "args", []) or [])
+    if any(_hint in _pytest_targets for _hint in ("tests/integration", "tests/normative")):
+        os.environ.setdefault("AURIK_SAFE_VALIDATION_PROFILE", "1")
 
     # Guard 2: Kein xdist → kein Import-Lock-Risiko → Warm-up überspringen.
     # (Verhindert Numba-JIT-Hang bei pytest -p no:xdist und VS Code Test Explorer)
@@ -187,6 +199,17 @@ def pytest_collection_finish(session) -> None:
             category=UserWarning,
         )
 
+    # Die Integrations-/Normative-Suite soll als Safe-Validation laufen.
+    # Collection kennt die echten Test-Dateien bereits, daher ist dies der
+    # robusteste Zeitpunkt, um teure Post-Processing-Pfade für diese Gates
+    # global zu deaktivieren.
+    if any(
+        "tests/integration/" in str(getattr(item, "fspath", ""))
+        or "tests/normative/" in str(getattr(item, "fspath", ""))
+        for item in session.items
+    ):
+        os.environ.setdefault("AURIK_SAFE_VALIDATION_PROFILE", "1")
+
     _release_heavy_singletons()
     # Fast incremental GC to avoid long collection stalls in VS Code.
     _gc.collect(0)
@@ -211,6 +234,92 @@ def pytest_runtest_teardown(item, nextitem) -> None:
 
     if _VSCODE_FULL_GC_INTERVAL > 0 and _VSCODE_TEST_COUNTER % _VSCODE_FULL_GC_INTERVAL == 0:
         _gc.collect()
+
+
+def pytest_sessionfinish(session, exitstatus) -> None:
+    """Robuster End-of-Session-Cleanup für Hintergrund-Threads und ML-Singletons.
+
+    Verhindert native Aborts beim Interpreter-Shutdown (z. B. Exit 134), wenn
+    Monitor-Threads aus ARM/PLM nach Testende noch aktiv sind.
+    """
+    # 1) ARM-Monitor sicher stoppen (falls während Integration/E2E aktiviert).
+    try:
+        from backend.core.adaptive_resource_manager import (
+            adaptive_resource_manager as _arm,
+        )
+
+        _arm.stop_monitoring()
+    except Exception:
+        pass
+
+    # 2) PLM-Monitor sicher stoppen + Pipeline-Refcount defensiv entspannen.
+    try:
+        from backend.core.plugin_lifecycle_manager import (
+            get_plugin_lifecycle_manager as _get_plm,
+        )
+        from backend.core.plugin_lifecycle_manager import (
+            set_pipeline_active as _set_pipeline_active,
+        )
+
+        for _ in range(8):
+            try:
+                _set_pipeline_active(False)
+            except Exception:
+                break
+        _get_plm().shutdown()
+    except Exception:
+        pass
+
+    # 3) Schwere Modulsingletons freigeben + finales GC.
+    _release_heavy_singletons()
+    _gc.collect()
+
+    # 4) AurikDenker-Restaurier-Threads koennen nach Timeout/Fallback noch kurz
+    # weiterlaufen. Vor dem Interpreter-Shutdown geben wir ihnen einen kleinen,
+    # deterministischen Drain-Puffer, damit kein nativer Abort bei noch aktiven
+    # Daemon-Threads entsteht.
+    _drain_deadline = _time.monotonic() + 30.0
+    while _time.monotonic() < _drain_deadline:
+        _rest_threads = []
+        for _th in list(_threading.enumerate()):
+            try:
+                if _th is _threading.current_thread():
+                    continue
+                if not _th.is_alive():
+                    continue
+                if _th.name.endswith("(_run_rest)"):
+                    _rest_threads.append(_th)
+            except Exception:
+                continue
+
+        if not _rest_threads:
+            break
+
+        _remaining = max(0.0, _drain_deadline - _time.monotonic())
+        _slice = min(5.0, _remaining)
+        if _slice <= 0.0:
+            break
+
+        for _th in _rest_threads:
+            try:
+                _th.join(timeout=_slice)
+            except Exception:
+                pass
+
+    if os.environ.get("AURIK_PYTEST_THREAD_DUMP", "0") == "1":
+        try:
+            _alive = []
+            for _th in _threading.enumerate():
+                _alive.append(
+                    {
+                        "name": _th.name,
+                        "daemon": bool(_th.daemon),
+                        "alive": bool(_th.is_alive()),
+                    }
+                )
+            print(f"AURIK_THREAD_DUMP sessionfinish exitstatus={exitstatus} threads={_alive}", file=_sys.stderr)
+        except Exception:
+            pass
 
 
 # ── Legacy-Testdateien ausschließen ────────────────────────────────────────

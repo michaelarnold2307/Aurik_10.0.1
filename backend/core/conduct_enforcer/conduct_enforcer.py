@@ -118,9 +118,9 @@ class ConductEnforcer:
         with open(self.rules_path, encoding="utf-8") as f:
             rules = yaml.safe_load(f)
 
-        return rules
+        return rules  # type: ignore[no-any-return]
 
-    def validate_step(
+    def validate_step(  # type: ignore[return]
         self,
         cas_delta: float,
         dcs: float,
@@ -506,7 +506,7 @@ class ConductEnforcer:
 
         # Most common violations
         all_principles = []
-        all_goals = []
+        all_goals: list[str] = []
         for result in self.decision_history:
             all_principles.extend(result.violated_principles)
             all_goals.extend(result.violated_musical_goals.keys())

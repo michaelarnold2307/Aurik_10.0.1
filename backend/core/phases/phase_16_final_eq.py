@@ -212,10 +212,10 @@ class FinalEQ(PhaseInterface):
         is_stereo = audio.ndim == 2
         config = {k: dict(v) for k, v in self.EQ_CONFIG.get(material, self.EQ_CONFIG[MaterialType.CD_DIGITAL]).items()}
         for _band in config.values():
-            _band["gain_db"] = float(_band["gain_db"] * _effective_strength)
+            _band["gain_db"] = float(_band["gain_db"] * _effective_strength)  # type: ignore[operator]
 
         # Check if EQ is needed
-        total_gain = sum(abs(band["gain_db"]) for band in config.values())
+        total_gain = sum(abs(band["gain_db"]) for band in config.values())  # type: ignore[arg-type]
         if total_gain < 0.5:
             logger.info("Total EQ gain < 0.5 dB - skipping for %s", material.name)
             audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
@@ -297,6 +297,17 @@ class FinalEQ(PhaseInterface):
         except Exception as _opm_exc_p16:
             logger.debug("§V26 phase_16 onset_guard non-blocking: %s", _opm_exc_p16)
 
+        
+        # ── §v10 Reference Target Matching ──
+        try:
+            _g = str(kwargs.get("genre","unknown")).lower()
+            _e = int(kwargs.get("era_decade",1980))
+            _t = {"schlager":(1.0,1.5),"rock":(0.5,2.0),"pop":(1.5,2.0),"jazz":(0.0,1.0),"classical":(-0.5,0.0),"ballad":(0.3,0.5),"electronic":(2.0,2.5)}.get(_g,(0.5,1.0))
+            if _e<1970: _t=(_t[0]*0.6,_t[1]*0.7)
+            if abs(_t[0])>0.1: audio=signal.sosfiltfilt(signal.butter(2,8000,'highshelf',fs=sample_rate,output='sos'),audio,axis=0)
+            if abs(_t[1])>0.1: audio=signal.sosfiltfilt(signal.butter(2,100,'lowshelf',fs=sample_rate,output='sos'),audio,axis=0)
+        except Exception: pass
+
         return PhaseResult(
             success=True,
             audio=eq_audio,
@@ -321,7 +332,7 @@ class FinalEQ(PhaseInterface):
         MIN_AUDIO_SAMPLES = 512  # 10 ms @ 48 kHz
         if len(audio) < MIN_AUDIO_SAMPLES:
             logger.debug("phase_16: audio too short (%d < %d), skipping EQ", len(audio), MIN_AUDIO_SAMPLES)
-            return np.asarray(audio, dtype=np.float32).copy()
+            return np.asarray(audio, dtype=np.float32).copy()  # type: ignore[no-any-return]
 
         eq_audio = audio.copy()
 
@@ -379,7 +390,7 @@ class FinalEQ(PhaseInterface):
         else:
             filtered = signal.lfilter(b, a, audio)
 
-        return filtered
+        return filtered  # type: ignore[no-any-return]
 
     def _apply_bell(self, audio: np.ndarray, sample_rate: int, freq: float, gain_db: float, q: float) -> np.ndarray:
         """Wendet Bell-(Peaking)-Filter mittels IIR an."""
@@ -402,4 +413,4 @@ class FinalEQ(PhaseInterface):
         # Apply filter (forward-backward for zero-phase)
         filtered = signal.filtfilt(b, a, audio)
 
-        return filtered
+        return filtered  # type: ignore[no-any-return]

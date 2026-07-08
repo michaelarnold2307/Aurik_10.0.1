@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from operator import methodcaller
 from typing import Any
@@ -51,7 +52,7 @@ class SotaVocalModelRouter:
     _SEPARATION_STEMS = ["vocals", "drums", "bass", "guitar", "piano", "other"]
     _ROFORMER_MIN_MEM_GB = 10.0
     _DEMUCS_MIN_MEM_GB = 5.0
-    _MDX_MIN_MEM_GB = 4.0
+    _MDX_MIN_MEM_GB = 3.0
 
     def separate_vocal_instrumental(
         self,
@@ -167,9 +168,14 @@ class SotaVocalModelRouter:
                 )
                 return None
             try:
-                from plugins.mdx23c_plugin import get_mdx23c_plugin  # pylint: disable=import-outside-toplevel
+                mdx_module = __import__("plugins.mdx23c_plugin", fromlist=["get_mdx23c_plugin"])
+                get_mdx23c_plugin = mdx_module.get_mdx23c_plugin
+                get_loaded_mdx23c_plugin = getattr(mdx_module, "get_loaded_mdx23c_plugin", None)
 
-                stems = get_mdx23c_plugin().separate_all_stems(reference, sr, stems=["vocals", "inst"])
+                mdx = get_loaded_mdx23c_plugin() if callable(get_loaded_mdx23c_plugin) else None
+                if mdx is None:
+                    mdx = get_mdx23c_plugin()
+                stems = mdx.separate_all_stems(reference, sr, stems=["vocals", "inst"])
                 if isinstance(stems, dict) and stems:
                     vocal = self._coerce_like(stems.get("vocals", np.zeros_like(reference)), reference)
                     instrumental = self._coerce_like(stems.get("inst", reference - vocal), reference)
@@ -607,7 +613,7 @@ class SotaVocalModelRouter:
                 get_model_capability_gate,
             )
 
-            return get_model_capability_gate().build_report()
+            return dict(get_model_capability_gate().build_report())
         except Exception as exc:  # pylint: disable=broad-except
             logger.debug("§SMR-1 model capability report unavailable: %s", exc)
             return {}
@@ -633,7 +639,7 @@ class SotaVocalModelRouter:
     @classmethod
     def _stems_to_vocal_instr(
         cls,
-        stems: dict[str, object],
+        stems: Mapping[str, object],
         reference: np.ndarray,
     ) -> tuple[np.ndarray, np.ndarray]:
         vocal = cls._coerce_like(stems.get("vocals", np.zeros_like(reference)), reference)
@@ -654,7 +660,7 @@ class SotaVocalModelRouter:
         try:
             arr = np.asarray(candidate, dtype=np.float32)
         except Exception:  # pylint: disable=broad-except
-            return np.zeros_like(ref, dtype=np.float32)
+            return np.zeros_like(ref, dtype=np.float32)  # type: ignore[no-any-return]
 
         arr = np.nan_to_num(arr, nan=0.0, posinf=0.0, neginf=0.0)
         if arr.ndim == 2 and ref.ndim == 2 and arr.T.shape == ref.shape:
@@ -665,7 +671,7 @@ class SotaVocalModelRouter:
             arr = np.repeat(arr[:, None], ref.shape[1], axis=1)
 
         if arr.ndim != ref.ndim:
-            return np.zeros_like(ref, dtype=np.float32)
+            return np.zeros_like(ref, dtype=np.float32)  # type: ignore[no-any-return]
         if arr.shape[0] < ref.shape[0]:
             pad_shape = list(arr.shape)
             pad_shape[0] = ref.shape[0] - arr.shape[0]
@@ -674,8 +680,8 @@ class SotaVocalModelRouter:
             arr = arr[: ref.shape[0]]
 
         if arr.shape != ref.shape:
-            return np.zeros_like(ref, dtype=np.float32)
-        return np.clip(arr.astype(np.float32), -1.0, 1.0)
+            return np.zeros_like(ref, dtype=np.float32)  # type: ignore[no-any-return]
+        return np.clip(arr.astype(np.float32), -1.0, 1.0)  # type: ignore[no-any-return]
 
 
 _instance: SotaVocalModelRouter | None = None

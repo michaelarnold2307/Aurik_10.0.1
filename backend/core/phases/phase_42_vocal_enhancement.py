@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Phase 43: Vocal Enhancement v2.0 - Professional.
+Phase 42: Vocal Enhancement v2.0 - Professional.
 Comprehensive vocal processing chain for clarity, presence, and polish.
 
 Algorithm Overview:
@@ -304,7 +304,7 @@ class VocalEnhancement(PhaseInterface):
             description="Comprehensive vocal processing chain for clarity and polish",
         )
 
-    def process(  # pylint: disable=arguments-renamed  # type: ignore[override]
+    def process(  # type: ignore  # pylint: disable=arguments-renamed
         self, audio: np.ndarray, sample_rate: int, material: MaterialType = MaterialType.CD_DIGITAL, **kwargs
     ) -> PhaseResult:
         """
@@ -346,6 +346,23 @@ class VocalEnhancement(PhaseInterface):
         phase_locality_factor = float(np.clip(phase_locality_factor, 0.35, 1.0))
         _pmgg_strength = float(kwargs.get("strength", 1.0))
         _effective_strength = float(np.clip(_pmgg_strength * phase_locality_factor, 0.0, 1.0))
+
+        # §V41 ForwardMaskingGuard — Enhancement-Stärke in post-transienten Masking-Zonen erhöhen
+        _panns_s_42 = float(kwargs.get("panns_singing", 0.0))
+        if _panns_s_42 >= 0.25 and _effective_strength > 0.0:
+            try:
+                from backend.core.dsp.temporal_masking import (
+                    get_forward_masking_guard as _fmg_fn_42,
+                )
+
+                _fmz_42 = kwargs.get("forward_masking_zones") or _fmg_fn_42().compute_zones(audio, sample_rate)
+                if _fmz_42:
+                    _n_s_42 = audio.shape[-1] if audio.ndim > 1 else len(audio)
+                    _zone_s_42 = sum(z.end_sample - z.start_sample for z in _fmz_42)
+                    _zone_frac_42 = float(np.clip(_zone_s_42 / max(1, _n_s_42), 0.0, 1.0))
+                    _effective_strength = float(np.clip(_effective_strength + _zone_frac_42 * 0.15, 0.0, 1.0))
+            except Exception as _fmg_exc_42:
+                logger.debug("Phase42 §V41 ForwardMaskingGuard non-blocking: %s", _fmg_exc_42)
 
         if _effective_strength <= 0.0:
             audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
@@ -818,7 +835,11 @@ class VocalEnhancement(PhaseInterface):
                         # pylint: disable-next=import-outside-toplevel
                         from backend.core.dsp.lpc_formant_tracker import get_lpc_formant_tracker as _get_lfc
 
-                        _lfc_result = _get_lfc().enhance(audio, sample_rate)
+                        _lfc_result = _get_lfc().enhance(
+                            audio,
+                            sample_rate,
+                            era_decade=int(_era_decade) if _era_decade is not None else None,
+                        )
                         if _lfc_result is not None and np.isfinite(_lfc_result).all():
                             enhanced_audio = np.clip(_lfc_result, -1.0, 1.0).astype(np.float32)
                             logger.debug(
@@ -902,6 +923,40 @@ class VocalEnhancement(PhaseInterface):
             except Exception as _vai_err:
                 logger.debug("VocalAIEnhancement fehlgeschlagen (ignoriert): %s", _vai_err)
 
+        # §2.46e [RELEASE_MUST] Hallucination-Guard — nach allen additiven Operationen.
+        # Phase_42 fügt Presence-, Formant- und Chest-Energie hinzu (3–5 dB additive Boosts).
+        # Auf Shellac (BW ≤ 7 kHz) oder historischem Material kann das synthetische HF-Energie
+        # erzeugen, die im Original nie existierte. Restoration: spectral_novelty > 0.15 → Rollback.
+        # Studio 2026: spectral_novelty > 0.08 → Score-Penalty (kein Rollback, da Enhancement-Modus).
+        # Modus-Normalisierung: UV3 kann entweder den String "studio2026" ODER ein Enum
+        # RestoreMode.STUDIO_2026 übergeben → str(enum) = "RestoreMode.STUDIO_2026".
+        # .replace('.', '_') → "restoremode_studio_2026", dann "studio" und "2026" erkennbar.
+        _raw_p42_mode = kwargs.get("mode", kwargs.get("_mode", "restoration"))
+        _p42_mode = str(_raw_p42_mode).strip().lower().replace(".", "_").replace(" ", "")
+        try:
+            from backend.core.dsp.hallucination_guard import (  # pylint: disable=import-outside-toplevel
+                check_hallucination as _check_hallucination_p42,
+            )
+
+            _hg_result = _check_hallucination_p42(audio, enhanced_audio, sr=sample_rate, mode=_p42_mode)
+            if _hg_result.requires_rollback:
+                logger.warning(
+                    "phase_42 §2.46e Hallucination-Guard: spectral_novelty=%.3f → Rollback (mode=%s, material=%s)",
+                    _hg_result.spectral_novelty,
+                    _p42_mode,
+                    material.value if hasattr(material, "value") else str(material),
+                )
+                enhanced_audio = audio.copy()
+            elif _hg_result.score_penalty > 0.0:
+                logger.info(
+                    "phase_42 §2.46e Hallucination-Guard: spectral_novelty=%.3f → Score-Penalty %.1f (mode=%s)",
+                    _hg_result.spectral_novelty,
+                    _hg_result.score_penalty,
+                    _p42_mode,
+                )
+        except Exception as _hg_exc_p42:
+            logger.debug("phase_42 Hallucination-Guard (non-blocking): %s", _hg_exc_p42)
+
         if 0.0 < _effective_strength < 1.0:
             enhanced_audio = audio + _effective_strength * (enhanced_audio - audio)
 
@@ -939,7 +994,7 @@ class VocalEnhancement(PhaseInterface):
                     apply_hnr_blend as _hnr_blend_p42,  # pylint: disable=import-outside-toplevel
                 )
 
-                enhanced_audio = _hnr_blend_p42(audio, enhanced_audio, sample_rate)
+                enhanced_audio, _ = _hnr_blend_p42(audio, enhanced_audio, sample_rate)
             except Exception as _hnr_exc_p42:
                 logger.debug("§0p HNR-Blend phase_42 (non-blocking): %s", _hnr_exc_p42)
 
@@ -985,11 +1040,19 @@ class VocalEnhancement(PhaseInterface):
         # damit Überprozessierung nicht die Stimmidentität zerstört.
         if _p42_panns >= 0.35:
             try:
+                from backend.core.musical_goals.era_vocal_profile import (
+                    get_era_vocal_profile as _gevp_p42,  # pylint: disable=import-outside-toplevel  # §EraVocalProfile
+                )
                 from backend.core.musical_goals.vocal_quality_index import (  # pylint: disable=import-outside-toplevel
                     compute_vqi as _compute_vqi_p42,
                 )
 
-                _vqi_result_p42 = _compute_vqi_p42(audio_orig=audio, audio_restored=enhanced_audio, sr=sample_rate)
+                _vqi_result_p42 = _compute_vqi_p42(
+                    audio_orig=audio,
+                    audio_restored=enhanced_audio,
+                    sr=sample_rate,
+                    era_profile=_gevp_p42(int(_era_decade)) if _era_decade is not None else None,
+                )
                 _vqi_p42 = float(_vqi_result_p42.get("vqi", 1.0))
                 if _vqi_p42 < 0.95:
                     logger.info(
@@ -1327,7 +1390,7 @@ class VocalEnhancement(PhaseInterface):
 
         # ── 3: MDX23C fallback (Kim_Vocal_2) ─────────────────────────────────
         _plm42_mdx = None
-        if _avail_gb is not None and _avail_gb < 4.0:
+        if _avail_gb is not None and _avail_gb < 3.0:
             logger.info(
                 "Phase42 Stem-Sep: mdx23c übersprungen (low_ram_%.1fGB) — Fallback auf NMF/HPSS",
                 _avail_gb,
@@ -1347,7 +1410,14 @@ class VocalEnhancement(PhaseInterface):
                 except Exception:
                     _plm42_mdx = None
 
-                mdx = get_mdx23c_plugin()
+                try:
+                    from plugins.mdx23c_plugin import get_loaded_mdx23c_plugin
+                except Exception:
+                    get_loaded_mdx23c_plugin = None  # type: ignore[assignment]
+
+                mdx = get_loaded_mdx23c_plugin() if callable(get_loaded_mdx23c_plugin) else None
+                if mdx is None:
+                    mdx = get_mdx23c_plugin()
                 if _plm42_mdx is not None:
                     try:
                         _plm42_mdx.touch_plugin("MDX23C_vocals")  # type: ignore[attr-defined]
@@ -1430,7 +1500,7 @@ class VocalEnhancement(PhaseInterface):
                     _hpss_max_s,
                 )
             _t0_hpss = time.monotonic()
-            harmonic_mono, _ = librosa.effects.hpss(mono_in)
+            harmonic_mono, _ = librosa.effects.hpss(mono_in)  # type: ignore[attr-defined]
             _hpss_elapsed = time.monotonic() - _t0_hpss
             if _hpss_elapsed > _hpss_max_s:
                 logger.warning(
@@ -1464,15 +1534,15 @@ class VocalEnhancement(PhaseInterface):
         # Measure energy in formant region (300-3000 Hz)
         sos_formant = signal.butter(4, self.VOCAL_BANDS["formant"], btype="band", fs=sample_rate, output="sos")
         formant_signal = signal.sosfilt(sos_formant, audio)
-        formant_energy = np.mean(formant_signal**2)
+        formant_energy = float(np.mean(formant_signal**2))
 
         # Measure total energy
-        total_energy = np.mean(audio**2)
+        total_energy = float(np.mean(audio**2))
 
         # If formant region has >20% of total energy, likely contains vocals
         if total_energy > 1e-10:
-            formant_ratio = formant_energy / total_energy
-            return formant_ratio > 0.20  # type: ignore[no-any-return]
+            formant_ratio = float(formant_energy / total_energy)
+            return formant_ratio > 0.20
         else:
             return False
 
@@ -1687,7 +1757,7 @@ class VocalEnhancement(PhaseInterface):
 
             result = np.nan_to_num(result, nan=0.0, posinf=0.0, neginf=0.0)
             result = np.clip(result, -1.0, 1.0)
-            return result.astype(audio.dtype)
+            return result.astype(audio.dtype)  # type: ignore[no-any-return]
 
         except Exception as _cfd_exc:
             logger.debug("§Hebel-4 _restore_carrier_formant_decay fehlgeschlagen (ignoriert): %s", _cfd_exc)
@@ -1876,7 +1946,7 @@ class VocalEnhancement(PhaseInterface):
     @staticmethod
     def _prefer_demucs_native(material: object) -> bool:
         """Aktiviert nativen HTDemucs nur fuer live/crowd-nahe Quellen."""
-        return prefer_demucs_native_from_material(material)
+        return prefer_demucs_native_from_material(material)  # type: ignore[no-any-return]
 
     def _apply_deessing(self, audio: np.ndarray, sample_rate: int, config: dict[str, Any]) -> np.ndarray:
         """Wendet De-Essing auf das Sibilanz-Band an."""
@@ -2024,7 +2094,7 @@ class VocalEnhancement(PhaseInterface):
                 except Exception as _pg_err:
                     logger.debug("phoneme_guided_enhance fehlgeschlagen (ignoriert): %s", _pg_err)
 
-                return enhanced.astype(audio.dtype)
+                return enhanced.astype(audio.dtype)  # type: ignore[no-any-return]
             except Exception as _fs_err:
                 logger.debug("FormantSystem fehlgeschlagen, Bell-EQ-Fallback: %s", _fs_err)
 
@@ -2080,7 +2150,7 @@ class VocalEnhancement(PhaseInterface):
                 enhanced = signal.lfilter(_b, _a, enhanced)
         enhanced = np.nan_to_num(enhanced, nan=0.0, posinf=0.0, neginf=0.0)
         enhanced = np.clip(enhanced, -1.0, 1.0)
-        return enhanced.astype(audio.dtype)
+        return enhanced.astype(audio.dtype)  # type: ignore[no-any-return]
 
     def _boost_presence(self, audio: np.ndarray, sample_rate: int, config: dict[str, Any]) -> np.ndarray:
         """Verstärkt presence region with ISO 226 loudness compensation.
@@ -2343,14 +2413,17 @@ class VocalEnhancement(PhaseInterface):
         if makeup_linear > 1.0005:
             from backend.core.audio_utils import apply_musical_gain_envelope  # pylint: disable=import-outside-toplevel
 
-            # §2.45a-II v9.12.2: reference_for_gate=compressed → signal-relative gate
+            # V04-Fix: reference_for_gate MUSS den Pre-Phase-Input (audio) nutzen, nicht
+            # das komprimierte Intermediat — sonst kann Makeup-Gain in Stille-Zonen
+            # durchgreifen, deren Pegel nur durch Kompression unter den Gate-Schwell
+            # gedrückt wurden, im Original aber höher lagen.
             compressed = apply_musical_gain_envelope(
                 compressed,
                 makeup_linear,
                 gate_dbfs=-36.0,
                 crossfade_ms=10.0,
                 sr=sample_rate,
-                reference_for_gate=compressed,
+                reference_for_gate=audio,
             )
         else:
             compressed = compressed * makeup_linear
@@ -2394,7 +2467,7 @@ class VocalEnhancement(PhaseInterface):
                 out[: morphed.shape[0]] = morphed
                 return out
             logger.debug("Phase42 Vocal-Stem MDEM: micro-dynamics recovered on vocal stem")
-            return morphed
+            return morphed  # type: ignore[no-any-return]
         except Exception as _mdem_err:
             logger.debug("Vocal-Stem MDEM nicht verfügbar (ignoriert): %s", _mdem_err)
             return enhanced_vocals

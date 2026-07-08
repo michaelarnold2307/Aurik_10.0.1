@@ -42,7 +42,7 @@ class AdaptiveGoalEngine:
         target_lufs = goals.get("target_lufs", -14.0)
         rms = np.sqrt(np.mean(audio**2))
         gain = 0.1 if rms == 0 else (10 ** ((target_lufs + 23) / 20)) / rms
-        return audio * gain
+        return audio * gain  # type: ignore[no-any-return]
 
     def define_goal(self, context: dict[str, Any]) -> dict[str, Any]:
         """

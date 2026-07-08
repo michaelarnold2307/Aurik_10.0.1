@@ -29,6 +29,7 @@ export_guard = _bridge.export_guard
 get_audio_exporter_class = _bridge.get_audio_exporter_class
 get_aurik_denker_instance = _bridge.get_aurik_denker_instance
 get_load_audio_fn = _bridge.get_load_audio_fn
+normalize_user_mode = _bridge.normalize_user_mode
 run_pre_analysis = _bridge.run_pre_analysis
 validate_export_quality = _bridge.validate_export_quality
 
@@ -54,12 +55,7 @@ def _load_audio(path: str) -> tuple[np.ndarray, int]:
 
 
 def _normalize_mode(mode: str) -> str:
-    raw = str(mode or "Restoration").strip().lower().replace("_", "").replace(" ", "")
-    if raw in {"restoration", "quality"}:
-        return "Restoration"
-    if raw in {"studio2026", "studio"}:
-        return "Studio 2026"
-    return "Restoration"
+    return normalize_user_mode(mode)  # type: ignore[no-any-return]
 
 
 def _normalize_phase_strength_oracle_rollout(mode: str | None) -> str | None:
@@ -248,14 +244,14 @@ def _resample_to_48k(audio: np.ndarray, sr: int) -> np.ndarray:
         try:
             # Frontend parity: soxr HQ for deterministic quality alignment.
             out = _soxr_rs.resample(audio, sr, _TARGET_SR, quality="HQ")
-            return np.asarray(out, dtype=np.float32)
+            return np.asarray(out, dtype=np.float32)  # type: ignore[no-any-return]
         except Exception:
             pass
     if _sig is not None:
         try:
             int(round(audio.shape[0] * _TARGET_SR / sr))
             out = _sig.resample_poly(audio, _TARGET_SR, sr, axis=0)
-            return np.asarray(out, dtype=np.float32)
+            return np.asarray(out, dtype=np.float32)  # type: ignore[no-any-return]
         except Exception as exc2:
             raise RuntimeError(
                 "Interne 48-kHz-Normierung fehlgeschlagen. Ursache: Resampling konnte nicht ausgefuehrt werden. "
@@ -272,7 +268,30 @@ def _as_samples_channels(audio: np.ndarray) -> np.ndarray:
     arr = np.asarray(audio, dtype=np.float32)
     if arr.ndim == 2 and arr.shape[0] <= 2 and arr.shape[1] > 2:
         arr = arr.T
-    return np.ascontiguousarray(arr)
+    return np.ascontiguousarray(arr)  # type: ignore[no-any-return]
+
+
+def _resample_audio(audio: np.ndarray, src_sr: int, dst_sr: int) -> np.ndarray:
+    """Resampelt Audio von src_sr auf dst_sr mit soxr HQ (Fallback: scipy)."""
+    if src_sr == dst_sr:
+        return audio
+    if _soxr_rs is not None:
+        try:
+            _out: np.ndarray = np.asarray(_soxr_rs.resample(audio, src_sr, dst_sr, quality="HQ"), dtype=np.float32)
+            return _out
+        except Exception:
+            pass
+    if _sig is not None:
+        n_out = int(round(audio.shape[0] * dst_sr / src_sr))
+        if audio.ndim == 1:
+            _out1: np.ndarray = np.asarray(_sig.resample(audio, n_out), dtype=np.float32)
+            return _out1
+        _out2: np.ndarray = np.stack(
+            [np.asarray(_sig.resample(audio[:, ch], n_out), dtype=np.float32) for ch in range(audio.shape[1])],
+            axis=1,
+        ).astype(np.float32)
+        return _out2
+    raise RuntimeError("soxr und scipy nicht verfügbar — Output-Resampling nicht möglich.")
 
 
 def _export_audio_frontend_parity(
@@ -281,6 +300,8 @@ def _export_audio_frontend_parity(
     restored_audio: np.ndarray,
     reference_audio: np.ndarray,
     logger: logging.Logger,
+    bit_depth: int = 24,
+    output_sr: int = _TARGET_SR,
 ) -> tuple[bool, list[str], dict[str, object]]:
     """Exportiert mit demselben Guard-/Gate-Vertrag wie das Frontend."""
     write_audio = export_guard(_as_samples_channels(restored_audio))
@@ -394,14 +415,29 @@ def _export_audio_frontend_parity(
         out_path = out_path.with_suffix(".wav")
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
+    # Output-Resampling wenn abweichende Ziel-Sample-Rate gewünscht (z.B. 44100 Hz für CD)
+    write_sr = _TARGET_SR
+    if output_sr != _TARGET_SR:
+        try:
+            write_audio = _resample_audio(write_audio, _TARGET_SR, output_sr)
+            if reference_for_export is not None:
+                reference_for_export = _resample_audio(reference_for_export, _TARGET_SR, output_sr)
+            write_sr = output_sr
+            logger.info("Output-Resampling: %d Hz → %d Hz (soxr HQ)", _TARGET_SR, output_sr)
+        except Exception as _rs_exc:
+            logger.warning("Output-Resampling fehlgeschlagen, exportiere mit %d Hz: %s", _TARGET_SR, _rs_exc)
+
+    _SUBTYPE_MAP = {16: "PCM_16", 24: "PCM_24", 32: "FLOAT"}
+    _sf_subtype = _SUBTYPE_MAP.get(bit_depth, "PCM_24")
+
     audio_exporter_cls = get_audio_exporter_class()
     if audio_exporter_cls is not None and out_path.suffix.lower() in audio_exporter_cls.FORMATS:
         exporter = audio_exporter_cls()
         exporter.export(
             write_audio,
-            _TARGET_SR,
+            write_sr,
             out_path,
-            bit_depth=24,
+            bit_depth=bit_depth,
             quality="veryhigh",
             metadata=export_metadata,
             normalize=False,
@@ -410,7 +446,7 @@ def _export_audio_frontend_parity(
     else:
         tmp_path = str(out_path) + ".wav.tmp"
         try:
-            sf.write(tmp_path, write_audio, _TARGET_SR, format="WAV", subtype="PCM_24")
+            sf.write(tmp_path, write_audio, write_sr, format="WAV", subtype=_sf_subtype)
             os.replace(tmp_path, out_path)
         finally:
             if os.path.exists(tmp_path):
@@ -430,6 +466,11 @@ def process_audio(
     verbose: bool = True,
     mode: str = "Restoration",
     phase_strength_oracle_rollout: str | None = None,
+    bit_depth: int = 24,
+    output_sr: int = _TARGET_SR,
+    json_mode: bool = False,
+    abx_mode: bool = False,
+    dry_run: bool = False,
 ) -> object:
     """Verarbeitet eine Audiodatei über denselben Denker-/Exportpfad wie das Frontend."""
     logging.basicConfig(level=logging.INFO if verbose else logging.WARNING, format="%(levelname)s: %(message)s")
@@ -643,7 +684,7 @@ def process_audio(
             },
         }
     )
-    setattr(result, "metadata", _meta_dict)
+    result.metadata = _meta_dict
     if _drop_db > _pegel_threshold:
         _export_degraded = True
         _export_degraded_reasons.append(f"Pegelabfall={_drop_db:.2f}dB>{_pegel_threshold:.1f}dB")
@@ -661,6 +702,8 @@ def process_audio(
             restored,
             audio_48k,
             logger,
+            bit_depth=bit_depth,
+            output_sr=output_sr,
         )
     except Exception as exc:
         logger.error("Fehler beim Speichern der Audiodatei: %s", exc)
@@ -682,16 +725,86 @@ def process_audio(
         else:
             logger.info("💾 Gespeichert: %s", output_path)
 
+    # ── §T5.2: ABX Blindtest-Generator ──
+    if abx_mode and result is not None:
+        try:
+            import soundfile as _abx_sf
+            from pathlib import Path as _Path
+            import json as _json
+            
+            # Load original and restored audio
+            orig_audio, orig_sr = _abx_sf.read(str(input_path))
+            restored_audio, restored_sr = _abx_sf.read(str(output_path))
+            
+            # Match lengths and sample rates
+            min_len = min(len(orig_audio), len(restored_audio))
+            sr_use = min(orig_sr, restored_sr)
+            
+            # Generate 3 ABX snippets (10s each, random positions)
+            snippet_dur = int(10 * sr_use)
+            n_snippets = 3
+            abx_data = []
+            
+            rng = np.random.RandomState(hash(str(input_path)) % (2**31))
+            
+            for idx in range(n_snippets):
+                max_start = max(0, min_len - snippet_dur - int(2 * sr_use))
+                start = rng.randint(int(2 * sr_use), max_start) if max_start > 0 else 0
+                end = start + snippet_dur
+                
+                # X is randomly A (original) or B (restored)
+                x_is_a = rng.random() > 0.5
+                
+                a_path = Path(output_path).parent / f"{Path(output_path).stem}_abx{idx+1}_A.wav"
+                b_path = Path(output_path).parent / f"{Path(output_path).stem}_abx{idx+1}_B.wav"
+                x_path = Path(output_path).parent / f"{Path(output_path).stem}_abx{idx+1}_X.wav"
+                
+                _abx_sf.write(str(a_path), orig_audio[start:end], sr_use)
+                _abx_sf.write(str(b_path), restored_audio[start:end], sr_use)
+                _abx_sf.write(str(x_path), 
+                         orig_audio[start:end] if x_is_a else restored_audio[start:end], 
+                         sr_use)
+                
+                abx_data.append({
+                    "snippet": idx + 1,
+                    "start_s": float(start) / sr_use,
+                    "duration_s": 10.0,
+                    "x_is": "A" if x_is_a else "B",
+                    "files": {
+                        "A": str(a_path),
+                        "B": str(b_path),
+                        "X": str(x_path),
+                    }
+                })
+            
+            # Write ABX mapping (user can check after listening)
+            mapping_path = Path(output_path).parent / f"{Path(output_path).stem}_abx_mapping.json"
+            with open(mapping_path, 'w') as f:
+                json.dump({"abx_snippets": abx_data, "note": "X=A (Original) oder X=B (Restauriert)?"}, f, indent=2)
+            
+            if verbose:
+                logger.info("🔬 ABX-Blindtest: %d Snippets generiert → %s", n_snippets, mapping_path)
+        except Exception as _abx_err:
+            logger.warning("ABX-Generator: %s", _abx_err)
+
     return result
 
 
 def print_usage():
     """Gibt die CLI-Hilfe aus."""
-    print("\nVerwendung: aurik_cli [--input PATH] [--output PATH] [--mode MODUS] [-q] [-h]")
+    print(
+        "\nVerwendung: aurik_cli [--input PATH] [--output PATH] [--mode MODUS] [--bit-depth N] [--output-sr HZ] [--abx] [--dry-run] [--json] [-q] [-h]"
+    )
     print("\nOptionen:")
     print("  --input, --input_audio PATH  Eingabe-Audiodatei")
     print("  --output, --output_audio PATH Ausgabe-Audiodatei")
     print("  --mode MODUS                 Restaurierungsmodus: 'Restoration' (Standard) oder 'Studio 2026'")
+    print("  --bit-depth N                Bit-Tiefe: 16, 24 (Standard) oder 32 (float)")
+    print("  --output-sr HZ               Ausgabe-Sample-Rate: 44100 oder 48000 (Standard)")
+    print("  --dry-run                    Nur Pre-Analyse + Phasen-Plan, keine DSP-Verarbeitung")
+    print("  --json                       Maschinenlesbare JSON-Ausgabe")
+    print("  --abx                        A/B/X-Blindtest-Dateien nach Export generieren")
+    print("  --progress                   Zeige Fortschrittsbalken während der Verarbeitung")
     print("  -q, --quiet                  Keine Fortschritts-Ausgaben")
     print("  -h, --help                   Diese Hilfe anzeigen")
     print()
@@ -713,6 +826,13 @@ def main():
     output_file = None
     mode = "Restoration"
     phase_strength_oracle_rollout: str | None = None
+    bit_depth = 24
+    output_sr = _TARGET_SR
+    dry_run = False
+    json_mode = False
+    abx_mode = False
+    progress_mode = False
+    resume_mode = False
     skip_next = False
     for i, arg in enumerate(args):
         if skip_next:
@@ -730,12 +850,73 @@ def main():
                 skip_next = True
         elif "=" in arg and arg.split("=", 1)[0] in ("--output_audio", "--output"):
             output_file = arg.split("=", 1)[1]
+        elif arg in ("--dry-run", "--json", "--abx"):
+            if arg == "--dry-run":
+                dry_run = True
+            elif arg == "--json":
+                json_mode = True
+            elif arg == "--abx":
+                abx_mode = True
+            elif arg == "--progress":
+                progress_mode = True
+            elif arg == "--resume":
+                resume_mode = True
         elif arg == "--mode":
             if i + 1 < len(args):
                 mode = args[i + 1]
                 skip_next = True
         elif "=" in arg and arg.split("=", 1)[0] == "--mode":
             mode = arg.split("=", 1)[1]
+        elif arg == "--bit-depth":
+            if i + 1 < len(args):
+                try:
+                    _bd = int(args[i + 1])
+                    if _bd in (16, 24, 32):
+                        bit_depth = _bd
+                    else:
+                        print(f"❌ Ungültige Bit-Tiefe '{args[i + 1]}' — erlaubt: 16, 24, 32")
+                        sys.exit(1)
+                except ValueError:
+                    print(f"❌ Ungültige Bit-Tiefe '{args[i + 1]}' — erlaubt: 16, 24, 32")
+                    sys.exit(1)
+                skip_next = True
+        elif "=" in arg and arg.split("=", 1)[0] == "--bit-depth":
+            _bd_str = arg.split("=", 1)[1]
+            try:
+                _bd = int(_bd_str)
+                if _bd in (16, 24, 32):
+                    bit_depth = _bd
+                else:
+                    print(f"❌ Ungültige Bit-Tiefe '{_bd_str}' — erlaubt: 16, 24, 32")
+                    sys.exit(1)
+            except ValueError:
+                print(f"❌ Ungültige Bit-Tiefe '{_bd_str}' — erlaubt: 16, 24, 32")
+                sys.exit(1)
+        elif arg == "--output-sr":
+            if i + 1 < len(args):
+                try:
+                    _sr = int(args[i + 1])
+                    if _sr in (44_100, 48_000):
+                        output_sr = _sr
+                    else:
+                        print(f"❌ Ungültige Sample-Rate '{args[i + 1]}' — erlaubt: 44100, 48000")
+                        sys.exit(1)
+                except ValueError:
+                    print(f"❌ Ungültige Sample-Rate '{args[i + 1]}' — erlaubt: 44100, 48000")
+                    sys.exit(1)
+                skip_next = True
+        elif "=" in arg and arg.split("=", 1)[0] == "--output-sr":
+            _sr_str = arg.split("=", 1)[1]
+            try:
+                _sr = int(_sr_str)
+                if _sr in (44_100, 48_000):
+                    output_sr = _sr
+                else:
+                    print(f"❌ Ungültige Sample-Rate '{_sr_str}' — erlaubt: 44100, 48000")
+                    sys.exit(1)
+            except ValueError:
+                print(f"❌ Ungültige Sample-Rate '{_sr_str}' — erlaubt: 44100, 48000")
+                sys.exit(1)
     # Positional Fallback: nur Nicht-Flag-Argumente verwenden
     positional = [a for a in args if not a.startswith("-")]
     if input_file is None and len(positional) >= 1:
@@ -748,13 +929,88 @@ def main():
         print_usage()
         sys.exit(1)
 
+    # ── §QW2: Dry-Run Modus ──
+    if dry_run:
+        if not json_mode:
+            print("🔍 DRY-RUN: Pre-Analyse + Phasen-Plan ohne DSP-Verarbeitung")
+        # Nur Pre-Analyse durchführen
+        try:
+            from backend.api.bridge import get_defect_scanner
+            audio_dry, sr_dry = sf.read(str(input_file))
+            ScannerClass = get_defect_scanner()
+            scanner = ScannerClass()
+            analysis = scanner.scan(audio_dry, sr_dry)
+            n_defects = sum(1 for d in (analysis.scores.values() if isinstance(analysis.scores, dict) else []) if getattr(d, 'severity', 0) > 0.5)
+            duration_s = len(audio_dry) / sr_dry
+            if json_mode:
+                print(json.dumps({
+                    "status": "dry_run_complete",
+                    "mode": mode,
+                    "input": str(input_file),
+                    "output": str(output_file),
+                    "detected_material": getattr(analysis, 'material_type', 'unknown'),
+                    "defect_count": n_defects,
+                    "duration_s": duration_s,
+                }, indent=2, default=str))
+            else:
+                print(f"✅ Dry-Run abgeschlossen: {duration_s:.1f}s Audio, {n_defects} Defekte erkannt")
+        except Exception as e:
+            if json_mode:
+                print(json.dumps({"status": "dry_run_failed", "error": str(e)}))
+            else:
+                print(f"❌ Dry-Run fehlgeschlagen: {e}")
+            sys.exit(4)
+        return
+
+    # ── §QW2: JSON Mode ──
+    if input_file and not os.path.exists(input_file):
+        print(f"❌ Die Datei \"{input_file}\" wurde nicht gefunden.")
+        print("   Bitte überprüfe den Pfad und versuche es erneut.")
+        sys.exit(2)
+
     process_audio(
         input_file,
         output_file,
         verbose=verbose,
         mode=mode,
         phase_strength_oracle_rollout=phase_strength_oracle_rollout,
+        bit_depth=bit_depth,
+        output_sr=output_sr,
+        json_mode=json_mode,
+        abx_mode=abx_mode,
+        dry_run=dry_run,
     )
+
+
+# ── §v10 V6: Checkpoint & Resume ──
+def save_pipeline_checkpoint(audio, phase_id, output_path, metadata=None):
+    """Speichert Checkpoint nach jeder 5. Phase."""
+    import pickle, os, hashlib
+    ckpt_dir = Path(output_path).parent / ".aurik_checkpoints"
+    ckpt_dir.mkdir(exist_ok=True)
+    ckpt_path = ckpt_dir / f"{Path(output_path).stem}_{phase_id}.ckpt"
+    try:
+        data = {"audio": audio, "phase": phase_id, "metadata": metadata or {}}
+        with open(ckpt_path, 'wb') as f:
+            pickle.dump(data, f, protocol=5)
+        logger.debug("Checkpoint: %s", ckpt_path)
+    except Exception as e:
+        logger.debug("Checkpoint failed: %s", e)
+
+def load_latest_checkpoint(output_path):
+    """Lädt den neuesten Checkpoint für Resume."""
+    import pickle, os, glob
+    ckpt_dir = Path(output_path).parent / ".aurik_checkpoints"
+    if not ckpt_dir.exists():
+        return None
+    files = sorted(glob.glob(str(ckpt_dir / "*.ckpt")), key=os.path.getmtime, reverse=True)
+    for f in files:
+        try:
+            with open(f, 'rb') as fh:
+                return pickle.load(fh)
+        except Exception:
+            continue
+    return None
 
 
 if __name__ == "__main__":

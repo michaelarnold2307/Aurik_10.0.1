@@ -375,6 +375,16 @@ class FrequencyRestorationPhase(PhaseInterface):
             PhaseResult with extended bandwidth audio
         """
         enable_sbr: bool = bool(kwargs.get("enable_sbr", True))
+        # ── §v10 PIM: Per-Band-Intensität kalibrieren ──
+        try:
+            from backend.core.pim_phase_hook import apply_pim_intensity
+            _pim = apply_pim_intensity(kwargs, "freq_restore",
+                default_nr=0.4, default_de_ess=0.2, default_comp=1.0)
+            for _key in ("noise_reduction_strength", "nr_strength", "strength", "wet"):
+                if _key in kwargs:
+                    kwargs[_key] = _pim["nr_strength"]
+        except Exception:
+            pass
         assert sample_rate == 48000, f"SR muss 48000 Hz sein, erhalten: {sample_rate}"
         start_time = time.time()
 
@@ -401,6 +411,31 @@ class FrequencyRestorationPhase(PhaseInterface):
             phase_locality_factor = float(np.clip(float(kwargs.get("phase_locality_factor", 1.0)), 0.35, 1.0))
         _pmgg_strength = float(kwargs.get("strength", 1.0))
         _effective_strength = float(np.clip(_pmgg_strength * phase_locality_factor, 0.0, 1.0))
+
+        # §V41 ForwardMaskingGuard: Stärke in post-transienten Masking-Fenstern erhöhen.
+        _panns_s_06 = float(kwargs.get("panns_singing", 0.0))
+        if _panns_s_06 >= 0.25 and _effective_strength > 0.0:
+            try:
+                from backend.core.dsp.temporal_masking import (
+                    get_forward_masking_guard as _fmg_fn_06,  # pylint: disable=import-outside-toplevel
+                )
+
+                _fmg_06 = _fmg_fn_06()
+                _fmz_06 = _fmg_06.compute_zones(audio, sample_rate)
+                if _fmz_06:
+                    _n_s_06 = audio.shape[-1] if audio.ndim > 1 else len(audio)
+                    _zone_samples_06 = sum(z.end_sample - z.start_sample for z in _fmz_06)
+                    _zone_frac_06 = float(np.clip(_zone_samples_06 / max(1, _n_s_06), 0.0, 1.0))
+                    _boost_06 = _zone_frac_06 * 0.15
+                    _effective_strength = float(np.clip(_effective_strength + _boost_06, 0.0, 1.0))
+                    logger.debug(
+                        "Phase06 §V41 ForwardMasking: zone_frac=%.2f boost=%.3f → eff_str=%.3f",
+                        _zone_frac_06,
+                        _boost_06,
+                        _effective_strength,
+                    )
+            except Exception as _fmg_exc_06:  # pylint: disable=broad-except
+                logger.debug("Phase06 §V41 ForwardMaskingGuard non-blocking: %s", _fmg_exc_06)
 
         if _effective_strength <= 0.0:
             passthrough = np.nan_to_num(audio.copy(), nan=0.0, posinf=0.0, neginf=0.0)
@@ -660,7 +695,7 @@ class FrequencyRestorationPhase(PhaseInterface):
             "wax_cylinder": 3000.0,  # §ERA 1900-1925: max 3 kHz (v9.12.9)
             "vinyl": 16000.0,
             "reel_tape": 18000.0,
-            "cassette": 15000.0,
+            "cassette": 12000.0,  # V33/§6.2c: IEC 60094-1 Type I BW-Ceiling 12 kHz (fix: war 15 kHz)
         }
         _mat_key_06 = str(material_type).lower().replace(" ", "_").replace("-", "_")
         _bw_cap_hz = _BW_CEILING_HZ.get(_mat_key_06)
@@ -715,6 +750,7 @@ class FrequencyRestorationPhase(PhaseInterface):
                 sr=sample_rate,
                 material_bw_ceiling_hz=_bw_cap_hz,
                 mode=_hg_mode_06,
+                bw_extension_context=True,  # §Brillanz-Fix: AudioSR adds new HF below ceiling — not hallucination
             )
             if _hg_result06.requires_rollback:
                 logger.warning(
@@ -1362,7 +1398,7 @@ class FrequencyRestorationPhase(PhaseInterface):
         # Rolloff exists if >6 dB difference
         has_rolloff = rolloff_db > 6.0
 
-        return has_rolloff, rolloff_db, measured_rolloff_freq
+        return has_rolloff, rolloff_db, measured_rolloff_freq  # type: ignore[return-value]
 
     def _restore_highs_professional(self, audio: np.ndarray, params: dict[str, Any], enable_sbr: bool) -> np.ndarray:
         """
@@ -1601,7 +1637,7 @@ class FrequencyRestorationPhase(PhaseInterface):
         if len(audio_refined) < n:
             audio_refined = np.pad(audio_refined, (0, n - len(audio_refined)))
         audio_refined = np.nan_to_num(audio_refined, nan=0.0, posinf=0.0, neginf=0.0)
-        return np.clip(audio_refined, -1.0, 1.0).astype(np.float32)
+        return np.clip(audio_refined, -1.0, 1.0).astype(np.float32)  # type: ignore[no-any-return]
 
     def _restore_channel(
         self, channel: np.ndarray, params: dict[str, Any], enable_sbr: bool, hop_length: int, n_fft: int
@@ -1881,7 +1917,7 @@ class FrequencyRestorationPhase(PhaseInterface):
         n_tgt = len(target_freqs)
 
         if n_src < 2 or n_frames < 1:
-            return np.ones((n_tgt, n_frames), dtype=np.complex64)
+            return np.ones((n_tgt, n_frames), dtype=np.complex64)  # type: ignore[no-any-return]
 
         # Source bin float indices for each target bin (mirrors linspace used in
         # _apply_sbr when mapping source magnitudes to the target band).
@@ -1900,7 +1936,7 @@ class FrequencyRestorationPhase(PhaseInterface):
         omega_s = 2.0 * np.pi * source_freqs.astype(np.float64) / float(sr)  # (n_src,)
         expected_inc = omega_s * float(hop)  # rad/frame  (n_src,)
 
-        phi_s = np.angle(Zxx_source).astype(np.float64)  # (n_src, n_frames)
+        phi_s: np.ndarray = np.angle(Zxx_source).astype(np.float64)  # (n_src, n_frames)
         dphi = np.empty_like(phi_s)
         dphi[:, 0] = 0.0
         dphi[:, 1:] = phi_s[:, 1:] - phi_s[:, :-1]

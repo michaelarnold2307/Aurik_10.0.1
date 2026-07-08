@@ -87,7 +87,7 @@ class TransferLearner:
 
         if self._source_mean is None or self._weights is None:
             # Not fitted yet — return zeros
-            return np.zeros(X.shape[0], dtype=np.float64)
+            return np.zeros(X.shape[0], dtype=np.float64)  # type: ignore[no-any-return]
 
         X_norm = (X - self._source_mean) / self._source_std
         X_aug = np.column_stack([X_norm, np.ones(len(X_norm))])
@@ -95,7 +95,7 @@ class TransferLearner:
         predictions = X_aug @ self._weights
         # Guarantee finite outputs
         predictions = np.nan_to_num(predictions, nan=0.0, posinf=1.0, neginf=0.0)
-        return predictions.astype(np.float64)
+        return predictions.astype(np.float64)  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------

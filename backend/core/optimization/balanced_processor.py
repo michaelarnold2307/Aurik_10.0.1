@@ -60,7 +60,7 @@ class BalancedAudioProcessor:
         """
         x = np.asarray(audio, dtype=np.float32)
         if len(x) == 0:
-            return x.copy()
+            return x.copy()  # type: ignore[no-any-return]
 
         # Stage 1: algorithmic efficiency pass
         x = self.efficiency.process(x, sr, use_multicore=False)
@@ -90,7 +90,7 @@ class BalancedAudioProcessor:
         elif len(x) < int(target * 0.9):
             x = np.pad(x, (0, int(target * 0.9) - len(x)))
 
-        return np.nan_to_num(x, nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32)
+        return np.nan_to_num(x, nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32)  # type: ignore[no-any-return]
 
     def benchmark(self, audio: np.ndarray, sr: int, n_iterations: int = 1) -> dict[str, Any]:
         """Misst real-time factor over *n_iterations*.

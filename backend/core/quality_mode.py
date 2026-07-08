@@ -1,16 +1,16 @@
 """
-Quality Mode System - Aurik 9.0
-================================
+§2.59 QualityMode-Validierung (2026-07-09)
 
-Zentrale Steuerung für DSP vs ML-Hybrid Modi.
+Zentrale Validierung aller Quality-Mode-Strings.
+Verhindert stille Fallbacks durch Tippfehler wie "restoraton".
 
-Modes:
-- FAST: Pure DSP (0.7× RT, Score 0.83)
-- BALANCED: Adaptive Hybrid (1.8× RT, Score ~0.90)
-
-Author: Aurik 9.0 Development Team
-Date: 15. Februar 2026
+Usage:
+  from backend.core.quality_mode import validate_mode, QUALITY_MODES
+  mode = validate_mode(user_input)  # "restoration" → "restoration"
+                                     # "restoraton" → WARNING + Fallback
 """
+
+from __future__ import annotations
 
 import logging
 from enum import Enum
@@ -19,204 +19,116 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
+# ── QualityMode Enum ─────────────────────────────────────────────────────
+
 class QualityMode(Enum):
-    """Quality modes for processing."""
+    FAST = "fast"
+    BALANCED = "balanced"
+    QUALITY = "quality"
+    MAXIMUM = "maximum"
 
-    FAST = "fast"  # Pure DSP only
-    BALANCED = "balanced"  # Adaptive Hybrid (Default)
-
-    @classmethod
-    def from_string(cls, mode_str: str) -> "QualityMode":
-        """Konvertiert string to QualityMode."""
-        mode_map = {
-            "fast": cls.FAST,
-            "balanced": cls.BALANCED,
-            "maximum": cls.BALANCED,
-            "dsp": cls.FAST,
-            "hybrid": cls.BALANCED,
-            "ml": cls.BALANCED,
-        }
-        return mode_map.get(mode_str.lower(), cls.BALANCED)
-
-    def __str__(self) -> str:
-        return self.value
+    @property
+    def is_ml_enabled(self) -> bool:
+        return self in (QualityMode.QUALITY, QualityMode.MAXIMUM)
 
 
 class QualityModeConfig:
-    """Global configuration for quality mode."""
-
-    _current_mode: QualityMode = QualityMode.BALANCED
+    _current_mode: QualityMode = QualityMode.QUALITY
+    _ml_phases_enabled: bool = True
 
     @classmethod
     def set_mode(cls, mode: QualityMode) -> None:
-        """Setzt global quality mode."""
         cls._current_mode = mode
-        logger.info("Quality mode set to: %s", mode.value)
 
     @classmethod
     def get_mode(cls) -> QualityMode:
-        """Gibt zurück: current quality mode."""
         return cls._current_mode
 
     @classmethod
-    def should_use_ml(cls, phase_name: str, defect_severity: float = 0.5) -> bool:
-        """
-        Bestimmt if ML should be used for a specific phase.
-
-        Args:
-            phase_name: Name of the phase
-            defect_severity: Severity of defects (0.0-1.0)
-
-        Returns:
-            True if ML should be used, False for DSP only
-        """
-        mode = cls._current_mode
-
-        if mode == QualityMode.FAST:
-            return False  # Always DSP
-
-        else:  # BALANCED
-            # Adaptive: Use ML for severe defects
-            return defect_severity > 0.6
-
-    @classmethod
-    def get_expected_performance(cls) -> dict[str, Any]:
-        """Gibt zurück: expected performance metrics for current mode."""
-        performance = {
-            QualityMode.FAST: {
-                "realtime_factor": 0.7,
-                "expected_score": 0.83,
-                "natuerlichkeit": 0.55,
-                "description": "Pure DSP - Schnellste Verarbeitung",
-            },
-            QualityMode.BALANCED: {
-                "realtime_factor": 1.8,
-                "expected_score": 0.90,
-                "natuerlichkeit": 0.80,
-                "description": "Adaptive Hybrid - Balance zwischen Speed & Quality",
-            },
-        }
-        return performance[cls._current_mode]
-
-
-# ML Model Availability Registry
-ML_MODELS_AVAILABLE = {
-    "audiosr": True,  # Phase 23, 24
-    "deepfilternet": True,  # Phase 2, 3, 29
-    "silero_vad": True,  # Phase 18
-    "banquet": True,  # Phase 9
-    "mp_senet": True,  # Phase 1, 3, 29 — §4.4: MP-SENet 2023 (ersetzt DCCRN + FullSubNet+)
-}
-
-
-def check_ml_available(model_name: str) -> bool:
-    """Prüft if ML model is available."""
-    return ML_MODELS_AVAILABLE.get(model_name, False)
-
-
-# Phase-specific ML recommendations
-PHASE_ML_CONFIG = {
-    1: {  # Click Removal
-        "ml_model": "mp_senet",  # §4.4: MP-SENet 2023 ersetzt DCCRN
-        "hybrid_strategy": "dsp_detect_ml_repair",
-        "improvement": 0.25,
-        "critical": False,
-    },
-    2: {  # Hum Removal
-        "ml_model": "deepfilternet",
-        "hybrid_strategy": "dual_stage",
-        "improvement": 0.25,
-        "critical": False,
-    },
-    3: {  # Denoise
-        "ml_model": "deepfilternet",
-        "hybrid_strategy": "snr_based_routing",
-        "improvement": 0.12,
-        "critical": False,
-    },
-    9: {  # Crackle Removal
-        "ml_model": "banquet",
-        "hybrid_strategy": "material_adaptive",
-        "improvement": 0.35,
-        "critical": True,  # Vinyl restoration
-    },
-    18: {  # Noise Gate
-        "ml_model": "silero_vad",
-        "hybrid_strategy": "ml_vad_dsp_gate",
-        "improvement": 0.35,
-        "critical": True,  # High impact, easy implementation
-    },
-    23: {  # Spectral Repair
-        "ml_model": "audiosr",
-        "hybrid_strategy": "dsp_detect_ml_repair",
-        "improvement": 0.45,
-        "critical": True,  # HIGHEST PRIORITY - worst phase
-    },
-    24: {  # Dropout Repair
-        "ml_model": "audiosr",
-        "hybrid_strategy": "length_based_routing",
-        "improvement": 0.30,
-        "critical": False,
-    },
-    29: {  # Tape Hiss Reduction
-        "ml_model": "deepfilternet",
-        "hybrid_strategy": "band_specific",
-        "improvement": 0.30,
-        "critical": False,
-    },
-}
-
-
-def get_phase_ml_config(phase_number: int) -> dict[str, Any] | None:
-    """Gibt zurück: ML configuration for a specific phase."""
-    return PHASE_ML_CONFIG.get(phase_number)
+    def should_use_ml(cls, phase_name: str, defect_severity: float = 0.0) -> bool:
+        if not cls._ml_phases_enabled:
+            return False
+        if cls._current_mode == QualityMode.FAST:
+            return False
+        return cls._current_mode.is_ml_enabled
 
 
 def is_phase_ml_enabled(phase_number: int) -> bool:
-    """Prüft if ML is enabled for a phase based on current mode."""
-    config = get_phase_ml_config(phase_number)
-    if not config:
+    _CRITICAL: frozenset[int] = frozenset({3, 23, 24, 29, 55, 66})
+    if phase_number not in _CRITICAL:
         return False
-
-    mode = QualityModeConfig.get_mode()
-
-    if mode == QualityMode.FAST:
-        return False
-    else:  # BALANCED
-        # Only critical phases in balanced mode
-        return config.get("critical", False) and check_ml_available(config["ml_model"])
+    return QualityModeConfig._ml_phases_enabled
 
 
-# Logging helper
-def log_mode_decision(phase_name: str, use_ml: bool, reason: str) -> None:
-    """Protokolliert quality mode decision for debugging."""
-    mode = QualityModeConfig.get_mode()
-    ml_status = "ML" if use_ml else "DSP"
-    logger.debug("Phase %s | Mode: %s | Using: %s | Reason: %s", phase_name, mode.value, ml_status, reason)
+def log_mode_decision(phase_name: str, use_ml: bool, message: str = "") -> None:
+    logger.debug("ML-%s %s: %s", "ON" if use_ml else "OFF", phase_name, message or ("enabled" if use_ml else "disabled"))
 
 
-if __name__ == "__main__":
-    # Test quality modes
-    logger.debug("Quality Mode System Test\n" + "=" * 50)
+# ──
 
-    for mode in QualityMode:
-        QualityModeConfig.set_mode(mode)
-        perf = QualityModeConfig.get_expected_performance()
+QUALITY_MODES: frozenset[str] = frozenset({
+    "restoration",
+    "quality",
+    "maximum",
+    "studio_2026",
+    "balanced",
+    "fast",
+})
 
-        logger.debug("\nMode: %s", mode.value.upper())
-        logger.debug("  RT Factor: %s×", perf["realtime_factor"])
-        logger.debug("  Score: %s", perf["expected_score"])
-        logger.debug("  Natürlichkeit: %s", perf["natuerlichkeit"])
-        logger.debug("  %s", perf["description"])
+MODE_ALIASES: dict[str, str] = {
+    "restoration": "quality",
+    "studio_2026": "maximum",
+    "quality": "quality",
+    "maximum": "maximum",
+    "balanced": "balanced",
+    "fast": "fast",
+}
 
-        # Test phase decisions
-        logger.debug("\n  ML-Enabled Phases:")
-        for phase_num in [1, 3, 9, 18, 23, 29]:
-            config = get_phase_ml_config(phase_num)
-            if config:
-                enabled = is_phase_ml_enabled(phase_num)
-                status = "✓" if enabled else "✗"
-                logger.debug("    %s Phase %d: %s", status, phase_num, config["ml_model"])
+MODE_FALLBACK = "quality"
 
-    logger.debug("\n" + "=" * 50)
-    logger.debug("✅ Quality Mode System initialized")
+
+def validate_mode(mode: Any, fallback: str = MODE_FALLBACK) -> str:
+    """Validiert und normalisiert einen Quality-Mode-String.
+
+    Args:
+        mode: Roher Mode-String vom User/API
+        fallback: Fallback-Mode bei ungültiger Eingabe
+
+    Returns:
+        Kanonischer Mode-String
+    """
+    if mode is None or not isinstance(mode, str):
+        logger.warning(
+            "QualityMode: invalid type %s, fallback to '%s'",
+            type(mode).__name__ if mode is not None else "None",
+            fallback,
+        )
+        return fallback
+
+    mode_lower = mode.strip().lower()
+
+    if mode_lower in MODE_ALIASES:
+        canonical = MODE_ALIASES[mode_lower]
+        if canonical != mode_lower:
+            logger.debug("QualityMode: alias '%s' → '%s'", mode_lower, canonical)
+        return canonical
+
+    # Check partial matches for common typos
+    for known in QUALITY_MODES:
+        if mode_lower in known or known in mode_lower:
+            logger.warning(
+                "QualityMode: '%s' is not a valid mode. Did you mean '%s'? "
+                "Falling back to '%s'.",
+                mode,
+                known,
+                fallback,
+            )
+            return fallback
+
+    logger.warning(
+        "QualityMode: '%s' is not a valid mode. Valid: %s. Fallback to '%s'.",
+        mode,
+        sorted(QUALITY_MODES),
+        fallback,
+    )
+    return fallback

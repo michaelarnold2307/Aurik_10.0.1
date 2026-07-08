@@ -36,6 +36,7 @@ import logging
 import threading
 import warnings
 from dataclasses import dataclass
+from typing import cast
 
 import numpy as np
 from scipy import signal as _sp_signal
@@ -580,7 +581,7 @@ def compute_specific_loudness_array(audio: np.ndarray, sr: int) -> np.ndarray:
     """
     result = compute_specific_loudness_zwicker(audio, sr)
     if not result.computation_valid:
-        return np.zeros(N_BARK, dtype=np.float64)
+        return np.zeros(N_BARK, dtype=np.float64)  # type: ignore[no-any-return]
     return result.specific_loudness
 
 
@@ -605,7 +606,7 @@ def compute_bark_energy_profile(audio: np.ndarray, sr: int) -> np.ndarray:
         if arr.ndim == 2:
             arr = arr.mean(axis=0) if arr.shape[0] <= 2 else arr.mean(axis=1)
         if arr.size == 0:
-            return np.zeros(N_BARK, dtype=np.float64)
+            return np.zeros(N_BARK, dtype=np.float64)  # type: ignore[no-any-return]
         # Cap at 5 s for performance
         arr = arr[: int(5 * sr)]
 
@@ -616,10 +617,10 @@ def compute_bark_energy_profile(audio: np.ndarray, sr: int) -> np.ndarray:
                 continue
             filtered = _sp_signal.sosfilt(sos, arr)
             profile[b] = float(np.sqrt(np.mean(filtered**2)))
-        return np.nan_to_num(profile, nan=0.0, posinf=0.0, neginf=0.0)
+        return np.nan_to_num(profile, nan=0.0, posinf=0.0, neginf=0.0)  # type: ignore[no-any-return]
     except Exception as _e:
         logger.debug("compute_bark_energy_profile Fehler: %s", _e)
-        return np.zeros(N_BARK, dtype=np.float64)
+        return np.zeros(N_BARK, dtype=np.float64)  # type: ignore[no-any-return]
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -681,7 +682,7 @@ def compute_noise_texture_profile(
             arr = arr.mean(axis=0) if arr.shape[0] <= 2 else arr.mean(axis=1)
         arr = arr[: int(max_duration_s * sr)]
         if arr.size < int(0.1 * sr):
-            return np.zeros(8, dtype=np.float64)
+            return np.zeros(8, dtype=np.float64)  # type: ignore[no-any-return]
 
         # Frame-based noise extraction: select quiet frames < -35 dBFS
         frame_len = int(0.05 * sr)  # 50 ms frames
@@ -707,7 +708,7 @@ def compute_noise_texture_profile(
                 quiet_spectra.append(spec)
 
         if len(quiet_spectra) < 3:
-            return np.zeros(8, dtype=np.float64)
+            return np.zeros(8, dtype=np.float64)  # type: ignore[no-any-return]
 
         # Average PSD of quiet frames
         avg_psd = np.median(np.array(quiet_spectra), axis=0)
@@ -733,11 +734,11 @@ def compute_noise_texture_profile(
         if pmax > 1e-15:
             profile /= pmax
 
-        return np.nan_to_num(profile, nan=0.0, posinf=0.0, neginf=0.0)
+        return np.nan_to_num(profile, nan=0.0, posinf=0.0, neginf=0.0)  # type: ignore[no-any-return]
 
     except Exception as _e:
         logger.debug("compute_noise_texture_profile error: %s", _e)
-        return np.zeros(8, dtype=np.float64)
+        return np.zeros(8, dtype=np.float64)  # type: ignore[no-any-return]
 
 
 def get_material_noise_texture(material_type: str) -> np.ndarray:
@@ -862,7 +863,7 @@ def synthesize_comfort_noise(
                         s : s + fade_len
                     ]
 
-        return np.nan_to_num(result, nan=0.0, posinf=0.0, neginf=0.0).astype(audio.dtype)
+        return np.nan_to_num(result, nan=0.0, posinf=0.0, neginf=0.0).astype(audio.dtype)  # type: ignore[no-any-return]
 
     except Exception as _e:
         logger.debug("synthesize_comfort_noise error: %s — returning unmodified audio", _e)
@@ -950,11 +951,11 @@ def compute_time_varying_loudness(
             else:
                 smoothed[fi] = smoothed[fi - 1] + alpha_release * (raw_loudness[fi] - smoothed[fi - 1])
 
-        return np.nan_to_num(smoothed, nan=0.0, posinf=0.0, neginf=0.0)
+        return np.nan_to_num(smoothed, nan=0.0, posinf=0.0, neginf=0.0)  # type: ignore[no-any-return]
 
     except Exception as _e:
         logger.debug("compute_time_varying_loudness error: %s", _e)
-        return np.zeros(1, dtype=np.float64)
+        return np.zeros(1, dtype=np.float64)  # type: ignore[no-any-return]
 
 
 def compute_loudness_envelope_delta(
@@ -1102,7 +1103,8 @@ def apply_psychoacoustic_masking_clamp(
                         # §2.62 G_floor≥0.10
                         blend = np.clip(scaled, 0.10, 1.0)
                         result[:, ch] = blend * ch_proc + (1.0 - blend) * ch_orig
-                return np.clip(result, -1.0, 1.0).astype(processed_audio.dtype)
+                result_arr = np.asarray(np.clip(result, -1.0, 1.0), dtype=processed_audio.dtype)
+                return result_arr  # type: ignore[no-any-return]
             else:
                 x = np.arange(len(proc_mono), dtype=np.float32)
                 gain_samples = np.interp(x, centers, gain_t).astype(np.float32)
@@ -1110,7 +1112,8 @@ def apply_psychoacoustic_masking_clamp(
                 # §2.62 G_floor≥0.10: verhindert klinisches Stille-Artefakt
                 blend = np.clip(scaled, 0.10, 1.0)
                 result = blend * proc_mono + (1.0 - blend) * orig_mono
-                return np.clip(result, -1.0, 1.0).astype(processed_audio.dtype)
+                result_arr = np.asarray(np.clip(result, -1.0, 1.0), dtype=processed_audio.dtype)
+                return cast(np.ndarray, result_arr)
 
         elif mode == "additive":
             # For additive phases: limit how much energy is ADDED in masked
@@ -1133,7 +1136,7 @@ def apply_psychoacoustic_masking_clamp(
                 result = orig + delta * scaled_2d
             else:
                 result = orig + delta * scaled
-            return np.clip(result, -1.0, 1.0).astype(processed_audio.dtype)
+            return np.clip(result, -1.0, 1.0).astype(processed_audio.dtype)  # type: ignore[no-any-return]
 
         return processed_audio
 
@@ -1173,7 +1176,7 @@ def compute_erb_masking_threshold(
 
         n = min(len(arr), n_fft)
         if n < 64:
-            return np.full(n_fft // 2 + 1, -120.0, dtype=np.float64)
+            return np.full(n_fft // 2 + 1, -120.0, dtype=np.float64)  # type: ignore[no-any-return]
 
         win = np.hanning(n).astype(np.float64)
         spec = np.abs(np.fft.rfft(arr[:n] * win))
@@ -1195,11 +1198,11 @@ def compute_erb_masking_threshold(
             ml = mag_db[b] - masking_offset_db
             threshold[lo:hi] = np.maximum(threshold[lo:hi], ml)
 
-        return threshold
+        return threshold  # type: ignore[no-any-return]
 
     except Exception as _e:
         logger.debug("compute_erb_masking_threshold error: %s", _e)
-        return np.full(n_fft // 2 + 1, -120.0, dtype=np.float64)
+        return np.full(n_fft // 2 + 1, -120.0, dtype=np.float64)  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------
@@ -1299,7 +1302,7 @@ def compute_masking_threshold_iso11172(
     # Cap bei 0.70: NR kann immer mindestens 30 % reduzieren (kein vollständiger NR-Block).
     ratio = np.clip(ratio, 0.0, 0.70)
 
-    return np.asarray(ratio, dtype=np.float32)
+    return np.asarray(ratio, dtype=np.float32)  # type: ignore[no-any-return]
 
 
 def compute_versa_confidence(snr_estimate_db: float, material_type: str) -> float:

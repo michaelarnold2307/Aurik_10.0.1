@@ -151,6 +151,47 @@ class TestAnalyzePhase:
         corr, delay = phase._analyze_phase(L, R, max_delay=30)
         assert abs(delay - d_true) < 0.5, f"Detected delay {delay:.3f} ≠ true {d_true}"
 
+
+class TestPhase14LocalityProfile:
+    def test_locality_profile_is_event_strength_adaptive(self, phase):
+        profile, coverage = phase._build_locality_profile(
+            n_samples=SR * 3,
+            sample_rate=SR,
+            defect_locations={"phase_issues": [(0.30, 0.90)], "stereo_imbalance": [(1.70, 2.30)]},
+            event_metadata={
+                "phase_issues": {"severity": 0.95, "confidence": 0.95},
+                "stereo_imbalance": {"severity": 0.35, "confidence": 0.65},
+            },
+        )
+
+        assert profile.shape == (SR * 3,)
+        assert 0.0 < coverage < 0.50
+        strong_region = float(np.mean(profile[int(0.45 * SR) : int(0.75 * SR)]))
+        mild_region = float(np.mean(profile[int(1.85 * SR) : int(2.15 * SR)]))
+        clean_region = float(np.mean(profile[int(1.10 * SR) : int(1.35 * SR)]))
+        assert strong_region > mild_region * 1.5
+        assert clean_region < 0.04
+
+    def test_vibrato_zone_caps_locality_profile(self, phase):
+        free, _ = phase._build_locality_profile(
+            n_samples=SR * 3,
+            sample_rate=SR,
+            defect_locations={"phase_issues": [(1.20, 1.80)]},
+            event_metadata={"phase_issues": {"severity": 0.95, "confidence": 0.95}},
+        )
+        capped, _ = phase._build_locality_profile(
+            n_samples=SR * 3,
+            sample_rate=SR,
+            defect_locations={"phase_issues": [(1.20, 1.80)]},
+            event_metadata={"phase_issues": {"severity": 0.95, "confidence": 0.95}},
+            protected_zones=[(1.15, 1.85, 0.20)],
+        )
+
+        free_strength = float(np.mean(free[int(1.35 * SR) : int(1.65 * SR)]))
+        capped_strength = float(np.mean(capped[int(1.35 * SR) : int(1.65 * SR)]))
+        assert capped_strength <= 0.21
+        assert capped_strength < free_strength * 0.55
+
     def test_fractional_delay_more_accurate_than_integer(self, phase):
         """Sub-sample estimation is closer to truth than rounding to nearest int."""
         n = SR // 2

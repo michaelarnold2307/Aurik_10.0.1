@@ -393,8 +393,16 @@ class MusicalGoalsQualityGate:
         _using_adaptive = bool(adaptive_thresholds) or bool(context and context.get("adaptive_thresholds"))
 
         for goal_name, threshold in thresholds.items():
-            achieved = float(np.nan_to_num(achieved_scores.get(goal_name, 0.0), nan=0.0))
-            baseline = float(np.nan_to_num(baseline_scores.get(goal_name, 0.0), nan=0.0))
+            # Kontrakt-Drift-Guard: einige Konfigurationen nutzen goal-keys mit Bindestrich
+            # (z.B. "bass-kraft"), während Metrik-Outputs Unterstriche verwenden
+            # ("bass_kraft"). Für Gate-Entscheidungen müssen beide Varianten gleichwertig sein.
+            _goal_alt = goal_name.replace("-", "_")
+            achieved = float(
+                np.nan_to_num(achieved_scores.get(goal_name, achieved_scores.get(_goal_alt, 0.0)), nan=0.0)
+            )
+            baseline = float(
+                np.nan_to_num(baseline_scores.get(goal_name, baseline_scores.get(_goal_alt, 0.0)), nan=0.0)
+            )
             delta = achieved - baseline
 
             # Check if goal achieved
@@ -920,7 +928,7 @@ class EnhancedQualityGate:
             try:
                 from plugins.visqol_plugin import ViSQOLPlugin
 
-                self._visqol_plugin = ViSQOLPlugin()
+                self._visqol_plugin = ViSQOLPlugin()  # type: ignore[assignment]
                 logger.info("ViSQOL plugin loaded")
             except Exception as e:
                 logger.warning("ViSQOL plugin unavailable: %s", e)
@@ -932,7 +940,7 @@ class EnhancedQualityGate:
             try:
                 from plugins.versa_plugin import get_versa_plugin
 
-                self._versa_plugin = get_versa_plugin()
+                self._versa_plugin = get_versa_plugin()  # type: ignore[assignment]
                 logger.info("VERSA plugin loaded (§4.4)")
             except Exception as e:
                 logger.warning("VERSA plugin unavailable: %s", e)
@@ -943,7 +951,7 @@ class EnhancedQualityGate:
         if self._reprocessing_engine is None:
             from .auto_reprocessing import AutoReprocessingEngine
 
-            self._reprocessing_engine = AutoReprocessingEngine(
+            self._reprocessing_engine = AutoReprocessingEngine(  # type: ignore[assignment]
                 max_attempts=5, min_improvement=0.02, enable_hybrid_fallback=True, enable_forensic_guidance=True
             )
             logger.info("Auto-reprocessing engine loaded")
@@ -1188,7 +1196,7 @@ class EnhancedQualityGate:
                 ]
             )
         else:
-            perceptual_avg = 0.0
+            perceptual_avg = 0.0  # type: ignore[assignment]
 
         # Weighted combination
         weighted = (

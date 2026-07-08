@@ -149,7 +149,7 @@ class TransientDecoupledProcessing:
                     mix_local = orig + h
                     logger.debug("GrooveMetric DTW %.2f ms > 8 ms -- original_perc uebernommen", dtw_ms)
             mix_local = np.nan_to_num(mix_local)
-            return np.clip(mix_local, -1.0, 1.0).astype(np.float32)
+            return np.clip(mix_local, -1.0, 1.0).astype(np.float32)  # type: ignore[no-any-return]
 
         # Stereo channel-first (2, N)
         if (
@@ -165,7 +165,7 @@ class TransientDecoupledProcessing:
             op1 = op[1] if op is not None and op.ndim == 2 and op.shape[0] == 2 else None
             m0 = _recombine_mono(audio_p[0], audio_h[0], op0)
             m1 = _recombine_mono(audio_p[1], audio_h[1], op1)
-            return np.stack([m0, m1], axis=0)
+            return np.stack([m0, m1], axis=0)  # type: ignore[no-any-return]
 
         # Stereo column-major (N, 2)
         if (
@@ -181,7 +181,7 @@ class TransientDecoupledProcessing:
             op1 = op[:, 1] if op is not None and op.ndim == 2 and op.shape[1] == 2 else None
             m0 = _recombine_mono(audio_p[:, 0], audio_h[:, 0], op0)
             m1 = _recombine_mono(audio_p[:, 1], audio_h[:, 1], op1)
-            return np.column_stack([m0, m1])
+            return np.column_stack([m0, m1])  # type: ignore[no-any-return]
 
         # Mono / fallback
         orig = np.asarray(original_perc, dtype=np.float32) if original_perc is not None else None

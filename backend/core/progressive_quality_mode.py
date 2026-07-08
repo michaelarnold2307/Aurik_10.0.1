@@ -198,6 +198,15 @@ class ProgressiveQualityMode:
         audio = np.asarray(audio, dtype=np.float32)
         audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
 
+        if preview_cache is not None:
+            logger.debug(
+                "Stage-2 nutzt Stage-1-Cache: preview_mos=%.2f, defects=%s",
+                float(getattr(preview_cache, "preview_mos", 0.0)),
+                list(getattr(preview_cache, "detected_defects", []) or []),
+            )
+            if progress_callback:
+                progress_callback(5.0, "Stage-1-Cache übernommen", 60.0)
+
         if restoration_fn is not None:
             try:
                 if progress_callback:
@@ -205,10 +214,10 @@ class ProgressiveQualityMode:
                 result = restoration_fn(audio, sr)
                 result = np.asarray(result, dtype=np.float32)
                 result = np.nan_to_num(result, nan=0.0, posinf=0.0, neginf=0.0)
-                return np.clip(result, -1.0, 1.0)
+                return np.clip(result, -1.0, 1.0)  # type: ignore[no-any-return]
             except Exception as exc:
                 logger.warning("restoration_fn fehlgeschlagen, Pass-Through: %s", exc)
-                return np.clip(audio, -1.0, 1.0)
+                return np.clip(audio, -1.0, 1.0)  # type: ignore[no-any-return]
 
         # Fallback: DSP-Behandlung
         return self._apply_preview_dsp(audio, sr, "unknown")
@@ -280,7 +289,7 @@ class ProgressiveQualityMode:
                     out[sl] += (frames_out[t_idx, :seg_len] * win[:seg_len]).astype(np.float32)
                     norm[sl] += w2[:seg_len]
                 norm = np.maximum(norm, 1e-12)
-                return (out / norm).astype(np.float32)
+                return (out / norm).astype(np.float32)  # type: ignore[no-any-return]
 
             if audio.ndim == 2:
                 audio = np.stack(
@@ -295,7 +304,7 @@ class ProgressiveQualityMode:
             )  # Fallback: Pass-Through (NR nicht kritisch in Stage-1-Vorschau)
 
         audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
-        return np.clip(audio, -1.0, 1.0)
+        return np.clip(audio, -1.0, 1.0)  # type: ignore[no-any-return]
 
     def _estimate_mos(self, audio: np.ndarray, sr: int) -> float:
         """DSP-Proxy MOS-Schätzung: SNR-Basis."""

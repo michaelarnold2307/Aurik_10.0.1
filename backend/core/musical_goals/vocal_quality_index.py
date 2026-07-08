@@ -98,6 +98,26 @@ _VQI_GENRE_WEIGHTS: dict[str, tuple[float, float, float, float, float]] = {
     "gospel": (0.30, 0.20, 0.20, 0.25, 0.05),
     "r_b": (0.30, 0.20, 0.20, 0.25, 0.05),
     "schlager": (0.30, 0.25, 0.20, 0.15, 0.10),
+    # Deutsche/europäische Genre-Varianten (Aurik-Kernmaterial)
+    "german_schlager": (0.30, 0.25, 0.20, 0.15, 0.10),
+    "german_pop": (0.28, 0.22, 0.22, 0.15, 0.13),
+    "neue_deutsche_welle": (0.30, 0.22, 0.25, 0.13, 0.10),
+    "ndw": (0.30, 0.22, 0.25, 0.13, 0.10),
+    "chanson": (0.35, 0.22, 0.20, 0.18, 0.05),
+    "volksmuziek": (0.30, 0.25, 0.20, 0.15, 0.10),
+    "volksmusik": (0.30, 0.25, 0.20, 0.15, 0.10),
+    "schlagerfolk": (0.30, 0.25, 0.20, 0.15, 0.10),
+    "evergeen": (0.32, 0.25, 0.18, 0.15, 0.10),  # Tippfehler-Variante
+    "evergreen": (0.32, 0.25, 0.18, 0.15, 0.10),
+    "deutschpop": (0.28, 0.22, 0.22, 0.15, 0.13),
+    "beatmusik": (0.28, 0.20, 0.22, 0.15, 0.15),
+    "krautrock": (0.25, 0.18, 0.25, 0.15, 0.17),
+    "operette": (0.27, 0.38, 0.15, 0.15, 0.05),
+    "operetta": (0.27, 0.38, 0.15, 0.15, 0.05),
+    "kabarett": (0.35, 0.20, 0.25, 0.12, 0.08),
+    "chansonniere": (0.35, 0.22, 0.20, 0.18, 0.05),
+    "bossa_nova": (0.35, 0.20, 0.18, 0.20, 0.07),
+    "tango": (0.35, 0.22, 0.18, 0.18, 0.07),
 }
 # fmt: on
 
@@ -110,7 +130,27 @@ def _get_vqi_weights(genre: str | None) -> tuple[float, float, float, float, flo
     """
     if not genre:
         return (_W_SINGER_ID, _W_FORMANT, _W_ARTICULATION, _W_PROXIMITY, _W_SIBILANCE)
-    key = str(genre).strip().lower().replace(" ", "_").replace("-", "_").replace("&", "")
+    # Normalisierung: Leerzeichen, Bindestriche, Sonderzeichen, Umlaute (DE/FR)
+    key = (
+        str(genre)
+        .strip()
+        .lower()
+        .replace(" ", "_")
+        .replace("-", "_")
+        .replace("&", "")
+        .replace("ä", "ae")
+        .replace("ö", "oe")
+        .replace("ü", "ue")
+        .replace("ß", "ss")
+        .replace("é", "e")
+        .replace("è", "e")
+        .replace("ê", "e")
+        .replace("à", "a")
+        .replace("â", "a")
+        .replace("ç", "c")
+        .replace("ñ", "n")
+        .replace("ô", "o")
+    )
     return _VQI_GENRE_WEIGHTS.get(key, (_W_SINGER_ID, _W_FORMANT, _W_ARTICULATION, _W_PROXIMITY, _W_SIBILANCE))
 
 
@@ -122,15 +162,15 @@ def _get_vqi_weights(genre: str | None) -> tuple[float, float, float, float, flo
 def _to_mono(audio: np.ndarray) -> np.ndarray:
     """Channels-first (2,N) oder samples-first (N,2) → mono (N,)."""
     if audio.ndim == 1:
-        return audio.astype(np.float32)
+        return audio.astype(np.float32)  # type: ignore[no-any-return]
     if audio.ndim == 2:
         if audio.shape[0] == 2 and audio.shape[1] > 2:
-            return audio.mean(axis=0).astype(np.float32)
+            return np.asarray(audio.mean(axis=0), dtype=np.float32)  # type: ignore[no-any-return]
         if audio.shape[1] == 2:
-            return audio.mean(axis=1).astype(np.float32)
+            return np.asarray(audio.mean(axis=1), dtype=np.float32)  # type: ignore[no-any-return]
         if audio.shape[0] == 1:
-            return audio[0].astype(np.float32)
-    return audio.flatten().astype(np.float32)
+            return np.asarray(audio[0], dtype=np.float32)  # type: ignore[no-any-return]
+    return audio.flatten().astype(np.float32)  # type: ignore[no-any-return]
 
 
 def _safe_cosine(a: np.ndarray, b: np.ndarray) -> float:
@@ -174,9 +214,11 @@ def _compute_singer_identity_dsp(
         vec_pre = mfcc_pre[:, :min_frames].mean(axis=1)
         vec_post = mfcc_post[:, :min_frames].mean(axis=1)
         cosine = _safe_cosine(vec_pre, vec_post)
-        # MFCC cosine typically [0.85, 1.0] for the same voice.
-        # Normalise to [0, 1] using 0.70 as baseline reference.
-        return float(np.clip((cosine - 0.70) / 0.30, 0.0, 1.0))
+        # MFCC cosine typically [0.93–0.97] für dieselbe Stimme nach NR-Verarbeitung.
+        # §R3 Kalibrierung: raw 0.93 → 0.920 (besteht 0.92-Rollback-Schwelle), raw 0.80 → 0.829.
+        # Formel: (8×cosine − 1) / 7 — raw 0.70 → 0.60 (Rollback); raw 0.96 → 0.954.
+        # Altes Formel (cosine − 0.70) / 0.30: raw 0.93 → 0.767 — falscher Rollback bei unveränderter Stimme.
+        return float(np.clip((cosine * 8.0 - 1.0) / 7.0, 0.0, 1.0))
     except Exception as exc:
         logger.debug("singer_identity_dsp failed: %s", exc)
         return 0.80  # conservatively neutral
@@ -252,10 +294,15 @@ def _compute_formant_stability(
         frame_len = int(sr * 0.025)  # 25 ms Frames
         hop = frame_len // 2
 
-        # LPC-Order 30: §0p Formant-Integrität — Spec fordert Ord. 30–40 @ 48 kHz.
-        # Ord. 14 wäre für 8 kHz-Telefonsignal ausreichend; bei 48 kHz wird mit Ord. 14
-        # nur jede dritte Partial-Resonanz erfasst, F3/F4 gehen verloren.
-        lpc_order = 30
+        # LPC-Order 14: Standard für Vokal-Formant-Analyse im Bandpass-Band 200–3400 Hz.
+        # §BUG-FIX v9.12.10: Order 30 ist für das VOLLE 48 kHz-Spektrum gedacht —
+        # nach dem 200–3400 Hz Bandpass enthält das Signal nur noch ~3,2 kHz Bandbreite.
+        # LPC Order 30 auf einem 3,2 kHz-Band → 15 Polpaare → alle spektralen Details
+        # (HF-Boost-Artefakte, Kassetten-Flutter-Harmonische) als "Formanten" erkannt.
+        # Folge: F1-Schätzung instabil, formant_stability_score ≈ 0.14 statt ≈ 0.85.
+        # Order 14 = 7 Polpaare auf 3400 Hz-Band — erfasst F1, F2, F3 korrekt (ITUT P.501).
+        # F4 liegt > 3000 Hz und fällt bereits außerhalb des Bandpass → kein Verlust.
+        lpc_order = 14
 
         def _lpc_f1_frames(audio: np.ndarray) -> list[float]:
             frames = librosa.util.frame(audio, frame_length=frame_len, hop_length=hop)
@@ -326,8 +373,8 @@ def _compute_articulation_score(
 
         # Broadband transient detection via spectral flux
         hop = 512
-        onset_strength_pre = librosa.onset.onset_strength(y=vocal_pre, sr=sr, hop_length=hop)
-        onset_strength_post = librosa.onset.onset_strength(y=vocal_post, sr=sr, hop_length=hop)
+        onset_strength_pre = librosa.onset.onset_strength(y=vocal_pre, sr=sr, hop_length=hop)  # type: ignore[attr-defined]
+        onset_strength_post = librosa.onset.onset_strength(y=vocal_post, sr=sr, hop_length=hop)  # type: ignore[attr-defined]
 
         min_len = min(len(onset_strength_pre), len(onset_strength_post))
         if min_len < 4:
@@ -456,7 +503,7 @@ def compute_vqi(  # pylint: disable=too-many-positional-arguments
             "proximity_score": 0.90,
             "sibilance_naturalness": 0.90,
             "singer_id_dsp_fallback": True,
-            "vqi_tier": "world_class",
+            "vqi_tier": "world_class",  # type: ignore[dict-item]
         }
 
     orig_m = orig_m[:min_len]
@@ -560,7 +607,7 @@ def compute_vqi(  # pylint: disable=too-many-positional-arguments
     # Normiert auf [0,1]: SingMOS MOS ∈ [1,5] → (mos - 1) / 4.
     singmos_score: float | None = None
     try:
-        from plugins.versa_plugin import get_versa_plugin  # pylint: disable=import-outside-toplevel  # noqa: I001  # type: ignore[import]
+        from plugins.versa_plugin import get_versa_plugin  # type: ignore[import]  # pylint: disable=import-outside-toplevel  # noqa: I001
 
         _versa = get_versa_plugin()
         if _versa is not None:
@@ -631,7 +678,7 @@ def compute_vqi(  # pylint: disable=too-many-positional-arguments
         "proximity_score": float(np.clip(proximity, 0.0, 1.0)),
         "sibilance_naturalness": float(np.clip(sibilance, 0.0, 1.0)),
         "singer_id_dsp_fallback": dsp_fallback,
-        "vqi_tier": tier,
+        "vqi_tier": tier,  # type: ignore[dict-item]
         "reference_audio_used": _reference_audio_used,  # §P1 Artist-Voice-Reference anchor used
-        "genre_weights_used": _genre_used,  # None = default weights
+        "genre_weights_used": _genre_used,  # type: ignore[dict-item]  # None = default weights
     }

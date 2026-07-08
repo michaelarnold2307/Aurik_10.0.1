@@ -24,7 +24,7 @@ SR = 48_000
 
 def _sine(sr: int = SR, duration: float = 5.0, freq: float = 440.0, amp: float = 0.3) -> np.ndarray:
     t = np.linspace(0, duration, int(sr * duration), endpoint=False)
-    return (np.sin(2 * np.pi * freq * t) * amp).astype(np.float32)
+    return np.asarray(np.sin(2 * np.pi * freq * t) * amp, dtype=np.float32)  # type: ignore[no-any-return]
 
 
 def _sine_stereo(sr: int = SR, duration: float = 5.0, freq: float = 440.0, amp: float = 0.3) -> np.ndarray:
@@ -254,6 +254,97 @@ class TestTapeLevelStabilizer:
             if e <= result.shape[0]:
                 assert rms_repaired > rms_dipped, f"At t={t}s: repaired RMS should exceed dipped RMS"
 
+    def test_22b_repaired_dips_are_not_audibly_residual(self):
+        """Counted tape-dip repairs must reduce residual event loss below a clearly audible gap."""
+        phase = self._get_phase()
+        audio = _sine(duration=10.0, amp=0.3)
+        dipped = _inject_level_dips(audio, dip_times=[2.0, 5.0, 8.0], dip_depth_db=15.0)
+
+        result, n_dips = phase._stabilize_tape_level(dipped, SR, 0.35, is_primary_tape=True)
+
+        assert n_dips >= 3
+        for t in [2.0, 5.0, 8.0]:
+            s = int((t + 0.09) * SR)
+            e = s + int(0.05 * SR)
+            rms_orig = float(np.sqrt(np.mean(audio[s:e] ** 2)))
+            rms_repaired = float(np.sqrt(np.mean(result[s:e] ** 2)))
+            residual_loss_db = 20.0 * np.log10((rms_repaired + 1e-15) / (rms_orig + 1e-15))
+            assert residual_loss_db >= -2.0, f"At t={t}s residual dip is still {residual_loss_db:.2f} dB"
+
+    def test_22c_confirmed_chain_tape_dips_are_not_left_barely_touched(self):
+        """Confirmed tape-stage dips in transferred material need stronger repair than generic dynamics."""
+        phase = self._get_phase()
+        audio = _sine(duration=8.0, amp=0.3)
+        dipped = _inject_level_dips(audio, dip_times=[2.0, 5.0], dip_depth_db=15.0)
+
+        result, n_dips = phase._stabilize_tape_level(
+            dipped,
+            SR,
+            0.35,
+            is_primary_tape=False,
+            confirmed_tape_dip=True,
+        )
+
+        assert n_dips >= 2
+        for t in [2.0, 5.0]:
+            s = int((t + 0.09) * SR)
+            e = s + int(0.05 * SR)
+            rms_orig = float(np.sqrt(np.mean(audio[s:e] ** 2)))
+            rms_repaired = float(np.sqrt(np.mean(result[s:e] ** 2)))
+            residual_loss_db = 20.0 * np.log10((rms_repaired + 1e-15) / (rms_orig + 1e-15))
+            assert residual_loss_db >= -3.0, f"At t={t}s confirmed chain dip remains {residual_loss_db:.2f} dB"
+
+    def test_22d_per_event_oracle_repairs_deeper_dips_more_strongly(self):
+        """Deep and shallow tape-level defects must not receive a uniform correction."""
+        phase = self._get_phase()
+        audio = _sine(duration=8.0, amp=0.3)
+        shallow = _inject_level_dips(audio, dip_times=[2.0], dip_depth_db=7.0)
+        mixed = _inject_level_dips(shallow, dip_times=[5.0], dip_depth_db=17.0)
+
+        result, n_dips = phase._stabilize_tape_level(mixed, SR, 0.35, is_primary_tape=True)
+
+        assert n_dips >= 2
+        shallow_s = int((2.0 + 0.09) * SR)
+        deep_s = int((5.0 + 0.09) * SR)
+        window = int(0.05 * SR)
+        shallow_gain_db = 20.0 * np.log10(
+            (float(np.sqrt(np.mean(result[shallow_s : shallow_s + window] ** 2))) + 1e-15)
+            / (float(np.sqrt(np.mean(mixed[shallow_s : shallow_s + window] ** 2))) + 1e-15)
+        )
+        deep_gain_db = 20.0 * np.log10(
+            (float(np.sqrt(np.mean(result[deep_s : deep_s + window] ** 2))) + 1e-15)
+            / (float(np.sqrt(np.mean(mixed[deep_s : deep_s + window] ** 2))) + 1e-15)
+        )
+        assert deep_gain_db > shallow_gain_db + 4.0
+
+    def test_22e_vibrato_zone_caps_level_dip_repair_strength(self):
+        """Vocal-protected zones must cap tape-level repair instead of forcing a uniform heavy boost."""
+        phase = self._get_phase()
+        audio = _sine(duration=5.0, amp=0.3)
+        dipped = _inject_level_dips(audio, dip_times=[2.0], dip_depth_db=15.0)
+
+        free_result, _ = phase._stabilize_tape_level(dipped, SR, 0.35, is_primary_tape=True)
+        capped_result, n_dips = phase._stabilize_tape_level(
+            dipped,
+            SR,
+            0.35,
+            is_primary_tape=True,
+            protected_zones=[(1.8, 2.4, 0.20)],
+        )
+
+        assert n_dips >= 1
+        s = int((2.0 + 0.09) * SR)
+        e = s + int(0.05 * SR)
+        free_gain_db = 20.0 * np.log10(
+            (float(np.sqrt(np.mean(free_result[s:e] ** 2))) + 1e-15)
+            / (float(np.sqrt(np.mean(dipped[s:e] ** 2))) + 1e-15)
+        )
+        capped_gain_db = 20.0 * np.log10(
+            (float(np.sqrt(np.mean(capped_result[s:e] ** 2))) + 1e-15)
+            / (float(np.sqrt(np.mean(dipped[s:e] ** 2))) + 1e-15)
+        )
+        assert capped_gain_db < free_gain_db - 6.0
+
     def test_23_output_shape_mono(self):
         """Output shape must match input for mono."""
         phase = self._get_phase()
@@ -269,6 +360,25 @@ class TestTapeLevelStabilizer:
         dipped = _inject_level_dips(audio, dip_times=[1.0], dip_depth_db=10.0)
         result, _ = phase._stabilize_tape_level(dipped, SR, 0.8)
         assert result.shape == audio.shape
+
+    def test_24b_channels_first_stereo_is_repaired_without_axis_collapse(self):
+        """UV3 liefert Stereo als (2, N); der Stabilizer darf daraus kein 2-Sample-STFT machen."""
+        phase = self._get_phase()
+        audio = _sine_stereo(duration=4.0, amp=0.3)
+        dipped = _inject_level_dips(audio, dip_times=[1.2], dip_depth_db=14.0)
+        dipped_cf = dipped.T.copy()
+
+        result, n_dips = phase._stabilize_tape_level(dipped_cf, SR, 0.8)
+
+        assert n_dips >= 1
+        assert result.shape == dipped_cf.shape
+        assert result.dtype == np.float32
+        assert np.isfinite(result).all()
+        s = int(1.29 * SR)
+        e = s + int(0.04 * SR)
+        rms_dipped = float(np.sqrt(np.mean(dipped_cf[0, s:e] ** 2)))
+        rms_repaired = float(np.sqrt(np.mean(result[0, s:e] ** 2)))
+        assert rms_repaired > rms_dipped
 
     def test_25_nan_inf_guard(self):
         """NaN/Inf in input must not propagate to output."""
@@ -334,6 +444,22 @@ class TestTapeLevelStabilizer:
         rms_high = float(np.sqrt(np.mean(result_high[s:e] ** 2)))
         assert rms_high >= rms_low
 
+    def test_31_primary_tape_start_dip_is_repaired(self):
+        """Primary tape/cassette dips near song start must not be hidden by intro protection."""
+        phase = self._get_phase()
+        audio = _sine(duration=6.0, amp=0.3)
+        dipped = _inject_level_dips(audio, dip_times=[1.2], dip_duration_s=0.18, dip_depth_db=14.0)
+
+        result, n_dips = phase._stabilize_tape_level(dipped, SR, 0.35, is_primary_tape=True)
+
+        assert n_dips >= 1
+        s = int(1.29 * SR)
+        e = s + int(0.04 * SR)
+        rms_dipped = float(np.sqrt(np.mean(dipped[s:e] ** 2)))
+        rms_repaired = float(np.sqrt(np.mean(result[s:e] ** 2)))
+        gain_applied_db = 20.0 * np.log10((rms_repaired + 1e-15) / (rms_dipped + 1e-15))
+        assert gain_applied_db >= 2.0
+
 
 # ===========================================================================
 # Class 4: CausalDefectReasoner Routing
@@ -389,6 +515,23 @@ class TestPhase12Integration:
         assert result.success
         assert "tape_level_dips_repaired" in result.metrics
         assert result.metrics["tape_level_dips_repaired"] >= 0
+
+    def test_50b_process_cassette_channels_first_preserves_shape_and_repairs_dips(self):
+        """Full process() must handle UV3 stereo layout (2, N) for cassette tape defects."""
+        from backend.core.defect_scanner import MaterialType
+        from backend.core.phases.phase_12_wow_flutter_fix import WowFlutterFix
+
+        phase = WowFlutterFix()
+        audio = _sine_stereo(duration=4.0, amp=0.3)
+        dipped = _inject_level_dips(audio, dip_times=[1.2], dip_depth_db=14.0)
+        dipped_cf = dipped.T.copy()
+
+        result = phase.process(dipped_cf, SR, material=MaterialType.CASSETTE, strength=0.35, use_ml_hybrid=False)
+
+        assert result.success
+        assert result.audio.shape == dipped_cf.shape
+        assert np.isfinite(result.audio).all()
+        assert result.metrics.get("tape_level_dips_repaired", 0) >= 1
 
     def test_51_process_cd_digital_no_stabilizer(self):
         """Phase 12 on CD_DIGITAL should NOT run tape level stabilizer."""

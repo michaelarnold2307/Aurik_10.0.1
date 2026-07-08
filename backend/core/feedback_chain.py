@@ -70,6 +70,7 @@ class FeedbackChain:
         self.use_pqs_in_loop = bool(use_pqs_in_loop)
         self.use_versa_in_loop = bool(use_versa_in_loop)
         self.panns_singing: float = float(np.clip(panns_singing, 0.0, 1.0))  # §0p VQI-Gate
+        self.era_decade: int = 1975  # §EraVocalProfile: optional von UV3 überschrieben
         self._vqi_orig_audio: np.ndarray | None = None  # gesetzt in run() — §0p Dual-Objective
         self.frisson_zones: list | None = None  # §Frisson: gesetzt von UV3 vor FC-Loop
         self.frisson_orig_audio: np.ndarray | None = None  # §Frisson: Original-Audio-Referenz
@@ -93,9 +94,14 @@ class FeedbackChain:
                 logger.debug("FeedbackChain: PQS scorer unavailable, heuristic fallback active: %s", exc)
         if self.use_versa_in_loop:
             try:
-                from plugins.versa_plugin import get_versa_plugin  # pylint: disable=import-outside-toplevel
+                from plugins.versa_plugin import (  # pylint: disable=import-outside-toplevel
+                    get_loaded_versa_plugin,
+                    get_versa_plugin,
+                )
 
-                _versa_plugin = get_versa_plugin()
+                _versa_plugin = get_loaded_versa_plugin()
+                if _versa_plugin is None:
+                    _versa_plugin = get_versa_plugin()
                 if _versa_plugin is not None:
                     self._versa_score_fn = _versa_plugin.score
             except Exception as exc:
@@ -193,7 +199,7 @@ class FeedbackChain:
             _frisson_zones = getattr(self, "frisson_zones", None)
             _frisson_orig: np.ndarray | None = getattr(self, "frisson_orig_audio", None)
             if _frisson_zones and _frisson_orig is not None:
-                _fo: np.ndarray = _frisson_orig  # narrowed: is not None guard oben  # type: ignore[assignment]
+                _fo: np.ndarray = _frisson_orig  # type: ignore[assignment]  # narrowed: is not None guard oben
                 try:
                     _frisson_penalty = 1.0
                     _n_frisson = int(audio.shape[-1] if audio.ndim == 2 else len(audio))
@@ -537,7 +543,11 @@ class FeedbackChain:
         # Phases that degrade MOS (Δ < -0.01) are pruned from subsequent iterations.
         # This prevents a harmful phase from cancelling gains of helpful ones.
         _phase_list_mode = isinstance(phases_or_fn, list)
-        _active_phases: list = list(phases_or_fn) if _phase_list_mode else []
+        _active_phases: list
+        if isinstance(phases_or_fn, list):
+            _active_phases = list(phases_or_fn)
+        else:
+            _active_phases = []
         _pruned_phases: list[str] = []
         _phase_deltas: dict[str, float] = {}  # phase_id → MOS delta from first iteration
 

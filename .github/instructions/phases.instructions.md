@@ -13,6 +13,10 @@ applyTo: "backend/core/phases/phase_*.py"
 4. result = np.nan_to_num(result, nan=0.0, posinf=0.0, neginf=0.0) vor Return
 5. logger.info("phase=%s score=%.2f", phase_id, score) — kein print()
 6. CAUSE_TO_PHASES + CAUSES bidirektional ergänzen (V12)
+     → Die vollständige Defektoberfläche aus backend/core/defect_scanner.py MUSS
+         in _PHASE_MAP und in jedem defektgebundenen Recommender vollständig
+         abgebildet sein; Teilmengen oder lose Sonderfall-Tabellen sind
+         Release-Blocker.
 7. Neue HPF/Notch-Phase: 4-stufige Checkliste (s. unten)
 8. Wenn panns_singing ≥ 0.25: apply_hnr_blend() nach jeder ML-NR-Phase (§0p)
 9. Wenn panns_singing ≥ 0.25: Formant-Delta via lpc_formant_tracker prüfen (§0p)
@@ -31,6 +35,19 @@ applyTo: "backend/core/phases/phase_*.py"
     → Beispiel: CASSETTE braucht eigene DETECTION_THRESHOLD-Schwelle basierend auf IEC 60094-1
       (≤ 0,2 % WRMS Capstan/Pinch-Roller); Vinyl-Default 0.5 % übersieht Kassetten-Transport-Bumps
     → Pflicht-Test: test_phase_XX_all_material_types_in_DICT() für jede Phase mit material-indizierten Dicts
+13. [V38] Phasen mit Event-Schleifen (bump_locations, splice_points, Dropout-Segmente usw.):
+    → `vfa_protected_zones` aus kwargs lesen: `vfa_result = kwargs.get("vfa_result", {})` →
+      `protected_zones = [(s, e, cap) ...]` aus vfa_result (Vibrato 0.20, Frisson 0.30, Flüster 0.25, Passaggio 0.35)
+    → Per-Event-Strength-Oracle MUSS implementiert sein:
+      `_compute_<defect>_local_strength(mono_ref, start, end, sr, base_strength, protected_zones)`
+      mit 250 ms Kontext-RMS-Proxy; `base_strength < 1e-6` → 0.0 (kein Event-Processing)
+    → Einheitliche `strength` für alle Events in der Schleife ist VERBOTEN
+
+14. [RELEASE_MUST] Defect-Coverage-Registry:
+        → Jede komplette Defect-Registry muss alle DefectType-Werte aus
+            backend/core/defect_scanner.py abdecken.
+        → Vollständigkeits-Tests sind Pflicht; fehlende Defekte oder silent fallbacks
+            gelten als unvollständig implementiert.
 
 Hinweis zur Strength-Übergabe (kanonisch):
         - `strength` wird aus `kwargs` gelesen (z. B. `strength = float(kwargs.get("strength", 0.7))`).
@@ -296,6 +313,10 @@ register_sequence = detect_vocal_register_temporal(audio, sr)
 Phasenmodule dürfen keine eigenen globalen Qualitäts-Gates etablieren.
 Sie liefern Signal + Telemetrie; die finale Exportentscheidung liegt ausschließlich bei UV3.
 
+Die normative songweite Steuerquelle ist `restoration_policy_profile`. Phasen dürfen
+`song_goal_weights` nur noch als daraus abgeleiteten Kompatibilitätswert lesen;
+eigene alternative Zielprofile oder parallel berechnete Song-Weights sind verboten.
+
 ```python
 # VERBOTEN in Phase-Dateien:
 # - Eigene globale Goal-Schwellen (z. B. natuerlichkeit >= 0.90 hardcoded)
@@ -313,6 +334,7 @@ Pflicht bei jeder Phase:
 ```python
 metadata["phase_decision_scope"] = "local_only"
 metadata["final_authority"] = "UV3"
+metadata["policy_source"] = "restoration_policy_profile"
 ```
 
 ## §PH-NAT Natürlichkeits-Priorität ohne Übersteuerung

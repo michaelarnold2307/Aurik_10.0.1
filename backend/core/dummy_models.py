@@ -32,8 +32,8 @@ class DenoiserModel:
             _, y = istft(Zxx_out, fs=sr, nperseg=nperseg, noverlap=noverlap)
             n = len(audio)
             if len(y) >= n:
-                return y[:n].astype(audio.dtype)
-            return np.pad(y, (0, n - len(y))).astype(audio.dtype)
+                return y[:n].astype(audio.dtype)  # type: ignore[no-any-return]
+            return np.pad(y, (0, n - len(y))).astype(audio.dtype)  # type: ignore[no-any-return]
         except Exception:
             return audio
 
@@ -48,7 +48,7 @@ class SibilantModel:
             reduction_db = float(context.get("reduction_db", 6.0))
             sr = int(context.get("sr", 44100))
             de_esser = MLDeEsser(reduction_db=reduction_db)
-            return de_esser.process(audio, sr).astype(audio.dtype)
+            return de_esser.process(audio, sr).astype(audio.dtype)  # type: ignore[no-any-return]
         except Exception:
             return audio
 
@@ -66,6 +66,6 @@ class AuthenticityModel:
             saturated = np.tanh(drive * audio.astype(np.float64)) / norm
             # Subtiler Mix: 80% Original + 20% Sättigung
             mix = float(context.get("mix", 0.2))
-            return (audio * (1.0 - mix) + saturated * mix).astype(audio.dtype)
+            return (audio * (1.0 - mix) + saturated * mix).astype(audio.dtype)  # type: ignore[no-any-return]
         except Exception:
             return audio

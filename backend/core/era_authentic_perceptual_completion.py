@@ -297,7 +297,7 @@ class EraAuthenticPerceptualCompletion:
         result_rms = max(1e-8, float(_grl_eapc(result, gate_dbfs=-50.0)))
         result *= orig_rms / result_rms
 
-        return np.clip(result, -1.0, 1.0)
+        return np.clip(result, -1.0, 1.0)  # type: ignore[no-any-return]
 
 
 # ---------------------------------------------------------------------------

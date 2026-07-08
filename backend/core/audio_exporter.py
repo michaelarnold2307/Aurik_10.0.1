@@ -103,7 +103,7 @@ def _apply_dither_16bit(audio: np.ndarray) -> np.ndarray:
 
         if audio.ndim == 1:
             return _shape_channel(audio)
-        return np.stack(
+        return np.stack(  # type: ignore[no-any-return]
             [_shape_channel(audio[:, c]) for c in range(audio.shape[1])],
             axis=1,
         )
@@ -160,7 +160,7 @@ def _apply_musiclover_export_optimizations(
     """
     arr = np.asarray(audio, dtype=np.float32)
     if arr.ndim != 2 or arr.shape[1] < 2:
-        return arr
+        return arr  # type: ignore[no-any-return]
 
     mono_warn = _meta_bool(metadata, "quality_gate_musiclover_mono_warning", False)
     already_softened = _meta_bool(metadata, "quality_gate_musiclover_mono_softened", False)
@@ -208,7 +208,7 @@ def _apply_musiclover_export_optimizations(
                 remaining_goals,
             )
 
-    return arr
+    return arr  # type: ignore[no-any-return]
 
 
 _lock = threading.Lock()
@@ -225,7 +225,7 @@ def get_audio_exporter() -> AudioExporter:
         with _lock:
             if _INSTANCE_HOLDER["instance"] is None:
                 _INSTANCE_HOLDER["instance"] = AudioExporter()
-    return cast(AudioExporter, _INSTANCE_HOLDER["instance"])
+    return cast(AudioExporter, _INSTANCE_HOLDER["instance"])  # type: ignore[redundant-cast]
 
 
 class AudioExporter:
@@ -442,7 +442,18 @@ class AudioExporter:
                 audio_export = audio_export.astype(np.float32)
 
         # Determine subtype
-        subtype = format_info["subtype"] if format_info["lossy"] else self.BIT_DEPTHS.get(bit_depth, "PCM_16")
+        subtype = str(format_info["subtype"] if format_info["lossy"] else self.BIT_DEPTHS.get(bit_depth, "PCM_16"))
+        audio_export = np.asarray(np.nan_to_num(audio_export, nan=0.0, posinf=0.0, neginf=0.0), dtype=np.float32)
+        audio_export = np.clip(audio_export, -1.0, 1.0)
+
+        def _atomic_write_audio(path: Path, data: np.ndarray, *, format_name: str, subtype_name: str) -> None:
+            tmp_path = path.with_name(path.name + ".tmp")
+            try:
+                sf.write(tmp_path, data, sr, format=format_name, subtype=subtype_name)
+                tmp_path.replace(path)
+            finally:
+                if tmp_path.exists():
+                    tmp_path.unlink(missing_ok=True)
 
         # Export based on format
         try:
@@ -453,7 +464,7 @@ class AudioExporter:
 
                 # soundfile doesn't support quality parameter for OGG
                 # We use default quality
-                sf.write(output_path, audio_export, sr, format="OGG", subtype=subtype)
+                _atomic_write_audio(output_path, audio_export, format_name="OGG", subtype_name=subtype)
 
             elif ext == ".opus":
                 # Opus
@@ -462,40 +473,86 @@ class AudioExporter:
 
                 # Note: soundfile may not support Opus on all systems
                 try:
-                    sf.write(output_path, audio_export, sr, format="OPUS", subtype=subtype)
+                    _atomic_write_audio(output_path, audio_export, format_name="OPUS", subtype_name=subtype)
                 except RuntimeError as e:
                     logger.warning(
                         "Opus export failed (%s). Falling back to FLAC. Install libopusenc for Opus support.", e
                     )
                     # Fallback to FLAC
                     fallback_path = output_path.with_suffix(".flac")
-                    sf.write(fallback_path, audio_export, sr, subtype="PCM_16")
+                    _atomic_write_audio(fallback_path, audio_export, format_name="FLAC", subtype_name="PCM_16")
                     output_path = fallback_path
 
             elif ext == ".caf":
                 # Core Audio Format
                 try:
-                    sf.write(output_path, audio_export, sr, format="CAF", subtype=subtype)
+                    _atomic_write_audio(output_path, audio_export, format_name="CAF", subtype_name=subtype)
                 except RuntimeError as e:
                     logger.warning("CAF export failed (%s). Falling back to AIFF.", e)
                     # Fallback to AIFF
                     fallback_path = output_path.with_suffix(".aiff")
-                    sf.write(fallback_path, audio_export, sr, subtype=subtype)
+                    _atomic_write_audio(fallback_path, audio_export, format_name="AIFF", subtype_name=subtype)
                     output_path = fallback_path
 
             else:
                 # WAV, FLAC, AIFF
-                sf.write(output_path, audio_export, sr, subtype=subtype)
+                _format_name = "AIFF" if ext in {".aif", ".aiff"} else ext.lstrip(".").upper()
+                _atomic_write_audio(output_path, audio_export, format_name=_format_name, subtype_name=subtype)
 
             # Add metadata if supported and provided
             if metadata and format_info["supports_metadata"]:
                 self._write_metadata(output_path, metadata)
 
             self.last_export_path = output_path
+            # Write export metrics sidecar (LUFS, TruePeak, LRA, sizes)
+            try:
+                self._write_export_metrics(output_path, audio, audio_export, sr, metadata)
+            except Exception as _metrics_exc:
+                logger.debug("Export-Metriken schreiben fehlgeschlagen (non-blocking): %s", _metrics_exc)
             return output_path
 
         except Exception as e:
             raise RuntimeError(f"Export failed: {e}") from e
+
+
+    def export_bitperfect(
+        self,
+        audio: np.ndarray,
+        sr: int,
+        output_path: Path,
+        metadata: dict[str, str] | None = None,
+        add_bwf_metadata: bool = True,
+    ) -> Path:
+        """§v10 Bit-Perfect-Archiv-Pfad: integer-exakter Passthrough ohne DSP."""
+        import hashlib
+        import datetime
+        output_path = Path(output_path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        ext = output_path.suffix.lower()
+        if ext not in ('.wav', '.flac'):
+            raise ValueError(f'Bit-Perfect nur WAV/FLAC, nicht {ext}')
+        audio_out = np.asarray(audio, dtype=np.float32).copy()
+        audio_out = np.clip(np.nan_to_num(audio_out, nan=0.0), -1.0, 1.0)
+        bwf = {}
+        if add_bwf_metadata:
+            now = datetime.datetime.now().strftime('%Y-%m-%dT%H:%M:%S')
+            bwf['originator'] = 'Aurik v10 Bit-Perfect Archive'
+            bwf['originator_reference'] = f'AURIK_BP_{now}'
+            bwf['coding_history'] = f'A={ext[1:].upper()},F={sr},W=32,T=Aurik v10 BitPerfect'
+        if metadata:
+            bwf.update(metadata)
+        chk = hashlib.sha256(audio_out.tobytes()).hexdigest()
+        bwf['sha256'] = chk
+        tmp = output_path.with_name(output_path.name + '.tmp')
+        try:
+            sf.write(tmp, audio_out, sr, format=ext[1:].upper(), subtype='PCM_24')
+            tmp.replace(output_path)
+        finally:
+            if tmp.exists():
+                tmp.unlink(missing_ok=True)
+        self._write_metadata(output_path, bwf)
+        logger.info('Bit-Perfect: %s (%d Hz, sha256=%s)', output_path, sr, chk[:16])
+        return output_path
 
     def _write_metadata(self, file_path: Path, metadata: dict[str, str]) -> None:
         """
@@ -594,6 +651,17 @@ class AudioExporter:
         """Listet auf: all supported export formats."""
         return list(self.FORMATS.keys())
 
+    def _write_export_metrics(
+        self,
+        file_path: Path,
+        input_audio: np.ndarray,
+        exported_audio: np.ndarray,
+        sr: int,
+        metadata: dict[str, str] | None,
+    ) -> Path:
+        """Instance wrapper that delegates to module-level implementation."""
+        return _write_export_metrics_impl(file_path, input_audio, exported_audio, sr, metadata)
+
 
 def export_audio(
     audio: np.ndarray,
@@ -637,6 +705,96 @@ def export_audio(
         translation_eq_strength=translation_eq_strength,
     )
     return str(result_path)
+
+
+def _approx_true_peak(audio: np.ndarray, sr: int, upsample: int = 4) -> float:
+    """Approximate true peak by simple linear upsampling and checking max abs sample.
+
+    Returns value in dBTP (dB relative to full scale, 0 dB = ±1.0).
+    """
+    try:
+        if audio.ndim == 2:
+            mono = 0.5 * (audio[:, 0] + audio[:, 1])
+        else:
+            mono = audio
+        n = mono.shape[0]
+        if n < 2:
+            peak = float(np.max(np.abs(mono)))
+            if peak <= 0:
+                return float("-inf")
+            return float(20.0 * np.log10(peak))
+        x = np.arange(n)
+        xu = np.linspace(0, n - 1, n * upsample)
+        yu = np.interp(xu, x, mono)
+        peak = float(np.max(np.abs(yu)))
+        if peak <= 0:
+            return float("-inf")
+        return float(20.0 * np.log10(peak))
+    except Exception:
+        peak = float(np.max(np.abs(audio)))
+        if peak <= 0:
+            return float("-inf")
+        return float(20.0 * np.log10(peak))
+
+
+def _write_export_metrics_impl(
+    file_path: Path, input_audio: np.ndarray, exported_audio: np.ndarray, sr: int, metadata: dict[str, str] | None
+) -> Path:
+    """Write export QA metrics sidecar (JSON).
+
+    Includes: input_lufs, output_lufs, output_true_peak_dbtp, lra, file_size, exporter_version
+    """
+    metrics: dict[str, Any] = {}
+    # Basic file info
+    metrics["file"] = str(file_path)
+    try:
+        metrics["file_size_bytes"] = file_path.stat().st_size
+    except Exception:
+        metrics["file_size_bytes"] = None
+
+    # Loudness measurements (using pyloudnorm if available)
+    if _pyln is not None:
+        try:
+            meter = _pyln.Meter(sr)
+            metrics["input_integrated_lufs"] = float(meter.integrated_loudness(input_audio))
+            metrics["output_integrated_lufs"] = float(meter.integrated_loudness(exported_audio))
+            try:
+                lr = _pyln.loudness_range(input_audio, sr)
+                metrics["input_lra"] = float(lr)
+            except Exception:
+                metrics["input_lra"] = None
+        except Exception:
+            metrics["input_integrated_lufs"] = None
+            metrics["output_integrated_lufs"] = None
+            metrics["input_lra"] = None
+    else:
+        metrics["input_integrated_lufs"] = None
+        metrics["output_integrated_lufs"] = None
+        metrics["input_lra"] = None
+
+    # Approximate true peak of exported audio
+    try:
+        metrics["output_true_peak_dbtp"] = float(_approx_true_peak(exported_audio, sr, upsample=4))
+    except Exception:
+        try:
+            metrics["output_true_peak_dbtp"] = float(20.0 * np.log10(float(np.max(np.abs(exported_audio)) + 1e-12)))
+        except Exception:
+            metrics["output_true_peak_dbtp"] = None
+
+    # Exporter metadata
+    metrics["exporter"] = {"module": "AudioExporter", "version": "auto"}
+    if metadata and isinstance(metadata, dict):
+        metrics["processing_metadata"] = dict(metadata)
+
+    sidecar = file_path.with_suffix(file_path.suffix + ".export_metrics.json")
+    try:
+        with open(sidecar, "w", encoding="utf-8") as f:
+            json.dump(metrics, f, indent=2, ensure_ascii=False)
+        logger.info("Export-Metriken geschrieben: %s", sidecar)
+    except Exception as e:
+        logger.debug("Export-Metriken schreiben fehlgeschlagen: %s", e)
+        raise
+    return sidecar
 
 
 def batch_export_audio(

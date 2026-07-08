@@ -151,10 +151,10 @@ class EmotionalResonanceAnalyzer:
 
         # Extract 200-800 Hz band
         mask_warmth = (freqs >= 200) & (freqs <= 800)
-        warmth_energy = np.sum(magnitude[mask_warmth])
+        warmth_energy: float = float(np.sum(magnitude[mask_warmth]))
 
         # Total energy
-        total_energy = np.sum(magnitude)
+        total_energy: float = float(np.sum(magnitude))
 
         # Ratio
         warmth_ratio = warmth_energy / (total_energy + 1e-10)
@@ -175,7 +175,7 @@ class EmotionalResonanceAnalyzer:
         Hohe Dynamik = High Expression
         """
         # === 1. Makrodynamik (Peak-to-RMS) ===
-        peak = np.max(np.abs(audio))
+        peak: float = float(np.max(np.abs(audio)))
         rms = np.sqrt(np.mean(audio**2))
 
         dynamic_range_db = 20 * np.log10(peak / rms) if rms > 0 else 0.0
@@ -286,7 +286,7 @@ class EmotionalResonanceAnalyzer:
 
         # Normalize: Low flux = High flow
         # Typical range: 0.01-0.10
-        flow_score = 1.0 - min(1.0, mean_flux / 0.10)
+        flow_score = 1.0 - min(1.0, mean_flux / 0.10)  # type: ignore[operator]
 
         return float(np.clip(flow_score, 0.0, 1.0))
 
@@ -311,10 +311,10 @@ class EmotionalResonanceAnalyzer:
         if np.sum(mask_air) == 0:
             return 0.0  # No HF content
 
-        air_energy = np.sum(magnitude[mask_air])
+        air_energy: float = float(np.sum(magnitude[mask_air]))
 
         # Total energy
-        total_energy = np.sum(magnitude)
+        total_energy: float = float(np.sum(magnitude))
 
         # Ratio
         air_ratio = air_energy / (total_energy + 1e-10)
@@ -420,7 +420,7 @@ class EmotionalResonanceEnhancer:
             expansion_applied = True
 
         # Normalize
-        peak = np.max(np.abs(enhanced))
+        peak: float = float(np.max(np.abs(enhanced)))
         if peak > 0:
             enhanced = enhanced / peak
 
@@ -466,7 +466,7 @@ class EmotionalResonanceEnhancer:
         gain_linear = 10 ** (gain_db / 20.0)
         enhanced = audio + (filtered - audio) * (gain_linear - 1.0)
 
-        return enhanced
+        return enhanced  # type: ignore[no-any-return]
 
     def _apply_tube_saturation(self, audio: np.ndarray, gain: float = 0.15) -> np.ndarray:
         """
@@ -485,7 +485,7 @@ class EmotionalResonanceEnhancer:
         mix = 0.15
         enhanced = (1 - mix) * audio + mix * saturated
 
-        return enhanced
+        return enhanced  # type: ignore[no-any-return]
 
     def _apply_high_shelf(self, audio: np.ndarray, sr: int, cutoff_freq: float, gain_db: float) -> np.ndarray:
         """
@@ -514,7 +514,7 @@ class EmotionalResonanceEnhancer:
         # Mix to apply gain
         enhanced = audio + (filtered * (gain_linear - 1.0))
 
-        return enhanced
+        return enhanced  # type: ignore[no-any-return]
 
     def _apply_expansion(self, audio: np.ndarray, threshold_db: float = -40.0, ratio: float = 1.2) -> np.ndarray:
         """
@@ -586,7 +586,7 @@ class EmotionalResonanceEnhancer:
             window_sum[window_sum == 0] = 1.0
             expanded /= window_sum
 
-        return expanded
+        return expanded  # type: ignore[no-any-return]
 
 
 # === CONVENIENCE FUNCTION ===

@@ -233,15 +233,15 @@ class NSGAII:
 
         # Prefer lower rank
         if ind1.rank < ind2.rank:
-            return deepcopy(ind1)
+            return deepcopy(ind1)  # type: ignore[no-any-return]
         elif ind2.rank < ind1.rank:
-            return deepcopy(ind2)
+            return deepcopy(ind2)  # type: ignore[no-any-return]
 
         # If same rank, prefer higher crowding distance
         if ind1.crowding_distance > ind2.crowding_distance:
-            return deepcopy(ind1)
+            return deepcopy(ind1)  # type: ignore[no-any-return]
         else:
-            return deepcopy(ind2)
+            return deepcopy(ind2)  # type: ignore[no-any-return]
 
     def crossover(self, parent1: Individual, parent2: Individual) -> tuple[Individual, Individual]:
         """Simulated binary crossover (SBX)."""
@@ -317,7 +317,7 @@ class NSGAII:
 
         for generation in range(self.n_generations):
             # Create offspring
-            offspring = []
+            offspring: list[Individual] = []
 
             while len(offspring) < self.population_size:
                 parent1 = self.tournament_selection(self.population)
@@ -449,7 +449,7 @@ class NSGAII:
             preferences = {obj.name: 1.0 for obj in self.objectives}
 
         # Normalize objectives to [0, 1]
-        normalized_objs = {obj.name: [] for obj in self.objectives}
+        normalized_objs: dict[str, list[float]] = {obj.name: [] for obj in self.objectives}
 
         for obj in self.objectives:
             values = [ind.objectives[obj.name] for ind in self.pareto_front]
@@ -473,7 +473,7 @@ class NSGAII:
                 best_individual = individual
 
         logger.info("Selected solution with score %.4f", best_score)
-        return best_individual
+        return best_individual  # type: ignore[return-value]
 
     def save_pareto_front(self, path: Path):
         """Speichert Pareto front to JSON."""
@@ -515,7 +515,7 @@ def create_audio_restoration_moo() -> NSGAII:
 
         # Simulate quality score (higher noise_reduction and declipping = better quality)
         quality = -(noise_reduction * 0.6 + declipping * 0.4)  # Negative for minimization
-        return quality
+        return quality  # type: ignore[no-any-return]
 
     def evaluate_speed(params: dict[str, Any]) -> float:
         """Simulate speed evaluation (minimize processing time)."""
@@ -524,7 +524,7 @@ def create_audio_restoration_moo() -> NSGAII:
 
         # More complexity and iterations = slower
         processing_time = model_complexity * 100 + n_iterations * 2
-        return processing_time
+        return processing_time  # type: ignore[no-any-return]
 
     def evaluate_authenticity(params: dict[str, Any]) -> float:
         """Simulate authenticity preservation (maximize, so negate for minimization)."""
@@ -533,7 +533,7 @@ def create_audio_restoration_moo() -> NSGAII:
 
         # Too much processing reduces authenticity
         authenticity = -(1.0 - noise_reduction * 0.4 - eq_strength * 0.3)
-        return authenticity
+        return authenticity  # type: ignore[no-any-return]
 
     objectives = [
         ObjectiveFunction("quality", evaluate_quality, minimize=True),

@@ -64,6 +64,7 @@ def check_hallucination(
     sr: int = 48000,
     mode: str = "restoration",
     material_bw_ceiling_hz: float | None = None,
+    bw_extension_context: bool = False,
 ) -> HallucinationCheckResult:
     """§2.46e: Check whether an additive phase introduced hallucinated material.
 
@@ -80,6 +81,11 @@ def check_hallucination(
         material_bw_ceiling_hz: Physical BW ceiling of the carrier medium (Hz).
                If provided, energy growth above this frequency is checked for
                harmonic_ceiling_violation (> 8× increase = hard rollback).
+        bw_extension_context: When True the phase intentionally adds new HF content
+               as part of carrier-inverse BW restoration (AudioSR / NVSR). In this
+               case the rollback threshold is relaxed from 0.15 → 0.20, because new
+               spectral energy below the material ceiling is physically expected and
+               not a hallucination. harmonic_ceiling_violation veto remains absolute.
 
     Returns:
         HallucinationCheckResult with decision flags and diagnostic metadata.
@@ -135,6 +141,24 @@ def check_hallucination(
     requires_rollback = False
     score_penalty = 0.0
 
+    # BW-extension context: carrier-inverse HF restoration is expected to add new
+    # spectral content below the material ceiling — raise rollback threshold.
+    # harmonic_ceiling_violation (above-ceiling energy growth) veto remains absolute.
+    _effective_rollback_threshold = _ROLLBACK_THRESHOLD
+    if bw_extension_context:
+        if material_bw_ceiling_hz is None:
+            # Codec-Material ohne BW-Ceiling (mp3_low, mp3_high, aac, streaming):
+            # HF-Rekonstruktion ist erwartete Carrier-Inversion des Codec-Verlustes —
+            # AudioSR/NVSR synthetisiert Inhalt, der durch Encoder verworfen wurde.
+            # Kein Ceiling-Veto möglich → Schwellwert auf 0.50 anheben (§S2-brillanz-fix).
+            _effective_rollback_threshold = 0.50
+        else:
+            # Analog-Material mit BW-Ceiling (Shellac, Vinyl, Kassette …):
+            # Moderater Anstieg auf 0.20 — Ceiling-Veto bleibt aktiv.
+            _effective_rollback_threshold = 0.20
+        meta["bw_extension_context"] = True
+        meta["effective_rollback_threshold"] = _effective_rollback_threshold
+
     if harmonic_ceiling_violation:
         # Hard rollback regardless of spectral_novelty
         requires_rollback = True
@@ -143,14 +167,14 @@ def check_hallucination(
             "§2.46e HallucinationGuard: harmonic_ceiling_violation=True (ceiling=%.0f Hz) → hard rollback.",
             material_bw_ceiling_hz or -1,
         )
-    elif spectral_novelty > _ROLLBACK_THRESHOLD:
+    elif spectral_novelty > _effective_rollback_threshold:
         if mode == "restoration":
             requires_rollback = True
         score_penalty = 0.3
         logger.warning(
             "§2.46e HallucinationGuard: spectral_novelty=%.3f > %.2f (mode=%s) → %s, score_penalty=%.1f",
             spectral_novelty,
-            _ROLLBACK_THRESHOLD,
+            _effective_rollback_threshold,
             mode,
             "rollback" if requires_rollback else "penalty_only",
             score_penalty,

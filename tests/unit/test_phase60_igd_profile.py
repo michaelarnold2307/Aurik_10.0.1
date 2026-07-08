@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from backend.core.phases.phase_60_inner_groove_distortion_repair import InnerGrooveDistortionRepairPhase
+from backend.core.phases.phase_60_inner_groove_distortion_repair import InnerGrooveDistortionRepairPhase, apply
 
 
 def _profile(material: str, qm: str = "balanced", rest: float = 50.0) -> dict:
@@ -64,3 +64,48 @@ class TestIgdProfileIntegration:
         assert "n_segments" in result.metadata
         assert 0.05 <= result.metadata["min_igd_score"] <= 0.25
         assert 4 <= result.metadata["n_segments"] <= 14
+
+
+class TestIgdSegmentOracle:
+    def test_distorted_inner_segment_is_processed_more_than_clean_outer_segment(self):
+        sr = 48000
+        t = np.arange(sr * 2, dtype=np.float32) / float(sr)
+        audio = (0.20 * np.sin(2.0 * np.pi * 440.0 * t)).astype(np.float32)
+        audio[sr:] += (0.08 * np.sin(2.0 * np.pi * 4200.0 * t[sr:])).astype(np.float32)
+
+        out = apply(
+            audio,
+            sr,
+            strength=0.8,
+            defect_scores={"inner_groove_distortion": 0.8},
+            n_segments=4,
+        )
+
+        outer_delta = float(np.sqrt(np.mean((out[: sr // 2] - audio[: sr // 2]) ** 2)))
+        inner_delta = float(np.sqrt(np.mean((out[sr:] - audio[sr:]) ** 2)))
+        assert inner_delta > outer_delta * 2.0
+
+    def test_protected_zone_caps_inner_groove_processing(self):
+        sr = 48000
+        t = np.arange(sr * 2, dtype=np.float32) / float(sr)
+        audio = (0.20 * np.sin(2.0 * np.pi * 440.0 * t) + 0.08 * np.sin(2.0 * np.pi * 4200.0 * t)).astype(np.float32)
+
+        free = apply(
+            audio,
+            sr,
+            strength=0.8,
+            defect_scores={"inner_groove_distortion": 0.8},
+            n_segments=4,
+        )
+        capped = apply(
+            audio,
+            sr,
+            strength=0.8,
+            defect_scores={"inner_groove_distortion": 0.8},
+            n_segments=4,
+            protected_zones=[(1.0, 2.0, 0.20)],
+        )
+
+        free_delta = float(np.sqrt(np.mean((free[sr:] - audio[sr:]) ** 2)))
+        capped_delta = float(np.sqrt(np.mean((capped[sr:] - audio[sr:]) ** 2)))
+        assert capped_delta < free_delta * 0.65

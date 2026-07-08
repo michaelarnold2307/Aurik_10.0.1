@@ -36,7 +36,7 @@ class NaturalPerformanceResult:
             i1 = min(n_samples, int(np.ceil(end_s * sr)))
             if i0 < i1:
                 mask[i0:i1] = True
-        return mask
+        return mask  # type: ignore[no-any-return]
 
     @property
     def has_early_reflections(self) -> bool:
@@ -307,6 +307,7 @@ class NaturalPerformanceDetector:
         seg = seg - seg.mean()
         # FFT-basierte Autokorrelation (O(n log n), VERBOTEN: np.correlate mode='full' O(n²))
         from scipy.signal import fftconvolve
+
         ac_full = fftconvolve(seg, seg[::-1], mode="full")
         ac = ac_full[len(seg) - 1 :]
         ac_norm = ac / (ac[0] + 1e-12)
