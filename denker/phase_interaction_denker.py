@@ -569,11 +569,14 @@ class PhaseInteractionDenker:
             "phase_05_rumble_filter": 0.40,
         }
         _codec_meta_raw = getattr(defect_result, "metadata", {}) or {}
-        if isinstance(_codec_meta_raw, dict):
-            _terminal = _codec_meta_raw.get("chain_threshold_override_applied", False)
-            _is_codec = bool(_terminal)  # simplified: if chain override active, codec is present
-        else:
-            _is_codec = False
+        # §BUGFIX: chain_threshold_override_applied ist true für JEDE Ketten-Override,
+        # nicht nur für Codec. Prüfe stattdessen die DefectScore-Metadaten.
+        _is_codec = False
+        _scores = getattr(defect_result, "scores", {}) or {}
+        for _ds in (_scores.values() if isinstance(_scores, dict) else []):
+            if hasattr(_ds, "metadata") and (_ds.metadata or {}).get("chain_contamination_terminal_codec"):
+                _is_codec = True
+                break
         if _is_codec:
             _codec_suppressed = 0
             _codec_damped = 0
