@@ -1052,7 +1052,9 @@ class SurgicalRepair:
                 repaired_segment = phase_fn(**kwargs)
                 if isinstance(repaired_segment, np.ndarray):
                     segment = repaired_segment
-            except Exception:
+            except Exception as _repair_exc:
+                logger.debug("CHIRURGIE-SKIP: %s @ %.3fs — %s",
+                           inst.defect_type, inst.start_s, str(_repair_exc)[:80])
                 skipped += 1
                 continue
 
