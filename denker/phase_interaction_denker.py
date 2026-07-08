@@ -556,7 +556,6 @@ class PhaseInteractionDenker:
         # §CODEC: Bei MP3/AAC-Terminal analog-spezifische Phasen drosseln
         # MP3-Artefakte ≠ echte analoge Defekte — Denoise/Wow/Rumble verschlimmern nur.
         _ANALOG_ONLY_PHASES: frozenset[str] = frozenset({
-            "phase_12_wow_flutter_fix",
             "phase_28_surface_noise_profiling",
             "phase_20_reverb_reduction",
             "phase_49_advanced_dereverb",
@@ -566,7 +565,8 @@ class PhaseInteractionDenker:
             "phase_03_denoise": 0.30,
             "phase_02_hum_removal": 0.40,
             "phase_05_rumble_filter": 0.40,
-            "phase_29_tape_hiss_reduction": 0.40,  # ECHTES Kassetten-Hiss, nicht MP3-Artefakt
+            "phase_29_tape_hiss_reduction": 0.40,
+            "phase_12_wow_flutter_fix": 0.50,  # Tape-Level-Dips MÜSSEN laufen
         }
         _codec_meta_raw = getattr(defect_result, "metadata", {}) or {}
         # §BUGFIX: chain_threshold_override_applied ist true für JEDE Ketten-Override,
