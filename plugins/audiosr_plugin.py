@@ -150,17 +150,26 @@ def _get_ml_model() -> object | None:
             except Exception:
                 _asr_device = "cpu"
             model = build_model(model_name="basic", device=_asr_device)
-            # §ROCm-Fix: HiFi-GAN vocoder produces NaN on ROCm (AMD GPU)
-            # due to transposed-convolution numerical instability.
-            # Permanently move vocoder to CPU — DDIM stays on GPU, only
-            # waveform synthesis runs on CPU (adds ~2s per zone, avoids NaN).
-            _vocoder = model.first_stage_model.vocoder
-            _vocoder.cpu()
+            # §ROCm-Fix v2: HiFi-GAN vocoder + first_stage_model produzieren NaN auf ROCm.
+            # Der alte Fix (nur vocoder.cpu()) deckt nicht alle Code-Pfade ab —
+            # generate_batch() ruft intern first_stage_model.decode() auf, das
+            # transposed convolutions auf GPU macht → NaN.
+            # Fix: gesamtes first_stage_model auf CPU. DDIM (model.model) bleibt auf GPU.
+            _fsm = model.first_stage_model
+            _fsm.cpu()
+            # Patch: alle Mel→Waveform-Pfade zwingen Input auf CPU
             _orig_mel2wav = model.mel_spectrogram_to_waveform
             def _patched_mel2wav(self, mel, savepath=".", bs=None, name="outwav", save=True):
-                mel_cpu = mel.cpu()
+                mel_cpu = mel.cpu() if hasattr(mel, 'cpu') else mel
                 return _orig_mel2wav(mel_cpu, savepath, bs, name, save)
             model.mel_spectrogram_to_waveform = _patched_mel2wav.__get__(model)
+            # Zusätzlich: decode-Methode patchen (generate_batch ruft diese direkt)
+            if hasattr(_fsm, 'decode'):
+                _orig_decode = _fsm.decode
+                def _patched_decode(self, z, **kw):
+                    z_cpu = z.cpu() if hasattr(z, 'cpu') else z
+                    return _orig_decode(z_cpu, **kw)
+                _fsm.decode = _patched_decode.__get__(_fsm)
             _ml_model = model
             logger.info("AudioSR: ML-Modell bereit (device=%s, vocoder=CPU, ddim_steps=50).", _asr_device)
             # PLM-Registrierung für LRU-basierte Auto-Eviction
