@@ -1304,6 +1304,16 @@ class DefectScanner:
         # the resolved material type for adaptive thresholds.
         self.material_type = material_type
 
+        # §CODEC-DISKRIMINATOR: Initialisiere pro-Detektor Codec-Awareness
+        # Wird von jedem _detect_*() konsultiert, um MP3-Artefakte von echten
+        # analogen Defekten zu unterscheiden.
+        from backend.core.dsp.codec_discriminator import CodecDiscriminator
+
+        _fmd_chain = getattr(forensic_medium_result, "transfer_chain", None) or getattr(
+            forensic_medium_result, "chain", None
+        )
+        self._codec_disc = CodecDiscriminator(_fmd_chain, self.sample_rate)
+
         self.thresholds = self.MATERIAL_SENSITIVITY[material_type]
 
         # §9.x [RELEASE_MUST] Chain-adaptive threshold merge — Tonträgerkette darf niemals
@@ -3005,6 +3015,14 @@ class DefectScanner:
 
         severity = min(1.0, click_rate / 20)  # 20 clicks/sec = severity 1.0
 
+        # §CODEC-DISKRIMINATOR: MP3 block-boundary artifacts → 26ms-Gitter-Check
+        _cd = getattr(self, "_codec_disc", None)
+        if _cd is not None and _cd.has_terminal_codec and severity > 0.05 and locations:
+            _on_grid = _cd.mp3_boundary_fraction([(s, e) for s, e in locations])
+            if _on_grid > 0.25:  # ≥25% auf 26ms-Gitter → wahrscheinlich MP3-Artefakte
+                _codec_discount = _cd.codec_discount * (1.0 - _on_grid * 0.65)
+                severity = float(np.clip(severity * _codec_discount, 0.0, 1.0))
+
         return DefectScore(
             defect_type=DefectType.CLICKS,
             severity=severity,
@@ -3164,6 +3182,15 @@ class DefectScanner:
         confidence = 0.8
         if hp_kurtosis < 4.0 or tonal_or_dense_hf:
             confidence = 0.3  # Very low confidence when HF is clearly tonal
+
+        # §CODEC-DISKRIMINATOR: MP3 pre-echo maskiert sich als Crackle
+        _cd = getattr(self, "_codec_disc", None)
+        if _cd is not None and _cd.has_terminal_codec and severity > 0.05:
+            _onset_frac = _cd.onset_correlation(audio, locations)
+            if _onset_frac > 0.35:  # ≥35% der Crackle-Events korrelieren mit Onsets → MP3 pre-echo
+                _codec_discount = _cd.codec_discount * (1.0 - _onset_frac * 0.7)
+                severity = float(np.clip(severity * _codec_discount, 0.0, 1.0))
+                confidence = float(np.clip(confidence * 0.6, 0.05, 0.99))
 
         return DefectScore(
             defect_type=DefectType.CRACKLE,
