@@ -29,3 +29,4 @@ pre-commit>=3.7.0
 # --- Typ-Stubs ---
 types-requests
 types-pyyaml
+psutil>=5.9.0
