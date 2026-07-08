@@ -11713,11 +11713,20 @@ class UnifiedRestorerV3:
                             _defect_locations[_dt_key] = list(_ds.locations)
 
                 if _defect_scores and _defect_locations:
+                    # §CODEC: Extrahiere Codec-Discounts für chirurgische Zonen
+                    _codec_discounts: dict[str, float] = {}
+                    for _dt, _ds in defect_result.scores.items():
+                        _dt_key = _dt.value if hasattr(_dt, "value") else str(_dt)
+                        _disc = float((_ds.metadata or {}).get("chain_contamination_discount", 1.0))
+                        if _disc < 0.99:
+                            _codec_discounts[_dt_key] = _disc
+
                     _analyzer = SurgicalDefectAnalyzer()
                     _zones = _analyzer.analyze(
                         defect_scores=_defect_scores,
                         audio_duration_s=float(audio.shape[-1]) / sample_rate if audio.ndim >= 1 else 0.0,
                         defect_locations=_defect_locations,
+                        codec_discounts=_codec_discounts if _codec_discounts else None,
                     )
                     if _zones:
                         for z in _zones:

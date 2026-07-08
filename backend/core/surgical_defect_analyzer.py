@@ -82,6 +82,7 @@ class SurgicalDefectAnalyzer:
         audio_duration_s: float = 0.0,
         *,
         defect_locations: dict[str, list[tuple[float, float]]] | None = None,
+        codec_discounts: dict[str, float] | None = None,
     ) -> list[DefectZone]:
         """Findet alle chirurgisch behandelbaren Defekt-Zonen mit ECHTEN Positionen.
 
@@ -104,6 +105,9 @@ class SurgicalDefectAnalyzer:
 
         for defect_type in SURGICAL_DEFECT_TYPES:
             sev = defect_scores.get(defect_type, 0.0)
+            _cd = _codec_disc.get(defect_type, 1.0)
+            if _cd < 1.0:
+                sev = sev * _cd
             if sev < self.MIN_SEVERITY:
                 continue
 
