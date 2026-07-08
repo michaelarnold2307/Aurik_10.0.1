@@ -149,7 +149,7 @@ def _get_ml_model() -> object | None:
                 _asr_device = _get_dev("AudioSR")
             except Exception:
                 _asr_device = "cpu"
-            model = build_model(model_name="basic", device=_asr_device)
+            model = build_model(model_name="basic", device="cpu")  # §ROCm: CPU-first, GPU fallback
             # §ROCm-Fix v2: HiFi-GAN vocoder + first_stage_model produzieren NaN auf ROCm.
             # Der alte Fix (nur vocoder.cpu()) deckt nicht alle Code-Pfade ab —
             # generate_batch() ruft intern first_stage_model.decode() auf, das
@@ -171,7 +171,7 @@ def _get_ml_model() -> object | None:
                     return _orig_decode(z_cpu, **kw)
                 _fsm.decode = _patched_decode.__get__(_fsm)
             _ml_model = model
-            logger.info("AudioSR: ML-Modell bereit (device=%s, vocoder=CPU, ddim_steps=50).", _asr_device)
+            logger.info("AudioSR: ML-Modell bereit (device=cpu, ddim_steps=50).")
             # PLM-Registrierung für LRU-basierte Auto-Eviction
             try:
                 from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm

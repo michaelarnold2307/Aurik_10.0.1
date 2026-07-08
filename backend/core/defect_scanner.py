@@ -3022,13 +3022,9 @@ class DefectScanner:
             if _on_grid > 0.25:  # ≥25% auf 26ms-Gitter → wahrscheinlich MP3-Artefakte
                 _codec_discount = _cd.codec_discount * (1.0 - _on_grid * 0.65)
                 severity = float(np.clip(severity * _codec_discount, 0.0, 1.0))
-                # §MP3-CLICK-CAP: > 5000 Clicks auf Codec → False Positives → Locations hart cappen
-                if len(locations) > 5000:
-                    locations = self._sample_locations_evenly(locations, 3000)
-                    logger.info(
-                        "§MP3-CLICK-CAP: %d clicks → %d (×%.2f discount, %.0f%% on MP3 grid)",
-                        len(verified_groups), len(locations), _codec_discount, _on_grid * 100,
-                    )
+                # §MP3-GRID: Anteil der Clicks auf MP3-Blockgrenzen in Metadata vermerken
+                # Der ReparaturDenker entscheidet dann über die Reparatur-Aggressivität.
+                _grid_pct = _on_grid
 
         return DefectScore(
             defect_type=DefectType.CLICKS,

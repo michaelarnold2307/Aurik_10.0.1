@@ -40,6 +40,7 @@ PROTECTED_PHASES: frozenset[str] = frozenset({
     "phase_01_click_removal",
     "phase_24_dropout_repair",
     "phase_08_transient_preservation",
+    "phase_12_wow_flutter_fix",     # Tape-Level-Dips sind strukturelle Defekte
 })
 
 
