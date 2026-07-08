@@ -150,8 +150,19 @@ def _get_ml_model() -> object | None:
             except Exception:
                 _asr_device = "cpu"
             model = build_model(model_name="basic", device=_asr_device)
+            # §ROCm-Fix: HiFi-GAN vocoder produces NaN on ROCm (AMD GPU)
+            # due to transposed-convolution numerical instability.
+            # Permanently move vocoder to CPU — DDIM stays on GPU, only
+            # waveform synthesis runs on CPU (adds ~2s per zone, avoids NaN).
+            _vocoder = model.first_stage_model.vocoder
+            _vocoder.cpu()
+            _orig_mel2wav = model.mel_spectrogram_to_waveform
+            def _patched_mel2wav(self, mel, savepath=".", bs=None, name="outwav", save=True):
+                mel_cpu = mel.cpu()
+                return _orig_mel2wav(mel_cpu, savepath, bs, name, save)
+            model.mel_spectrogram_to_waveform = _patched_mel2wav.__get__(model)
             _ml_model = model
-            logger.info("AudioSR: ML-Modell bereit (device=%s, ddim_steps=50).", _asr_device)
+            logger.info("AudioSR: ML-Modell bereit (device=%s, vocoder=CPU, ddim_steps=50).", _asr_device)
             # PLM-Registrierung für LRU-basierte Auto-Eviction
             try:
                 from backend.core.plugin_lifecycle_manager import register_plugin as _reg_plm

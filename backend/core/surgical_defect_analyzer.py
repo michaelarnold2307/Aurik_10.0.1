@@ -114,11 +114,31 @@ class SurgicalDefectAnalyzer:
             ))
 
         if zones:
-            logger.info(
-                "SurgicalDefectAnalyzer: %d lokalisierte Defekt-Zonen "
-                "im gesamten Song (%d Sekunden) für chirurgische Reparatur markiert",
-                len(zones),
-                int(audio_duration_s) if audio_duration_s > 0 else 0,
+            # Gruppiere nach Defekt-Typ für transparente Planungs-Logs
+            _by_type: dict[str, int] = {}
+            _by_sev: dict[str, list[float]] = {}
+            for z in zones:
+                _by_type[z.defect_type] = _by_type.get(z.defect_type, 0) + 1
+                _by_sev.setdefault(z.defect_type, []).append(z.severity)
+            _type_summary = ", ".join(
+                f"{t}={c}×" for t, c in sorted(_by_type.items())
             )
+            logger.info(
+                "🔬 CHIRURGIE-PLAN: %d Defekt-Zonen in %d Typen markiert "
+                "(%d s Audio) → %s",
+                len(zones),
+                len(_by_type),
+                int(audio_duration_s) if audio_duration_s > 0 else 0,
+                _type_summary,
+            )
+            for t in sorted(_by_type.keys()):
+                sevs = _by_sev.get(t, [])
+                logger.debug(
+                    "  ↳ %s: %d Zone(n), severity Ø%.2f (%.2f–%.2f)",
+                    t, _by_type[t],
+                    sum(sevs) / max(len(sevs), 1),
+                    min(sevs) if sevs else 0,
+                    max(sevs) if sevs else 0,
+                )
 
         return zones

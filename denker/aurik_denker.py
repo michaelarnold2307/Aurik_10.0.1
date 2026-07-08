@@ -2563,35 +2563,6 @@ class AurikDenker:
         except Exception as _pqc_err:
             logger.debug("PerceptualQualityCouncil fehlgeschlagen: %s", _pqc_err)
 
-        # ── §G Feedback-Rückkopplung: Council → UV3 ────────────────────────
-        _fb_retries = 0
-        _FB_MAX = 2
-        _FB_GOALS = {"waerme", "brillanz", "emotionalitaet", "stimmklarheit"}
-        while _fb_retries < _FB_MAX and musical_goals:
-            _below = [g for g in _FB_GOALS if musical_goals.get(g, 1.0) < 0.70]
-            if not _below:
-                break
-            _fb_retries += 1
-            _fb_s = 0.55 - 0.15 * (_fb_retries - 1)
-            logger.info("§G Feedback %d/%d: %d Goals unter 0.70, Stärke=%.2f", _fb_retries, _FB_MAX, len(_below), _fb_s)
-            try:
-                _fb = get_restaurier_denker().restauriere(
-                    aktuelles_audio, sr, material=material, mode=effective_mode,
-                    progress_callback=progress_callback,
-                    cached_era_result=cached_era_result,
-                    cached_genre_result=cached_genre_result,
-                    cached_defect_result=cached_defect_result or (getattr(defekt, "raw_scan_result", None) if defekt is not None else None),
-                    cached_medium_result=cached_medium_result,
-                    denker_policy_input={"feedback_strength": _fb_s},
-                )
-                if hasattr(_fb, "audio") and _fb.audio is not None:
-                    aktuelles_audio = _fb.audio
-                    if hasattr(_fb, "musical_goals") and _fb.musical_goals:
-                        for g, v in _fb.musical_goals.items():
-                            musical_goals[g] = max(musical_goals.get(g, 0.0), v)
-            except Exception as _fb_exc:
-                logger.warning("§G Feedback %d fehlgeschlagen: %s", _fb_retries, _fb_exc)
-
         # ── RAM-Cleanup nach Pipeline ────────────────────────────────────────
         # PluginLifecycleManager entlädt inaktive ML-Modelle wenn RAM knapp ist.
         # Kein Force-Evict hier (Batch-Cleanup erfolgt im Aufrufer via

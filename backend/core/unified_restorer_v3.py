@@ -7193,7 +7193,12 @@ class UnifiedRestorerV3:
         _file_ext_for_scan = _os_uv3.path.splitext(_input_path_for_ext)[1].lower() if _input_path_for_ext else ""
         self._active_global_plan = _gp_kwarg if _gp_kwarg is not None else self.config.global_plan
         self._active_chain_info = _chain_kwarg  # TonträgerketteDenker: Ketten-Phasen
-        self._active_defekt_hint = _defekt_hint_kwarg  # DefektDenker: heuristische Phasen-Empfehlung
+        # §2.59.1: Nur überschreiben wenn nicht None — verhindert dass
+        # Feedback-Loops (die keinen defekt_hint übergeben) den aktiven
+        # Hint des ersten Passes löschen und damit surgical_defect_types
+        # verlieren → PhasePruner löscht dann fälschlich Phasen.
+        if _defekt_hint_kwarg is not None:
+            self._active_defekt_hint = _defekt_hint_kwarg  # DefektDenker: heuristische Phasen-Empfehlung
         # §2.59: Chirurgische Defekte in restoration_context für alle Module sichtbar
         if isinstance(_defekt_hint_kwarg, dict):
             _surg = _defekt_hint_kwarg.get("surgical_defect_types", [])
@@ -11641,6 +11646,9 @@ class UnifiedRestorerV3:
 
             # §2.59 Surgical Repair: Lokalisierte Bandfehler präzise operieren
             # BEVOR die globalen Phasen laufen. Nur die kranken Stellen.
+            _surgical_plan: dict[str, int] = {}
+            _surgical_done: dict[str, int] = {}
+            _surgical_skip: dict[str, int] = {}
             try:
                 from backend.core.surgical_repair import SurgicalRepair, DefectInstance
                 from backend.core.surgical_defect_analyzer import SurgicalDefectAnalyzer
@@ -11655,31 +11663,66 @@ class UnifiedRestorerV3:
                         audio_duration_s=float(audio.shape[-1]) / sample_rate if audio.ndim >= 1 else 0.0,
                     )
                     if _zones:
+                        for z in _zones:
+                            _surgical_plan[z.defect_type] = _surgical_plan.get(z.defect_type, 0) + 1
                         _surgeon = SurgicalRepair(sr=sample_rate)
                         _instances = [
                             DefectInstance(z.start_s, z.end_s, z.defect_type, z.severity)
                             for z in _zones
                         ]
-                        # Operiere jede Defekt-Zone mit passender Lightweight-Funktion
+                        # Gruppiere Instanzen nach Defekt-Typ für Batch-Reparatur
                         from backend.core.surgical_repair import _SURGICAL_REPAIR_FUNCTIONS
-                        _audio_modified = False
+                        _by_type: dict[str, list] = {}
                         for _inst in _instances:
-                            _fn = _SURGICAL_REPAIR_FUNCTIONS.get(_inst.defect_type)
-                            if _fn is not None:
-                                audio = _surgeon.repair(
-                                    audio, [_inst],
-                                    phase_fn=_fn,
-                                ).audio
-                                _audio_modified = True
-                        if _audio_modified:
-                            logger.info(
-                                "§2.59 SurgicalRepair: %d Bandfehler-Zonen präzise operiert",
-                                len(_instances),
+                            _by_type.setdefault(_inst.defect_type, []).append(_inst)
+                        _total_planned = len(_instances)
+                        _total_repaired = 0
+                        _total_failed = 0
+                        for _defect_type, _type_instances in sorted(_by_type.items()):
+                            _fn = _SURGICAL_REPAIR_FUNCTIONS.get(_defect_type)
+                            if _fn is None:
+                                logger.warning(
+                                    "❌ CHIRURGIE-LÜCKE: %s — %d Zonen geplant, "
+                                    "aber KEINE Repair-Funktion registriert!",
+                                    _defect_type, len(_type_instances),
+                                )
+                                _total_failed += len(_type_instances)
+                                continue
+                            _result = _surgeon.repair(
+                                audio, _type_instances, phase_fn=_fn,
                             )
-                        logger.info(
-                            "§2.59 SurgicalRepair: %d Bandfehler-Zonen präzise operiert",
-                            len(_zones),
+                            audio = _result.audio
+                            _total_repaired += _result.zones_repaired
+                            _total_failed += _result.zones_skipped
+                            _surgical_done[_defect_type] = _result.zones_repaired
+                            _surgical_skip[_defect_type] = _result.zones_skipped
+                        # ── Zusammenfassung ────────────────────────────
+                        _plan_types = ", ".join(
+                            f"{t}={c}" for t, c in sorted(_surgical_plan.items())
                         )
+                        if _total_repaired > 0 and _total_failed == 0:
+                            logger.info(
+                                "✅ CHIRURGIE-ERFOLG: %d/%d Zonen in %d Typen repariert → %s",
+                                _total_repaired, _total_planned,
+                                len(_surgical_done), _plan_types,
+                            )
+                        elif _total_repaired > 0:
+                            logger.warning(
+                                "⚠️ CHIRURGIE-TEILERFOLG: %d/%d Zonen repariert, "
+                                "%d fehlgeschlagen in %d Typen → %s",
+                                _total_repaired, _total_planned,
+                                _total_failed, len(_surgical_done), _plan_types,
+                            )
+                        else:
+                            logger.warning(
+                                "❌ CHIRURGIE-GESCHEITERT: 0/%d Zonen repariert! "
+                                "Geplante Typen: %s — globale Phasen übernehmen",
+                                _total_planned, _plan_types,
+                            )
+                        # Merke für Metadaten
+                        self._restoration_context["surgical_repair_planned"] = dict(_surgical_plan)
+                        self._restoration_context["surgical_repair_done"] = dict(_surgical_done)
+                        self._restoration_context["surgical_repair_skipped"] = dict(_surgical_skip)
             except Exception:
                 logger.debug("SurgicalRepair: non-blocking", exc_info=True)
 
@@ -12078,6 +12121,20 @@ class UnifiedRestorerV3:
                 "phase_17_mastering_polish",
                 "phase_40_loudness_normalization",
             ]
+            # §2.59.5: Preflight-Risk-Guard-Entscheidungen respektieren —
+            # Phasen die der Risk-Guard entfernt hat nicht im FeedbackChain
+            # wieder hinzufügen (würde Risk-Guard umgehen).
+            _risk_removed = set(
+                self._restoration_context.get("preflight_risk_removed_phases", []) or []
+            )
+            if _risk_removed:
+                _fc_phase_ids = [p for p in _fc_phase_ids if p not in _risk_removed]
+                if len(_fc_phase_ids) < len(["phase_07_harmonic_restoration", "phase_14_phase_correction", "phase_16_final_eq", "phase_17_mastering_polish", "phase_40_loudness_normalization"]):
+                    logger.info(
+                        "§2.59.5 FeedbackChain: %d Phase(n) durch Preflight-Risk-Guard entfernt → übersprungen: %s",
+                        len(_risk_removed),
+                        sorted(_risk_removed),
+                    )
             _fc_phases_list: list[Any] = []
             for _fc_pid in _fc_phase_ids:
                 _fc_phase_obj = self._get_phase(_fc_pid)
@@ -13972,6 +14029,14 @@ class UnifiedRestorerV3:
                     ", ".join(_mg_violations),
                 )
 
+                # §2.59.6 End-Gate Time-Guard: Maximal 300s für Recovery-Kaskade.
+                # Verhindert Endlos-Oszillation wenn Blends keine Verbesserung bringen.
+                # Nach Timeout: bester bisheriger Kandidat wird exportiert.
+                _ENDGATE_TIMEOUT_S = 300.0
+                _endgate_t0 = time.monotonic()
+                _endgate_measure_count = 0
+                _ENDGATE_MAX_MEASURES = 25  # ~3.5 min bei 8.5s/measure
+
                 # §9.8 End-Gate: P1/P2 Goal Recovery Cascade
                 _P1P2_GOALS = {
                     "natuerlichkeit",
@@ -13994,6 +14059,8 @@ class UnifiedRestorerV3:
                     _best_regression_count = float("inf")
 
                     for _alpha in _BLEND_ALPHAS:
+                        if time.monotonic() - _endgate_t0 > _ENDGATE_TIMEOUT_S or _endgate_measure_count >= _ENDGATE_MAX_MEASURES:
+                            break
                         try:
                             _blended = np.clip(
                                 _alpha * restored_audio + (1.0 - _alpha) * original_audio_for_goals,
@@ -14167,6 +14234,10 @@ class UnifiedRestorerV3:
                 # against safe rollback/checkpoint candidates and only switch when the
                 # weighted goal-gap improves. This is the first export-quality recovery
                 # layer: it favors a musically valid candidate over a merely last-run one.
+                # §2.59.6: Übersprungen wenn End-Gate-Budget erschöpft.
+                _endgate_elapsed = time.monotonic() - _endgate_t0
+                if _endgate_elapsed > _ENDGATE_TIMEOUT_S or _endgate_measure_count >= _ENDGATE_MAX_MEASURES:
+                    logger.info("End-Gate Time-Guard: Candidate Ranking übersprungen (elapsed=%.0fs, measures=%d)", _endgate_elapsed, _endgate_measure_count)
                 try:
                     _ranking_weights = getattr(self, "_song_goal_weights", None)
                     _scan_meta: dict[str, Any] = {}
@@ -14235,6 +14306,10 @@ class UnifiedRestorerV3:
                         _goal_recovery_meta["waerme_focus_rescue"] = dict(_waerme_rescue_meta)
 
                     for _cand_name, _cand_audio_raw, _cand_penalty in _candidate_sources:
+                        # §2.59.6: End-Gate-Budget-Guard — Abbruch wenn Zeit/Maße erschöpft
+                        if time.monotonic() - _endgate_t0 > _ENDGATE_TIMEOUT_S or _endgate_measure_count >= _ENDGATE_MAX_MEASURES:
+                            logger.info("End-Gate Budget-Guard: Candidate-Loop abgebrochen (%.0fs, %d measures)", time.monotonic() - _endgate_t0, _endgate_measure_count)
+                            break
                         try:
                             if (
                                 _cand_audio_raw is None

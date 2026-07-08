@@ -2360,18 +2360,17 @@ class DeEsserPhase(PhaseInterface):
                 # drückt das Ergebnis oft Richtung "male", obwohl die Formanten
                 # eindeutig weiblich sind.
                 #
-                # Erkennung: Wenn gender=male, confidence<0.80, F0 in der
-                # Überlappungszone (145–195 Hz), UND F1/F2 im weiblichen Bereich
-                # → Kontra-Alt. Formanten sind das zuverlässigere Merkmal
-                # (anatomisch bedingt), daher korrigieren wir auf female.
-                _CONTRALTO_F0_LOW = 145.0
-                _CONTRALTO_F0_HIGH = 195.0
+                # §2.9.1: Formanten sind das anatomisch härtere Merkmal als F0
+                # (Vokaltrakt-Länge ist konstant; F0 variiert mit Tonhöhe).
+                # Daher: Kein Confidence-Gate mehr. Wenn F1 UND F2 weiblich-typisch
+                # sind und F0 im Überlappungsbereich liegt → override auf FEMALE.
+                _CONTRALTO_F0_LOW = 140.0
+                _CONTRALTO_F0_HIGH = 220.0  # bis A3 — deckt Alt/Mezzo ab
                 _FEMALE_F1 = (310.0, 860.0)
                 _FEMALE_F2 = (920.0, 2790.0)
                 _contralto_detected = False
                 if (
                     gender_str == VocalGender.MALE
-                    and confidence < 0.80
                     and _CONTRALTO_F0_LOW <= f0 <= _CONTRALTO_F0_HIGH
                     and len(formants) >= 2
                 ):
