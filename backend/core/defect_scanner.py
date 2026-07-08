@@ -1307,12 +1307,12 @@ class DefectScanner:
         # §CODEC-DISKRIMINATOR: Initialisiere pro-Detektor Codec-Awareness
         # Wird von jedem _detect_*() konsultiert, um MP3-Artefakte von echten
         # analogen Defekten zu unterscheiden.
-        from backend.core.dsp.codec_discriminator import CodecDiscriminator
+        from backend.core.dsp.codec_discriminator import make_discriminator
 
         _fmd_chain = getattr(forensic_medium_result, "transfer_chain", None) or getattr(
             forensic_medium_result, "chain", None
         )
-        self._codec_disc = CodecDiscriminator(_fmd_chain, self.sample_rate)
+        self._codec_disc = make_discriminator(list(_fmd_chain) if isinstance(_fmd_chain, (list, tuple)) else None)
 
         self.thresholds = self.MATERIAL_SENSITIVITY[material_type]
 

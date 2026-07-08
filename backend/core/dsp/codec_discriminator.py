@@ -34,6 +34,50 @@ class CodecDiscriminator:
         self._discount = discount
         self._enabled = terminal_codec is not None and discount < 1.0
 
+    @property
+    def has_terminal_codec(self) -> bool:
+        return self._enabled
+
+    @property
+    def codec_discount(self) -> float:
+        return self._discount
+
+    # Convenience: onset_correlation wrapper für DefectScanner-Kompatibilität
+    def onset_correlation(self, audio, locations_s: list) -> float:
+        """Wrapper für crackle_onset_correlation: Zeit-basierte Locations → Sample-Indizes."""
+        if not self._enabled or not locations_s:
+            return 0.0
+        try:
+            import numpy as np
+            onsets = self._detect_transients(audio)
+            regions = [(int(s * 44100), int(e * 44100)) for s, e in locations_s if e > s]
+            return self.crackle_onset_correlation(regions, onsets)
+        except Exception:
+            return 0.0
+
+    def mp3_boundary_fraction(self, locations_s: list[tuple[float, float]]) -> float:
+        """Wrapper für click_boundary_density: Zeit → Sample-Konvertierung."""
+        if not self._enabled or not locations_s:
+            return 0.0
+        indices = [int((s + e) / 2 * 44100) for s, e in locations_s if e > s]
+        return self.click_boundary_density(indices, 44100)
+
+    def _detect_transients(self, audio) -> list:
+        """Einfache Transienten-Detektion via Energie-Anstieg."""
+        try:
+            import numpy as np
+            a = np.asarray(audio).ravel()
+            if len(a) < 1024:
+                return []
+            energy = np.abs(a[::256])
+            onsets = []
+            for i in range(1, len(energy) - 1):
+                if energy[i] > 3.0 * max(energy[i-1], 1e-12) and energy[i] > energy[i+1] * 1.5:
+                    onsets.append(i * 256)
+            return onsets[:500]  # Max 500 onsets
+        except Exception:
+            return []
+
     # ── Clicks: MP3-Block-Boundary vs. Vinyl-Click ─────────
 
     def is_codec_click(self, click_sample_idx: int, sample_rate: int) -> bool:
