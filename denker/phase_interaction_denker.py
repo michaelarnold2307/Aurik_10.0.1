@@ -690,6 +690,9 @@ class PhaseInteractionDenker:
                 "chain_has_mp3": "mp3" in str(chain_info.get("chain_str", "")).lower() if chain_info else False,
                 "pipeline_confidence": pipeline_confidence if pipeline_confidence else 0.75,
                 "defect_count_total": len(defect_result.scores) if defect_result and hasattr(defect_result, "scores") else 0,
+                # §CODEC: Denker-Kalibrierung codec-aware
+                "terminal_codec": _terminal_codec,
+                "codec_avg_discount": _codec_avg_discount,
             }
             _calibration = _catalog.calibrate_all(ordered, _audio_ctx)
             policy_hints["phase_calibration"] = _calibration
