@@ -321,7 +321,7 @@ class ReparaturDenker:
         if defect_locations:
             _n_click_locs = len(defect_locations.get("click", []))
             if _n_click_locs > 5000:
-                self._CLICK_IQR_MULTIPLIER = 12.0
+                self._CLICK_IQR_MULTIPLIER = float(os.environ.get("AURIK_CLICK_IQR_CODEC", 12.0))
                 logger.info(
                     "ReparaturDenker: %d clicks → click_iqr %.1f (Denker-Schutzstufe 2)",
                     _n_click_locs, self._CLICK_IQR_MULTIPLIER,

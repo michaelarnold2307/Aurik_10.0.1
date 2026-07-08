@@ -857,11 +857,12 @@ class DenoisePhase(PhaseInterface):
         # (≤ 0.20), automatisch DSP-only Pfad — kein BS-RoFormer, kein MIIPHER.
         # Der Denker (Joint-Calibrator + PhaseEffectCatalog) entscheidet die Stärke.
         _denker_strength = float(kwargs.get("strength", 1.0))
-        if _denker_strength <= 0.20 and not use_lightweight:
+        _dsp_threshold = float(os.environ.get("AURIK_PHASE03_DSP_THRESHOLD", 0.20))
+        if _denker_strength <= _dsp_threshold and not use_lightweight:
             use_lightweight = True
             logger.info(
-                "§DENKER Phase 03: strength=%.2f ≤ 0.20 → DSP-only (Denker-Entscheidung)",
-                _denker_strength,
+                "§DENKER Phase 03: strength=%.2f ≤ %.2f → DSP-only (Denker-Entscheidung)",
+                _denker_strength, _dsp_threshold,
             )
 
         _bsrof_gate = _panns_singing >= 0.35 and not use_lightweight and (_est_snr_db is None or _est_snr_db < 20.0)

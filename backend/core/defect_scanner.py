@@ -2523,7 +2523,7 @@ class DefectScanner:
             "streaming": 0.50,
             "minidisc": 0.65,
         }
-        discount = _DISCOUNT_MAP.get(_terminal, 0.60)
+        discount = float(os.environ.get("AURIK_CODEC_DISCOUNT", _DISCOUNT_MAP.get(_terminal, 0.60)))
 
         # Analog-Defekte die von Codec-Artefakten imitiert werden
         _ANALOG_MIMICABLE: set[DefectType] = {
