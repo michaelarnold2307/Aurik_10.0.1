@@ -714,12 +714,17 @@ def get_rt60_profile(
 def estimate_room_type(
     rt60_mid_s: float,
     drr_db: float,
+    *,
+    era_decade: int | None = None,
+    material_hint: str | None = None,
 ) -> str:
-    """Heuristic room type from measured RT60 and DRR.
+    """Heuristic room type from measured RT60 and DRR with era plausibility.
 
     Args:
-        rt60_mid_s:  Measured RT60 at 500–1000 Hz [s].
-        drr_db:      Measured Direct-to-Reverberant Ratio [dB].
+        rt60_mid_s:    Measured RT60 at 500–1000 Hz [s].
+        drr_db:        Measured Direct-to-Reverberant Ratio [dB].
+        era_decade:    Recording decade for plausibility check.
+        material_hint: Material type (vinyl/tape → studio recording).
 
     Returns:
         One of: "studio" | "broadcast" | "concert_hall" | "church" | "outdoor".
@@ -731,8 +736,29 @@ def estimate_room_type(
     if rt60_mid_s < 1.20:
         return "broadcast"
     if rt60_mid_s < 2.50:
-        return "concert_hall"
-    return "church"
+        room = "concert_hall"
+    else:
+        room = "church"
+
+    # §2.59.16 Era-Plausibilität: Studio-Aufnahmen post-1955 sind
+    # nie in Kirchen entstanden. Der Hall kommt vom Plattenhall/Chamber.
+    # Caps: concert_hall→broadcast, church→broadcast.
+    _is_studio_era = (
+        era_decade is not None and era_decade >= 1960
+        and material_hint in ("vinyl", "tape", "reel_tape", "cassette")
+    )
+    if _is_studio_era and room in ("concert_hall", "church"):
+        import logging
+        _log = logging.getLogger(__name__)
+        _log.info(
+            "§2.59.16 Room-Era-Plausibilität: RT60=%.1fs → '%s', "
+            "aber era=%d + material=%s → auf 'broadcast' korrigiert "
+            "(kein Kirchenhall in Studio-Ära)",
+            rt60_mid_s, room, era_decade, material_hint,
+        )
+        return "broadcast"
+
+    return room
 
 
 def list_venue_keys() -> list[str]:

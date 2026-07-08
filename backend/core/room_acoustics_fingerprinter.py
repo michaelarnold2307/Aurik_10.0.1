@@ -142,7 +142,7 @@ def compute_room_acoustics_fingerprint(
         result["rt60_s"] = float(rt60)
         result["drr_db"] = float(drr)
 
-        room_type = estimate_room_type(rt60, drr)
+        room_type = estimate_room_type(rt60, drr, era_decade=era_decade, material_hint=venue_hint)
         result["room_type"] = room_type
         result["early_reflection_ms"] = _early_reflection_estimate_ms(rt60)
 

@@ -8559,6 +8559,11 @@ class UnifiedRestorerV3:
                 audio,
                 sample_rate,
                 era_decade=self._restoration_context.get("decade"),
+                venue_hint=str(
+                    getattr(material_type, "value", material_type)
+                    or getattr(_classified_material, "value", _classified_material)
+                    or "unknown"
+                ),
             )
             self._restoration_context["room_acoustics_fingerprint"] = _raf
         except Exception as _raf_exc:
