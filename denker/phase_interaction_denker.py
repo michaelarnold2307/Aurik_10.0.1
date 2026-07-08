@@ -352,6 +352,7 @@ class PhaseInteractionDenker:
         goal_risk_map: dict[str, float] | None = None,
         strategie_plan: Any | None = None,
         signal_signature: dict[str, float] | None = None,
+        sections: list[tuple[float, float, str]] | None = None,
     ) -> PhasePlan:
         """Erstellt einen konfliktfreien, semantisch geordneten Phasenplan.
 
@@ -395,6 +396,7 @@ class PhaseInteractionDenker:
                 goal_risk_map=goal_risk_map,
                 strategie_plan=strategie_plan,
                 signal_signature=signal_signature,
+                sections=sections,
             )
         except Exception as exc:
             logger.warning(
@@ -427,6 +429,7 @@ class PhaseInteractionDenker:
         goal_risk_map: dict[str, float] | None,
         strategie_plan: Any | None,
         signal_signature: dict[str, float] | None,
+        sections: list[tuple[float, float, str]] | None = None,
     ) -> PhasePlan:
         # 1. Phase-Selektion via UV3 (UV3 = Werkzeug, nicht Orchestrator)
         uv3_phases = self._select_via_uv3(
@@ -644,6 +647,62 @@ class PhaseInteractionDenker:
                 )
         except Exception as _u_exc:
             logger.debug("§U Phase-Ordering nicht verfügbar: %s", _u_exc)
+
+        # ── §2.60 Denker-Intelligenz: PhaseEffectCatalog → Intensitäten ────
+        try:
+            from backend.core.phase_effect_catalog import get_phase_effect_catalog, get_phase_risk_level
+            _catalog = get_phase_effect_catalog()
+            _audio_ctx = {
+                "snr_db": signal_signature.get("snr_db"),
+                "panns_singing": signal_signature.get("panns_singing", 0.0),
+                "bandwidth_hz": signal_signature.get("bandwidth_hz"),
+                "era_decade": era,
+                "material_type": str(material).lower() if material else "unknown",
+                "restorability": restorability_score / 100.0 if restorability_score else 0.5,
+                "defect_severity": signal_signature.get("severity", 0.5),
+                # §2.60 L1-Max: Alle Signal-Signature-Felder
+                "crest_db": signal_signature.get("crest_db", 12.0),
+                "hf_ratio": signal_signature.get("hf_ratio", 0.0),
+                "transient_ratio": signal_signature.get("transient_ratio", 0.0),
+                "micro_dynamic_db": signal_signature.get("micro_dynamic_db", 6.0),
+                "rms_dbfs": signal_signature.get("rms_dbfs", -20.0),
+                "chain_has_cassette": "cassette" in str(chain_info.get("chain_str", "")).lower() if chain_info else False,
+                "chain_has_mp3": "mp3" in str(chain_info.get("chain_str", "")).lower() if chain_info else False,
+                "pipeline_confidence": pipeline_confidence if pipeline_confidence else 0.75,
+                "defect_count_total": len(defect_result.scores) if defect_result and hasattr(defect_result, "scores") else 0,
+            }
+            _calibration = _catalog.calibrate_all(ordered, _audio_ctx)
+            policy_hints["phase_calibration"] = _calibration
+            _n_cal = sum(1 for v in _calibration.values() if v != 1.0)
+            # ── §2.60.1 Fahrplan: Denker als Dirigent ────────────────────
+            try:
+                from backend.core.fahrplan import build_fahrplan, Fahrplan
+                _goal_prios = {
+                    k: float(v) for k, v in (goal_risk_map or {}).items()
+                }
+                _fahrplan = build_fahrplan(
+                    phase_ids=list(ordered),
+                    sections=sections if sections else [],
+                    goal_priorities=_goal_prios,
+                    phase_effect_catalog=None,
+                    audio_ctx=_audio_ctx,
+                )
+                policy_hints["fahrplan"] = _fahrplan
+                logger.info(
+                    "§2.60.1 Fahrplan: %d Phasen, %d Sektionen → %s",
+                    len(_fahrplan.phase_order),
+                    len(_fahrplan.sections),
+                    _fahrplan.note,
+                )
+            except Exception:
+                pass
+            if _n_cal > 0:
+                logger.info(
+                    "§2.60 Denker-Kalibrierung: %d/%d Phasen intensitäts-angepasst",
+                    _n_cal, len(ordered),
+                )
+        except Exception:
+            pass
 
         return PhasePlan(
             phases=ordered,

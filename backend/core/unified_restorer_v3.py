@@ -8414,8 +8414,8 @@ class UnifiedRestorerV3:
         # §2.59.15: Fallback — ClippingDetector fand soft_saturation?
         # Dann preserve auch ohne Genre-Profil (Aufnahmecharakter bewahren).
         _sat_sev_fb = 0.0
-        if defect_result is not None and hasattr(defect_result, "scores"):
-            for _dk, _ds in defect_result.scores.items():
+        if _cached_defect_kwarg is not None and hasattr(_cached_defect_kwarg, "scores"):
+            for _dk, _ds in _cached_defect_kwarg.scores.items():
                 _dk_str = _dk.value if hasattr(_dk, "value") else str(_dk)
                 if _dk_str == "soft_saturation" and hasattr(_ds, "severity"):
                     _sat_sev_fb = float(_ds.severity)
@@ -8559,6 +8559,11 @@ class UnifiedRestorerV3:
                 audio,
                 sample_rate,
                 era_decade=self._restoration_context.get("decade"),
+                venue_hint=str(
+                    getattr(material_type, "value", material_type)
+                    or getattr(_classified_material, "value", _classified_material)
+                    or "unknown"
+                ),
             )
             self._restoration_context["room_acoustics_fingerprint"] = _raf
         except Exception as _raf_exc:
@@ -10255,6 +10260,18 @@ class UnifiedRestorerV3:
         except Exception as _ram_exc:
             logger.debug("§Gap6 ReferenceAnchorMatcher non-blocking: %s", _ram_exc)
 
+        # §2.63 Closed-Loop PID: Goal-Error-getriebene Strength-Justierung
+        try:
+            _pid_targets = getattr(self, "_song_goal_targets", None)
+            if isinstance(_pid_targets, dict) and _pid_targets:
+                from backend.core.closed_loop_pid import ClosedLoopPIDController
+                self._closed_loop_pid = ClosedLoopPIDController(_pid_targets)
+                logger.info("§2.63 Closed-Loop PID: aktiviert mit %d Goal-Targets", len(_pid_targets))
+            else:
+                self._closed_loop_pid = None
+        except Exception:
+            self._closed_loop_pid = None
+
         # §2.54 Pre-Pipeline Physical Ceiling — gecappte PMGG-Targets für per-Phase Nutzung.
         # Berechnet PhysicalCeiling auf dem Eingabe-Audio (degradiert) um die Signal-SNR-
         # und Bandbreiten-basierten Goal-Obergrenzen zu ermitteln. Combined mit SGT ergibt
@@ -11705,40 +11722,46 @@ class UnifiedRestorerV3:
                             logger.debug("SurgicalPlan: %d Instruktionen für %d Phasen", len(_sp), len(_sp.by_phase()))
                         except Exception:
                             pass
-                        _surgeon = SurgicalRepair(sr=sample_rate)
-                        _instances = [
-                            DefectInstance(z.start_s, z.end_s, z.defect_type, z.severity)
-                            for z in _zones
-                        ]
-                        from backend.core.surgical_repair import _SURGICAL_REPAIR_FUNCTIONS
-                        _by_type: dict[str, list] = {}
-                        for _inst in _instances:
-                            _by_type.setdefault(_inst.defect_type, []).append(_inst)
-                        _total_planned = len(_instances)
-                        _total_repaired = 0
-                        _total_failed = 0
-                        for _defect_type, _type_instances in sorted(_by_type.items()):
-                            _fn = _SURGICAL_REPAIR_FUNCTIONS.get(_defect_type)
-                            if _fn is None:
-                                logger.debug("CHIRURGIE: Keine Funktion für %s", _defect_type)
-                                _total_failed += len(_type_instances)
-                                continue
-                            _result = _surgeon.repair(audio, _type_instances, phase_fn=_fn)
-                            audio = _result.audio
-                            _total_repaired += _result.zones_repaired
-                            _total_failed += _result.zones_skipped
-                            _surgical_done[_defect_type] = _result.zones_repaired
-                            _surgical_skip[_defect_type] = _result.zones_skipped
-                        _plan_types = ", ".join(f"{t}={c}" for t, c in sorted(_surgical_plan.items()))
-                        if _total_repaired > 0 and _total_failed == 0:
-                            logger.info("✅ CHIRURGIE-ERFOLG: %d/%d Zonen in %d Typen → %s", _total_repaired, _total_planned, len(_surgical_done), _plan_types)
-                        elif _total_repaired > 0:
-                            logger.warning("⚠️ CHIRURGIE-TEILERFOLG: %d/%d Zonen, %d failed → %s", _total_repaired, _total_planned, _total_failed, _plan_types)
-                        else:
-                            logger.warning("❌ CHIRURGIE-GESCHEITERT: 0/%d → globale Phasen übernehmen", _total_planned)
-                        self._restoration_context["surgical_repair_planned"] = dict(_surgical_plan)
-                        self._restoration_context["surgical_repair_done"] = dict(_surgical_done)
-                        self._restoration_context["surgical_repair_skipped"] = dict(_surgical_skip)
+                        # §2.61: Chirurgie mit ECHTEN Phasen via surgical_dispatch()
+                        try:
+                            from backend.core.phases.phase_interface import PhaseInterface
+                            from backend.core.surgical_plan import SURGICAL_DEFECT_TO_PHASE
+                            _total_repaired = 0
+                            _total_failed = 0
+                            # Gruppiere Zonen nach Ziel-Phase
+                            _by_phase: dict[str, list[tuple[float, float]]] = {}
+                            for z in _zones:
+                                _target_phase = SURGICAL_DEFECT_TO_PHASE.get(z.defect_type)
+                                if _target_phase:
+                                    _by_phase.setdefault(_target_phase, []).append((z.start_s, z.end_s))
+                            for _phase_id, _time_ranges in sorted(_by_phase.items()):
+                                _phase = self._get_phase(_phase_id)
+                                if _phase is None:
+                                    _total_failed += len(_time_ranges)
+                                    continue
+                                try:
+                                    audio = PhaseInterface.surgical_dispatch(
+                                        _phase, audio, sample_rate,
+                                        str(getattr(material_type, "value", material_type) or "unknown"),
+                                        _time_ranges,
+                                    )
+                                    _total_repaired += len(_time_ranges)
+                                    _surgical_done[_phase_id] = len(_time_ranges)
+                                except Exception:
+                                    _total_failed += len(_time_ranges)
+                            _plan_types = ", ".join(f"{t}={c}" for t, c in sorted(_surgical_plan.items()))
+                            if _total_repaired > 0 and _total_failed == 0:
+                                logger.info("✅ CHIRURGIE-PHASEN: %d/%d Zonen via %d Phasen → %s",
+                                          _total_repaired, _total_repaired + _total_failed,
+                                          len(_surgical_done), _plan_types)
+                            elif _total_repaired > 0:
+                                logger.warning("⚠️ CHIRURGIE-PHASEN: %d/%d Zonen, %d failed → %s",
+                                             _total_repaired, _total_repaired + _total_failed,
+                                             _total_failed, _plan_types)
+                            else:
+                                logger.info("🔬 CHIRURGIE: Keine Phasen verfügbar — globale übernehmen")
+                        except Exception:
+                            logger.debug("SurgicalPhaseDispatch: non-blocking", exc_info=True)
                     else:
                         logger.info("🔬 CHIRURGIE: Keine lokalisierten Zonen")
                 else:
@@ -27714,6 +27737,18 @@ class UnifiedRestorerV3:
             _rest_ctx,
         )
 
+        # ── §2.60.3: Fahrplan-Kalibrierung — Denker gibt Intensität vor ──
+        _phase_id_pp = str(getattr(phase_metadata, "phase_id", ""))
+        if _phase_id_pp and "strength" in kwargs:
+            try:
+                _fahrplan_ctx = ((self._restoration_context.get("denker_policy_input", {}) or {}).get("phase_interaction", {}) or {}).get("fahrplan") if isinstance(getattr(self, "_restoration_context", None), dict) else None
+                if _fahrplan_ctx is not None and hasattr(_fahrplan_ctx, "calibration"):
+                    _cal_val = _fahrplan_ctx.calibration.get(_phase_id_pp)
+                    if _cal_val is not None and 0.0 < _cal_val < 1.0:
+                        kwargs["strength"] = float(_cal_val)
+            except Exception:
+                pass
+
         # ── §DENKER: Zentrale Guard-Modulation via PhaseInteractionDenker ──
         if "strength" in kwargs:
             try:
@@ -28147,8 +28182,66 @@ class UnifiedRestorerV3:
         if _env is not None and "strength_envelope" not in kwargs:
             kwargs["strength_envelope"] = _env
 
+        # §2.63 Closed-Loop PID: Strength boost/dampen basierend auf Goal-Errors
+        _pid_ctrl = getattr(self, "_closed_loop_pid", None)
+        if _pid_ctrl is not None and "strength" in kwargs:
+            try:
+                _pre_snap_pid = getattr(self, "_phase_pre_snapshot", {}) or {}
+                _pid_mult = _pid_ctrl.before_phase(
+                    str(getattr(phase_metadata, "phase_id", "")),
+                    _pre_snap_pid,
+                )
+                if _pid_mult != 1.0:
+                    _old_s_pid = float(kwargs.get("strength", 1.0))
+                    kwargs["strength"] = float(np.clip(_old_s_pid * _pid_mult, 0.15, 1.50))
+                    logger.debug(
+                        "§2.63 PID %s: mult=%.3f strength %.3f→%.3f",
+                        phase_metadata.phase_id, _pid_mult, _old_s_pid, kwargs["strength"],
+                    )
+            except Exception as _pid_exc:
+                logger.debug("§2.63 PID before_phase non-blocking: %s", _pid_exc)
+
+        # §2.62 Per-Segment-Ausführung: wenn Fahrplan non-uniforme Stärken hat,
+        # Audio an Sektionsgrenzen splitten, pro Segment verarbeiten, crossfaden.
+        _use_per_segment = False
         try:
-            result = phase.process(audio, **kwargs)
+            _ps_fahrplan = ((self._restoration_context.get("denker_policy_input", {}) or {})
+                            .get("phase_interaction", {}) or {}).get("fahrplan")
+            if _ps_fahrplan is not None:
+                from backend.core.per_segment_executor import get_segment_strengths_from_fahrplan
+
+                _ps_phase_id = str(getattr(phase_metadata, "phase_id", ""))
+                _ps_base = float(kwargs.get("strength", 1.0))
+                _ps_info = get_segment_strengths_from_fahrplan(_ps_fahrplan, _ps_phase_id, _ps_base)
+                if _ps_info is not None:
+                    _ps_bounds, _ps_strengths = _ps_info
+                    _use_per_segment = True
+        except Exception:
+            pass
+
+        try:
+            if _use_per_segment:
+                from backend.core.per_segment_executor import run_phase_per_segment
+
+                result = run_phase_per_segment(
+                    audio,
+                    int(kwargs.get("sample_rate", 48000)),
+                    phase.process,
+                    dict(kwargs),
+                    segment_bounds_s=_ps_bounds,
+                    segment_strengths=_ps_strengths,
+                    phase_id=_ps_phase_id,
+                )
+                # §2.62: Per-Segment gibt np.ndarray zurück, wickle in Result-artiges Objekt
+                # damit nachfolgender Code (getattr(result, "audio", None)) funktioniert.
+                if isinstance(result, np.ndarray):
+                    class _SegResult:
+                        pass
+                    _sr = _SegResult()
+                    _sr.audio = result
+                    result = _sr  # type: ignore[assignment]
+            else:
+                result = phase.process(audio, **kwargs)
         finally:
             _hb_stop_ev.set()
             if _hb_thread is not None:
@@ -29588,6 +29681,14 @@ class UnifiedRestorerV3:
                     _phase_meta_existing["psycho_runtime_rolling_risk"] = round(_new_roll, 4)
                     _phase_meta_existing["psycho_delta_focus"] = [f"{_k}:{_v:.4f}" for _k, _v in _delta_focus]
                     self._phase_metadata_accumulator[_phase_delta_pid] = _phase_meta_existing
+
+                    # §2.63 Closed-Loop PID: Post-Phase Delta an PID-Regler melden
+                    _pid_ctrl_post = getattr(self, "_closed_loop_pid", None)
+                    if _pid_ctrl_post is not None:
+                        try:
+                            _pid_ctrl_post.after_phase(_phase_delta_pid, _post_snap)
+                        except Exception:
+                            pass
 
                     # §2.64 K-3: HPI-Live-Proxy per Phase-Checkpoint
                     # Leichtgewichtig aus bereits berechneten _post_snap-Werten — kein
