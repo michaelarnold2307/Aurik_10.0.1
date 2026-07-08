@@ -10284,6 +10284,49 @@ class UnifiedRestorerV3:
         else:
             self._closed_loop_pid = None
 
+        # §2.70 Joint-Calibration: Goal-Gap-Optimierung aller Phasen-Stärken
+        # Ersetzt die 13 isolierten Regeln im PhaseEffectCatalog durch eine
+        # gemeinsame Optimierung gegen die 15 Musical-Goal-Proxies.
+        self._joint_calibration = None
+        try:
+            _jcal_targets = getattr(self, "_song_goal_targets", None)
+            _jcal_phases = getattr(self, "_selected_phases", None) or list(getattr(
+                getattr(self, "_precomputed_phase_plan", None), "phases", []) or [])
+            if _jcal_targets and _jcal_phases and os.environ.get("AURIK_EVOLUTION", "") == "1":
+                from backend.core.joint_calibrator import joint_calibrate
+                _jcal_proxies = {k: float(v) for k, v in (getattr(self, "_phase_pre_snapshot", {}) or {}).items()}
+                _jcal_mat = str(getattr(getattr(self, "_restoration_context", {}), "get", lambda _: "vinyl")("primary_material") or "vinyl").lower()
+                _jcal_panns = float(getattr(self, "_panns_singing", 0.0))
+                # Codec-Kontext aus PhaseInteractionDenker-Notizen
+                _jcal_notes = getattr(getattr(self, "_precomputed_phase_plan", None), "conflict_notes", []) or []
+                _jcal_terminal = None
+                _jcal_discount = 1.0
+                for _jn in (_jcal_notes if isinstance(_jcal_notes, list) else []):
+                    if "terminal=" in str(_jn):
+                        import re
+                        _m = re.search(r'terminal=(\S+)', str(_jn))
+                        if _m: _jcal_terminal = _m.group(1)
+                        _m2 = re.search(r'discount=([\d.]+)', str(_jn))
+                        if _m2: _jcal_discount = float(_m2.group(1))
+                self._joint_calibration = joint_calibrate(
+                    phase_ids=_jcal_phases,
+                    goal_proxies=_jcal_proxies,
+                    goal_targets=dict(_jcal_targets),
+                    material=_jcal_mat,
+                    panns_singing=_jcal_panns,
+                    codec_avg_discount=_jcal_discount,
+                    terminal_codec=_jcal_terminal,
+                )
+                if self._joint_calibration:
+                    _n_boosted = sum(1 for v in self._joint_calibration.values() if v > 0.50)
+                    _n_damped = sum(1 for v in self._joint_calibration.values() if v < 0.30)
+                    logger.info(
+                        "§2.70 Joint-Calibration: %d Phasen optimiert (%d boosted, %d damped)",
+                        len(self._joint_calibration), _n_boosted, _n_damped,
+                    )
+        except Exception as _jcal_exc:
+            logger.debug("§2.70 Joint-Calibration nicht verfügbar: %s", _jcal_exc)
+
         # §2.54 Pre-Pipeline Physical Ceiling — gecappte PMGG-Targets für per-Phase Nutzung.
         # Berechnet PhysicalCeiling auf dem Eingabe-Audio (degradiert) um die Signal-SNR-
         # und Bandbreiten-basierten Goal-Obergrenzen zu ermitteln. Combined mit SGT ergibt
