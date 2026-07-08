@@ -183,6 +183,17 @@ def calibrate_phase_intensity(
     era_decade: int = 1980,
     genre_is_schlager: bool = False,
     soft_saturation_preserve: bool = False,
+    # ── §2.60 L1-Max: Zusätzliche Messwerte ─────────────────
+    crest_db: float = 12.0,
+    hf_ratio: float = 0.0,
+    transient_ratio: float = 0.0,
+    micro_dynamic_db: float = 6.0,
+    rms_dbfs: float = -20.0,
+    chain_has_cassette: bool = False,
+    chain_has_mp3: bool = False,
+    restorability: float = 0.5,
+    pipeline_confidence: float = 0.75,
+    defect_count_total: int = 0,
 ) -> float:
     """§2.60: Kalibriert die Phasen-Intensität proaktiv.
 
@@ -235,6 +246,40 @@ def calibrate_phase_intensity(
             strength *= 0.5  # Sehr niedriger SNR → ML tut mehr Schaden als Nutzen
         elif snr_db > 15:
             strength = min(strength, 0.4)  # Hoher SNR → ML kaum nötig
+
+    # 6. Crest-Faktor: hoher Crest → Transienten-Phasen verstärken
+    if crest_db > 15.0 and "transient_smearing" in profile.risks:
+        strength *= 0.6  # Ohnehin schon spitzig → nicht weiter schärfen
+
+    # 7. HF-Anteil: viel HF → De-Esser/Brillanz-Phasen anpassen
+    if hf_ratio > 0.15 and phase_id == "phase_19_de_esser":
+        strength = min(strength, 1.0)  # Viel HF → De-Esser darf voll ran
+    if hf_ratio < 0.02 and "over_brightening" in profile.risks:
+        strength *= 0.3  # Kaum HF → Aufhell-Phasen kaum nötig, Risiko künstlich
+
+    # 8. Mikrodynamik: flache Dynamik → Expansions-Phasen verstärken
+    if micro_dynamic_db < 3.0 and phase_id == "phase_26_dynamic_range_expansion":
+        strength = min(strength * 1.3, 1.0)  # Flach → mehr Expansion wagen
+
+    # 9. Pegel: sehr leise Aufnahme → konservativer (Rauschen wird sonst hochgezogen)
+    if rms_dbfs < -30.0 and "ml_artifact" in profile.risks:
+        strength *= 0.5
+
+    # 10. Transfer-Kette: MP3 in der Kette → ML-Phasen vorsichtiger
+    if chain_has_mp3 and "ml_artifact" in profile.risks:
+        strength *= 0.7  # MP3-Artefakte + ML = Gefahr
+
+    # 11. Restorability: schlechte Ausgangslage → weniger invasive Eingriffe
+    if restorability < 0.4:
+        strength *= 0.7  # Ohnehin schwer → nicht zu viel riskieren
+
+    # 12. Pipeline-Unsicherheit: unklare Diagnose → defensiver
+    if pipeline_confidence < 0.7 and "ml_artifact" in profile.risks:
+        strength *= 0.6  # Wenn unsicher, dann ML lieber weglassen
+
+    # 13. Viele Defekte: zu viele Baustellen → nicht alle Phasen voll aufdrehen
+    if defect_count_total > 40:
+        strength *= 0.8  # Kaskadierende Phasen → jede etwas zurückhaltender
 
     return max(0.0, min(1.0, strength))
 
@@ -301,6 +346,16 @@ class _CatalogHelper:
                 bandwidth_hz=float(audio_ctx.get("bandwidth_hz", 20000)),
                 era_decade=int(audio_ctx.get("era_decade", 1980)),
                 rt60_s=float(audio_ctx.get("rt60_s", 0.5)),
+                crest_db=float(audio_ctx.get("crest_db", 12.0)),
+                hf_ratio=float(audio_ctx.get("hf_ratio", 0.0)),
+                transient_ratio=float(audio_ctx.get("transient_ratio", 0.0)),
+                micro_dynamic_db=float(audio_ctx.get("micro_dynamic_db", 6.0)),
+                rms_dbfs=float(audio_ctx.get("rms_dbfs", -20.0)),
+                chain_has_cassette=bool(audio_ctx.get("chain_has_cassette", False)),
+                chain_has_mp3=bool(audio_ctx.get("chain_has_mp3", False)),
+                restorability=float(audio_ctx.get("restorability", 0.5)),
+                pipeline_confidence=float(audio_ctx.get("pipeline_confidence", 0.75)),
+                defect_count_total=int(audio_ctx.get("defect_count_total", 0)),
             )
             result[pid] = calibrated
         return result

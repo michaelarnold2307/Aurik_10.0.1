@@ -657,6 +657,16 @@ class PhaseInteractionDenker:
                 "material_type": str(material).lower() if material else "unknown",
                 "restorability": restorability_score / 100.0 if restorability_score else 0.5,
                 "defect_severity": signal_signature.get("severity", 0.5),
+                # §2.60 L1-Max: Alle Signal-Signature-Felder
+                "crest_db": signal_signature.get("crest_db", 12.0),
+                "hf_ratio": signal_signature.get("hf_ratio", 0.0),
+                "transient_ratio": signal_signature.get("transient_ratio", 0.0),
+                "micro_dynamic_db": signal_signature.get("micro_dynamic_db", 6.0),
+                "rms_dbfs": signal_signature.get("rms_dbfs", -20.0),
+                "chain_has_cassette": "cassette" in str(chain_info.get("chain_str", "")).lower() if chain_info else False,
+                "chain_has_mp3": "mp3" in str(chain_info.get("chain_str", "")).lower() if chain_info else False,
+                "pipeline_confidence": pipeline_confidence if pipeline_confidence else 0.75,
+                "defect_count_total": len(defect_result.scores) if defect_result and hasattr(defect_result, "scores") else 0,
             }
             _calibration = _catalog.calibrate_all(ordered, _audio_ctx)
             policy_hints["phase_calibration"] = _calibration
