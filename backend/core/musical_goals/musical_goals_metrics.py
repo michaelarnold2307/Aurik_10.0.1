@@ -2156,6 +2156,23 @@ class GrooveMetric:
 
             score = 0.60 * timing_score + 0.40 * dtw_score
 
+            # §SOTA #5: Sub-Beat-Microtiming — Onset-Envelope-Autocorrelation
+            # misst, ob Restaurierung die Mikro-Timing-Struktur verwischt hat.
+            # Periodische Onsets im Sub-Beat-Bereich (50–200 ms) deuten auf
+            # erhaltenen Groove hin; flache Autocorrelation auf Verschmierung.
+            try:
+                _env = librosa.onset.onset_strength(y=audio, sr=sr, hop_length=256)
+                _ac = np.correlate(_env, _env, mode='full')
+                _ac = _ac[len(_ac)//2:] / max(_ac[len(_ac)//2], 1e-10)
+                _sub_lo = int(0.050 * sr / 256)  # 50 ms
+                _sub_hi = int(0.200 * sr / 256)  # 200 ms
+                if _sub_hi < len(_ac) and _sub_lo < _sub_hi:
+                    _sub_peak = float(np.max(_ac[_sub_lo:_sub_hi]))
+                    _sub_score = float(np.clip(_sub_peak * 1.5, 0.0, 0.10))
+                    score = min(1.0, score + _sub_score)
+            except Exception:
+                pass
+
         except Exception as exc:
             logger.debug("GrooveMetric Fallback (Fehler: %s)", exc)
             score = 0.75
