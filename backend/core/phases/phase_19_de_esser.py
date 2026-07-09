@@ -695,6 +695,8 @@ class DeEsserPhase(PhaseInterface):
             "max_gain_reduction_db": 0.0,
             "intelligibility_protected": False,
             "gender_profile": self.gender,
+            "gender_timeline": _gender_timeline,
+            "multi_gender": _multi_gender,
             "formant_preservation": self.vocal_profile.get("formant_protect", 0.85),
             "brilliance_preservation": self.vocal_profile.get("brilliance_preserve", 0.90),
             "aurik_8_stages_used": AURIK_8_AVAILABLE,
@@ -958,7 +960,20 @@ class DeEsserPhase(PhaseInterface):
                 logger.debug("Phase 19: sibilant_band_hz fallback: %s", _ptl_exc)
 
         # Multi-Band De-Essing anwenden (mit Gender-Profil)
-        if is_stereo:
+        # §2.9.6: Per-Segment-Gender — jedes Gender bekommt sein eigenes Profil
+        if _multi_gender and _gender_timeline:
+            logger.info(
+                "🎤 §2.9.6 Per-Gender-De-Essing: %d Segmente, genders=%s",
+                len(_gender_timeline),
+                sorted(set(s["gender"] for s in _gender_timeline)),
+            )
+            deessed_audio = self._process_per_gender_segments(
+                enhanced_audio, sample_rate, _gender_timeline,
+                material=material, band_weights=band_weights,
+                max_reduction_db=max_reduction_db, threshold_ratio=threshold_ratio,
+                lookahead_samples=lookahead_samples,
+            )
+        elif is_stereo:
             # §2.51 Stereo-Kohärenz: kein unabhängiges L/R-De-Essing.
             # M/S-Verarbeitung: Mid voll, Side konservativ.
             _sqrt2 = float(np.sqrt(2.0))
@@ -2941,6 +2956,81 @@ def _build_union_vocal_profile(genders: list[str]) -> dict:
             )
 
         return timeline
+
+    def _process_per_gender_segments(
+        self,
+        audio: np.ndarray,
+        sample_rate: int,
+        gender_timeline: list[dict[str, object]],
+        **kwargs: Any,
+    ) -> np.ndarray:
+        """Verarbeitet Audio in Gender-spezifischen Segmenten mit Crossfades."""
+        if not gender_timeline:
+            return audio
+        is_stereo = audio.ndim == 2
+        n_samples = audio.shape[1] if is_stereo else len(audio)
+        output = np.zeros_like(audio, dtype=np.float32)
+        weight_accum = np.zeros(n_samples, dtype=np.float32)
+        fade = int(0.005 * sample_rate)
+
+        for i, seg in enumerate(gender_timeline):
+            gender = str(seg["gender"])
+            if gender not in VOCAL_PROFILES:
+                continue
+            t0, t1 = float(seg["t_start_s"]), float(seg["t_end_s"])
+            s0, s1 = max(0, int(t0 * sample_rate)), min(n_samples, int(t1 * sample_rate))
+            if s1 <= s0:
+                continue
+
+            _saved_profile = dict(self.vocal_profile)
+            _saved_gender = self.gender
+            self.vocal_profile = VOCAL_PROFILES[gender]
+            self.gender = gender
+
+            try:
+                seg_audio = audio[:, s0:s1] if is_stereo else audio[s0:s1]
+                if is_stereo:
+                    dm, _ = self._process_channel_multiband_gender_aware(seg_audio[0], sample_rate, **kwargs)
+                    ds, _ = self._process_channel_multiband_gender_aware(seg_audio[1], sample_rate, **kwargs)
+                    seg_proc = np.stack([dm, ds], axis=0)
+                else:
+                    seg_proc, _ = self._process_channel_multiband_gender_aware(seg_audio, sample_rate, **kwargs)
+
+                _fp = self.vocal_profile.get("formant_protect", 0.85)
+                _fr = self.vocal_profile.get("formant_range", (300, 2000))
+                seg_proc = self._apply_formant_preservation(
+                    seg_audio, seg_proc, sample_rate,
+                    float(_fr[0]), float(_fr[1]), float(_fp),
+                )
+
+                fl = min(fade, s1 - s0)
+                win = np.ones(s1 - s0, dtype=np.float32)
+                if i > 0 and fl > 0:
+                    win[:fl] = np.hanning(fl * 2)[:fl]
+                if i < len(gender_timeline) - 1 and fl > 0:
+                    win[-fl:] = np.hanning(fl * 2)[fl:]
+
+                if is_stereo:
+                    output[:, s0:s1] += seg_proc * win[np.newaxis, :]
+                else:
+                    output[s0:s1] += seg_proc * win
+                weight_accum[s0:s1] += win
+            finally:
+                self.vocal_profile = _saved_profile
+                self.gender = _saved_gender
+
+        valid = weight_accum > 0
+        if is_stereo:
+            output[:, valid] /= weight_accum[valid][np.newaxis, :]
+        else:
+            output[valid] /= weight_accum[valid]
+        gaps = weight_accum <= 0
+        if np.any(gaps):
+            if is_stereo:
+                output[:, gaps] = audio[:, gaps]
+            else:
+                output[gaps] = audio[gaps]
+        return np.clip(output, -1.0, 1.0).astype(np.float32)
 
     def _apply_formant_preservation(
         self,
