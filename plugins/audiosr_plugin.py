@@ -312,6 +312,11 @@ def _run_audiosr_ml(audio: np.ndarray, sr: int) -> np.ndarray | None:
                 zone_mono_1d = np.clip(zone_mono_1d, -1.0, 1.0)
                 try:
                     batch, _asr_duration = _make_batch_fn(input_file=None, waveform=zone_mono_1d)
+                    # §ROCm-NaN-Fix: generate_batch auf ROCm GPU → NaN im Vocoder.
+                    # Force gesamtes Modell + Batch auf CPU vor Inference.
+                    model.cpu()
+                    if hasattr(batch, 'cpu'):
+                        batch = batch.cpu()
                     with _asr_torch.no_grad():
                         z_result_raw = model.generate_batch(  # type: ignore[attr-defined]
                             batch,
