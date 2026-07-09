@@ -532,6 +532,25 @@ class VocalFocusAnalyzer:
 
             f1_mean = float(np.mean(f1_vals)) if f1_vals else 0.0
             f2_mean = float(np.mean(f2_vals)) if f2_vals else 0.0
+
+            # §SOTA #2: LPC-Formant-Fallback — wenn Tracker keine validen Frames
+            # liefert (Vintage-Rauschen), plausible Defaults aus F0 ableiten.
+            if f1_mean <= 0.0 or f2_mean <= 0.0:
+                _f0_est = _estimate_f0_simple(seg, sr)
+                if _f0_est > 0:
+                    if _f0_est < 160.0:    # Male range
+                        f1_mean = f1_mean if f1_mean > 0 else 500.0
+                        f2_mean = f2_mean if f2_mean > 0 else 1500.0
+                    elif _f0_est < 300.0:  # Female range
+                        f1_mean = f1_mean if f1_mean > 0 else 700.0
+                        f2_mean = f2_mean if f2_mean > 0 else 2000.0
+                    else:                   # Child / high voice
+                        f1_mean = f1_mean if f1_mean > 0 else 800.0
+                        f2_mean = f2_mean if f2_mean > 0 else 2300.0
+                else:
+                    f1_mean = f1_mean if f1_mean > 0 else 600.0
+                    f2_mean = f2_mean if f2_mean > 0 else 1800.0
+                logger.debug("VFA formant fallback: F0=%.0f → F1=%.0f F2=%.0f", _f0_est, f1_mean, f2_mean)
             # Stabilität: F1-Standardabweichung < 15 % des Mittelwerts → stabil (Opera)
             f1_std = float(np.std(f1_vals)) if len(f1_vals) >= 4 else 0.0
             is_stable = (f1_std < f1_mean * 0.15) if f1_mean > 0 else True
@@ -941,6 +960,25 @@ class VocalFocusAnalyzer:
 # ---------------------------------------------------------------------------
 # Singleton-Zugriff
 # ---------------------------------------------------------------------------
+
+
+def _estimate_f0_simple(audio: np.ndarray, sr: int) -> float:
+    """Einfache F0-Schätzung via Autocorrelation für Formant-Fallback."""
+    try:
+        if len(audio) < sr // 20:
+            return 0.0
+        n = min(len(audio), sr * 2)  # Max 2s
+        seg = audio[:n].astype(np.float64)
+        autocorr = np.correlate(seg, seg, mode='full')
+        autocorr = autocorr[len(seg) - 1:] / max(autocorr[len(seg) - 1], 1e-10)
+        min_lag = int(sr / 450)
+        max_lag = int(sr / 80)
+        if max_lag >= len(autocorr):
+            return 0.0
+        peak_idx = np.argmax(autocorr[min_lag:max_lag]) + min_lag
+        return float(sr / peak_idx)
+    except Exception:
+        return 0.0
 
 
 def get_vocal_focus_analyzer() -> VocalFocusAnalyzer:
