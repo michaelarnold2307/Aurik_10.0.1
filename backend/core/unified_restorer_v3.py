@@ -7141,6 +7141,11 @@ class UnifiedRestorerV3:
         # dann als reiner Executor (kein _optimize_phase_plan_intelligence() mehr).
         # Leerer Plan [] oder None → UV3 selektiert autonom (fail-safe).
         _precomputed_phase_plan: list[str] | None = kwargs.pop("precomputed_phase_plan", None) or None
+        # §2.70: Codec-Kontext vom PhaseInteractionDenker für Joint-Calibrator
+        _conflict_notes: list[str] = kwargs.pop("conflict_notes", None) or []
+        # Store on self for downstream consumers (joint calibrator, phase guards)
+        self._precomputed_phase_plan = _precomputed_phase_plan
+        self._conflict_notes = _conflict_notes
         # §2.53b: Log immediately so test mock-patched pipelines capture these messages
         # before intermediate analysis steps that may be incomplete/mocked.
         if _precomputed_phase_plan:
@@ -10286,15 +10291,14 @@ class UnifiedRestorerV3:
         self._joint_calibration = None
         try:
             _jcal_targets = getattr(self, "_song_goal_targets", None)
-            _jcal_phases = getattr(self, "_selected_phases", None) or list(getattr(
-                getattr(self, "_precomputed_phase_plan", None), "phases", []) or [])
+            _jcal_phases = getattr(self, "_selected_phases", None) or (getattr(self, "_precomputed_phase_plan", None) or [])
             if _jcal_targets and _jcal_phases:
                 from backend.core.joint_calibrator import joint_calibrate
                 _jcal_proxies = {k: float(v) for k, v in (getattr(self, "_phase_pre_snapshot", {}) or {}).items()}
                 _jcal_mat = str(getattr(getattr(self, "_restoration_context", {}), "get", lambda _: "vinyl")("primary_material") or "vinyl").lower()
                 _jcal_panns = float(getattr(self, "_panns_singing", 0.0))
                 # Codec-Kontext aus PhaseInteractionDenker-Notizen
-                _jcal_notes = getattr(getattr(self, "_precomputed_phase_plan", None), "conflict_notes", []) or []
+                _jcal_notes = getattr(self, "_conflict_notes", []) or []
                 _jcal_terminal = None
                 _jcal_discount = 1.0
                 for _jn in (_jcal_notes if isinstance(_jcal_notes, list) else []):
@@ -10320,6 +10324,12 @@ class UnifiedRestorerV3:
                         "§2.70 Joint-Calibration: %d Phasen optimiert (%d boosted, %d damped)",
                         len(self._joint_calibration), _n_boosted, _n_damped,
                     )
+                    # Inject calibration into conductor hints so phases receive the strength
+                    if not hasattr(self, "_conductor_strength_hints"):
+                        self._conductor_strength_hints = {}
+                    for _jcal_pid, _jcal_s in self._joint_calibration.items():
+                        if _jcal_pid not in self._conductor_strength_hints:
+                            self._conductor_strength_hints[_jcal_pid] = _jcal_s
         except Exception as _jcal_exc:
             logger.debug("§2.70 Joint-Calibration nicht verfügbar: %s", _jcal_exc)
 
@@ -32098,6 +32108,32 @@ class UnifiedRestorerV3:
                     continue
             _defect_location_coverage_map[_dkey] = float(np.clip(_acc / _audio_duration_s, 0.0, 1.0))
 
+        # §2.71 Strength-Envelope v2: Zeitvariante Phasen-Stärke aus Defekt-Locations.
+        # SOTA mit: Defekt-typ-spezifischem Sigma, asymmetrischem Attack/Release,
+        # Transient-Gating, psychoakustischer Floor-Modulation, per-Frame Vocal-Attenuation.
+        self._strength_envelope = None
+        try:
+            from backend.core.strength_envelope import compute_strength_envelope
+            _se_audio = np.asarray(audio, dtype=np.float32)
+            self._strength_envelope = compute_strength_envelope(
+                defect_locations=_defect_locations,
+                defect_severity_map=_defect_severity_map,
+                defect_saliency_map=_defect_saliency_map,
+                audio_duration_s=_audio_duration_s,
+                sample_rate=sample_rate,
+                audio=_se_audio,  # For transient detection
+                panns_singing=float(getattr(self, "_panns_singing", 0.0)),
+            )
+            if self._strength_envelope is not None:
+                logger.info(
+                    "§2.71 Strength-Envelope v2: %d Frames (μ=%.3f σ=%.3f) — inaudible surgical NR",
+                    len(self._strength_envelope),
+                    float(np.mean(self._strength_envelope)),
+                    float(np.std(self._strength_envelope)),
+                )
+        except Exception as _se_exc:
+            logger.debug("§2.71 Strength-Envelope v2 nicht verfügbar: %s", _se_exc)
+
         # §11.7a: Bereits reparierte Gap-Locations aus RekonstruktionsDenker extrahieren.
         # Phase 24 (dropout_repair) und Phase 55 (diffusion_inpainting) können damit
         # bereits reparierte Regionen überspringen und vermeiden Triple-Inpainting.
@@ -32255,6 +32291,7 @@ class UnifiedRestorerV3:
                         defect_saliency_map=_defect_saliency_map,
                         defect_location_coverage_map=_defect_location_coverage_map,
                         max_defect_severity=_max_defect_severity,
+                        strength_envelope=self._strength_envelope,  # §2.71: Zeitvariante Stärke
                         quality_mode=_quality_mode_value,  # Pass quality mode for ML routing
                         repaired_gap_samples=_repaired_gap_samples,  # §11.7a: RekonstruktionsDenker gaps
                         masking_result=_masking_result,  # §Psychoacoustic: MaskingResult L/mono
@@ -35254,7 +35291,8 @@ class UnifiedRestorerV3:
                                 logger.debug("§Hebel-3 Conductor: %s", _cond_rec.skip_reason)
                                 # Advisory skip only — do not force skip; PMGG still decides.
                             else:
-                                self._conductor_strength_hints[_next_pid] = _cond_rec.recommended_strength
+                                # §2.70: Joint-Calibrator hat Vorrang — nur setzen wenn kein Wert existiert
+                                self._conductor_strength_hints.setdefault(_next_pid, _cond_rec.recommended_strength)
                                 if abs(_cond_rec.recommended_strength - 1.0) > 0.05:
                                     logger.debug(
                                         "§Hebel-3 Conductor → %s: recommended_strength=%.2f (conf=%.2f)",

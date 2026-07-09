@@ -1523,6 +1523,7 @@ class AurikDenker:
         # Bei Fehler: leerer Plan → UV3 selektiert autonom (fail-safe §0).
         _pid_plan = None
         _pid_phase_plan: list[str] | None = None
+        _pid_conflict_notes: list[str] = []
         _pid_runtime_hint: dict[str, Any] = {}
         try:
             _pid_defect_result = cached_defect_result or (
@@ -1894,6 +1895,7 @@ class AurikDenker:
                                 no_rt_limit=no_rt_limit,
                                 # §PID: PhaseInteractionDenker-Plan — UV3 als reiner Executor
                                 precomputed_phase_plan=_pid_phase_plan,
+                                conflict_notes=_pid_conflict_notes,
                                 phase_strength_oracle_rollout=_effective_oracle_rollout,
                                 denker_policy_input=_denker_policy_input,
                                 use_source_separation=os.environ.get("AURIK_SOURCE_SEPARATION", "") == "1",

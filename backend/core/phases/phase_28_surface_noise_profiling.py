@@ -533,6 +533,23 @@ class SurfaceNoiseProfiling(PhaseInterface):
 
         denoised_audio = np.nan_to_num(denoised_audio, nan=0.0, posinf=0.0, neginf=0.0)
         denoised_audio = np.clip(denoised_audio, -1.0, 1.0)
+
+        # §2.71 Strength-Envelope: Chirurgische Surface-Noise-Entfernung
+        _strength_env = kwargs.get("strength_envelope")
+        if _strength_env is not None:
+            try:
+                from backend.core.strength_envelope import apply_strength_envelope
+                _env_pre = np.asarray(denoised_audio, dtype=np.float32)
+                denoised_audio = apply_strength_envelope(
+                    processed=_env_pre, original=np.asarray(audio, dtype=np.float32),
+                    envelope=_strength_env, sample_rate=sample_rate,
+                    base_strength=_effective_strength,
+                )
+                if float(np.mean(np.abs(denoised_audio - _env_pre))) > 0.001:
+                    logger.info("§2.71 Envelope-Blending Phase 28: Δ=%.4f RMS", float(np.mean(np.abs(denoised_audio - _env_pre))))
+            except Exception as _se_exc:
+                logger.debug("§2.71 Envelope non-blocking: %s", _se_exc)
+
         return PhaseResult(
             success=True,
             audio=denoised_audio,

@@ -859,14 +859,29 @@ class DenoisePhase(PhaseInterface):
         _denker_strength = float(kwargs.get("strength", 1.0))
         # Data-driven: threshold = 0.10 + panns × 0.30 (0.10 instrumental, 0.25 vocal)
         _dsp_threshold = float(np.clip(0.10 + _panns_singing * 0.30, 0.08, 0.30))
+        # §DENKER-FALLBACK: Wenn der Joint-Calibrator nicht gelaufen ist
+        # (strength ≈ 1.0 default) und Gesang vorhanden ist, schützt dieser
+        # Guard vor BS-RoFormer-Vokalverzerrung bei Energieanstiegen.
+        # Sobald der Joint-Calibrator korrekt kalibriert (strength < 0.90),
+        # greift der normale Guard oben.
+        _denker_fallback_active = False
         if _denker_strength <= _dsp_threshold and not use_lightweight:
             use_lightweight = True
             logger.info(
                 "§DENKER Phase 03: strength=%.2f ≤ %.2f → DSP-only (Denker-Entscheidung)",
                 _denker_strength, _dsp_threshold,
             )
+        elif _denker_strength >= 0.95 and _panns_singing >= 0.25 and not use_lightweight:
+            use_lightweight = True
+            _denker_fallback_active = True
+            logger.info(
+                "§DENKER Phase 03 FALLBACK: strength=%.2f (unkalibriert), panns=%.2f ≥ 0.25 → DSP-only (Vokal-Schutz)",
+                _denker_strength, _panns_singing,
+            )
 
-        _bsrof_gate = _panns_singing >= 0.35 and not use_lightweight and (_est_snr_db is None or _est_snr_db < 20.0)
+        _bsrof_gate = (_panns_singing >= 0.35 and not use_lightweight
+                       and (_est_snr_db is None or _est_snr_db < 20.0)
+                       and _denker_strength > 0.55)  # §2.70: Nur wenn Kalibration NR befürwortet
         if _bsrof_gate:
             _bsrof_ram_ok = True
             try:
@@ -2354,6 +2369,31 @@ class DenoisePhase(PhaseInterface):
                 logger.warning("Phase03 §V42 NR-Pumpen → Blend ×0.80")
         except Exception as _zr03_exc:  # pylint: disable=broad-except
             logger.debug("Phase03 §V42 Roughness-Check non-blocking: %s", _zr03_exc)
+
+        # §2.71 Strength-Envelope: Chirurgische Wet/Dry-Mischung.
+        # In defektdichten Regionen (Envelope→1.0) wird das NR-Signal voll
+        # durchgelassen. In defektfreien/Gesangs-Regionen (Envelope→0.0)
+        # bleibt das Original erhalten → kein unnötiger Kollateralschaden.
+        _strength_env = kwargs.get("strength_envelope")
+        if _strength_env is not None and _post_nr_guard_ref_audio is not None:
+            try:
+                from backend.core.strength_envelope import apply_strength_envelope
+                _env_pre = np.asarray(result_audio, dtype=np.float32)
+                result_audio = apply_strength_envelope(
+                    processed=_env_pre,
+                    original=np.asarray(_post_nr_guard_ref_audio, dtype=np.float32),
+                    envelope=_strength_env,
+                    sample_rate=sample_rate,
+                    base_strength=effective_strength,
+                )
+                _env_mix = float(np.mean(np.abs(result_audio - _env_pre)))
+                if _env_mix > 0.001:
+                    logger.info(
+                        "§2.71 Envelope-Blending Phase 03: Δ=%.4f RMS — chirurgische NR angewendet",
+                        _env_mix,
+                    )
+            except Exception as _se_apply_exc:
+                logger.debug("§2.71 Envelope-Blending non-blocking: %s", _se_apply_exc)
 
         return create_phase_result(
             audio=_p03_out(result_audio),

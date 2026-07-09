@@ -1227,6 +1227,22 @@ class CrackleRemovalPhase(PhaseInterface):
         except Exception as _sc09_exc:
             logger.debug("§V24 phase_09 spectral_color_guard (non-blocking): %s", _sc09_exc)
 
+        # §2.71 Strength-Envelope: Chirurgische Crackle-Entfernung
+        _strength_env = kwargs.get("strength_envelope")
+        if _strength_env is not None:
+            try:
+                from backend.core.strength_envelope import apply_strength_envelope
+                _env_pre = np.asarray(restored, dtype=np.float32)
+                restored = apply_strength_envelope(
+                    processed=_env_pre, original=np.asarray(audio, dtype=np.float32),
+                    envelope=_strength_env, sample_rate=sample_rate,
+                    base_strength=_effective_strength,
+                )
+                if float(np.mean(np.abs(restored - _env_pre))) > 0.001:
+                    logger.info("§2.71 Envelope-Blending Phase 09: Δ=%.4f RMS", float(np.mean(np.abs(restored - _env_pre))))
+            except Exception as _se_exc:
+                logger.debug("§2.71 Envelope non-blocking: %s", _se_exc)
+
         return create_phase_result(
             audio=restored,
             modifications={

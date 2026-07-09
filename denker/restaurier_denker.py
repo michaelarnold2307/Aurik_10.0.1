@@ -373,6 +373,7 @@ class RestaurierDenker:
         output_path: str = "",
         no_rt_limit: bool = False,
         precomputed_phase_plan: list[str] | None = None,
+        conflict_notes: list[str] | None = None,
         phase_strength_oracle_rollout: str | None = None,
         denker_policy_input: dict[str, Any] | None = None,
         use_source_separation: bool = False,
@@ -498,6 +499,9 @@ class RestaurierDenker:
             # §PID: PhaseInteractionDenker-Plan weitergeben (UV3 wird reiner Executor)
             if precomputed_phase_plan:
                 _uv3_kwargs["precomputed_phase_plan"] = precomputed_phase_plan
+            # §2.70 Joint-Calibrator: Codec-Kontext aus PhaseInteractionDenker
+            if conflict_notes:
+                _uv3_kwargs["conflict_notes"] = conflict_notes
             # §2.39 OOM-Recovery: Pfade für Checkpoint-Persistierung
             if input_path:
                 _uv3_kwargs["input_path"] = input_path
