@@ -544,10 +544,16 @@ class HybridDereverb:
         # STATIONARITY CHECK: Tape hiss / background noise has nearly flat energy
         # → relative std < 20% → classify as no reverb to avoid false-positive DCCRN.
         # Real room reverb has exponential decay → much higher relative variance.
+        # §2.75: Noise-floor compensation — vintage recordings have elevated noise
+        # floors that mask the reverb tail. Subtract the noise floor estimate (10th
+        # percentile of energy envelope) before computing variance.
         if len(energy_smooth) > 5:
-            rel_std = float(np.std(energy_smooth) / (np.mean(energy_smooth) + 1e-12))
-            if rel_std < 0.20:
-                return 0.0  # Stationary noise, not reverb
+            _noise_floor = float(np.percentile(energy_smooth, 10))
+            _energy_denoised = np.maximum(energy_smooth - _noise_floor * 0.7, 0.0)
+            _denoised_mean = float(np.mean(_energy_denoised) + 1e-12)
+            rel_std = float(np.std(_energy_denoised) / _denoised_mean) if _denoised_mean > 0 else 0.0
+            if rel_std < 0.12:  # Lowered from 0.20 (now noise-compensated)
+                return 0.0  # Truly stationary noise, not reverb
 
         peak_idx = np.argmax(energy_smooth)
 
