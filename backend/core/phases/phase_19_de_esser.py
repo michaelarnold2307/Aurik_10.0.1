@@ -2270,6 +2270,73 @@ class DeEsserPhase(PhaseInterface):
 
         return result, gender_adaptive_bands
 
+
+def _estimate_vibrato_from_pyin(
+    f0_pyin: np.ndarray | None,
+    voiced_prob: np.ndarray | None,
+    sample_rate: int,
+    hop_length: int = 256,
+) -> tuple[float | None, float | None]:
+    """Schätzt Vibrato-Rate (Hz) und -Tiefe (cents) aus pYIN-F0-Zeitreihe.
+
+    Vibrato ist eine periodische F0-Modulation bei 3.5–8 Hz.
+    Weibliche Stimmen: 4.8–5.8 Hz, 100–250 cents
+    Männliche Stimmen: 3.5–4.5 Hz, 40–100 cents
+
+    Args:
+        f0_pyin: [n_frames] F0-Werte (pYIN-Output)
+        voiced_prob: [n_frames] Voicing-Probability
+        sample_rate: Audio-Sample-Rate
+        hop_length: pYIN-Hop-Länge
+
+    Returns:
+        (vibrato_rate_hz, vibrato_depth_cents) oder (None, None)
+    """
+    if f0_pyin is None or voiced_prob is None or len(f0_pyin) < 50:
+        return None, None
+
+    try:
+        # Nur voiced Frames mit hoher Confidence
+        f0_voiced = np.asarray(f0_pyin, dtype=np.float64)[voiced_prob > 0.7]
+        if len(f0_voiced) < 30:
+            return None, None
+
+        # Zentriere F0 um Median (entferne langsame Drift)
+        f0_median = np.median(f0_voiced)
+        f0_centered = f0_voiced - f0_median
+
+        # FFT der F0-Modulation
+        f0_fft = np.abs(np.fft.rfft(f0_centered))
+        freqs = np.fft.rfftfreq(len(f0_centered), d=hop_length / sample_rate)
+
+        # Vibrato-Bereich: 3–8 Hz
+        vib_mask = (freqs >= 3.0) & (freqs <= 8.0)
+        if not np.any(vib_mask):
+            return None, None
+
+        vib_fft = f0_fft[vib_mask]
+        vib_freqs = freqs[vib_mask]
+
+        # Stärkster Peak im Vibrato-Bereich
+        peak_idx = np.argmax(vib_fft)
+        vib_rate = float(vib_freqs[peak_idx])
+
+        # Vibrato-Tiefe: Halbe Peak-to-Peak-Amplitude in Cents
+        # FFT-Magnitude ≈ halbe Amplitude der Sinus-Komponente
+        peak_mag = float(vib_fft[peak_idx])
+        f0_amplitude_hz = 2.0 * peak_mag / len(f0_centered) * 2.0
+        vib_depth_cents = float(1200.0 * np.log2((f0_median + f0_amplitude_hz) / f0_median))
+
+        # Plausibilitäts-Check
+        if vib_depth_cents < 20.0 or vib_depth_cents > 600.0:
+            return vib_rate, None
+
+        return vib_rate, vib_depth_cents
+
+    except Exception:
+        return None, None
+
+
     def _detect_gender_robust(self, audio: np.ndarray, sample_rate: int) -> str:
         """
         Gender-Detection: Robuster Detektor (F0 + Formanten + WORLD) bevorzugt,
@@ -2395,6 +2462,50 @@ class DeEsserPhase(PhaseInterface):
                         )
                         gender_str = VocalGender.FEMALE
                         confidence = max(confidence, 0.65)  # Mindest-Confidence für contralto
+
+                # §2.9.2 Contralto-Fallback: Wenn Formanten fehlgeschlagen sind
+                # (F1≈0), aber F0 im weiblichen Überlappungsbereich liegt,
+                # Vibrato-Analyse aus pYIN-F0-Zeitreihe zur Entscheidung nutzen.
+                # Vibrato-Rate: ♀ 4.8–5.8 Hz, ♂ 3.5–4.5 Hz
+                # Vibrato-Tiefe: ♀ 100–250 cents, ♂ 40–100 cents
+                _formants_failed = len(formants) < 2 or (formants[0] < 50.0 and formants[1] < 50.0)
+                if (
+                    gender_str == VocalGender.MALE
+                    and _CONTRALTO_F0_LOW <= f0 <= _CONTRALTO_F0_HIGH
+                    and _formants_failed
+                    and not _contralto_detected
+                ):
+                    _pyin_available = '_f0_pyin' in locals() and '_voiced_prob' in locals()
+                    _vib_rate, _vib_depth = _estimate_vibrato_from_pyin(
+                        _f0_pyin if _pyin_available else None,
+                        _voiced_prob if _pyin_available else None,
+                        sample_rate,
+                    )
+                    # Female-typical vibrato: rate ≥ 4.6 Hz AND depth ≥ 100 cents
+                    if _vib_rate is not None and _vib_depth is not None:
+                        _is_female_vibrato = _vib_rate >= 4.6 and _vib_depth >= 100.0
+                        logger.info(
+                            "🎤 §2.9.2 Vibrato-Analyse: rate=%.1f Hz depth=%.0f cents "
+                            "→ %s (F0=%.0f Hz, formants failed)",
+                            _vib_rate, _vib_depth,
+                            "FEMALE-TYPICAL → override" if _is_female_vibrato else "ambiguous",
+                            f0,
+                        )
+                        if _is_female_vibrato:
+                            _contralto_detected = True
+                            gender_str = VocalGender.FEMALE
+                            confidence = max(confidence, 0.60)
+                    # Auch ohne Vibrato-Daten: F0 im Contralto-Bereich + Formant-Failure
+                    # → statistisch eher female (tiefe Frauenstimme wahrscheinlicher als
+                    # hoher Tenor mit komplettem Formant-Versagen)
+                    elif _vib_rate is None:
+                        logger.info(
+                            "🎤 §2.9.2 Formant-Failure + F0=%.0f Hz in contralto range "
+                            "→ defaulting to FEMALE (no vibrato data available)",
+                            f0,
+                        )
+                        gender_str = VocalGender.FEMALE
+                        confidence = max(confidence, 0.55)
 
                 if gender_str in (VocalGender.MALE, VocalGender.FEMALE, VocalGender.CHILD):
                     _contralto_tag = " [CONTRALTO→FEMALE]" if _contralto_detected else ""
