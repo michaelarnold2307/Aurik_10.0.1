@@ -2538,7 +2538,9 @@ class DefectScanner:
             DefectType.FLUTTER,             # SBR spectral holes
             DefectType.DROPOUTS,            # MP3 bitrate drops
             DefectType.GROOVE_ECHO,         # MP3 temporal masking
-            DefectType.TRANSPORT_BUMP,      # MP3 frame-boundary impulse
+            # TRANSPORT_BUMP REMOVED (§2.74): Broadband level dips cannot
+            # be produced by MP3 encoding. These are genuine tape transport
+            # defects — the encoder passes them through transparently.
         }
 
         _n_discounted = 0
