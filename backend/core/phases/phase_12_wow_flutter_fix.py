@@ -620,9 +620,14 @@ class WowFlutterFix(PhaseInterface):
                 # Transport-Level-Stabilisierung auch im Low-Confidence-Pfad,
                 # damit kein Komplett-Skip bei Kassetten-/Bandmaterial entsteht.
                 n_level_dips_repaired = 0
-                # CASSETTE + multi-chain (e.g. vinyl→tape→mp3): trigger also when
-                # TAPE_HEAD_LEVEL_DIP was detected via defect_locations (§2.46a transfer chain)
-                _has_tape_dip_defect = bool((kwargs.get("defect_locations") or {}).get("tape_head_level_dip"))
+                # §2.74: BOTH tape_head_level_dip AND transport_bump trigger
+                # the tape level stabilizer. These are genuine analog defects that
+                # MP3 cannot produce — transport_bump was previously excluded by
+                # the MP3 guard but is now properly passed through.
+                _dl = kwargs.get("defect_locations") or {}
+                _has_tape_dip_defect = bool(
+                    _dl.get("tape_head_level_dip") or _dl.get("transport_bump")
+                )
                 if (_is_primary_tape or _has_tape_dip_defect) and _effective_strength > 0.0:
                     audio, n_level_dips_repaired = self._stabilize_tape_level(
                         audio,
