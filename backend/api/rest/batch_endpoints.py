@@ -139,12 +139,16 @@ async def start_batch(background_tasks: BackgroundTasks, files: list[UploadFile]
             # Speichere hochgeladene Dateien temporär
             for upload_file in files:
                 if upload_file.filename and upload_file.filename.strip():
-                    file_path = AUDIO_IN_DIR / upload_file.filename
+                    # §Security: Path-Traversal verhindern — nur Dateiname, kein Pfad
+                    _safe_name = Path(upload_file.filename).name
+                    if not _safe_name:
+                        continue
+                    file_path = AUDIO_IN_DIR / _safe_name
                     with open(file_path, "wb") as f:
                         content = await upload_file.read()
                         f.write(content)
-                    input_files.append(upload_file.filename)
-                    logger.info("Uploaded file: %s", upload_file.filename)
+                    input_files.append(_safe_name)
+                    logger.info("Uploaded file: %s", _safe_name)
 
         # Option 2: Verwende existierende Dateien aus input_audio/
         if not input_files:
