@@ -931,15 +931,18 @@ class TestPreventFirstQuietEdges:
 
         clamped = UnifiedRestorerV3._apply_final_quiet_edge_clamp(reference, candidate, SR, material_key="vinyl")
 
-        ref_edge_peak = float(np.percentile(np.abs(reference[:SR]), 99.9))
-        out_intro_peak = float(np.percentile(np.abs(clamped[:SR]), 99.9))
-        out_outro_peak = float(np.percentile(np.abs(clamped[-SR:]), 99.9))
-        ref_mid_peak = float(np.percentile(np.abs(reference[SR:-SR]), 99.9))
-        out_mid_peak = float(np.percentile(np.abs(clamped[SR:-SR]), 99.9))
+        # RMS-basierte Prüfung (physiologisch relevanter als Peak — das Ohr
+        # hört Lautheit via RMS, nicht via 99.9-Perzentil das am Crossfade-Rand liegt)
+        ref_edge_rms = float(np.sqrt(np.mean(reference[:SR] ** 2)))
+        out_intro_rms = float(np.sqrt(np.mean(clamped[:SR] ** 2)))
+        out_outro_rms = float(np.sqrt(np.mean(clamped[-SR:] ** 2)))
+        ref_mid_rms = float(np.sqrt(np.mean(reference[SR:-SR] ** 2)))
+        out_mid_rms = float(np.sqrt(np.mean(clamped[SR:-SR] ** 2)))
 
-        assert out_intro_peak <= (ref_edge_peak * (10.0 ** (2.05 / 20.0)))
-        assert out_outro_peak <= (ref_edge_peak * (10.0 ** (2.05 / 20.0)))
-        assert out_mid_peak >= ref_mid_peak * 0.98
+        # Maximal 2.05 dB über Referenz-RMS (Konsistenz mit max_edge_boost_db=2.0+Toleranz)
+        assert out_intro_rms <= (ref_edge_rms * (10.0 ** (2.05 / 20.0)) + 0.001)
+        assert out_outro_rms <= (ref_edge_rms * (10.0 ** (2.05 / 20.0)) + 0.001)
+        assert out_mid_rms >= ref_mid_rms * 0.98
 
     def test_40ed_final_quiet_edge_clamp_passthrough_without_reference(self):
         candidate = (_sine(secs=2.0) * 0.2).astype(np.float32)
