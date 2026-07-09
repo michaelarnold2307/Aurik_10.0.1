@@ -2369,6 +2369,25 @@ def _estimate_vibrato_from_pyin(
     except Exception:
         return None, None
 
+    # §SOTA #4: Autocorrelation-Fallback — robuster als FFT bei Rauschen
+    try:
+        f0_v = np.asarray(f0_pyin, dtype=np.float64)[voiced_prob > 0.6]
+        if len(f0_v) < 30:
+            return None, None
+        f0_c = f0_v - np.median(f0_v)
+        ac = np.correlate(f0_c, f0_c, mode='full')
+        ac = ac[len(ac)//2:] / max(ac[len(ac)//2], 1e-10)
+        mn = int(1.0 / (8.0 * hop_length / sample_rate))
+        mx = int(1.0 / (3.0 * hop_length / sample_rate))
+        if mx >= len(ac) or mn >= mx:
+            return None, None
+        pk = np.argmax(ac[mn:mx]) + mn
+        rate = float(sample_rate / (pk * hop_length))
+        depth = float(1200.0 * np.log2((np.median(f0_v) + np.std(f0_c)) / np.median(f0_v)))
+        return (rate, depth) if 15 < depth < 600 else (rate, None)
+    except Exception:
+        return None, None
+
 
 def _find_contiguous_segments(
     mask: np.ndarray, hop: int, sample_rate: int
@@ -2467,7 +2486,9 @@ def _compute_spectral_tilt(audio: np.ndarray, sample_rate: int) -> float | None:
             return None
         spec = np.abs(np.fft.rfft(audio * np.hanning(n)))
         freqs = np.fft.rfftfreq(n, d=1.0 / sample_rate)
-        mask = (freqs >= 80.0) & (freqs <= 4000.0)
+        # §SOTA #7: 200–2000 Hz (Stimmformanten) — Recording-Chain-EQ
+        # beeinflusst Randbänder stärker als diesen Kernbereich
+        mask = (freqs >= 200.0) & (freqs <= 2000.0)
         if not np.any(mask):
             return None
         log_f = np.log2(freqs[mask] + 1.0)
