@@ -3724,14 +3724,16 @@ class DefectScanner:
                     confidence = float(np.clip(confidence * 0.70, 0.45, 0.85))
                     _rhythm_guard_applied = True
 
+        # §Per-Event-Duration: für chirurgische Reparatur (Phase 08)
+        _bump_durations_s = [(e - s) for s, e in locations] if locations else []
+        _dur_mean = float(np.mean(_bump_durations_s)) if _bump_durations_s else 0.0
+        _dur_min = float(np.min(_bump_durations_s)) if _bump_durations_s else 0.0
+        _dur_max = float(np.max(_bump_durations_s)) if _bump_durations_s else 0.0
+
         logger.info(
-            "transport_bump: n=%d, density=%.1f/min, max_mag=%.3f, mean=%.2f, sev=%.3f, suppressed=%d",
-            n_bumps,
-            bump_density,
-            max_mag,
-            mean_score,
-            severity,
-            suppressed_head_dip_like,
+            "transport_bump: n=%d, density=%.1f/min, max_mag=%.3f, mean=%.2f, sev=%.3f, suppressed=%d, dur=%.0f–%.0fms (μ=%.0fms)",
+            n_bumps, bump_density, max_mag, mean_score, severity, suppressed_head_dip_like,
+            _dur_min * 1000, _dur_max * 1000, _dur_mean * 1000,
         )
 
         return DefectScore(
@@ -3749,6 +3751,10 @@ class DefectScanner:
                 "interval_mean_s": round(_interval_mean_s, 4),
                 "interval_cv": round(_interval_cv, 4),
                 "magnitudes": [round(float(m), 4) for m in magnitudes[:30]],
+                "duration_mean_ms": round(_dur_mean * 1000, 1),
+                "duration_min_ms": round(_dur_min * 1000, 1),
+                "duration_max_ms": round(_dur_max * 1000, 1),
+                "event_durations_ms": [round((e - s) * 1000, 1) for s, e in locations[:30]],
             },
         )
 
