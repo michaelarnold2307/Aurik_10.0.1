@@ -9094,6 +9094,22 @@ class UnifiedRestorerV3:
         except Exception as _ras_exc:
             logger.debug("ReferenceAnchorSynthesizer nicht verfügbar: %s", _ras_exc)
 
+        # ── §2.25 ReferenceAnchor in Context speichern ──
+        # Ermöglicht Phasen und Guards, ihren Ziel-Frequenzgang, Dynamik-Range
+        # und Stereo-Breite als Soll-Werte zu kennen (statt blind zu arbeiten).
+        if _reference_anchor is not None:
+            try:
+                _anchor_dict = _reference_anchor.as_dict() if hasattr(_reference_anchor, "as_dict") else {}
+                _anchor_dict["era_decade"] = int(_era_for_anchor) if _era_for_anchor is not None else 1970
+                _anchor_dict["genre_label"] = str(_genre_for_anchor)
+                _anchor_dict["material"] = str(_mat_for_anchor)
+                self._restoration_context["reference_anchor"] = _anchor_dict
+                logger.debug("§2.25 ReferenceAnchor im Context: era=%s genre=%s mat=%s",
+                             _anchor_dict.get("era_decade"), _anchor_dict.get("genre_label"),
+                             _anchor_dict.get("material"))
+            except Exception as _ra_ctx_exc:
+                logger.debug("§2.25 ReferenceAnchor context set non-blocking: %s", _ra_ctx_exc)
+
         # Step 1: Defect Scanning (Cache-First — kein Mehrfach-Scan §9.4)
         logger.info("Step 1/4: Defect Scanning...")
         if _cached_defect_kwarg is not None:
@@ -10788,6 +10804,28 @@ class UnifiedRestorerV3:
             except Exception as _pol_exc:
                 logger.debug("§POL-INV Polarity-Check non-blocking: %s", _pol_exc)
 
+            # ── §POL-FALLBACK: Unabhängiger Korrelations-Check ──
+            # DefectScanner erkennt nur starke Inversion (≤ −0.9).
+            # Moderater Anti-Phase (< −0.3) wird vom Scanner übersehen,
+            # verursacht aber trotzdem Bass-Auslöschung in Mono und
+            # falsche M/S-Trennung in §2.51-Phasen.
+            if not self._restoration_context.get("polarity_inversion_corrected"):
+                try:
+                    _left_mono = np.asarray(audio[0, :100_000], dtype=np.float64)
+                    _right_mono = np.asarray(audio[1, :100_000], dtype=np.float64)
+                    _corr_fallback = float(np.corrcoef(_left_mono, _right_mono)[0, 1])
+                    if _corr_fallback < -0.30:
+                        audio = audio.copy()
+                        audio[1] = -audio[1]
+                        self._restoration_context["polarity_inversion_corrected"] = True
+                        logger.warning(
+                            "§POL-FALLBACK: Moderate Anti-Phase (L/R corr=%.3f) korrigiert "
+                            "→ R-Kanal invertiert",
+                            _corr_fallback,
+                        )
+                except Exception as _pol2_exc:
+                    logger.debug("§POL-FALLBACK non-blocking: %s", _pol2_exc)
+
         try:
             _recovery_certainty_profile = UnifiedRestorerV3._compute_recovery_certainty_profile(
                 restorability_score=float(_pmgg_restorability_score),
@@ -11864,6 +11902,23 @@ class UnifiedRestorerV3:
                     logger.info("🔬 CHIRURGIE: Keine per-Instance-Daten — globale Phasen übernehmen")
             except Exception:
                 logger.debug("SurgicalRepair: non-blocking", exc_info=True)
+
+            # ── §3.0 Cross-Phase Naturalness Consensus: Initialisierung ──
+            # Analyse aller ausgewählten Phasen auf Frequenzbereich-Überlappungen.
+            # Besonders kritisch: 2–8 kHz (maximale Ohrempfindlichkeit nach ISO 226).
+            # Der CrossPhaseCoordinator verteilt ein Budget pro Frequenzband,
+            # sodass sum(phase_strength_band) ≤ 1.0 — kein "Zuviel" im Präsenzbereich.
+            try:
+                from denker.cross_phase_coordinator import CrossPhaseCoordinator
+
+                _cpc_mat = str(_rc_primary_mat_str).lower() if '_rc_primary_mat_str' in dir() else "unknown"
+                CrossPhaseCoordinator.analyze(
+                    phase_plan=list(selected_phases),
+                    material=_cpc_mat,
+                    restoration_context=getattr(self, "_restoration_context", {}),
+                )
+            except Exception:
+                logger.debug("§3.0 CrossPhaseCoordinator initialization skipped", exc_info=True)
 
             restored_audio, executed_phases, skipped_phases, deferred_phases = self._execute_pipeline(
                 audio,
@@ -17474,7 +17529,7 @@ class UnifiedRestorerV3:
                             np.asarray(restored_audio, dtype=np.float32),
                             _gain_final,
                             gate_dbfs=_adaptive_gate_dbfs,  # adaptive: P5(orig)+6dB, not fixed -50 dBFS
-                            crossfade_ms=10.0,
+                            crossfade_ms=50.0,
                             sr=sample_rate,
                             # §2.45a-II §0 reference_for_gate=original: frame-RMS P5 from original
                             # prevents vinyl surface noise (-33 dBFS) being classified as music.
@@ -17696,7 +17751,7 @@ class UnifiedRestorerV3:
                                 _joint_base,
                                 _cand_gain,
                                 gate_dbfs=_adaptive_gate_dbfs,  # adaptive: P5(orig)+6dB, not -36 fixed
-                                crossfade_ms=10.0,
+                                crossfade_ms=50.0,
                                 sr=sample_rate,
                                 reference_for_gate=_orig_for_nf,  # §2.45a-II: frame-P5 from original
                             )
@@ -27870,6 +27925,209 @@ class UnifiedRestorerV3:
                 pass  # Denker nicht verfügbar — unmodulierte Stärke
         # ── Ende Denker-Guard-Modulation ──────────────────────────
 
+        # ── §3.0 Cross-Phase Naturalness Consensus ──
+        # Phasen im gleichen Frequenzbereich (insbesondere 2–8 kHz, der
+        # empfindlichste Bereich des menschlichen Ohrs) addieren ihre Effekte
+        # unabhängig. Der CrossPhaseCoordinator prüft die kumulative Wirkung,
+        # verteilt ein Budget pro Frequenzband und deckelt Überlappungen.
+        # Ergebnis: kein "Zuviel" im Präsenzbereich, natürlicher Wohlklang.
+        if "strength" in kwargs:
+            try:
+                from denker.cross_phase_coordinator import CrossPhaseCoordinator
+
+                _cpc_pid = str(getattr(phase_metadata, "phase_id", ""))
+                _cpc_mat = str(_ctx_pp.get("primary_material", "")).lower()
+                _cpc_capped = CrossPhaseCoordinator.get_capped_strength(
+                    phase_id=_cpc_pid,
+                    base_strength=float(kwargs.get("strength", 1.0)),
+                    material=_cpc_mat,
+                    restoration_context=_ctx_pp,
+                )
+                if _cpc_capped is not None:
+                    kwargs["strength"] = _cpc_capped
+            except Exception:
+                logger.debug("§3.0 CrossPhaseCoordinator not active — skipping consensus", exc_info=True)
+        # ── Ende Cross-Phase Naturalness Consensus ─────────────────
+
+        # ── §Gap5 BlindReference: Referenzqualität als Strength-Modulator ──
+        # Wenn das Material bereits gute interne Referenz-Segmente hat
+        # (best_score > 0.85), wird die Stärke reduziert — Over-Processing
+        # auf bereits gutem Material vermeiden. Bei schlechter Referenz
+        # (best_score < 0.50) bleibt volle Stärke für aggressive Restaurierung.
+        if "strength" in kwargs:
+            try:
+                _br = _ctx_pp.get("blind_reference") if isinstance(_ctx_pp, dict) else None
+                if _br and isinstance(_br, dict):
+                    _br_best = float(_br.get("best_score", 0.5) or 0.5)
+                    if _br_best > 0.85:
+                        # Material ist bereits gut → 30 % reduzieren
+                        _br_scale = 0.70
+                        kwargs["strength"] = float(np.clip(float(kwargs["strength"]) * _br_scale, 0.10, 1.0))
+                    elif _br_best > 0.70:
+                        # Material ist okay → 15 % reduzieren
+                        _br_scale = 0.85
+                        kwargs["strength"] = float(np.clip(float(kwargs["strength"]) * _br_scale, 0.15, 1.0))
+            except Exception:
+                logger.debug("§Gap5 BlindReference non-blocking", exc_info=True)
+        # ── Ende BlindReference-Modulation ─────────────────────────
+
+        # ── §2.25 ReferenceAnchor: Soll-Werte als Quality-Floor ──
+        # Der ReferenceAnchor definiert, welche Mindestqualität für dieses
+        # Material/Ära/Genre physikalisch erreichbar ist (z.B. Shellac 1920
+        # kann nie Brillanz 0.90 erreichen). Phasen-Stärke wird NIEMALS
+        # unter diesen physikalischen Floor gedrückt.
+        if "strength" in kwargs:
+            try:
+                _ra = _ctx_pp.get("reference_anchor") if isinstance(_ctx_pp, dict) else None
+                if _ra and isinstance(_ra, dict):
+                    _ra_era = _ra.get("era_decade")
+                    if _ra_era is not None and int(_ra_era) < 1960:
+                        # Historisches Material: Sanfter-Mindest-Stärke
+                        _current = float(kwargs.get("strength", 0.5))
+                        # NIEMALS unter 0.25 — auch fragile Aufnahmen brauchen minimale Behandlung
+                        kwargs["strength"] = max(_current, 0.25)
+            except Exception:
+                logger.debug("§2.25 ReferenceAnchor non-blocking", exc_info=True)
+        # ── Ende ReferenceAnchor-Quality-Floor ─────────────────────
+
+        # ── §AK AuraPreserver: Klanglichen Charakter schützen ──
+        # Der AuraPreserver misst die originale klangliche Identität
+        # (Wärme, Brillanz, Stereo-Breite, Emotion) und deklariert
+        # Schutz-Zonen, die Phasen respektieren müssen.
+        try:
+            _ap = _ctx_pp.get("_aura_preserver") if isinstance(_ctx_pp, dict) else None
+            if _ap is not None:
+                _ap_base = getattr(_ap, "_baseline", None)
+                if _ap_base is not None:
+                    # Warme Aufnahme → Wärme-Schutz aktivieren
+                    if getattr(_ap_base, "warmth_score", 0.7) > 0.80:
+                        kwargs.setdefault("preserve_warmth", True)
+                    # Enge Stereo-Basis (Mono-Ära) → Stereo-Phasen dämpfen
+                    if getattr(_ap_base, "stereo_width", 0.85) < 0.30:
+                        kwargs.setdefault("mono_era", True)
+                        if "strength" in kwargs:
+                            kwargs["strength"] = float(np.clip(float(kwargs["strength"]) * 0.85, 0.10, 1.0))
+                    # Geringe Brillanz (dunkle Aufnahme) → Air-Band-Phasen dämpfen
+                    if getattr(_ap_base, "brilliance_score", 0.45) < 0.30:
+                        kwargs.setdefault("dull_recording", True)
+                    # HF-Rolloff früh → keine künstliche BW-Erweiterung
+                    if getattr(_ap_base, "hf_rolloff_hz", 16000.0) < 8000.0:
+                        kwargs.setdefault("bw_limited_hz", getattr(_ap_base, "hf_rolloff_hz", 8000.0))
+        except Exception:
+            logger.debug("§AK AuraPreserver non-blocking", exc_info=True)
+        # ── Ende AuraPreserver ─────────────────────────────────────
+
+        # ── §AID ArtisticIntentDiscriminator: Konservativ bei Absicht ──
+        # Hoher Intent-Score (>0.70) bedeutet: der Klang ist künstlerisch
+        # gewollt, kein Defekt → konservativere Stärke. Niedriger Score
+        # (<0.30) bedeutet: sicher ein Defekt → volle Stärke erlaubt.
+        if "strength" in kwargs:
+            try:
+                _intent = _ctx_pp.get("intent_scores") if isinstance(_ctx_pp, dict) else None
+                if _intent and isinstance(_intent, dict):
+                    _pid = str(getattr(phase_metadata, "phase_id", ""))
+                    _pid_score = _intent.get(_pid, None)
+                    if _pid_score is None:
+                        # Fallback: global_score als generischen Intent-Modulator
+                        _intent_g = _ctx_pp.get("intent_global", None) if isinstance(_ctx_pp, dict) else None
+                        _pid_score = float(_intent_g) if _intent_g is not None else None
+                    if _pid_score is not None:
+                        _is_val = float(_pid_score)
+                        if _is_val > 0.70:
+                            # Hohe künstlerische Absicht → Stärke um 25% senken
+                            kwargs["strength"] = float(np.clip(
+                                float(kwargs["strength"]) * 0.75, 0.15, 1.0))
+                        elif _is_val > 0.50:
+                            # Moderate Absicht → Stärke um 10% senken
+                            kwargs["strength"] = float(np.clip(
+                                float(kwargs["strength"]) * 0.90, 0.20, 1.0))
+            except Exception:
+                logger.debug("§AID ArtisticIntent non-blocking", exc_info=True)
+        # ── Ende ArtisticIntentDiscriminator ───────────────────────
+
+        # ── §Psychoakustik: ISO-226-Lautstärke-Kompensation ──
+        # Das Ohr hört bei Zimmerlautstärke (~60 phon) Bässe und Höhen
+        # bis zu 20 dB leiser. Ohne Kompensation klingt eine bei
+        # Mastering-Pegel perfekt ausbalancierte Restauration bei
+        # normaler Hörlautstärke in den Höhen schneidend und im Bass dünn.
+        # Aurik targetiert 80 phon (Monitoring-Pegel) als Referenz.
+        if "strength" in kwargs:
+            try:
+                _pid_iso = str(getattr(phase_metadata, "phase_id", ""))
+                if "phase_40" in _pid_iso or "loudness" in _pid_iso.lower():
+                    from backend.core.fletcher_munson_curves import apply_loudness_compensation
+                    kwargs["iso226_target_phon"] = 80.0
+                    kwargs["iso226_reference_phon"] = 60.0
+            except Exception:
+                logger.debug("§ISO-226 non-blocking", exc_info=True)
+        # ── Ende ISO-226-Kompensation ──────────────────────────────
+
+        # ── §Transient: Systemweiter Transienten-Energie-Guard ──
+        # Vergleicht Vorher/Nacher-Energie der Transienten und
+        # korrigiert Attack-Verlust > 1.5 dB durch Stärke-Rücknahme.
+        _phase_has_transient_impact = (
+            "phase_03" in str(getattr(phase_metadata, "phase_id", ""))
+            or "phase_29" in str(getattr(phase_metadata, "phase_id", ""))
+            or "phase_01" in str(getattr(phase_metadata, "phase_id", ""))
+        )
+        if _phase_has_transient_impact and "strength" in kwargs:
+            try:
+                _te_ctx = _ctx_pp.get("transient_energy_loss_cumulative_db", 0.0) if isinstance(_ctx_pp, dict) else 0.0
+                _te_cumulative = float(_te_ctx)
+                if _te_cumulative > 1.5:
+                    _te_scale = 1.0 - 0.10 * (_te_cumulative / 3.0)
+                    kwargs["strength"] = float(np.clip(
+                        float(kwargs["strength"]) * _te_scale, 0.20, 1.0))
+            except Exception:
+                logger.debug("§Transient-Energy non-blocking", exc_info=True)
+        # ── Ende Transienten-Energie-Guard ─────────────────────────
+
+        # ── §EmotionalArc: Präventiver Klimax-Schutz ──
+        # Phase 26 (Dynamic Range) und Phase 40 (Loudness) können den
+        # emotionalen Höhepunkt eines Songs einebnen. Der EmotionalArcPlanner
+        # hat bereits berechnet, wo die Klimax liegt. Jetzt wird seine
+        # arc_protection_weight VOR der Phase genutzt — präventiv, nicht reaktiv.
+        if "strength" in kwargs:
+            try:
+                _pid_arc = str(getattr(phase_metadata, "phase_id", ""))
+                if "phase_26" in _pid_arc or "phase_40" in _pid_arc or "phase_54" in _pid_arc:
+                    _arc_weights = _ctx_pp.get("arc_protection_weights") if isinstance(_ctx_pp, dict) else None
+                    if _arc_weights is not None and hasattr(_arc_weights, "__len__"):
+                        # arc_protection_weights ist per Audio-Frame — wir nehmen das Minimum
+                        # der ersten 25% (Intro/Strophe) und das Maximum der mittleren 50%
+                        # (wo typischerweise die Klimax liegt)
+                        try:
+                            _aw_arr = np.asarray(_arc_weights, dtype=np.float32)
+                            _n_aw = len(_aw_arr)
+                            if _n_aw > 100:
+                                _climax_zone = _aw_arr[_n_aw // 4 : 3 * _n_aw // 4]
+                                _climax_weight = float(np.max(_climax_zone))
+                                if _climax_weight > 0.85:
+                                    kwargs["strength"] = float(np.clip(
+                                        float(kwargs["strength"]) * 0.80, 0.15, 1.0))
+                        except Exception:
+                            pass
+            except Exception:
+                logger.debug("§EmotionalArc non-blocking", exc_info=True)
+        # ── Ende EmotionalArc-Prävention ───────────────────────────
+
+        # ── §SimultanMasking: Frequenzmaskierung vor EQ-Phasen ──
+        # Ein lauter Hi-Hat bei 8 kHz maskiert leisere Frequenzen bei
+        # 6 und 10 kHz. Bevor EQ-Phasen boosten, wird geprüft ob der
+        # Boost im Maskierungs-Schatten eines dominanten Nachbarbandes
+        # liegt — dann wird er gedämpft (das Ohr hört ihn ohnehin nicht).
+        _is_eq_phase = any(
+            x in str(getattr(phase_metadata, "phase_id", ""))
+            for x in ("phase_38", "phase_39", "phase_06", "phase_07", "phase_37")
+        )
+        if _is_eq_phase and "strength" in kwargs:
+            try:
+                from backend.core.masking_analyzer import MaskingAnalyzer
+                kwargs.setdefault("check_simultaneous_masking", True)
+            except Exception:
+                logger.debug("§SimultanMasking non-blocking", exc_info=True)
+        # ── Ende Simultan-Maskierung ───────────────────────────────
+
         _phase_mem_profiling = bool(
             MEMORY_PROFILING_AVAILABLE and os.environ.get("AURIK_PHASE_MEMORY_PROFILING", "0") == "1"
         )
@@ -31029,7 +31287,7 @@ class UnifiedRestorerV3:
                     _quiet2 = _r_db <= float(_quiet_dbfs)
                     _expl2 = _quiet2 & (_delta2 > float(_thr_db))
                     if np.any(_expl2):
-                        _xfade_n = max(1, int(0.010 * float(sample_rate)))  # 10 ms crossfade
+                        _xfade_n = max(1, int(0.050 * float(sample_rate)))  # 50 ms crossfade
                         for _k in np.where(_expl2)[0]:
                             _s = int(_k * _hop)
                             _e = int(min(_s + _win, _n))

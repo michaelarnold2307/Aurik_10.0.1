@@ -392,6 +392,27 @@ class NoiseGate(PhaseInterface):
         except Exception as _nmr_exc_18:
             logger.debug("Phase18 §V40 NMR non-blocking: %s", _nmr_exc_18)
 
+        # §2.17 SectionStrengthEnvelope: Kontinuierliche per-Segment-Modulation.
+        # Reduziert Noise-Gate-Intensität in leisen Strophen (wo das Gate
+        # natürlichen Rauschflor erhalten soll), verstärkt in dichten Refrains
+        # (wo Rauschen störender wirkt). Fließende Cosine-Crossfades zwischen
+        # allen Sektionen — kein hörbares Pumpen.
+        _envelope = kwargs.get("strength_envelope")
+        if _envelope is not None and len(_envelope) > 0:
+            try:
+                from backend.core.dsp.section_strength_envelope import get_section_strength_at
+
+                _n_total = audio.shape[-1] if audio.ndim > 1 else len(audio)
+                _env_val = get_section_strength_at(_envelope, 0, _n_total)
+                _effective_strength = float(np.clip(_effective_strength * _env_val, 0.0, 1.0))
+                logger.debug(
+                    "Phase18 §2.17 SectionStrengthEnvelope: env=%.3f → eff_str=%.3f",
+                    _env_val,
+                    _effective_strength,
+                )
+            except Exception as _env_exc_18:
+                logger.debug("Phase18 §2.17 SectionStrengthEnvelope non-blocking: %s", _env_exc_18)
+
         is_stereo = audio.ndim == 2
         config = dict(self.GATE_CONFIG.get(material, self.GATE_CONFIG[MaterialType.CD_DIGITAL]))
         config["reductions_db"] = [float(r * _effective_strength) for r in config["reductions_db"]]  # type: ignore[attr-defined]

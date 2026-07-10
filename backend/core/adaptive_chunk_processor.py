@@ -35,7 +35,7 @@ CHUNK_MED_SEV_S: float = 15.0  # severity >= 0.3
 CHUNK_LOW_SEV_S: float = 60.0  # default
 CHUNK_MIN_S: float = 2.0
 CHUNK_MAX_S: float = 120.0
-CROSSFADE_S: float = 0.010  # 10 ms Hanning crossfade
+CROSSFADE_S: float = 0.050  # 50 ms Hann crossfade (unhörbar auch bei 30 Hz Subbass)
 
 # Maximum tolerance for beat-snapping chunk boundaries (opt-in feature).
 # A boundary is only moved if the nearest beat is within this tolerance.

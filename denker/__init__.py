@@ -22,6 +22,7 @@ Domänen:
 """
 
 from .aurik_denker import AurikDenker, get_aurik_denker, restauriere
+from .cross_phase_coordinator import CrossPhaseCoordinator
 from .defekt_denker import DefektDenker, get_defekt_denker
 from .exzellenz_denker import ExzellenzDenker, get_exzellenz_denker
 from .perceptual_council import (
@@ -39,6 +40,7 @@ from .tontraegerkette_denker import KettenErgebnis, TontraegerketteDenker, get_t
 
 __all__ = [
     "AurikDenker",
+    "CrossPhaseCoordinator",
     "DefektDenker",
     "ExzellenzDenker",
     "KettenErgebnis",

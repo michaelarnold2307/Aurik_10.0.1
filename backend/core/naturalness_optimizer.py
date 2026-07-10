@@ -762,11 +762,12 @@ def _fallback_hpe(audio: np.ndarray) -> float:
 # ═══════════════════════════════════════════════════════════════════════════
 
 def _noise_floor_gate(audio: np.ndarray, sr: int, original: np.ndarray) -> np.ndarray:
-    """Sanftes Noise-Gate: Rauschpegel in Signalpausen um 2-3 dB senken.
+    """Sanftes Noise-Gate: Rauschpegel in Signalpausen um 1-2 dB senken.
 
-    Nur aktiv wenn Signal-Pegel < −30 dB (Pause).
-    Max −3 dB Reduktion, Attack 5 ms, Release 50 ms.
-    Das Original-Audio wird nicht angetastet — nur die Rauschfahne.
+    Nur aktiv wenn Signal-Pegel < −48 dB (echte Stille).
+    Max −1.4 dB Reduktion, Attack 5 ms, Release 80 ms.
+    Erhält natürlichen Raumton unter −60 dBFS — absolute Stille
+    zwischen Noten klingt unnatürlich und ermüdend.
     """
     try:
         mono = audio.mean(axis=1) if audio.ndim == 2 else audio
@@ -778,18 +779,18 @@ def _noise_floor_gate(audio: np.ndarray, sr: int, original: np.ndarray) -> np.nd
                         for i in range(n_win)])
         rms_db = 20.0 * np.log10(rms)
 
-        # Schwelle: −30 dB (alles darunter ist Pause/Rauschen)
-        threshold_db = -30.0
+        # Schwelle: −48 dB (Raumton-Erhalt unter −60 dBFS)
+        threshold_db = -48.0
         is_noise = rms_db < threshold_db
 
-        # Smooth Gate: Attack 5ms, Release 50ms
+        # Smooth Gate: Attack 5ms, Release 80ms
         att = np.exp(-1.0 / (0.005 * sr / win))
-        rel = np.exp(-1.0 / (0.050 * sr / win))
+        rel = np.exp(-1.0 / (0.080 * sr / win))
 
         gate = np.ones(n_win, dtype=np.float32)
         state = 1.0
         for i in range(n_win):
-            target = 0.7 if is_noise[i] else 1.0  # −3 dB max
+            target = 0.85 if is_noise[i] else 1.0  # −1.4 dB max, erhält Raumton
             coef = att if target < state else rel
             state = coef * state + (1.0 - coef) * target
             gate[i] = state

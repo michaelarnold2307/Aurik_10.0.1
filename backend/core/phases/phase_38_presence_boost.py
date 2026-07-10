@@ -188,6 +188,27 @@ class PresenceBoost(PhaseInterface):
             except Exception as _fmg_exc_38:
                 logger.debug("Phase38 §V41 ForwardMaskingGuard non-blocking: %s", _fmg_exc_38)
 
+        # §2.17 SectionStrengthEnvelope: Kontinuierliche per-Segment-Modulation.
+        # Passt Presence-Boost dynamisch an: mehr Präsenz in Refrains (wo der Mix
+        # ohnehin dichter ist und Klarheit braucht), weniger in Strophen (wo
+        # Zurückhaltung natürlicher wirkt). Cosine-Crossfades verhindern hörbare
+        # Übergänge zwischen den Sektionen.
+        _envelope = kwargs.get("strength_envelope")
+        if _envelope is not None and len(_envelope) > 0:
+            try:
+                from backend.core.dsp.section_strength_envelope import get_section_strength_at
+
+                _n_total = audio.shape[-1] if audio.ndim > 1 else len(audio)
+                _env_val = get_section_strength_at(_envelope, 0, _n_total)
+                _effective_strength = float(np.clip(_effective_strength * _env_val, 0.0, 1.0))
+                logger.debug(
+                    "Phase38 §2.17 SectionStrengthEnvelope: env=%.3f → eff_str=%.3f",
+                    _env_val,
+                    _effective_strength,
+                )
+            except Exception as _env_exc_38:
+                logger.debug("Phase38 §2.17 SectionStrengthEnvelope non-blocking: %s", _env_exc_38)
+
         if _effective_strength <= 0.0:
             audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
             audio = np.clip(audio, -1.0, 1.0)

@@ -365,6 +365,32 @@ class VocalEnhancement(PhaseInterface):
             except Exception as _fmg_exc_42:
                 logger.debug("Phase42 §V41 ForwardMaskingGuard non-blocking: %s", _fmg_exc_42)
 
+        # ── §SVM-1 SingerVoiceModel: Stimmtyp-adaptives Vocal Enhancement ──
+        _svm_42 = kwargs.get("singer_voice_model")
+        if _svm_42 is not None and isinstance(_svm_42, dict) and _svm_42.get("confidence", 0.0) > 0.3:
+            try:
+                _svm_hnr = float(_svm_42.get("hnr_db", 20.0) or 20.0)
+                _svm_tilt = float(_svm_42.get("spectral_tilt_db_per_octave", 0.0) or 0.0)
+                _svm_conf = float(_svm_42.get("confidence", 0.0))
+                _svm_vd = float(_svm_42.get("vibrato_depth_cents", 0.0) or 0.0)
+                # Raue Stimme (HNR < 15 dB) → konservativer enhancen
+                if _svm_hnr < 15.0:
+                    _effective_strength = float(np.clip(
+                        _effective_strength * (0.70 + 0.30 * _svm_hnr / 15.0), 0.0, 1.0))
+                # Dunkle Stimme (tilt > 2 dB/oct) → mehr Präsenz-Boost
+                if _svm_tilt > 2.0:
+                    _effective_strength = float(np.clip(
+                        _effective_strength * (1.0 + 0.10 * _svm_conf), 0.0, 1.0))
+                # Vibrato-Schutz bei > 50 cent Tiefe → Formant-Lock aktivieren
+                if _svm_vd > 50.0:
+                    kwargs["preserve_vibrato"] = True
+                    kwargs["vibrato_depth_cents"] = _svm_vd
+                logger.debug(
+                    "Phase42 §SVM-1 SVM: hnr=%.1fdB tilt=%.1f vibrato=%.1f → eff=%.3f",
+                    _svm_hnr, _svm_tilt, _svm_vd, _effective_strength)
+            except Exception as _svm_exc_42:
+                logger.debug("Phase42 §SVM-1 non-blocking: %s", _svm_exc_42)
+
         if _effective_strength <= 0.0:
             audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
             audio = np.clip(audio, -1.0, 1.0)

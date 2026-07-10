@@ -387,6 +387,32 @@ class VocalNaturalnessRestorationPhase(PhaseInterface):
                     "Phase65 §M-2 VFA-Cap: effective_strength → %.2f (Vibrato/Passaggio-Schutz)", effective_strength
                 )
 
+        # ── §SVM-1 SingerVoiceModel: Stimm-Modell für natürliche Vokal-Restaurierung ──
+        _svm_65 = kwargs.get("singer_voice_model")
+        if _svm_65 is not None and isinstance(_svm_65, dict) and _svm_65.get("confidence", 0.0) > 0.3:
+            try:
+                _svm65_formants = _svm_65.get("formant_targets", {}) or {}
+                _svm65_vr = float(_svm_65.get("vibrato_rate_hz", 0.0) or 0.0)
+                _svm65_vd = float(_svm_65.get("vibrato_depth_cents", 0.0) or 0.0)
+                _svm65_hnr = float(_svm_65.get("hnr_db", 20.0) or 20.0)
+                _svm65_tilt = float(_svm_65.get("spectral_tilt_db_per_octave", 0.0) or 0.0)
+                # Vibrato-Erhalt: SVM-Vibrato als Ziel für Tilt-Korrektur
+                if _svm65_vr > 0 and _svm65_vd > 30.0:
+                    kwargs.setdefault("vibrato_zones_preserve", True)
+                # HNR-Schutz: bei bereits rauer Stimme HNR-Blend konservativer
+                if _svm65_hnr < 18.0:
+                    effective_strength = float(np.clip(
+                        effective_strength * (0.65 + 0.35 * _svm65_hnr / 18.0), 0.0, 1.0))
+                    _p65_meta["effective_strength"] = round(effective_strength, 4)
+                # Formant-Ziele als Referenz für Tilt-Korrektur
+                if _svm65_formants and _svm65_tilt != 0:
+                    _p65_meta["formant_targets_from_svm"] = True
+                logger.debug(
+                    "Phase65 §SVM-1 SVM: hnr=%.1fdB vibrato=%.1fHz/%.1fcent formants=%d → eff=%.3f",
+                    _svm65_hnr, _svm65_vr, _svm65_vd, len(_svm65_formants), effective_strength)
+            except Exception as _svm_exc_65:
+                logger.debug("Phase65 §SVM-1 non-blocking: %s", _svm_exc_65)
+
         # ---- Stufe 1: Spektral-Tilt-Korrektur ----
         if abs(tilt_delta) > _TILT_DELTA_THRESHOLD:
             try:

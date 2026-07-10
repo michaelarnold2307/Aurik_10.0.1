@@ -130,6 +130,28 @@ class TruePeakLimiterPhase(PhaseInterface):
                 metrics={"effective_strength": 0.0},
             )
 
+        # ── §PRE-LIMITER-HIGHPASS: Infraschall-Energie vor Limiting entfernen ──
+        # Sub-Bass < 20 Hz ist für das menschliche Ohr unhörbar (ISO 226),
+        # verbraucht aber wertvollen Limiter-Headroom und triggert unnötige
+        # Gain-Reduction auf hörbaren Frequenzen. Ein 20 Hz LR4 Highpass
+        # (Linkwitz-Riley 4. Ordnung, −24 dB/Oktave) entfernt Infraschall,
+        # ohne den hörbaren Bass (>30 Hz) anzutasten.
+        try:
+            from scipy.signal import butter, sosfiltfilt
+            _hp_freq = 20.0
+            _hp_sos = butter(4, _hp_freq / (sample_rate / 2), btype='high', output='sos')
+            if is_stereo:
+                audio_hp = np.column_stack([
+                    sosfiltfilt(_hp_sos, audio[:, 0]),
+                    sosfiltfilt(_hp_sos, audio[:, 1]),
+                ])
+            else:
+                audio_hp = sosfiltfilt(_hp_sos, audio)
+            audio = audio_hp.astype(np.float32)
+            logger.debug("Phase47 §Pre-Limiter-HP: 20 Hz LR4 applied")
+        except Exception as _hp_exc:
+            logger.debug("Phase47 §Pre-Limiter-HP non-blocking: %s", _hp_exc)
+
         ceiling_dbfs: float = float(kwargs.get("ceiling_dbfs", _DEFAULT_CEILING_DBFS))
         ceiling_lin: float = 10 ** (ceiling_dbfs / 20.0)
 

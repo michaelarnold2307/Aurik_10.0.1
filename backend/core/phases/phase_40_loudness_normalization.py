@@ -243,6 +243,27 @@ class LoudnessNormalizationPhase(PhaseInterface):
         _pmgg_strength = float(kwargs.get("strength", 1.0))
         _effective_strength = float(np.clip(_pmgg_strength * phase_locality_factor, 0.0, 1.0))
 
+        # ── §ISO-226: Lautstärke-Kompensation für Ziel-Hörpegel ──
+        # Ohne Kompensation klingt eine auf 80 phon gemasterte Aufnahme
+        # bei Zimmerlautstärke (~60 phon) in Höhen schneidend und im Bass
+        # dünn. Die Fletcher-Munson-Kurven kompensieren das.
+        _iso_target = float(kwargs.get("iso226_target_phon", 0.0))
+        _iso_ref = float(kwargs.get("iso226_reference_phon", 0.0))
+        if _iso_target > 0 and _iso_ref > 0:
+            try:
+                from backend.core.fletcher_munson_curves import apply_loudness_compensation
+
+                audio_lc = apply_loudness_compensation(
+                    audio, sample_rate, target_phon=_iso_target, reference_phon=_iso_ref
+                )
+                if audio_lc is not None and np.all(np.isfinite(audio_lc)):
+                    audio = audio_lc.astype(np.float32)
+                    logger.debug(
+                        "Phase40 §ISO-226: loudness compensated target=%.0f phon ref=%.0f phon",
+                        _iso_target, _iso_ref)
+            except Exception as _iso_exc:
+                logger.debug("Phase40 §ISO-226 non-blocking: %s", _iso_exc)
+
         if _effective_strength <= 0.0:
             audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
             audio = np.clip(audio, -1.0, 1.0)
