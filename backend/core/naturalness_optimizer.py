@@ -60,10 +60,12 @@ def optimize_naturalness(
     mode: str = "RESTORATION",
     dry_run: bool = False,
     album_ref: dict | None = None,
+    progress_callback: callable | None = None,  # f(pct_0_100: float, label: str)
 ) -> NaturalnessResult:
     """Maximiert die natürliche Hörqualität auf Weltklasse-Niveau.
 
-    Args:
+        progress_callback: Optional callable(pct_0_100, label) für Fortschrittsanzeige.
+
         audio: UV3-restauriertes Audio (float32)
         original: Original-Audio (float32)
         sr: Sample-Rate (48000)
@@ -117,9 +119,20 @@ def optimize_naturalness(
             return before + (after - before) * decision.new_strength, decision.new_strength
         return after, 1.0
 
+    # Progress tracking
+    _stage_num = 0
+    _total_stages = 12 + (3 if mode == "RESTORATION" else 0) + (7 if mode == "STUDIO_2026" else 0)
+    def _progress(label):
+        nonlocal _stage_num
+        _stage_num += 1
+        if progress_callback:
+            progress_callback(_stage_num / _total_stages * 100, label)
+
     # ── 1. HPE-Vollanalyse ─────────────────────────────────────────────
     hpe_full = _compute_hpe_full(arr, sr)
+    _progress("Analyse")
 
+    _progress("Multi-Band-Glue")
     # ── 2. Multi-Band-Glue Stage ────────────────────────────────────────
     _bg = arr.copy()
     arr, glue_db = _multiband_glue(arr, sr, mode=mode)
@@ -128,6 +141,7 @@ def optimize_naturalness(
         applied.append("multiband_glue")
         improvements.append(f"Multi-Band-Feinschliff ({glue_db:.1f} dB)")
 
+    _progress("Stereo")
     # ── 3. Stereo-Feld-Optimierung ──────────────────────────────────────
     if is_stereo:
         _s3 = arr.copy()
@@ -137,6 +151,7 @@ def optimize_naturalness(
             applied.append("stereo_optimize")
             improvements.append(sw_info)
 
+    _progress("Transienten")
     # ── 4. Transienten-Schutz ───────────────────────────────────────────
     if hpe_full.get("roughness_asper", 0.5) < 2.0:
         _s4 = arr.copy()
@@ -147,6 +162,7 @@ def optimize_naturalness(
             improvements.append(f"{n_protected} Attack-Transienten geschützt")
             transients_protected = n_protected
 
+    _progress("De-Essing")
     # ── 5. De-Essing-Nachbearbeitung ────────────────────────────────────
     if material not in ("shellac", "wax_cylinder"):
         _s5 = arr.copy()
@@ -156,6 +172,7 @@ def optimize_naturalness(
             applied.append("de_essing_refinement")
             improvements.append(ds_info)
 
+    _progress("Bass")
     # ── 6. Bass-Management ─────────────────────────────────────────────
     if material not in ("shellac", "wax_cylinder", "wire_recording"):
         _s6 = arr.copy()
@@ -163,6 +180,7 @@ def optimize_naturalness(
         arr, _ = _guarded_stage("bass_management", _s6, arr)
         applied.append("bass_management")
 
+    _progress("Sharpness")
     # ── 7. Sharpness-Korrektur ─────────────────────────────────────────
     sharp = hpe_full.get("sharpness_zwicker", 1.5)
     if sharp > 3.0:
@@ -180,6 +198,7 @@ def optimize_naturalness(
         improvements.append(f"Höhen +{boost:.1f} dB (zu dumpf)")
         applied.append("sharpness_correction")
 
+    _progress("Roughness")
     # ── 8. Roughness-Glättung ──────────────────────────────────────────
     if hpe_full.get("roughness_asper", 0.5) > 1.5:
         _s8 = arr.copy()
@@ -188,12 +207,14 @@ def optimize_naturalness(
         improvements.append(f"Mikrodynamik geglättet ({hpe_full['roughness_asper']:.1f} asper)")
         applied.append("roughness_smoothing")
 
+    _progress("Wärme")
     # ── 9. Wärmeband-Guard ─────────────────────────────────────────────
     _s9 = arr.copy()
     arr = _warmth_band_guard(arr, sr, orig)
     arr, _ = _guarded_stage("warmth_guard", _s9, arr)
     applied.append("warmth_guard")
 
+    _progress("Air-Band")
     # ── 10. Air-Band-Polish ────────────────────────────────────────────
     if _allows_air_band(material, era):
         _s10 = arr.copy()
@@ -202,12 +223,14 @@ def optimize_naturalness(
         improvements.append("Luftband poliert (+1.5 dB @ 14 kHz)")
         applied.append("air_band_polish")
 
+    _progress("Loudness")
     # ── 11. Loudness-Feinschliff ───────────────────────────────────────
     _s11 = arr.copy()
     arr = _loudness_balance(arr, orig, mode)
     arr, _ = _guarded_stage("loudness_balance", _s11, arr)
     applied.append("loudness_balance")
 
+    _progress("Tonalness")
     # ── 12. Tonalness-Enhancement ──────────────────────────────────────
     if hpe_full.get("tonalness", 0.5) < 0.25 and hpe_before > 0.45:
         _s12 = arr.copy()
@@ -216,6 +239,7 @@ def optimize_naturalness(
         improvements.append("Tonale Anteile sanft verstärkt")
         applied.append("tonalness_boost")
 
+    _progress("Masterband")
     # ── 13. Restoration: Masterband-Qualität (§v10.6) ──────────────────
     # Nur RESTORATION. Jede Stage analysiert zuerst, ob sie nötig ist.
     if mode == "RESTORATION":
@@ -237,6 +261,7 @@ def optimize_naturalness(
             arr, _ = _guarded_stage("stereo_focus", _r13c, arr)
             applied.append("stereo_focus")
 
+    _progress("Bandbreite")
     # ── 13d. Bandbreiten-Extension: Vintage-Material (beide Modi) ─────
     if _needs_bandwidth_extension(material):
         _r13d = arr.copy()
@@ -244,6 +269,7 @@ def optimize_naturalness(
         arr, _ = _guarded_stage("bandwidth_extend", _r13d, arr)
         applied.append("bandwidth_extend")
 
+    _progress("Studio 2026")
     # ── 14. Studio 2026 Re-Production Chain (§v10.5) ───────────────────
     if mode == "STUDIO_2026":
         _s13_pre = arr.copy()
