@@ -411,7 +411,7 @@ class _CatalogHelper:
                 material=str(audio_ctx.get("material_type", "vinyl")),
                 panns_singing=float(audio_ctx.get("panns_singing", 0)),
                 snr_db=audio_ctx.get("snr_db"),
-                bandwidth_hz=float(audio_ctx.get("bandwidth_hz", 20000)),
+                bandwidth_hz=float(audio_ctx.get("bandwidth_hz") or 20000),
                 era_decade=int(audio_ctx.get("era_decade", 1980)),
                 rt60_s=float(audio_ctx.get("rt60_s", 0.5)),
                 crest_db=float(audio_ctx.get("crest_db", 12.0)),
