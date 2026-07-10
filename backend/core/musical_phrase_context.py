@@ -72,7 +72,7 @@ def _get_madmom_module():
     try:
         return importlib.import_module("madmom")
     except Exception as e:
-        logger.warning("musical_phrase_context.py::_get_madmom_module fallback: %s", e)
+        logger.debug("musical_phrase_context: madmom nicht verfügbar — DSP-Fallback aktiv")
         return None
 
 
