@@ -51,6 +51,19 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
+class GoosebumpsResult:
+    """Gänsehaut-Faktor Ergebnis."""
+    score: float = 0.0
+    dynamic_contrast: float = 0.0
+    harmonic_surprise: float = 0.0
+    spectral_shimmer: float = 0.0
+    temporal_breath: float = 0.0
+    frequency_warmth: float = 0.0
+    label: str = "neutral"
+    recommendation: str = ""
+    issues: list[str] = field(default_factory=list)
+    details: dict = field(default_factory=dict)
+
 
 def compute_goosebumps(
     audio: np.ndarray,

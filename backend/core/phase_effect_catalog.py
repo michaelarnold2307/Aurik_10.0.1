@@ -404,7 +404,7 @@ class _CatalogHelper:
                 continue
             calibrated = calibrate_phase_intensity(
                 pid,
-                profile.base_strength,
+                profile.max_strength_by_material.get(audio_ctx.get("material_type", "vinyl"), 1.0),
                 defect_severity=float(audio_ctx.get("defect_severity", 0)),
                 material=str(audio_ctx.get("material_type", "vinyl")),
                 panns_singing=float(audio_ctx.get("panns_singing", 0)),
