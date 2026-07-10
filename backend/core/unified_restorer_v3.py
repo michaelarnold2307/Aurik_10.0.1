@@ -8716,6 +8716,20 @@ class UnifiedRestorerV3:
                         _svm_result.confidence,
                         _svm_result.vibrato_rate_hz,
                     )
+                    # ── §ROADMAP-3: SVM → BSL-Persistenz ──
+                    # Speichert das Stimm-Modell im BatchSessionLearner,
+                    # damit folgende Songs derselben Session die
+                    # Stimmparameter als Prior laden können (statt
+                    # jedes Mal von Null zu analysieren).
+                    try:
+                        _bsl = getattr(self, "_batch_intelligence", None)
+                        if _bsl is not None and hasattr(_bsl, "store"):
+                            _song_id = self._restoration_context.get("song_id", "")
+                            if _song_id:
+                                _bsl.store(_song_id, "singer_voice_model", _svm_result.to_dict())
+                                logger.debug("§ROADMAP-3 BSL-Persistenz: SVM gespeichert (song_id=%s)", _song_id)
+                    except Exception as _bsl_exc:
+                        logger.debug("§ROADMAP-3 BSL-Persistenz non-blocking: %s", _bsl_exc)
             except Exception as _svm_exc:
                 logger.debug("§SVM-1 SingerVoiceModel non-blocking: %s", _svm_exc)
                 self._restoration_context.setdefault("singer_voice_model", None)

@@ -116,7 +116,9 @@ CrossPhaseCoordinator.analyze(phase_plan)
 
 ## §ROADMAP-2: SectionStrengthEnvelope aktivieren (§2.17.1)
 
-**Status:** Infrastruktur vollständig implementiert (build, inject). Keine Phase liest sie.
+**Status:** ✅ **Implementiert.** Aktiv in Phase 18 (Noise Gate), 19 (De-Esser) und 38 (Presence Boost).
+Alle drei lesen `kwargs.get("strength_envelope")` und modulieren `_effective_strength`.
+Cosine-Crossfades (200 ms) verhindern hörbare Übergänge zwischen Sektionen.
 
 **Nächster Schritt:** Exemplarische Integration in Phase 19 (De-Esser) und Phase 38
 (Presence Boost). Diese beiden Phasen haben den größten per-Segment-Variationsbedarf.
