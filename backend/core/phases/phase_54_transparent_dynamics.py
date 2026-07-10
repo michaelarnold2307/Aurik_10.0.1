@@ -316,6 +316,8 @@ class TransparentDynamicsV1(PhaseInterface):
             "pumping",
             "level_pumping",
             "transient_smearing",
+            "transport_bump",
+            "tape_head_level_dip",
         )
         mask = np.zeros(n_samples, dtype=np.float32)
         for key in keys:

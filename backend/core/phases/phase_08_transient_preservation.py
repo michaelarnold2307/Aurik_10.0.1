@@ -437,13 +437,13 @@ class TransientPreservationPhase(PhaseInterface):
         except Exception as _hg_exc_08:
             logger.debug("Phase08 §2.46e Hallucination-Guard (non-blocking): %s", _hg_exc_08)
 
-        # ── §Transport-Bump-Repair: Chirurgische Amplituden-Korrektur ──
-        # Transport-Bumps und Tape-Head-Level-Dips sind kurze Pegel-Einbrüche.
-        # Für JEDES Event wird individuell gemessen: Dauer, Tiefe, lokaler Kontext.
-        # Die Reparatur passt sich pro Event an — kurze Dips (30ms) bekommen
-        # einen schnellen Gain-Push, längere (200ms+) einen sanften Hüllkurven-Boost.
+        # ── §Transport-Bump-Repair: Maximales SOTA ──
+        # Ebene 1: Multi-Band-Envelope (200Hz/3kHz Crossover)
+        # Ebene 2: Onset-Erkennung an Bump-Stellen (kein Over-Boost)
+        # Ebene 3: Post-Repair-Qualitäts-Validierung pro Event
         _bump_count = 0
         _bump_total_db = 0.0
+        _bump_rolled_back = 0
         try:
             _defect_locs = kwargs.get("defect_locations", {}) or {}
             _bump_locs = _defect_locs.get("transport_bump", [])
@@ -451,9 +451,22 @@ class TransientPreservationPhase(PhaseInterface):
                 _bump_locs = _defect_locs.get("tape_head_level_dip", [])
 
             if _bump_locs:
+                import scipy.signal as _sps
                 _channels = enhanced if enhanced.ndim == 2 else enhanced[np.newaxis, :]
                 _n_samples = _channels.shape[1]
                 _bump_repaired = _channels.copy()
+
+                # ── Ebene 2: Onset-Erkennung für den gesamten Track ──
+                _audio_mono = np.mean(_channels, axis=0)
+                _onset_env = np.abs(_audio_mono)
+                _onset_thresh = float(np.percentile(_onset_env, 85)) * 1.5
+                _onset_frames = _onset_env > _onset_thresh
+
+                # ── Ebene 1: Multi-Band-Crossover-Filter ──
+                _c1, _c2 = 200.0, 3000.0  # Hz
+                _sos_lo = _sps.butter(2, _c1 / (sample_rate / 2), btype='low', output='sos')
+                _sos_mid = _sps.butter(2, [_c1 / (sample_rate / 2), _c2 / (sample_rate / 2)], btype='band', output='sos')
+                _sos_hi = _sps.butter(2, _c2 / (sample_rate / 2), btype='high', output='sos')
 
                 for _t_start, _t_end in _bump_locs:
                     _s = max(0, int(_t_start * sample_rate))
@@ -463,55 +476,92 @@ class TransientPreservationPhase(PhaseInterface):
 
                     _dur_s = (_e - _s) / sample_rate
                     _segment = _channels[:, _s:_e]
+                    _seg_mono = np.mean(_segment, axis=0)
 
-                    # ── Individuelle Messung: RMS-Verlauf des Events ──
-                    _win_sm = max(32, int(sample_rate * 0.005))  # 5ms Fenster
-                    _seg_mono = np.mean(np.abs(_segment), axis=0)
-                    _env = np.zeros(len(_seg_mono), dtype=np.float64)
-                    for _k in range(0, len(_seg_mono), _win_sm // 2):
-                        _ke = min(_k + _win_sm, len(_seg_mono))
-                        _env[_k:_ke] = float(np.sqrt(np.mean(_seg_mono[_k:_ke]**2) + 1e-12))
+                    # ── Ebene 2: Onset-Check an Bump-Position ──
+                    _onset_overlap = float(np.mean(_onset_frames[_s:_e]))
+                    _onset_scale = 1.0 if _onset_overlap < 0.15 else max(0.30, 1.0 - _onset_overlap * 2.0)
 
-                    # ── Referenz: RMS im umgebenden Kontext (150ms vorher + nachher) ──
+                    # ── Ebene 1: Multi-Band-Envelope ──
+                    _lo = _sps.sosfiltfilt(_sos_lo, _seg_mono)
+                    _mid = _sps.sosfiltfilt(_sos_mid, _seg_mono)
+                    _hi = _sps.sosfiltfilt(_sos_hi, _seg_mono)
+
+                    _win_sm = max(32, int(sample_rate * 0.005))
+                    def _band_env(band):
+                        _env = np.zeros(len(band), dtype=np.float64)
+                        for _k in range(0, len(band), _win_sm // 2):
+                            _ke = min(_k + _win_sm, len(band))
+                            _env[_k:_ke] = float(np.sqrt(np.mean(band[_k:_ke]**2) + 1e-12))
+                        return _env
+
+                    _env_lo = _band_env(_lo)
+                    _env_mid = _band_env(_mid)
+                    _env_hi = _band_env(_hi)
+
+                    # Referenz pro Band aus Kontext
                     _ctx_before_s = max(0, _s - int(sample_rate * 0.150))
                     _ctx_after_e = min(_n_samples, _e + int(sample_rate * 0.150))
-                    _ctx_before = _channels[:, _ctx_before_s:_s] if _s > _ctx_before_s else _channels[:, :1]
-                    _ctx_after = _channels[:, _e:_ctx_after_e] if _ctx_after_e > _e else _channels[:, -1:]
-                    _ref_rms = float(np.sqrt(np.mean(np.concatenate([
-                        _ctx_before.ravel(), _ctx_after.ravel()
-                    ])**2) + 1e-12))
+                    _ctx_mono = np.concatenate([
+                        np.mean(_channels[:, _ctx_before_s:_s], axis=0) if _s > _ctx_before_s else _channels[0, :1],
+                        np.mean(_channels[:, _e:_ctx_after_e], axis=0) if _ctx_after_e > _e else _channels[0, -1:],
+                    ])
+                    _ctx_lo = _sps.sosfiltfilt(_sos_lo, _ctx_mono)
+                    _ctx_mid = _sps.sosfiltfilt(_sos_mid, _ctx_mono)
+                    _ctx_hi = _sps.sosfiltfilt(_sos_hi, _ctx_mono)
+                    _ref_lo = float(np.sqrt(np.mean(_ctx_lo**2) + 1e-12))
+                    _ref_mid = float(np.sqrt(np.mean(_ctx_mid**2) + 1e-12))
+                    _ref_hi = float(np.sqrt(np.mean(_ctx_hi**2) + 1e-12))
 
-                    if _ref_rms < 1e-8:
+                    if max(_ref_lo, _ref_mid, _ref_hi) < 1e-8:
                         continue
 
-                    # ── Per-Event-Gain-Kurve: Tiefe + Dauer-adaptiv ──
-                    _env_norm = _env / _ref_rms
-                    # Gain = Referenz / aktuell, begrenzt auf max 6dB Recovery
-                    _gain = np.clip(1.0 / np.maximum(_env_norm, 0.05), 0.5, 2.0)
-                    # Längere Dips → weichere Recovery (langsamere Gain-Änderung)
+                    # Per-Band-Gain-Kurven
+                    _gain_lo = np.clip(1.0 / np.maximum(_env_lo / max(_ref_lo, 1e-12), 0.05), 0.5, 2.0)
+                    _gain_mid = np.clip(1.0 / np.maximum(_env_mid / max(_ref_mid, 1e-12), 0.05), 0.5, 2.0)
+                    _gain_hi = np.clip(1.0 / np.maximum(_env_hi / max(_ref_hi, 1e-12), 0.05), 0.5, 2.0)
+                    _gain = (_gain_lo + _gain_mid + _gain_hi) / 3.0
+
+                    # Ebene 2: Onset-Skalierung auf Gain anwenden
+                    _gain = 1.0 + (_gain - 1.0) * _onset_scale
+
+                    # Smoothing + Hanning-Fade
                     _smooth_ms = float(np.clip(_dur_s * 0.3 * 1000, 5.0, 50.0))
                     _smooth_win = max(3, int(_smooth_ms / 1000 * sample_rate / (_win_sm // 2)))
                     if _smooth_win > 2 and len(_gain) > _smooth_win:
-                        _gain = np.convolve(_gain, np.ones(_smooth_win) / _smooth_win, mode="same")
+                        _gain = np.convolve(_gain, np.ones(_smooth_win) / _smooth_win, mode='same')
 
-                    # ── Hanning-Fade an den Rändern (unhörbare Übergänge) ──
-                    _fade_n = min(int(sample_rate * 0.010), len(_gain) // 4)  # 10ms
+                    _fade_n = min(int(sample_rate * 0.010), len(_gain) // 4)
                     if _fade_n > 1:
-                        _fade_in = 0.5 - 0.5 * np.cos(np.pi * np.arange(_fade_n) / _fade_n)
-                        _fade_out = 0.5 + 0.5 * np.cos(np.pi * np.arange(_fade_n) / _fade_n)
-                        _gain[:_fade_n] = 1.0 + (_gain[:_fade_n] - 1.0) * _fade_in
-                        _gain[-_fade_n:] = 1.0 + (_gain[-_fade_n:] - 1.0) * _fade_out
+                        _fi = 0.5 - 0.5 * np.cos(np.pi * np.arange(_fade_n) / _fade_n)
+                        _fo = 0.5 + 0.5 * np.cos(np.pi * np.arange(_fade_n) / _fade_n)
+                        _gain[:_fade_n] = 1.0 + (_gain[:_fade_n] - 1.0) * _fi
+                        _gain[-_fade_n:] = 1.0 + (_gain[-_fade_n:] - 1.0) * _fo
 
-                    # Gain auf Segment-Länge interpolieren
                     _gain_full = np.interp(
                         np.arange(len(_seg_mono)),
-                        np.linspace(0, len(_seg_mono) - 1, len(_gain)),
-                        _gain,
+                        np.linspace(0, len(_seg_mono) - 1, len(_gain)), _gain
                     ).astype(np.float32)
+
+                    # ── Ebene 3: Pre-Repair-Qualitäts-Snapshot ──
+                    _pre_seg = _seg_mono.copy()
+                    _pre_rms = float(np.sqrt(np.mean(_pre_seg**2) + 1e-12))
 
                     # Applizieren
                     for _ch in range(_channels.shape[0]):
                         _bump_repaired[_ch, _s:_e] = _channels[_ch, _s:_e] * _gain_full
+
+                    # ── Ebene 3: Post-Repair-Validierung ──
+                    _post_seg = np.mean(_bump_repaired[:, _s:_e], axis=0)
+                    _post_rms = float(np.sqrt(np.mean(_post_seg**2) + 1e-12))
+                    _rms_improvement = _post_rms / max(_pre_rms, 1e-12)
+
+                    if _rms_improvement < 0.98 or _rms_improvement > 2.0:
+                        # Keine Verbesserung oder Überkorrektur → Rollback
+                        for _ch in range(_channels.shape[0]):
+                            _bump_repaired[_ch, _s:_e] = _channels[_ch, _s:_e]
+                        _bump_rolled_back += 1
+                        continue
 
                     _bump_count += 1
                     _bump_total_db += float(20 * np.log10(np.max(_gain)))
@@ -520,11 +570,12 @@ class TransientPreservationPhase(PhaseInterface):
                     enhanced = _bump_repaired if enhanced.ndim == 2 else _bump_repaired[0]
                     enhanced = np.clip(enhanced, -1.0, 1.0)
                     logger.info(
-                        "Phase08 §Transport-Bump-Repair: %d Events chirurgisch korrigiert "
-                        "(mean=%.1fdB Gain)", _bump_count,
+                        "Phase08 §SOTA-Bump-Repair: %d Events (3-Band + Onset-Guard + Validation), "
+                        "%d rolled back, mean=%.1fdB Gain",
+                        _bump_count, _bump_rolled_back,
                         _bump_total_db / max(_bump_count, 1))
         except Exception as _tb_exc:
-            logger.debug("Phase08 §Transport-Bump-Repair non-blocking: %s", _tb_exc)
+            logger.debug("Phase08 §SOTA-Bump-Repair non-blocking: %s", _tb_exc)
 
         return create_phase_result(
             audio=enhanced,
@@ -538,6 +589,7 @@ class TransientPreservationPhase(PhaseInterface):
                 "phase_locality_factor": phase_locality_factor,
                 "effective_strength": _effective_strength,
                 "transport_bumps_repaired": _bump_count,
+                "transport_bumps_rolled_back": _bump_rolled_back,
                 "transport_bump_mean_gain_db": round(_bump_total_db / max(_bump_count, 1), 1) if _bump_count else 0.0,
                 "material_type": material_type,
             },
