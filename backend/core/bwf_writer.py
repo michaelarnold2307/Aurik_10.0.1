@@ -239,6 +239,7 @@ def write_bwf_chunks(
     description: str = "",
     originator: str = "Aurik 10",
     originator_ref: str = "",
+    transfer_chain: list[str] | None = None,
     **kwargs,
 ) -> bool:
     """Schreibt BWF bext- und iXML-Chunks in eine WAV-Datei.
@@ -254,7 +255,7 @@ def write_bwf_chunks(
         True wenn erfolgreich.
     """
     bext = _build_bext_chunk(
-        description=description,
+        description=description + (" | Chain: " + " → ".join(transfer_chain) if transfer_chain else ""),
         originator=originator,
         originator_ref=originator_ref,
         **kwargs,
