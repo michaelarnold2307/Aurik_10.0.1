@@ -27,7 +27,7 @@ from typing import Literal
 logger = logging.getLogger(__name__)
 
 # ── Typen ───────────────────────────────────────────────────────────────────
-ProviderT = Literal["cpu", "cuda", "rocm", "mps", "directml"]
+ProviderT = Literal["cpu", "cuda", "rocm", "directml"]  # macOS/MPS nicht unterstützt
 
 
 @dataclass
@@ -91,7 +91,8 @@ class MLEngineConfig:
 def detect_gpu_capabilities(fail_fast: bool = False) -> MLEngineConfig:
     """Erkennt verfügbare GPU-Backends und wählt das beste.
 
-    Priorität: CUDA → MPS (Apple Silicon) → ROCm → DirectML → CPU.
+    Priorität: CUDA → ROCm → DirectML → CPU.
+    (macOS/Apple Silicon nicht unterstützt.)
 
     Args:
         fail_fast: True → Exception bei Erkennungsfehlern statt Warnung.
@@ -120,15 +121,6 @@ def detect_gpu_capabilities(fail_fast: bool = False) -> MLEngineConfig:
         config.gpu_name = _get_gpu_name_cuda()
         config.vram_mb = _get_vram_cuda(config.device_id)
         logger.info("CUDA-GPU erkannt: %s (%.0f MB VRAM)", config.gpu_name, config.vram_mb)
-        return config
-
-    # ── Apple Silicon (MPS / CoreML) ─────────────────────────────────────
-    if "CoreMLExecutionProvider" in available:
-        config.provider = "mps"
-        config.onnx_providers = _build_provider_list("CoreMLExecutionProvider")
-        config.gpu_name = "Apple Silicon (MPS/CoreML)"
-        config.vram_mb = _get_apple_silicon_memory()
-        logger.info("Apple Silicon erkannt: %.0f MB Unified Memory", config.vram_mb)
         return config
 
     # ── ROCm (AMD) ───────────────────────────────────────────────────────
@@ -258,15 +250,6 @@ def _get_vram_rocm(device_id: int = 0) -> float:
         import torch  # type: ignore[import]
         props = torch.cuda.get_device_properties(device_id)
         return props.total_memory / (1024 * 1024)
-    except Exception:
-        return 0.0
-
-
-def _get_apple_silicon_memory() -> float:
-    """Geschätztes Unified Memory (Apple Silicon)."""
-    try:
-        import psutil  # type: ignore[import]
-        return psutil.virtual_memory().total / (1024 * 1024)
     except Exception:
         return 0.0
 

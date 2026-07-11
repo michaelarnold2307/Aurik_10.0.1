@@ -1,18 +1,15 @@
-- file: placeholder_shellac_jazz_1938.wav
-  duration_s: 0.0
-  sample_rate: 0
-  channels: 0
-  material: shellac
-  era: 1938
-  genre: Jazz
+- channels: 1
+  checksum_sha256: 171403bad28ffbd60ee87b07d22627175be32f4bbd987a4a1281da370658a4c7
   defects:
   - clicks
   - surface_noise
-  - rumble
-  source: Internet Archive — 78rpm Collection
-  source_url: https://archive.org/details/78rpm
-  license: Public Domain
-  license_url: ''
-  checksum_sha256: ''
-  notes: 'PLACEHOLDER: Bitte durch echte Public-Domain-Aufnahme ersetzen'
-  _status: placeholder
+  - bandwidth_limited
+  duration_s: 3.0
+  era: 1932
+  file: shellac_test_damaged.wav
+  genre: Jazz
+  license: CC0
+  material: shellac
+  notes: Synthetische Test-Aufnahme
+  sample_rate: 48000
+  source: Synthetic Test Corpus

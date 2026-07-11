@@ -772,3 +772,32 @@ def test_open_source_competitive_benchmark() -> None:
         f"STDOUT:\n{result.stdout[-1000:]}\n"
         f"STDERR:\n{result.stderr[-500:]}"
     )
+
+
+# ── Regression Gate (v10.0.0-Phantom) ────────────────────────────────────────
+
+@pytest.mark.regression
+@pytest.mark.timeout(120)
+def test_regression_gate_no_regression() -> None:
+    """Aurik darf sich nicht verschlechtern (Regression-Gate).
+
+    Vergleicht aktuelle PQS-Werte mit gespeicherter Baseline.
+    Regression = PQS-Drop > 2.0 Punkte in einem Szenario.
+    """
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    result = subprocess.run(
+        [sys.executable, "benchmarks/regression/regression_gate.py", "--check", "--ci", "--duration", "0.5"],
+        capture_output=True,
+        text=True,
+        timeout=110,
+        cwd=str(Path(__file__).parent.parent.parent),
+    )
+
+    assert result.returncode == 0, (
+        f"Regression Gate fehlgeschlagen (rc={result.returncode}):\n"
+        f"STDOUT:\n{result.stdout[-1000:]}\n"
+        f"STDERR:\n{result.stderr[-500:]}"
+    )

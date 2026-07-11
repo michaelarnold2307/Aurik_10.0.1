@@ -1,16 +1,12 @@
-- file: placeholder_digital_electronic_2020.wav
-  duration_s: 0.0
-  sample_rate: 0
-  channels: 0
-  material: digital
-  era: 2020
+- channels: 1
+  checksum_sha256: 87fc01f789d8507bb0674ff56d23260bf0f60b16339acedca22efc3c1f3dead6
+  defects: []
+  duration_s: 3.0
+  era: 2015
+  file: digital_test_damaged.wav
   genre: Electronic
-  defects:
-  - clipping
-  source: Freesound (CC0)
-  source_url: https://freesound.org
   license: CC0
-  license_url: ''
-  checksum_sha256: ''
-  notes: 'PLACEHOLDER: Bitte durch echte CC0-Aufnahme ersetzen'
-  _status: placeholder
+  material: digital
+  notes: Synthetische Test-Aufnahme
+  sample_rate: 48000
+  source: Synthetic Test Corpus
