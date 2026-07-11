@@ -392,6 +392,19 @@ def run_pre_analysis(
                            "tape": "tape", "reel_tape": "reel_tape", "reel": "reel_tape",
                            "cd_digital": "cd_digital", "dat": "dat"}
                 _defect_material = _defmap.get(_dm)
+                # §2.46a: Wenn der DefectScanner ein anderes Material auto-detektiert
+                # hat als der Hint, das auto-detektierte Material für die Kette verwenden.
+                _auto_dm = getattr(result.defects, "auto_detected_material", None)
+                if _auto_dm is not None:
+                    _adm = str(_auto_dm).lower()
+                    for _suffix in [".cassette", ".vinyl", ".reel_tape", ".tape", ".shellac",
+                                    ".lacquer_disc", ".wire_recording", ".wax_cylinder"]:
+                        if _adm.endswith(_suffix):
+                            _adm = _suffix[1:]; break
+                    _adm_mapped = _defmap.get(_adm)
+                    if _adm_mapped and _adm_mapped != _defect_material:
+                        logger.info("pre_analysis: DefectScanner auto-detected %s (overrides hint %s)", _adm_mapped, _defect_material or "none")
+                        _defect_material = _adm_mapped
 
             _physical = list(getattr(_md, "physical_analog_sources", []) or [])
             _analog = {"shellac", "wax_cylinder", "vinyl", "tape", "reel_tape",

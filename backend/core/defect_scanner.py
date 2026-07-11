@@ -287,6 +287,7 @@ class DefectAnalysisResult:
     analysis_time_seconds: float
     sample_rate: int
     duration_seconds: float
+    auto_detected_material: MaterialType | None = None  # §2.46a: vom Scanner auto-detektiert
     # Forensische Tonträgerkettenerkennung (befüllt von DefectScanner.scan())
     transfer_chain_raw: dict = field(default_factory=dict)  # MediumDetector.detect()-Ausgabe
     is_multi_generation: bool = False  # Mehrstufige Überspielungskette
@@ -2448,6 +2449,7 @@ class DefectScanner:
             analysis_time_seconds=analysis_time,
             sample_rate=sr,
             duration_seconds=duration,
+            auto_detected_material=_auto_material if _auto_material != material_type else None,
             transfer_chain_raw=_fmd_result,
             is_multi_generation=bool(getattr(_fmd_result, "is_multi_generation", False)),
             transfer_chain_str=str(getattr(_fmd_result, "transfer_chain", "") or getattr(_fmd_result, "chain", "")),
