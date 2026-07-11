@@ -1,3 +1,4 @@
+import pytest
 from __future__ import annotations
 
 import numpy as np
@@ -5,6 +6,7 @@ import numpy as np
 from backend.ml.inference_only.vocal_separation.mdx_net_wrapper import MDXNetSeparator
 
 
+@pytest.mark.unit
 def test_hpss_fallback_recombines_close_to_original(monkeypatch):
     separator = MDXNetSeparator(model_path="/does/not/exist.onnx", sample_rate=48000)
     audio = np.vstack(

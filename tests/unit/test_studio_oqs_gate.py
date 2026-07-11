@@ -1,3 +1,4 @@
+import pytest
 """Tests für §8.1.1a [RELEASE_MUST] Studio-2026 OQS-Gate (v9.10.130).
 
 Verifiziert:
@@ -36,6 +37,7 @@ def _make_mushra_result(score: float):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 def test_mushra_result_passes_at_exactly_88():
     """passes_mushra_threshold(88.0) bei Score 88.0 → True (>=)."""
     result = _make_mushra_result(88.0)

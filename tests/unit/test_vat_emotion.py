@@ -1,3 +1,4 @@
+import pytest
 """Tests für _VATEmotionEstimator — Valence-Arousal-Tension-Modell (§V45).
 
 Abdeckung:
@@ -46,6 +47,7 @@ def _minor_chord(duration_s: float = 2.0, amp: float = 0.3) -> np.ndarray:
     )
 
 
+@pytest.mark.unit
 class TestVATEmotionEstimatorImport:
     """_VATEmotionEstimator — Importierbar."""
 

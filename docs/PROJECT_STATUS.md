@@ -1,23 +1,26 @@
-# 📊 Aurik 9 — Project Status Report (Snapshot)
+# 📊 Aurik 9.20.3 — Project Status Report
 
-**Datum:** Mai 2026  
-**Version:** 9.12.8  
-**Status:** ✅ Produktionsbereit — auf Spitzenqualität ausgelegtes Musik-Restaurierungssystem
+**Datum:** Juli 2026
+**Version:** 9.20.3
+**Status:** ✅ Produktionsbereit | §v10 Pleasantness-First aktiv | SNR-adaptive Defekterkennung
 
-> Hinweis: Diese Datei enthält einen historischen Snapshot. Verbindlicher Ist-Stand ist in `.github/specs/01-08` und `docs/CHANGELOG_HISTORY.md` dokumentiert.
+> Verbindlicher Ist-Stand: `.github/specs/01-14`, `.github/copilot-instructions.md`, `CLAUDE.md`.
 
 ---
 
 ## Executive Summary
 
-**Aurik 9.x.x ist ein denkendes Musik-Restaurierungssystem (historischer Snapshot).**
+**Aurik 9.20.3 ist ein autonom denkendes Musik-Restaurierungssystem — jeder Song wird individuell gemessen und optimiert.**
 
 | Kennzahl | Wert |
 | --- | --- |
-| Tests | **~13.662** pytest-IDs (Mai 2026) |
-| Phasen | **64** (Phase 01–64, Defect-First) |
-| Materialien | **15** auto-erkannte Typen (inkl. wax_cylinder, wire_recording, lacquer_disc) |
-| Musical Goals | **14** psychoakustisch fundierte Ziele |
+| Tests | **~18.400** pytest-IDs (Juli 2026), 511 mit Markern |
+| Phasen | **64** (Phase 01–64, Defect-First, Spectrum-Aware EQ) |
+| Materialien | **15** auto-erkannte Typen + Multi-Generation-Chain |
+| Musical Goals | **15** psychoakustisch fundierte Ziele (Pleasantness-First) |
+| SNR-Adaption | ✅ Click, Tape-Splice, MATERIAL_SENSITIVITY, CAUSE_PARAMS |
+| Spectrum-Aware | ✅ Phase 16 (Final EQ), Phase 17 (Mastering Polish) |
+| Harmonic-Aware | ✅ Phase 17 Saturation (misst Even/Odd-Harmonic-Ratio) |
 | PQS MOS | **>= 4.0** (Minimum) / **>= 4.5** (internes Spitzenziel) |
 
 > Evidenzhinweis: Diese Datei ist ein historischer Snapshot. Aussagen zu Spitzenqualität,
@@ -194,7 +197,7 @@ ConsonantEnhancement: Frikative-SNR >= +3 dB · HF-Anhebung <= +6 dB · Crossfad
 | v9.10.74–83 | KMV Stufe-2, ML-Headroom-Guard, OOM-Checkpoint, Denker-Differenzierung, Song-Kalibrierung | 7.500+ Tests |
 | v9.10.84–91 | Dual-SR-Vertrag, PMGG SNR-Proxy-Fixes (§9.7.11–14), Stab.-Invarianten | 8.500+ Tests |
 | v9.10.92–99 | PMGG SNR-Proxies brillanz/transparenz/waerme, Codec-Repair, AMRB-Kalibrierung | 9.500+ Tests |
-| v9.10.100–102 | Lyrics-Produktivpfad, Phasen 59–64, Genre-Phase-1 (Family+Top-k+Open-Set) | ~13.662 Tests |
+| v9.10.100–102 | Lyrics-Produktivpfad, Phasen 59–64, Genre-Phase-1 (Family+Top-k+Open-Set) | ~18.400 Tests |
 
 ### 🔜 Geplant
 
@@ -262,4 +265,4 @@ Dithering: POW-r Typ 3 bei 24->16-bit; Fallback: TPDF
 
 ---
 
-_Aurik 9.12.8 — Mai 2026 (Stand: 03.04.2026)_
+_Aurik 9.20.3 — Mai 2026 (Stand: 03.04.2026)_

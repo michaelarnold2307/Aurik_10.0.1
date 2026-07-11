@@ -1,8 +1,10 @@
+import pytest
 """Unit tests for phase_05_rumble_filter._compute_rumble_filter_profile (§2.56)."""
 
 from backend.core.phases.phase_05_rumble_filter import RumbleFilterPhase
 
 
+@pytest.mark.unit
 class TestRumbleFilterProfile:
     def _p(self, material="vinyl", qm="balanced", rest=50.0):
         return RumbleFilterPhase._compute_rumble_filter_profile(material, qm, rest)

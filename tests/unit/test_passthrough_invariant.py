@@ -96,6 +96,7 @@ def _pearson_corr(a: np.ndarray, b: np.ndarray) -> float:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestPhase03PassThrough:
     """Phase 03 (denoise) — keine Degradation bei sauberem Material."""
 

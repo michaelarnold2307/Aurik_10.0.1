@@ -55,6 +55,7 @@ def _degrading_fn(audio: np.ndarray, sr: int) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestFeedbackChainImport:
     def test_01_class_importable(self):
         assert FeedbackChain is not None

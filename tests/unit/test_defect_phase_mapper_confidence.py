@@ -1,3 +1,4 @@
+import pytest
 """tests/unit/test_defect_phase_mapper_confidence.py
 
 Regression-Tests fuer confidence-aware Priorisierung im DefectPhaseMapper.
@@ -18,6 +19,7 @@ class _DummyDefect:
     confidence: float
 
 
+@pytest.mark.unit
 def test_low_confidence_downweights_secondary_phases_in_restoration() -> None:
     mapper = DefectPhaseMapper()
     defect = _DummyDefect(defect_type=DefectType.HIGH_FREQ_NOISE, severity=1.0, confidence=0.10)

@@ -42,6 +42,7 @@ def _make_vibrato_signal(
 # ---------------------------------------------------------------------------
 # Compression tests
 # ---------------------------------------------------------------------------
+@pytest.mark.unit
 class TestPsychoacousticCompression:
     """Vocal compression should preserve micro-dynamics better than flat RMS."""
 

@@ -1,3 +1,4 @@
+import pytest
 """Unit tests for the productive MIIPHER vocal SOTA adapter."""
 
 import types
@@ -25,6 +26,7 @@ def _patch_vocal_guards(monkeypatch) -> None:
     )
 
 
+@pytest.mark.unit
 def test_miipher_adapter_uses_loaded_sgmse_plus(monkeypatch):
     import plugins
     from plugins.miipher_plugin import MiipherPlugin

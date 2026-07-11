@@ -11,6 +11,7 @@ import numpy as np
 import pytest
 
 
+@pytest.mark.unit
 class TestStemConfig:
     """§3.0a: SourceAwareFahrplan — Per-Stem-Konfiguration."""
 

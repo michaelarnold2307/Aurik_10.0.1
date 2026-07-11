@@ -1,3 +1,4 @@
+import pytest
 """Tests für GENERATION_LOSS-Priors in CausalDefectReasoner.
 
 Prüft, dass die aktualisierten Prior-Werte für vinyl, mp3_low, mp3_high,
@@ -26,6 +27,7 @@ def _get_priors(material: str) -> dict:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestGenerationLossPriors:
     """generation_loss-Priors müssen auf rationalere Werte angehoben worden sein."""
 

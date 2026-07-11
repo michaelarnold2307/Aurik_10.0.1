@@ -1,8 +1,8 @@
-# Spec 12: Perceptual Optimization Patterns (§G–§Z)
+# Spec 12: Perceptual Optimization Patterns (§G–§Z) | §v10 Pleasantness-First
 
-> **Status:** Normativ · **Version:** Aurik 9.12.11 · **Scope:** Entscheidungsintelligenz, Klangqualität, Resilienz
+> **Status:** Normativ · **Version:** Aurik 9.20.3 · **Scope:** Entscheidungsintelligenz, Klangqualität, Resilienz
 
-## §12.1 Übersicht der Patterns
+## §12.1 [RELEASE_MUST] Übersicht der Patterns
 
 Aurik implementiert 20 Perceptual-Optimization-Patterns, die in 4 Gruppen organisiert sind.
 Jedes Pattern ist vollständig implementiert und durch Unit-Tests abgesichert.
@@ -47,7 +47,7 @@ Jedes Pattern ist vollständig implementiert und durch Unit-Tests abgesichert.
 | §Y | Codec-Aware Export | `backend/core/production_enhancements.py` | MP3/AAC/Opus/FLAC spezifische Optimierung |
 | §Z | Batch Intelligence | `backend/core/preference_learner.py` | Batch-übergreifendes Lernen (Phase-Stärken, EQ) |
 
-## §12.2 Integrationspunkte
+## §12.2 [RELEASE_MUST] Integrationspunkte
 
 Alle Patterns werden über `unified_restorer_v3.py` integriert:
 
@@ -59,7 +59,7 @@ Alle Patterns werden über `unified_restorer_v3.py` integriert:
 - **§G:** Im `AurikDenker._orchestriere()` nach VERSA-MOS-Gate
 - **§K:** Im `_tick_heartbeat()` des MainWindow über `_tick_uv3_simple_progress()`
 
-## §12.3 Test-Abdeckung
+## §12.3 Test-Abdeckung (≥1.683 Tests)
 
 - 285 Denker-Tests: Pipeline-Logik, Mode-Normalisierung
 - 386 Musical-Goals-Tests: PMGG, Goal-Weighting, Regression
@@ -76,3 +76,17 @@ Alle Patterns werden über `unified_restorer_v3.py` integriert:
 | §L–§O | <50 ms | FFT-basierte Messungen, non-blocking |
 | §T | <500 ms | Allpass + Modulation, einmal pro Pipeline |
 | §G | Variabel | Max 2 zusätzliche UV3-Durchläufe |
+
+
+## §12.5 [RELEASE_MUST] §v10 SNR/Spectrum/Harmonic-Adaption (Juli 2026)
+
+**Prinzip:** Kein blinder Material-Glaube. Jeder Song wird individuell gemessen.
+
+| Pattern | Funktion | Datei | Wirkung |
+|---------|----------|-------|---------|
+| SNR-Adaption | `_estimate_local_snr()` | `defect_scanner.py` | Click-Thresholds, Tape-Splice, 8 Detektoren SNR-adaptiv |
+| Spectrum-Aware EQ | `_measure_spectral_deviation()` | `phase_16_final_eq.py` | 4-Band-EQ adaptiv zum IST-Spektrum |
+| Spectrum-Aware Mastering | `_measure_spectral_balance()` | `phase_17_mastering_polish.py` | Mastering-EQ adaptiv zum IST-Spektrum |
+| Harmonic-Aware Saturation | `_measure_harmonic_density()` | `phase_17_mastering_polish.py` | Sättigung adaptiv zur Even/Odd-Harmonic-Ratio |
+
+**Invariante:** Kein Song bekommt dieselbe EQ, denselben Threshold oder dieselbe Sättigung wie ein anderer — jeder wird individuell gemessen (§v10).

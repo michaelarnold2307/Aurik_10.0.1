@@ -1,4 +1,9 @@
-"""§ABX: ABX-Regression-Test mit synthetischen Defekten und Ground Truth."""
+"""§Perceptual: Perzeptuelle Metrik-Regression mit synthetischen Defekten und Ground Truth.
+
+Dieser Test validiert objektive perzeptuelle Metriken (SNR, RMS) auf synthetischen
+Signalen. Für echte ABX-Blindhörtests siehe backend/core/abx_listener.py (geplant).
+Für MUSHRA-Approximation siehe backend/core/objective_mushra_estimator.py.
+"""
 import numpy as np
 import pytest
 
@@ -46,6 +51,7 @@ def _rms(audio: np.ndarray) -> float:
     return float(np.sqrt(np.mean(audio ** 2)))
 
 
+@pytest.mark.unit
 class TestABXRegression:
     """ABX-Regression: synthetische Defekte → Restaurierung → Messung."""
 

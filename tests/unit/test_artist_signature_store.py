@@ -50,6 +50,7 @@ def default_voice():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 def test_confidence_at_zero():
     assert _confidence_from_n(0) == 0.0
 

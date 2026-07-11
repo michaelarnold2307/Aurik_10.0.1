@@ -1,3 +1,4 @@
+import pytest
 """
 Tests for Audio Authenticity Validator (Innovation #1)
 ========================================================
@@ -21,6 +22,7 @@ from backend.core.forensics.audio_authenticity_validator import (
 )
 
 
+@pytest.mark.unit
 class TestAudioForensicsAnalyzer:
     """Test suite for AudioForensicsAnalyzer."""
 

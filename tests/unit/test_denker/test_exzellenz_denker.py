@@ -26,6 +26,7 @@ def _sine(dur: float = 1.0, freq: float = 440.0) -> np.ndarray:
 # ─── ExzellenzErgebnis ────────────────────────────────────────────────────────
 
 
+@pytest.mark.unit
 class TestExzellenzErgebnisFields:
     def _make(self):
         from denker.exzellenz_denker import ExzellenzErgebnis

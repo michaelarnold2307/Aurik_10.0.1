@@ -28,6 +28,7 @@ def _profile(material: str = "vinyl", qm: str = "balanced", rest: float = 50.0) 
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestTransparentDynamicsProfileQualityMode:
     """Quality-Mode-Anpassungen auf mix_delta."""
 

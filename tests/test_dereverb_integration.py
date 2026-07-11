@@ -13,6 +13,7 @@ import pytest
 from dsp.advanced_dereverb import AdvancedDereverb
 
 
+@pytest.mark.unit
 class TestAdvancedDereverb:
     """Tests für Advanced De-Reverb."""
 

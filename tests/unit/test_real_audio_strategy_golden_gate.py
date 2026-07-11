@@ -1,3 +1,4 @@
+import pytest
 from __future__ import annotations
 
 import types
@@ -9,6 +10,7 @@ import backend.core.real_audio_strategy_golden_gate as _strategy_gate
 from backend.core.real_audio_strategy_golden_gate import run_real_audio_strategy_golden_gate
 
 
+@pytest.mark.unit
 def test_resolve_strategy_phase_coalitions_uses_uv3_registry(monkeypatch) -> None:
     from backend.core.unified_restorer_v3 import UnifiedRestorerV3
 

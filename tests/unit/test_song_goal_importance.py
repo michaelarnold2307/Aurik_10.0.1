@@ -35,6 +35,7 @@ from backend.core.song_goal_importance import (
 # ── Default / Neutral ──────────────────────────────────────────────────
 
 
+@pytest.mark.unit
 class TestDefaultImportance:
     def test_default_all_goals_present(self):
         d = get_default_importance()

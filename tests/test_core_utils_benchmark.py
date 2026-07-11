@@ -1,3 +1,4 @@
+import pytest
 import time
 
 import numpy as np
@@ -15,5 +16,6 @@ def benchmark_compute_rms():
     assert rms >= 0.0
 
 
+@pytest.mark.slow
 def test_benchmark_compute_rms():
     benchmark_compute_rms()

@@ -93,6 +93,7 @@ def _rms_dbfs_segment(audio: np.ndarray, start_s: float, end_s: float, sr: int =
 # Test 1: MDEM darf Pegelexplosion in Intro/Outro NICHT erzeugen
 # (schlägt fehl wenn SG-Guard nicht korrekt auf langen Signalen wirkt)
 # ---------------------------------------------------------------------------
+@pytest.mark.unit
 class TestMdemIntroOutroPegelexplosion:
     """
     Blind spot 1: SG-Fenster = 17.5s → alle Tests < 10s sind blind.

@@ -1,3 +1,4 @@
+import pytest
 """
 tests/unit/test_iad_musical_residuum.py — IntroducedArtifactDetector §2.23 Test-Suite
 §2.46e Relative-Harmonicity-Guard (v9.12.1) — artifact_freedom = 0.95 adhesion fix.
@@ -27,6 +28,7 @@ def _noise(dur: float = 6.0, amp: float = 0.03) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 def test_00_import():
     from backend.core.introduced_artifact_detector import (
         IntroducedArtifactDetector,

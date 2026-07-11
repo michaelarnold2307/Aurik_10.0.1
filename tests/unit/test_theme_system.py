@@ -14,6 +14,7 @@ import pytest
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestThemePalette:
     """Test _Theme class-level palette switching."""
 

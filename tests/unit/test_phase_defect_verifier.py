@@ -1,3 +1,4 @@
+import pytest
 """
 tests/unit/test_phase_defect_verifier.py
 PhaseDefectVerifier §7 (Ursache 7: Post-Phase Defekt-Verifikation) Test-Suite
@@ -96,6 +97,7 @@ def _add_slow_amplitude_modulation(audio: np.ndarray, rate_hz: float = 6.0, dept
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 def test_00_import():
     from backend.core.cassette_defect_verifier import PhaseDefectVerifier, get_phase_defect_verifier
 

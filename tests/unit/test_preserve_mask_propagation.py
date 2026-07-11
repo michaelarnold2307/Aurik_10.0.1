@@ -34,6 +34,7 @@ def dummy_audio():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 def test_get_preserve_mask_returns_ndarray_for_shellac(iac, dummy_audio):
     result = iac.get_preserve_mask(dummy_audio, 48000, material_type="shellac")
     assert isinstance(result, np.ndarray), "Rückgabe muss np.ndarray sein"

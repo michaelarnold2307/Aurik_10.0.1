@@ -1,0 +1,18 @@
+- file: placeholder_vinyl_classical_1972.wav
+  duration_s: 0.0
+  sample_rate: 0
+  channels: 0
+  material: vinyl
+  era: 1972
+  genre: Classical
+  defects:
+  - pops
+  - crackle
+  - inner_groove_distortion
+  source: Musopen
+  source_url: https://musopen.org
+  license: Public Domain
+  license_url: ''
+  checksum_sha256: ''
+  notes: 'PLACEHOLDER: Bitte durch echte Public-Domain-Aufnahme ersetzen'
+  _status: placeholder

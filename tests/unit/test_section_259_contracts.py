@@ -3,6 +3,7 @@
 import pytest
 
 
+@pytest.mark.unit
 class TestSafeDict:
     """SafeDict: .get()-Masking-Detektor."""
 

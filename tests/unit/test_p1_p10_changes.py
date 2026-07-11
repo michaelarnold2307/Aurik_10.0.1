@@ -66,6 +66,7 @@ def _manifest_by_name() -> dict[str, dict]:
 # ===========================================================================
 
 
+@pytest.mark.unit
 class TestCrepeChunkStreaming:
     """P1: _CHUNK_FRAMES=512 ersetzt _MAX_ONNX_FRAMES=10.
 

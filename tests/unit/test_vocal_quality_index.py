@@ -25,6 +25,7 @@ def noisy_audio(sine_audio):
     return noisy, sr
 
 
+@pytest.mark.unit
 class TestVocalQualityIndexImport:
     def test_import_ok(self):
         from backend.core.musical_goals.vocal_quality_index import compute_vqi

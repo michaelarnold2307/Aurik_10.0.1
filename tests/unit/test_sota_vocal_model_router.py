@@ -1,3 +1,4 @@
+import pytest
 """Unit tests for §SMR-1 SotaVocalModelRouter."""
 
 import types
@@ -10,6 +11,7 @@ def _audio(sr: int = 48000, duration: float = 1.0) -> np.ndarray:
     return (0.2 * np.sin(2 * np.pi * 440.0 * t)).astype(np.float32)
 
 
+@pytest.mark.unit
 def test_stem_routing_policy_detects_live_like_ctx_and_chain():
     from backend.core.dsp.stem_routing_policy import prefer_demucs_native_from_ctx
 

@@ -68,6 +68,7 @@ def _silence(duration_s: float = 8.0) -> np.ndarray:
 # ── Testklassen ───────────────────────────────────────────────────────────────
 
 
+@pytest.mark.unit
 class TestSingleton:
     """Singleton-Invarianten (§2.30)."""
 

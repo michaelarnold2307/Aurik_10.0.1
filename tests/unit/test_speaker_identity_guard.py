@@ -84,6 +84,7 @@ def stereo_vocal(vocal_like):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestExtractVoiceprint:
     """Tests for extract_mfcc_voiceprint()."""
 

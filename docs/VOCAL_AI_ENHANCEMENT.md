@@ -373,7 +373,7 @@ pytest tests/test_vocal_ai_enhancement.py -v
 
 ## 👥 Authoren
 
-**Aurik 9.0 Development Team**
+**Aurik 9.20.3 Development Team**
 
 - AI Framework Integration
 - Gender Detection Algorithm
@@ -387,7 +387,7 @@ pytest tests/test_vocal_ai_enhancement.py -v
 
 ## 📝 Lizenz
 
-Proprietär - Aurik 9.0
+Proprietär - Aurik 9.20.3
 Musical Excellence First
 
 ---

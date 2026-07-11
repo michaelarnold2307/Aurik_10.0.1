@@ -81,6 +81,7 @@ def _stereo(seconds: float = 0.5, sr: int = 48000) -> np.ndarray:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+@pytest.mark.unit
 class TestSourceFidelityTargetNewFields:
     def test_era_mic_type_default(self):
         t = SourceFidelityTarget()

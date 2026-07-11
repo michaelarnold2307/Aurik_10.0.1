@@ -1,8 +1,10 @@
+import pytest
 import numpy as np
 
 from dsp.adaptive_stft import AdaptiveSTFT
 
 
+@pytest.mark.unit
 def test_adaptive_stft_istft_uses_last_stft_window_by_default() -> None:
     sr = 48000
     t = np.linspace(0.0, 1.0, sr, endpoint=False)

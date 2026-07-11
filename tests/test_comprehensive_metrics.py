@@ -116,6 +116,7 @@ def calculator(sample_rate):
 # ============================================================
 
 
+@pytest.mark.unit
 class TestPsychoAcousticMetrics:
     """Test psychoacoustic metrics computation."""
 

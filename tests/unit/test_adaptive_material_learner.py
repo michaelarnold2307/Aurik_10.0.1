@@ -1,5 +1,7 @@
+import pytest
 """Unit tests for adaptive_material_learner.py"""
 import numpy as np, pytest, tempfile, os
+@pytest.mark.unit
 class TestAdaptiveLearner:
     def test_01_init(self):
         from backend.core.adaptive_material_learner import MaterialAdaptiveLearner

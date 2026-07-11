@@ -59,6 +59,7 @@ def _stereo_with_delay(delay_samples: float, freq: float = 1000.0, dur: float = 
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestLagrangeFfd:
     def test_shape(self, phase):
         h = phase._lagrange_ffd(0.3, order=3)

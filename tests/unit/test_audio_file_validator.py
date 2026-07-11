@@ -64,6 +64,7 @@ def _make_mp3_stub(tmp_path: pathlib.Path) -> pathlib.Path:
     return p
 
 
+@pytest.mark.unit
 class TestAudioFileValidatorImport:
     """Import und Singleton."""
 

@@ -1,0 +1,18 @@
+- file: placeholder_tape_folk_1965.wav
+  duration_s: 0.0
+  sample_rate: 0
+  channels: 0
+  material: tape
+  era: 1965
+  genre: Folk
+  defects:
+  - hiss
+  - dropouts
+  - print_through
+  source: Community Recording Project
+  source_url: ''
+  license: CC0
+  license_url: ''
+  checksum_sha256: ''
+  notes: 'PLACEHOLDER: Bitte durch echte CC0-Aufnahme ersetzen'
+  _status: placeholder

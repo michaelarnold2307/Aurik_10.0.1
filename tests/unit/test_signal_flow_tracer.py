@@ -53,6 +53,7 @@ def fresh_tracer():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 def test_singleton_returns_same_instance():
     from backend.core.signal_flow_tracer import get_signal_flow_tracer
 

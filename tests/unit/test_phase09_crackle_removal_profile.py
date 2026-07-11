@@ -1,8 +1,10 @@
+import pytest
 """Unit tests for phase_09_crackle_removal._compute_crackle_removal_profile (§2.56)."""
 
 from backend.core.phases.phase_09_crackle_removal import CrackleRemovalPhase
 
 
+@pytest.mark.unit
 class TestCrackleRemovalProfile:
     def _p(self, material="vinyl", qm="balanced", rest=50.0):
         return CrackleRemovalPhase._compute_crackle_removal_profile(material, qm, rest)

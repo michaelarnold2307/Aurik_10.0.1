@@ -49,6 +49,7 @@ def _harmonic_signal(sr: int = 48000, dur: float = 2.0) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestNatuerlichkeitStateless:
     """FIXED v9.11: Immer gleiche Gewichte, CREPE verfeinert nur voicing_naturalness."""
 

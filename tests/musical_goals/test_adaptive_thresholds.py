@@ -28,6 +28,7 @@ def manager_with_profiles():
         yield manager
 
 
+@pytest.mark.unit
 class TestBaseThresholds:
     """Test base threshold functionality."""
 

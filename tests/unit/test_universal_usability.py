@@ -1,3 +1,4 @@
+import pytest
 """Tests for universal usability improvements (v9.10.x).
 
 Covers:
@@ -158,6 +159,7 @@ def _make_rubato_signal(sr: int = 48000, dur: float = 4.0) -> np.ndarray:
 # ═══════════════════════════════════════════════════════════════════════
 # 1. Beat-Reliability-Score
 # ═══════════════════════════════════════════════════════════════════════
+@pytest.mark.unit
 class TestBeatReliability:
     """Test beat-reliability score calculation (rubato detection)."""
 

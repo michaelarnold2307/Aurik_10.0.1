@@ -25,6 +25,7 @@ def tmp_session_dir(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 def test_00_import():
     from backend.core.batch_session_learner import BatchSessionLearner
 

@@ -34,6 +34,7 @@ def _make_onset_mask(n: int, onset_positions_ms: list[float], window_ms: float =
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestOnsetGuardImport:
     def test_import_function(self):
         from backend.core.dsp.onset_guard import apply_onset_protection_mask

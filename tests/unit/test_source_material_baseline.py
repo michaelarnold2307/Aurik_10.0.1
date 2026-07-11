@@ -39,6 +39,7 @@ def _make_stereo(left: np.ndarray, right: np.ndarray) -> np.ndarray:
 # ── Grundlegende Rückgabe-Invarianten ─────────────────────────────────────
 
 
+@pytest.mark.unit
 def test_returns_source_material_baseline(gate, sr):
     """measure_source_baseline gibt immer ein SourceMaterialBaseline zurück."""
     from backend.core.artifact_freedom_gate import SourceMaterialBaseline

@@ -59,6 +59,7 @@ def _amplify_phase(seg: np.ndarray, strength: float = 0.5, **_kw: Any) -> np.nda
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestSegmentProbeResultDataclass:
     def test_felder_vorhanden(self) -> None:
         r = SegmentProbeResult(

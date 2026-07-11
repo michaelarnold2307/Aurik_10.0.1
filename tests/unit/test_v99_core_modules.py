@@ -68,6 +68,7 @@ def _dirac(dur: float = 0.1, sr: int = SR) -> np.ndarray:
 # ═════════════════════════════════════════════════════════════════════════════
 
 
+@pytest.mark.unit
 class TestAudioExporter:
     """core.audio_exporter.AudioExporter — 14 Tests"""
 

@@ -1,3 +1,4 @@
+import pytest
 """
 tests/unit/test_harmonic_context_analyzer.py — §HCA-1 Unit-Tests
 
@@ -27,6 +28,7 @@ def _make_chord(freqs: list, sr: int = 44100, duration_s: float = 3.0) -> np.nda
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 def test_singleton_returns_same_instance():
     from backend.core.harmonic_context_analyzer import get_harmonic_context_analyzer
 

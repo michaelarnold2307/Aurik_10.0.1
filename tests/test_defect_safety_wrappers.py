@@ -215,6 +215,7 @@ def dummy_dehummer(audio: np.ndarray, sr: int, fundamental_hz: float = 50.0) -> 
 # ============================================================================
 
 
+@pytest.mark.unit
 def test_declick_safety_clicked_audio(clicked_audio, temp_log_dir):
     """Test de-click safety with clicked audio."""
     audio, sr = clicked_audio

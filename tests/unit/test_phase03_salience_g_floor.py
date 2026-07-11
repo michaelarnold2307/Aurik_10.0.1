@@ -39,6 +39,7 @@ def _make_uniform_audio(sr: int = SR, duration_s: float = 2.0, amplitude: float 
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestComputeSalienceGFloor:
     """Unit tests for the static helper method."""
 

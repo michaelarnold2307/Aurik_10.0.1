@@ -70,6 +70,7 @@ def _make_wcs_vector(**overrides: float) -> dict[str, float]:
 # ── Tests: measure_candidate_dims ────────────────────────────────────────────
 
 
+@pytest.mark.unit
 class TestMeasureCandidateDims:
     """measure_candidate_dims liefert gemessene, nicht geschätzte Werte."""
 

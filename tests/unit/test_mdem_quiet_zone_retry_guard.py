@@ -64,6 +64,7 @@ def _make_vinyl_audio(sr: int = 48000) -> tuple[np.ndarray, np.ndarray]:
     return orig, restored
 
 
+@pytest.mark.unit
 def test_mdem_no_boost_in_quiet_zone_main_path(mdem):
     """morph() Hauptpfad: Keine Lautstärkeerhöhung im Quiet-Zone-Bereich."""
     orig, restored = _make_vinyl_audio()

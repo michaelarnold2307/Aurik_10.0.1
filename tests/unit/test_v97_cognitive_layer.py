@@ -66,6 +66,7 @@ def degraded_signal(sine_440):
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 
+@pytest.mark.unit
 class TestPerceptualEmbedder:
     """Sektion 17 — PerceptualAudioEmbedder (8 Tests)."""
 

@@ -20,6 +20,7 @@ SR = 48000
 from backend.core.medium_classifier import _MaterialScorer
 
 
+@pytest.mark.unit
 class TestBayesianMaterialScorer:
     """Tests for the Bayesian Gaussian-likelihood _MaterialScorer."""
 

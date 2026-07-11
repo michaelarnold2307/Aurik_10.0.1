@@ -5,6 +5,7 @@ import pytest
 from backend.core.unified_restorer_v3 import _compute_weighted_goal_gap
 
 
+@pytest.mark.unit
 def test_compute_weighted_goal_gap_zero_when_all_goals_pass() -> None:
     scores = {"natuerlichkeit": 0.92, "authentizitaet": 0.90}
     thresholds = {"natuerlichkeit": 0.90, "authentizitaet": 0.88}

@@ -66,6 +66,7 @@ def _make_audio(duration_s: float = 2.0, sr: int = 48000) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestNormalizeMaterialKey:
     """Unit-Tests für MediumDetector._normalize_material_key (§6.1 Fix X6)."""
 

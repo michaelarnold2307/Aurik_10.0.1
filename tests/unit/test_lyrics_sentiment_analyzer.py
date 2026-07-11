@@ -1,3 +1,4 @@
+import pytest
 """Tests für LyricsSentimentAnalyzer (§LSM-1).
 
 Spec: §LSM-1 NLP-Lyrik-Sentiment-Modell
@@ -6,6 +7,7 @@ Spec: §LSM-1 NLP-Lyrik-Sentiment-Modell
 import numpy as np
 
 
+@pytest.mark.unit
 class TestLyricsSentimentAnalyzerBase:
     def test_singleton_returns_same_instance(self):
         from backend.core.lyrics_sentiment_analyzer import get_lyrics_sentiment_analyzer

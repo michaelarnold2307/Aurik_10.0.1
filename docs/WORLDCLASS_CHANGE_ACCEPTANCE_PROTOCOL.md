@@ -125,3 +125,15 @@ QT_QPA_PLATFORM=offscreen \
 
 Dieses Protokoll gilt als operative Ergaenzung zu den bestehenden Specs und
 setzt den Release-Must-Anspruch auf Weltklasse-Niveau praktisch um.
+
+
+## §v10 Update (Juli 2026): SNR/Spectrum/Harmonic-Adaption
+
+**Status:** ✅ Implementiert. Kein blinder Material-Glaube mehr.
+
+- `_estimate_local_snr()`: SNR-adaptive Defekterkennung (Click, Tape-Splice, 8 Detektoren)
+- `_measure_spectral_deviation()`: Spectrum-Aware EQ (Phase 16)
+- `_measure_spectral_balance()`: Spectrum-Aware Mastering (Phase 17)
+- `_measure_harmonic_density()`: Harmonic-Aware Saturation (Phase 17)
+- Pre-Commit Static-Value-Guard aktiv
+- Pleasantness + Goal-Achievement Test-Marker

@@ -39,6 +39,7 @@ _REQUIRED_MATERIALS = {
 }
 
 
+@pytest.mark.unit
 class TestMaterialCeilingSync:
     """§6.2d bidirectional sync tests."""
 

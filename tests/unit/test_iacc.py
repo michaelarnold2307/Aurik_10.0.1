@@ -45,6 +45,7 @@ def _delayed_stereo(delay_samples: int = 24, n: int = SR, seed: int = 5) -> np.n
     return np.stack([mono, r], axis=0)
 
 
+@pytest.mark.unit
 class TestIACCResult:
     """IACCResult dataclass — Attribute."""
 

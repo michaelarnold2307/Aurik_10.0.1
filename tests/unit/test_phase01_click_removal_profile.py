@@ -1,3 +1,4 @@
+import pytest
 """Unit tests for phase_01_click_removal._compute_click_removal_profile (§2.56)."""
 
 import numpy as np
@@ -7,6 +8,7 @@ from backend.core.phases.phase_01_click_removal import ClickRemovalPhase
 SR = 48000
 
 
+@pytest.mark.unit
 class TestClickRemovalProfile:
     def _p(self, material="vinyl", qm="balanced", rest=50.0):
         return ClickRemovalPhase._compute_click_removal_profile(material, qm, rest)

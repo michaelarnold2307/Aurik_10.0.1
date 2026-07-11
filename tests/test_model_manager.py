@@ -1,3 +1,4 @@
+import pytest
 from backend.core.model_manager import ModelManager
 
 
@@ -6,6 +7,7 @@ class DummyModel:
         return audio
 
 
+@pytest.mark.unit
 def test_register_and_list_models():
     mm = ModelManager()
     mm.register_model("test_model", DummyModel(), {"type": "test", "quality": "high"})

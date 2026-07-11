@@ -1,3 +1,4 @@
+import pytest
 """Unit-Tests für §PEP (V22) transient_guard.py.
 
 Testet detect_transient_shifts() und TransientShiftResult.
@@ -31,6 +32,7 @@ def _make_noise(n: int = _N, amp: float = 0.05, seed: int = 99) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestTransientGuardImport:
     def test_import_function(self):
         from backend.core.dsp.transient_guard import detect_transient_shifts

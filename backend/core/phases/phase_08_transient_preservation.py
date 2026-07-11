@@ -291,6 +291,32 @@ class TransientPreservationPhase(PhaseInterface):
         _pmgg_strength = float(kwargs.get("strength", 1.0))
         _effective_strength = float(np.clip(_pmgg_strength * phase_locality_factor, 0.0, 1.0))
 
+        # ── §v10 Frisson-Schutz (§0i Gänsehaut-Erhaltung) ────────────
+        # In Frisson-Zonen (Gänsehaut-Passagen) wird die Attack-Verstärkung
+        # reduziert, um die natürliche Dynamik der Klimax nicht zu verfälschen.
+        # Frisson-Cap: max. 30% der normalen Attack-Stärke (§VFA).
+        _frisson_zones = kwargs.get("frisson_zones", [])
+        _frisson_cap = 1.0
+        if _frisson_zones:
+            try:
+                _audio_dur = len(audio) / sample_rate if audio.ndim == 1 else audio.shape[1] / sample_rate
+                for _fz in _frisson_zones:
+                    _fz_start = float(getattr(_fz, "start_s", 0.0))
+                    _fz_end = float(getattr(_fz, "end_s", 0.0))
+                    _fz_score = float(getattr(_fz, "score", 0.0))
+                    if _fz_start < _audio_dur and _fz_end > 0 and _fz_score >= 0.28:
+                        _overlap = min(_fz_end, _audio_dur) - max(_fz_start, 0.0)
+                        if _overlap > 0:
+                            _frisson_cap = min(_frisson_cap, 0.30)
+            except Exception:
+                pass  # Non-blocking
+            if _frisson_cap < 1.0:
+                _effective_strength = float(_effective_strength * _frisson_cap)
+                logger.debug(
+                    "§v10 Phase 08 Frisson-Protect: cap=%.2f strength=%.2f",
+                    _frisson_cap, _effective_strength
+                )
+
         if _effective_strength <= 0.0:
             passthrough = np.nan_to_num(audio.copy(), nan=0.0, posinf=0.0, neginf=0.0)
             passthrough = np.clip(passthrough, -1.0, 1.0)
@@ -346,7 +372,10 @@ class TransientPreservationPhase(PhaseInterface):
         # Step 3: Apply transient shaping per band
         shaped_bands = []
         for band_idx, band_audio in enumerate(bands):
-            shaped = self._shape_transients_per_band(band_audio, onset_times, onset_strengths, params, band_idx)
+            shaped = self._shape_transients_per_band(
+                band_audio, onset_times, onset_strengths, params, band_idx,
+                frisson_zones=_frisson_zones
+            )
             shaped_bands.append(shaped)
 
         # Step 4: Recombine bands
@@ -734,6 +763,7 @@ class TransientPreservationPhase(PhaseInterface):
         onset_strengths: np.ndarray,
         params: dict[str, Any],
         band_idx: int,
+        frisson_zones: list | None = None,
     ) -> np.ndarray:
         """
         Shape transients in a single frequency band.
@@ -748,16 +778,41 @@ class TransientPreservationPhase(PhaseInterface):
         sustain_gain_db = params["sustain_gain_db"][band_idx]
         release_gain_db = params["release_gain_db"][band_idx]
 
+        # ── §v10 Frisson per-Band-Protection ─────────────────────────
+        # Onsets in Frisson-Zonen bekommen reduzierte Attack-Gains.
+        # Gänsehaut-Passagen: Attack-Boost max. 30% der normalen Stärke.
+        _frisson_onset_mask = set()
+        if frisson_zones:
+            for _fz in frisson_zones:
+                try:
+                    _fz_start = float(getattr(_fz, "start_s", 0.0))
+                    _fz_end = float(getattr(_fz, "end_s", 0.0))
+                    _fz_score = float(getattr(_fz, "score", 0.0))
+                    if _fz_score < 0.28:
+                        continue
+                    _fz_cap = 0.30 if _fz_score >= 0.80 else 0.50
+                    for idx, ot in enumerate(onset_times):
+                        if _fz_start <= float(ot) <= _fz_end:
+                            _frisson_onset_mask.add(idx)
+                except Exception:
+                    continue
+
         # Create gain envelope
         gain_envelope = np.ones(len(band_audio))
 
-        for onset_time, _onset_strength in zip(onset_times, onset_strengths):
+        for idx, (onset_time, _onset_strength) in enumerate(zip(onset_times, onset_strengths)):
             onset_sample = int(onset_time * self.sample_rate)
 
             # Attack phase
             attack_samples = int(attack_time_ms / 1000 * self.sample_rate)
             attack_end = min(onset_sample + attack_samples, len(band_audio))
-            attack_gain = 10 ** (attack_gain_db / 20)
+            # §v10 Frisson: reduzierte Attack-Gain in Gänsehaut-Zonen
+            _effective_attack_db = attack_gain_db
+            if idx in _frisson_onset_mask:
+                _fz_score = 0.80  # conservative estimate
+                _fz_cap = 0.30
+                _effective_attack_db = float(attack_gain_db * _fz_cap)
+            attack_gain = 10 ** (_effective_attack_db / 20)
             gain_envelope[onset_sample:attack_end] = attack_gain
 
             # Sustain phase

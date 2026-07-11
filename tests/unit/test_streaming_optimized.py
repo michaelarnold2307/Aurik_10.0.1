@@ -1,3 +1,4 @@
+import pytest
 """
 Unit-Tests für dsp/streaming_optimized.py
 
@@ -47,6 +48,7 @@ def _noisy(n: int = _N, noise_amp: float = 0.05) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestStreamingLimiter:
     def test_output_shape_preserved(self):
         audio = _sine()

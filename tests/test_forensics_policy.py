@@ -1,3 +1,4 @@
+import pytest
 """
 Test suite for forensics/analysis_and_modules.py - PolicyManager
 Tests policy escalation, reset, thresholds, and logging
@@ -11,6 +12,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from backend.core.forensics.analysis_and_modules import PolicyManager
 
 
+@pytest.mark.unit
 def test_policy_manager_initialization():
     """Test PolicyManager initializes with default escalation levels"""
     policy = {}

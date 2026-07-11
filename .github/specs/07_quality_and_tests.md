@@ -627,7 +627,7 @@ Der Hörer empfindet eine Stimme als „körperlich nah" durch drei physikalisch
    entfernen — Early Reflections müssen erhalten bleiben, sonst kollabiert die wahrgenommene
    Quellen-Distanz auf „unendlich weit".
 
-#### Spektrale Phasenkohärenz — Tiefenstaffelung durch IPD
+#### [RELEASE_MUST] Spektrale Phasenkohärenz — Tiefenstaffelung durch IPD
 
 Nach **jeder** Spektral-Modifikation: **PGHI-ISTFT** (Phase Gradient Heap Integration, Virtanen 2018).
 

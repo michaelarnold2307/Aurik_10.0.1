@@ -64,6 +64,7 @@ def noise_2s():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestHPGExtractMask:
     def test_01_returns_tuple(self, hpg, tonal_2s):
         result = hpg.extract_harmonic_mask(tonal_2s, SR)

@@ -1,3 +1,4 @@
+import pytest
 """Unit tests for phase_02_hum_removal._compute_hum_removal_profile (§2.56)."""
 
 import numpy as np
@@ -5,6 +6,7 @@ import numpy as np
 from backend.core.phases.phase_02_hum_removal import HumRemovalPhase
 
 
+@pytest.mark.unit
 class TestHumRemovalProfile:
     def _p(self, material="vinyl", qm="balanced", rest=50.0):
         return HumRemovalPhase._compute_hum_removal_profile(material, qm, rest)

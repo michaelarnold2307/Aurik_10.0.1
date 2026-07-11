@@ -1,3 +1,4 @@
+import pytest
 """
 tests/unit/test_adaptive_drift_tolerance.py — §2.54 compute_adaptive_drift_tolerance() E2E
 
@@ -17,6 +18,7 @@ def _get_fn():
     return compute_adaptive_drift_tolerance
 
 
+@pytest.mark.unit
 class TestBasicProperties:
     """Fundamental properties of adaptive drift tolerance."""
 

@@ -70,6 +70,7 @@ def metrics_computer():
 # ============================================================
 
 
+@pytest.mark.unit
 def test_compute_snr(clean_audio, noisy_audio):
     """Test SNR computation."""
     audio_clean, sr = clean_audio

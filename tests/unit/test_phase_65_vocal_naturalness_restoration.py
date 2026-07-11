@@ -1,3 +1,4 @@
+import pytest
 """Tests für backend/core/phases/phase_65_vocal_naturalness_restoration.py (§7.10)."""
 
 from __future__ import annotations
@@ -26,6 +27,7 @@ def _make_phase():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 def test_singleton():
     from backend.core.phases.phase_65_vocal_naturalness_restoration import get_phase_65
 

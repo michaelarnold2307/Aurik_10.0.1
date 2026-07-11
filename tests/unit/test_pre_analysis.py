@@ -69,6 +69,7 @@ class _StubRestorability:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestPreAnalysisResult:
     def test_default_all_none(self):
         from backend.core.pre_analysis import PreAnalysisResult

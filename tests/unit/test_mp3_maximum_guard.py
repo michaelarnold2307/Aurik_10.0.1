@@ -1,3 +1,4 @@
+import pytest
 from __future__ import annotations
 
 from backend.core.defect_scanner import MaterialType
@@ -5,6 +6,7 @@ from backend.core.performance_guard import QualityMode
 from backend.core.unified_restorer_v3 import UnifiedRestorerV3
 
 
+@pytest.mark.unit
 def test_is_mp3_material_true_for_low_high() -> None:
     assert UnifiedRestorerV3._is_mp3_material(MaterialType.MP3_LOW) is True
     assert UnifiedRestorerV3._is_mp3_material(MaterialType.MP3_HIGH) is True

@@ -34,6 +34,7 @@ from backend.core.processing_context import (
 )
 
 
+@pytest.mark.unit
 class TestProcessingContext:
     """Test suite for ProcessingContext."""
 

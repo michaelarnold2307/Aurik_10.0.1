@@ -1,3 +1,4 @@
+import pytest
 """Unit tests for phase_25_azimuth_correction._compute_azimuth_profile (§2.56)."""
 
 import numpy as np
@@ -5,6 +6,7 @@ import numpy as np
 from backend.core.phases.phase_25_azimuth_correction import AzimuthCorrectionPhaseV2
 
 
+@pytest.mark.unit
 class TestAzimuthProfile:
     def _p(self, material="tape", qm="restoration", rest=50.0):
         return AzimuthCorrectionPhaseV2._compute_azimuth_profile(material, qm, rest)

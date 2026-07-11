@@ -1,4 +1,4 @@
-# Modular Phases API - Aurik 9.0
+# Modular Phases API - Aurik 9.20.3
 
 **Version:** 1.0.0  
 **Status:** ✅ Production-Ready  
@@ -8,7 +8,7 @@
 
 ## 1. Purpose
 
-The **Modular Phases Architecture** provides a standardized interface for all 41 restoration phases in Aurik 9.0. Benefits:
+The **Modular Phases Architecture** provides a standardized interface for all 41 restoration phases in Aurik 9.20.3. Benefits:
 - **Uniform API:** All phases implement same interface (process, validate, estimate_time)
 - **Material-Adaptive:** Each phase adjusts behavior based on material type (shellac/vinyl/tape/CD)
 - **Dependency Management:** Phases declare dependencies for correct execution order

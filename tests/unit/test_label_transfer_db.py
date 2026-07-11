@@ -21,6 +21,7 @@ def _sine(freq: float = 1000.0, sr: int = 48000, duration: float = 1.0) -> np.nd
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 def test_label_transfer_db_singleton():
     from backend.core.label_transfer_db import get_label_transfer_db
 

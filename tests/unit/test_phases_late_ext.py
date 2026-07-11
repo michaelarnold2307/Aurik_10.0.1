@@ -83,6 +83,7 @@ def _assert_phase_result(result, orig_audio, *, check_clipping: bool = True, cli
 # ===========================================================================
 # Phase 43 – ML DeEsser
 # ===========================================================================
+@pytest.mark.unit
 class TestPhase43MLDeEsser:
     def setup_method(self):
         from backend.core.phases.phase_43_ml_deesser import MLDeEsserPhase

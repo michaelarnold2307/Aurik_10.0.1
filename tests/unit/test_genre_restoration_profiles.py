@@ -1,3 +1,4 @@
+import pytest
 """Unit-Tests für Genre-Restaurierungsprofile aus core.genre_classifier.
 
 Testet:
@@ -22,6 +23,7 @@ from backend.core.genre_classifier import (
 )
 
 
+@pytest.mark.unit
 class TestGenreRestorationProfiles:
     """Tests für Genre-Restaurierungsprofile."""
 

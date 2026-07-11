@@ -33,6 +33,7 @@ VS Code-Volltest-Stabilität (Anti-OOM + Anti-Pipe-Flood):
 """
 
 import gc as _gc
+import logging
 import os
 import sys as _sys
 import threading as _threading
@@ -40,6 +41,8 @@ import time as _time
 import warnings as _warnings
 
 import pytest
+
+logger = logging.getLogger(__name__)
 
 # Trio-Hinweis tritt in VS-Code-/pytest-Umgebungen mit eigenem excepthook auf
 # und ist für unsere Testausführung nicht handlungsrelevant.

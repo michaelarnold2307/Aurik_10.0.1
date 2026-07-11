@@ -47,6 +47,7 @@ def _make_audio(seconds: float = 3.0, wow_hz: float = 0.0, infrasonic_rms: float
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestInferTapeSpeedIps:
     @pytest.fixture(autouse=True)
     def _uv3(self):

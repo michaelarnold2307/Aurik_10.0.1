@@ -41,6 +41,7 @@ def _add_musical_noise(audio):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 def test_00_import():
     from backend.core.introduced_artifact_detector import (
         IntroducedArtifactDetector,

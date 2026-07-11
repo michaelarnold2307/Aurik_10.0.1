@@ -1,6 +1,6 @@
 # CI/CD Pipeline Documentation
 
-**Aurik 9.0 Continuous Integration & Deployment**  
+**Aurik 9.20.3 Continuous Integration & Deployment**  
 Letzte Aktualisierung: 16. Februar 2026
 
 > **Normativer Hinweis (Release-Scope):** Aurik ist als Desktop-Produkt releasefaehig
@@ -11,7 +11,7 @@ Letzte Aktualisierung: 16. Februar 2026
 
 ## 📋 Overview
 
-Aurik 9.0 nutzt GitHub Actions für Continuous Integration, Testing, Security Audits und automatisierte Releases.
+Aurik 9.20.3 nutzt GitHub Actions für Continuous Integration, Testing, Security Audits und automatisierte Releases.
 
 ### Available Workflows
 
@@ -115,7 +115,7 @@ Automatisierte Multi-Platform Builds und Release-Erstellung.
 
 ### Trigger
 
-1. **Git Tags:** Pushe einen Tag mit Format `v*.*.*` (z.B. `v9.0.0`)
+1. **Git Tags:** Pushe einen Tag mit Format `v*.*.*` (z.B. `v9.20.3`)
 
    ```bash
    git tag v9.0.1
@@ -440,7 +440,7 @@ ACTIONS_RUNNER_DEBUG = true
 
 ```
 Major.Minor.Patch (Semantic Versioning)
-9.0.0 → Major release (breaking changes)
+9.20.3 → Major release (breaking changes)
 9.1.0 → Minor release (new features)
 9.0.1 → Patch release (bug fixes)
 ```

@@ -1,3 +1,4 @@
+import pytest
 """
 tests/unit/test_247_chain_correction.py
 =========================================
@@ -142,6 +143,7 @@ def _apply_chain_correction(
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestChainCorrection247:
     def test_vinyl_defects_extend_chain(self):
         """Vinyl-Indikatoren (crackle, rumble) → chain wird auf [vinyl, mp3_low] erweitert."""

@@ -38,6 +38,7 @@ def _stereo(seconds: float = 2.0) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestRepairChannelHFProtection:
     """Direct tests for the low-level _repair_channel HF-spike guard."""
 

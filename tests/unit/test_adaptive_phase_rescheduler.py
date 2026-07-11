@@ -36,6 +36,7 @@ def _fresh_rescheduler():
     return r
 
 
+@pytest.mark.unit
 class TestImportAndSingleton:
     def test_import(self):
         _get_rescheduler()

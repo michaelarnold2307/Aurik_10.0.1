@@ -1,3 +1,4 @@
+import pytest
 """Tests §Phase-level wall-time deadline shared across M/S MRSA sub-calls.
 
 Root cause: stereo audio caused 2× independent zone budgets (562.5s each = 1125s+),
@@ -29,6 +30,7 @@ def _make_mono(duration_s: float) -> np.ndarray:
     return rng.uniform(-0.3, 0.3, n).astype(np.float32)
 
 
+@pytest.mark.unit
 class TestPhase23SharedDeadline:
     """phase_deadline parameter propagated and used correctly."""
 

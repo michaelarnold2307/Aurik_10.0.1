@@ -34,6 +34,7 @@ from backend.core.module_communication import (
 )
 
 
+@pytest.mark.unit
 class TestModuleCommunicationBus:
     """Tests for ModuleCommunicationBus."""
 

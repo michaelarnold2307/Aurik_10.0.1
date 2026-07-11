@@ -69,6 +69,7 @@ def stereo_sine():
 # ===========================================================================
 
 
+@pytest.mark.unit
 class TestHelpers:
     def test_db_to_linear_0db(self):
         assert abs(_db_to_linear(0.0) - 1.0) < 1e-6

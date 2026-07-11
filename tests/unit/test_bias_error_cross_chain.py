@@ -1,3 +1,4 @@
+import pytest
 """Tests für BIAS_ERROR Cross-Chain-Fallback und ALIASING Cross-Chain-Fallback.
 
 Prüft:
@@ -90,6 +91,7 @@ class _FakeFMDResult:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestChainContainsTape:
     def _s(self):
         from backend.core.defect_scanner import DefectScanner

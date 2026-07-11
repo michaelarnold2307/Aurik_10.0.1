@@ -72,6 +72,7 @@ def phase():
     return WowFlutterFix()
 
 
+@pytest.mark.unit
 class TestStabilizeTapeLevel:
     """Unit tests for WowFlutterFix._stabilize_tape_level()."""
 

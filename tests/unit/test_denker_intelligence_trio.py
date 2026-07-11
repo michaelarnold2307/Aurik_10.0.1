@@ -24,6 +24,7 @@ import pytest
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestLeitePhaseNAb:
     """§2.46 Trägerkette → ChainPhasePlan Invarianten."""
 

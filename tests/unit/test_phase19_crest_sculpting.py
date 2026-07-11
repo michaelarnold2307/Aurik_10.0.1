@@ -51,6 +51,7 @@ def _bandlimited_noise(f_low: float, f_high: float, n: int = SR, amp: float = 0.
 # ─── A: API contract ─────────────────────────────────────────────────────────
 
 
+@pytest.mark.unit
 class TestSpectralCrestSculptApi:
     """8 tests — shape, dtype, NaN safety, edge cases."""
 

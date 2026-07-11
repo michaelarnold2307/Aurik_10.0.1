@@ -165,7 +165,7 @@ print(f"Valence: {result.emotional.valence:+.2f}")
 
 # Check gegen internes Spitzenziel
 if result.passes_aurik_standards():
-  print("✅ INTERNES SPITZENZIEL ERREICHT - Meets Aurik 9.0 Standards!")
+  print("✅ INTERNES SPITZENZIEL ERREICHT - Meets Aurik 9.20.3 Standards!")
 else:
   print("⚠️  Below internal top-tier target")
 
@@ -230,7 +230,7 @@ Emotional Impact:   75.4 / 100
 
 🏆 AURIK QUALITY SCORE: 90.5 / 100
 
-✅ INTERNES SPITZENZIEL ERREICHT - Meets Aurik 9.0 Standards!
+✅ INTERNES SPITZENZIEL ERREICHT - Meets Aurik 9.20.3 Standards!
 ======================================================================
 ```
 
@@ -321,7 +321,7 @@ pytest tests/test_comprehensive_metrics.py -v
 
 ## Normative Standards
 
-Das Metrik-System erfüllt folgende Aurik 9.0 Normen:
+Das Metrik-System erfüllt folgende Aurik 9.20.3 Normen:
 
 - ✅ Real implementiert (keine Dummys/Mocks)
 - ✅ Wissenschaftlich fundiert (internationale Standards)
@@ -334,12 +334,12 @@ Das Metrik-System erfüllt folgende Aurik 9.0 Normen:
 
 ## Lizenz
 
-Teil des Aurik 9.0 Projekts - Open Source (Lizenz noch zu bestimmen)
+Teil des Aurik 9.20.3 Projekts - Open Source (Lizenz noch zu bestimmen)
 
 ---
 
 ## Kontakt
 
-Aurik 9.0 Development Team
+Aurik 9.20.3 Development Team
 Datum: 15. Februar 2026
-Version: 9.0.0
+Version: 9.20.3

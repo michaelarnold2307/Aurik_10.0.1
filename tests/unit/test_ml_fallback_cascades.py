@@ -45,6 +45,7 @@ def _audio(dur: float = 2.0) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestAudioSRFallback:
     """AudioSR → Harmonische+PGHI → SBR."""
 

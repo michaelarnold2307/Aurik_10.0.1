@@ -73,6 +73,7 @@ def detector():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestToMono:
     def test_mono_stays_mono(self):
         mono = np.array([1.0, 2.0, 3.0])

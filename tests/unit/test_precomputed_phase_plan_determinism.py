@@ -184,6 +184,7 @@ _HEAVY_PATCHES = [
 # ── §2.53b Denker-Plan wird deterministisch durchgesetzt ─────────────────
 
 
+@pytest.mark.unit
 def test_precomputed_plan_bypasses_select_phases(sr, short_audio):
     """§2.53b: Wenn precomputed_phase_plan uebergeben wird, darf _select_phases() NICHT aufgerufen werden."""
     from backend.core.unified_restorer_v3 import UnifiedRestorerV3

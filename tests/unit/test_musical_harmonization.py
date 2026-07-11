@@ -32,6 +32,7 @@ from backend.core.defect_scanner import DefectScore, DefectType
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestReversePhaseMap:
     """Tests for the reverse phase map (phase_id → [DefectType])."""
 

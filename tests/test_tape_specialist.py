@@ -98,6 +98,7 @@ def stereo_audio_with_azimuth_error(sample_rate, duration):
 # =============================================================================
 
 
+@pytest.mark.unit
 class TestTapePrintThroughRemover:
     """Tests for GAP #1: Tape Print-Through Removal"""
 

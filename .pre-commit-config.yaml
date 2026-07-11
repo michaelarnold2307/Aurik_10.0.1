@@ -302,3 +302,11 @@ repos:
         language: system
         pass_filenames: false
         files: ^(backend|Aurik10)/.*\.py$
+
+      # ── v10 Sprint: Static-Value-Guard (§v10 No-Blind-Trust) ──────
+      - id: aurik-static-value-guard
+        name: "🔍 Static-Value-Guard (§v10: keine blinden statischen Werte)"
+        entry: .venv_aurik/bin/python scripts/pre_commit_static_guard.py --ci
+        language: system
+        pass_filenames: true
+        files: ^(backend|Aurik10)/.*\.py$

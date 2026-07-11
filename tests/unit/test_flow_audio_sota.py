@@ -1,3 +1,4 @@
+import pytest
 """
 Tests for FlowAudio SOTA Plugin — Conditional Flow Matching Inpainting
 ======================================================================
@@ -73,6 +74,7 @@ def _make_audio_with_gap(
 # ═══════════════════════════════════════════════════════════════════════════
 
 
+@pytest.mark.unit
 class TestInputValidation:
     """Tests for input validation in FlowAudioModel.inpaint()."""
 

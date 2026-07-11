@@ -139,6 +139,7 @@ def damaged_audio():
 # === Test Cases ===
 
 
+@pytest.mark.unit
 class TestMQABaseline:
     """Test quality baseline establishment."""
 

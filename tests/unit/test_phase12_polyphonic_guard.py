@@ -1,3 +1,4 @@
+import pytest
 from __future__ import annotations
 
 import logging
@@ -7,6 +8,7 @@ import numpy as np
 from backend.core.phases.phase_12_wow_flutter_fix import WowFlutterFix
 
 
+@pytest.mark.unit
 def test_polyphonic_estimate_is_insufficient_for_single_frame() -> None:
     pitch = np.array([220.0], dtype=np.float64)
     conf = np.array([0.95], dtype=np.float64)

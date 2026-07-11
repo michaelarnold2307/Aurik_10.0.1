@@ -563,7 +563,7 @@ def export_audio(
         unexpected = ", ".join(sorted(str(key) for key in kwargs))
         raise TypeError(f"Unerwartete Export-Parameter: {unexpected}")
 
-    _SUBTYPE_MAP = {16: "PCM_16", 24: "PCM_24", 32: "FLOAT"}
+    _SUBTYPE_MAP = {8: "PCM_S8", 16: "PCM_16", 24: "PCM_24", 32: "FLOAT", 64: "DOUBLE"}
 
     # 1. Decode incoming bytes
     try:
@@ -595,7 +595,7 @@ def export_audio(
     subtype = _SUBTYPE_MAP.get(bit_depth)
 
     # 4. WAV, FLAC, OGG, AIFF direkt mit soundfile — atomic write via .tmp → os.replace
-    if export_format.lower() in ["wav", "flac", "ogg", "aiff", "aif", "alac", "caf"]:
+    if export_format.lower() in ["wav", "flac", "ogg", "aiff", "aif", "alac", "caf", "rf64"]:
         tmp_path = export_path + ".tmp"
         try:
             write_kwargs: dict = {"format": export_format.upper()}
@@ -604,6 +604,13 @@ def export_audio(
             sf.write(tmp_path, audio, sr, **write_kwargs)
             os.replace(tmp_path, export_path)
             _transfer_metadata(source_path, export_path)
+            # BWF-Metadaten für WAV/RF64 schreiben
+            if export_format.lower() in ("wav", "rf64"):
+                try:
+                    from backend.core.bwf_writer import write_bwf_chunks
+                    write_bwf_chunks(export_path, description=f"Aurik {_AURIK_VERSION} Restauration", originator="Aurik")
+                except Exception as _bwf_exc:
+                    logger.debug("BWF-metadata write skipped: %s", _bwf_exc)
             _size_mb = os.path.getsize(export_path) / (1024 * 1024)
             logger.info(
                 "Export abgeschlossen: %s (%.1f MB, %s %d-bit)", export_path, _size_mb, export_format.upper(), bit_depth

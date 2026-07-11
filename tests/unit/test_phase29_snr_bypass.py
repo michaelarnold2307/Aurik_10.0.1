@@ -1,3 +1,4 @@
+import pytest
 """Unit tests — §2.47 Phase_29 SNR > 35 dB Dry-Signal Bypass.
 
 Verifies that TapeHissReductionPhase skips OMLSA processing and returns
@@ -36,6 +37,7 @@ def _noisy_mono(snr_db: float = 10.0) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestPhase29SnrBypass:
     """§2.47 SNR > 35 dB bypass invariant."""
 

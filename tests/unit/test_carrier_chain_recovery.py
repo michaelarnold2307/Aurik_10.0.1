@@ -1,3 +1,4 @@
+import pytest
 """Unit-Tests für §0d spectral_correlation + carrier_chain_recovery_ratio (Layer 3)."""
 
 from __future__ import annotations
@@ -7,6 +8,7 @@ import numpy as np
 from backend.core.carrier_transfer_characteristics import spectral_correlation
 
 
+@pytest.mark.unit
 class TestSpectralCorrelation:
     """§0d — spectral_correlation() Kernfunktion."""
 

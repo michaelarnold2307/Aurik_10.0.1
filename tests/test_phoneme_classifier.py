@@ -21,6 +21,7 @@ from backend.ml.phoneme_aware import PhonemeCategory, PhonemeClassifier, Sibilan
 from backend.ml.phoneme_aware.phoneme_classifier import ArticulationPlace, PhonemeInfo
 
 
+@pytest.mark.unit
 class TestPhonemeClassifierBasic:
     """Test basic classification functionality"""
 

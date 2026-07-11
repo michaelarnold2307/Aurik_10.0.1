@@ -77,6 +77,7 @@ def _make_zxx(n_src: int = 12, n_frames: int = 60, seed: int = 0) -> np.ndarray:
 # ──────────────────────────────────────────────────────────────────────────────
 
 
+@pytest.mark.unit
 class TestSbrPvtApi:
     def test_output_shape(self, phase):
         n_src, n_frames, n_tgt = 10, 50, 20

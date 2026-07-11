@@ -122,6 +122,7 @@ def _dummy_saliency(n_frames: int = 20) -> np.ndarray:
 # ===========================================================================
 
 
+@pytest.mark.unit
 class TestWordTimestamp:
     def test_01_fields_accessible(self) -> None:
         w = WordTimestamp(

@@ -1,3 +1,4 @@
+import pytest
 #!/usr/bin/env python3
 """
 v9.10.118 — Kopfhörer-Qualitäts-Fixes: 5 audible Defizite behoben.
@@ -16,6 +17,7 @@ import numpy as np
 # ═══════════════════════════════════════════════════════════════════════
 
 
+@pytest.mark.unit
 class TestWienerStereoMasking:
     """§9.10.118 — Wiener stereo preservation instead of mono duplication."""
 

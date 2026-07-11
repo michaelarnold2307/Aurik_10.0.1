@@ -1,3 +1,4 @@
+import pytest
 """
 tests/unit/test_restorability_estimator.py — RestorabilityEstimator Test-Suite (≥ 20 Tests)
 Alle Tests synthetisch, kein ML-Modell-Download erforderlich.
@@ -35,6 +36,7 @@ def _clipped(dur: float = 3.0, threshold: float = 0.3):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 def test_00_import():
     from backend.core.restorability_estimator import (
         RestorabilityEstimator,

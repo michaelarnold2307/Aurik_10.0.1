@@ -163,6 +163,7 @@ def vinyl_with_warmth(sample_rate, duration):
 # =============================================================================
 
 
+@pytest.mark.unit
 class TestFingerNoiseDetector:
     """Test suite for FingerNoiseDetector"""
 

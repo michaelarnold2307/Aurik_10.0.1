@@ -110,6 +110,7 @@ def _assert_deterministic(
 # ===========================================================================
 
 
+@pytest.mark.unit
 class TestDeterminismToleranceContract:
     """Tests: Die normativen Toleranzgrenzen sind korrekt definiert."""
 

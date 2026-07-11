@@ -1,3 +1,4 @@
+import pytest
 """test_warmup_thread.py — §9.7.4 Modell-Warmup im Hintergrund.
 
 Pflicht-Tests (≥ 8) für _warmup_models_background() aus Aurik10/main.py.
@@ -60,6 +61,7 @@ def _run_warmup_logic(module_map: dict | None = None, sleep_s: float = 0.0) -> l
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestWarmupThread:
     """§9.7.4 — Modell-Warmup-Thread-Tests."""
 

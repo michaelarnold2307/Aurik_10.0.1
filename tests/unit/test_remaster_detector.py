@@ -1,3 +1,4 @@
+import pytest
 """Tests für core/remaster_detector.py — RemasterDetector (§2.14).
 
 ≥ 17 Unit-Tests: alle synthetic, kein Audio-File, np.random.seed(42).
@@ -51,6 +52,7 @@ def _digital_silence_with_hiss(
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 def test_00_import():
     """Modul importierbar ohne Fehler."""
     from backend.core.remaster_detector import analyse_remaster

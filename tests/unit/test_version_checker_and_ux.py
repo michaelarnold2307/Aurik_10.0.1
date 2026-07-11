@@ -1,3 +1,4 @@
+import pytest
 """Tests for Aurik10/core/version_checker.py — update check logic."""
 
 import json
@@ -15,6 +16,7 @@ from Aurik10.core.version_checker import (
 # ── _parse_version ─────────────────────────────────────────────────────────
 
 
+@pytest.mark.unit
 def test_parse_version_simple():
     assert _parse_version("9.10.77") == (9, 10, 77)
 

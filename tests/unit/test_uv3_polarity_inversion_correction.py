@@ -29,6 +29,7 @@ def _make_stereo(duration_s: float = 1.0) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestPolarityInversionLogic:
     """Isolierte Prüfung der Polarity-Inversion-Logik (Whitebox)."""
 

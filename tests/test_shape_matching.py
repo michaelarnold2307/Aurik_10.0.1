@@ -1,3 +1,4 @@
+import pytest
 #!/usr/bin/env python
 """
 Test für Shape-Matching zwischen Stereo/Mono Arrays (resemble_enhance Broadcasting-Fix)
@@ -6,6 +7,7 @@ Test für Shape-Matching zwischen Stereo/Mono Arrays (resemble_enhance Broadcast
 import numpy as np
 
 
+@pytest.mark.unit
 def test_shape_matching():
     """Test dass Shape-Matching korrekt funktioniert"""
     print("=" * 80)

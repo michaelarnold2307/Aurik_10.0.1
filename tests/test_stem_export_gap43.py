@@ -91,6 +91,7 @@ def temp_export_dir():
 # ==============================================================================
 
 
+@pytest.mark.unit
 class TestSpectralStemSeparation:
     """Tests for spectral-based stem separation"""
 

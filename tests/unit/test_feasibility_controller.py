@@ -53,6 +53,7 @@ def _make_audio(seconds: float = 2.0, channels: int = 1) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestGoalFeasibilityDataclass:
     def test_fields_present(self) -> None:
         gf = GoalFeasibility(reachable=True, confidence=0.75, max_achievable=0.92)

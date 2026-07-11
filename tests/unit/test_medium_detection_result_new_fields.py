@@ -1,3 +1,4 @@
+import pytest
 """Unit-Tests für MediumDetectionResult — neue Felder §6.7 (v9.11.14)."""
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ def _make_result(**kwargs) -> MediumDetectionResult:
     return MediumDetectionResult(**defaults)
 
 
+@pytest.mark.unit
 class TestMediumDetectionResultNewFields:
     """§6.7 — tape_speed_ips, riaa_curve_type, riaa_curve_confidence."""
 

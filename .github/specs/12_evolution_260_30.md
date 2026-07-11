@@ -1,4 +1,4 @@
-# §EVO: Denker → UV3 Evolutionsstufen (§2.60–§3.0)
+# §EVO [RELEASE_MUST]: Denker → UV3 Evolutionsstufen (§2.60–§3.0) | §v10 Pleasantness-First
 
 Stand: 2026-07-09 | Status: ✅ Implementiert und aktiv
 

@@ -16,6 +16,7 @@ import pytest
 # §2.60 Fahrplan
 # ═══════════════════════════════════════════════════════════════
 
+@pytest.mark.unit
 class TestFahrplan:
     """Testet build_fahrplan() und Fahrplan.calibration."""
 

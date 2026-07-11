@@ -1,3 +1,4 @@
+import pytest
 from __future__ import annotations
 
 import json
@@ -32,6 +33,7 @@ def _write_uat(
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
+@pytest.mark.unit
 def test_load_uat_runs_sorted_by_timestamp(tmp_path: Path) -> None:
     _write_uat(
         tmp_path / "uat_results_2026-04-12.json",

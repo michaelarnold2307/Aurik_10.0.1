@@ -60,6 +60,7 @@ def _chord(freqs, dur: float = 0.5) -> np.ndarray:
 # ──────────────────────────────────────────────────────────────────────────────
 
 
+@pytest.mark.unit
 class TestComputeHarmonicSalience:
     def _make_magnitude_spectrum(self, f0_list: list[float], dur: float = 0.5):
         """Build a magnitude spectrum for a sum of harmonic tones."""

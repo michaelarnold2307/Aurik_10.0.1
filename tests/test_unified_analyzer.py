@@ -67,6 +67,7 @@ def full_analyzer(trained_medium_detector, trained_era_detector, trained_defect_
     )
 
 
+@pytest.mark.unit
 class TestUnifiedForensicAnalyzer:
     """Test suite for Unified Forensic Analyzer."""
 

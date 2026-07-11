@@ -1,3 +1,4 @@
+import pytest
 from __future__ import annotations
 
 from pathlib import Path
@@ -16,6 +17,7 @@ def _probe(path: Path, *, has_rocm: bool) -> RuntimeProbe:
     )
 
 
+@pytest.mark.unit
 def test_select_runtime_python_prefers_rocm(monkeypatch, tmp_path: Path) -> None:
     repo_root = tmp_path
     rocm_python = repo_root / ".venv_rocm" / "bin" / "python"

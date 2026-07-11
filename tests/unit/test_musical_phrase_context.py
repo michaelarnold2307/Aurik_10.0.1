@@ -1,3 +1,4 @@
+import pytest
 """Pflicht-Tests für MusicalPhraseContextExtractor (§2.12).
 
 Testkonventionen:
@@ -53,6 +54,7 @@ def _make_gap(audio_len: int, gap_s: float = 0.2, sr: int = SR) -> tuple[int, in
 # ---------------------------------------------------------------------------
 # Testklasse: Grundlegende Korrektheit
 # ---------------------------------------------------------------------------
+@pytest.mark.unit
 class TestPhraseContextBasic:
     def test_01_returns_phrase_context(self) -> None:
         """extract_context gibt eine PhraseContext-Instanz zurück."""

@@ -1,3 +1,4 @@
+import pytest
 """Tests for PerceptualSalienceEstimator (§9.1c).
 
 Validations:
@@ -61,6 +62,7 @@ def _insert_silence_gap(audio: np.ndarray, sr: int, start_s: float, end_s: float
     return out
 
 
+@pytest.mark.unit
 class TestPerceptualSalienceEstimatorShape:
     """Basic shape, NaN/Inf guards, and return type tests."""
 

@@ -38,6 +38,7 @@ def _make_stereo_test_audio() -> np.ndarray:
     return np.stack([mono, mono * 0.8], axis=1).astype(np.float32)
 
 
+@pytest.mark.unit
 class TestPhaseSteeringGuard:
     """Unit-Tests für PhaseSteeringGuard (ohne UV3-Integration)."""
 

@@ -1,3 +1,4 @@
+import pytest
 from __future__ import annotations
 
 import sys
@@ -6,6 +7,7 @@ import types
 import numpy as np
 
 
+@pytest.mark.unit
 def test_crepe_falls_back_to_yin_when_pyin_fails(monkeypatch):
     from plugins.crepe_plugin import CrepePlugin
 

@@ -84,3 +84,14 @@ Stand: 2026-04-14
    - konsolidierten Status pruefen in audit/consolidated_release_status.json
 3. Vor Release-Entscheid:
    - latest recommendation + Gates + R5-R12 aus daily_real_audio_gate_status.json bestaetigen
+
+
+## §v10 Pleasantness-First: No-Blind-Trust (Juli 2026 Audit)
+
+**Erkenntnis:** Das Projekt hatte ~800 Zeilen MATERIAL_SENSITIVITY-Dictionary,
+das blind dem Materialtyp vertraute ("Vinyl hat immer Clicks"). Behoben durch:
+
+- SNR-Adaption: Alle 8 DefectScanner-Detektoren passen sich dem gemessenen SNR an
+- Spectrum-Aware EQ: Phase 16/17 messen IST-Spektrum vor EQ-Anwendung
+- Harmonic-Aware Saturation: Phase 17 misst Even/Odd-Harmonic-Ratio vor Sättigung
+- Neue Messfunktionen: _estimate_local_snr(), _measure_spectral_deviation(), _measure_harmonic_density()

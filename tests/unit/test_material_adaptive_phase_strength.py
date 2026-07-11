@@ -64,6 +64,7 @@ def _make_fake_phase(strength_recorder: list) -> object:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestGetMaterialInitialStrength:
     def test_shellac_denoise_below_one(self):
         from backend.core.defect_phase_mapper import get_material_initial_strength

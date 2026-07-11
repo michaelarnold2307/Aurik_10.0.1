@@ -350,7 +350,7 @@ Phase 3 Complete?
 **Internal:**
 
 - `.github/copilot-instructions.md` — Normative requirements
-- `.github/specs/01-08_*.md` — Technical specifications
+- `.github/specs/01-14_*.md` — Technical specifications
 - `README.md` — Project overview
 
 **This System:**

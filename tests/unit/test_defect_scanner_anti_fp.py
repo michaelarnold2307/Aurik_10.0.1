@@ -1,3 +1,4 @@
+import pytest
 """Anti-False-Positive-Tests für DefectScanner (§6.3 — Aurik v9.10.57).
 
 Validates that the three hardened detectors (_detect_clicks,
@@ -37,6 +38,7 @@ def _complex_tone(duration: float = 3.0) -> np.ndarray:
 # ============================================================
 
 
+@pytest.mark.unit
 class TestClicksAntiFP:
     """Clean signals must NOT trigger click detection."""
 

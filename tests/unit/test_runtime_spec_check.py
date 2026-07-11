@@ -1,3 +1,4 @@
+import pytest
 from __future__ import annotations
 
 import json
@@ -18,6 +19,7 @@ def _get_mode_check(report: dict) -> dict:
     raise AssertionError("mode_contract-Check nicht gefunden")
 
 
+@pytest.mark.unit
 def test_mode_contract_accepts_internal_studio2026(tmp_path: Path) -> None:
     backend = tmp_path / "backend.log"
     frontend = tmp_path / "frontend.log"

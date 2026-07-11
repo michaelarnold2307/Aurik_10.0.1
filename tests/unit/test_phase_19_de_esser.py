@@ -100,6 +100,7 @@ def stereo_breathy(breathy_vocal_mono):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestEstimateBreahtiness:
     """_estimate_breathiness() must return float in [0.0, 1.0]."""
 

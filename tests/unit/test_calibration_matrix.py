@@ -1,3 +1,4 @@
+import pytest
 """Unit tests for backend/core/calibration_matrix.py — §09.1/§09.2/§09.7.
 
 Tests cover:
@@ -30,6 +31,7 @@ _P1_GOALS = {"natuerlichkeit", "authentizitaet"}
 _P2_GOALS = {"tonal_center", "timbre_authentizitaet", "artikulation"}
 
 
+@pytest.mark.unit
 def test_canonical_thresholds_restoration_has_all_goals():
     """All 15 goals must be present in CANONICAL_THRESHOLDS_RESTORATION."""
     expected = {

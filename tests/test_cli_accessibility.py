@@ -15,6 +15,7 @@ import pytest
 from usability.cli_accessibility import AccessibleCLI, CLITheme
 
 
+@pytest.mark.unit
 class TestCLITheme:
     """Test CLITheme configuration and detection"""
 

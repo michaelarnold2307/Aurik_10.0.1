@@ -1,3 +1,4 @@
+import pytest
 """Unit-tests for backend.exporter — POW-r Type 3 / TPDF dithering.
 
 Spec §DSP-Spezialregeln:
@@ -51,6 +52,7 @@ def _stereo(n: int = 4800) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestPowR3Coefficients:
     def test_shape(self):
         assert _POWR3_COEFFS.ndim == 1

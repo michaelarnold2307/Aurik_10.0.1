@@ -776,7 +776,7 @@ quality_estimate = 0.40 * (1 - defect_severity) + 0.60 * (pqs_mos - 1) / 4
 
 ---
 
-## §2.29 PerPhaseMusicalGoalsGate — Adaptive Regression-Schwellen
+## [RELEASE_MUST] §2.29 PerPhaseMusicalGoalsGate — Adaptive Regression-Schwellen
 
 **[RELEASE_MUST] PMGG darf notwendige Phasen nicht stumm verwerfen.**
 CausalDefectReasoner-bestimmte Phasen müssen über eine Recovery-Kaskade geführt werden
@@ -1592,7 +1592,7 @@ Zusammenfassung aller Stabilitäts-Invarianten. Jede Verletzung einer dieser Reg
 - `_check_audio_buffer_size()` bei direktem `soundfile.read()` (S-07).
 - **[RELEASE_MUST] Längen-Invariante**: `len(phase_output) == len(phase_input)` — Phasen dürfen die Signallänge nicht verändern. `_execute_pipeline()` korrigiert akkumulierten Längendrift am Ausgang (Trim bei Überlänge, Zero-Pad bei Unterlänge). Dies betrifft insbesondere PGHI-basierte Phasen mit `padded=False` (letztes unvollständiges Fenster wird weggelassen) — Abhilfe: `n_samples=len(audio_in)` immer an `pghi_reconstruct_from_stft()` übergeben.
 
-### Invarianten
+### [RELEASE_MUST] Invarianten
 
 - Checkpoint-Audio als `FLOAT` WAV — verlustfrei, kein Encoding-Verlust
 - Ablauf: 7 Tage (`_MAX_CHECKPOINT_AGE_S`) — danach automatische Bereinigung
@@ -2625,7 +2625,7 @@ Mehrfache STFT→Modifikation→ISTFT erzeugt akkumulierte Phasenfehler (Gruppen
 
 **Betroffene Phasen** (STFT-basiert): phase_03 (De-Hiss), phase_07 (Harmonic), phase_20/49 (De-Reverb), phase_23/24 (Super-Resolution), phase_29 (NR), phase_35 (Multiband-Comp)
 
-### Checkpoint-Verwaltung (§2.54-konform)
+### [RELEASE_MUST] Checkpoint-Verwaltung (§2.54-konform)
 
 - `best_perceptual_checkpoint`: Audio-Snapshot mit dem **höchsten gewichteten P1–P5-Score** über alle bereits akzeptierten Phasen — nicht das **letzte nicht-gerollte**, sondern das perceptuell **beste**
 - Bei Rollback: Phase-Skip protokollieren in `RestorationResult.metadata["interaction_rollbacks"]`
@@ -3780,7 +3780,7 @@ Quelle: `[SRC:S06,S07,S12,S13]`
 
 **Wenn ein Gate scheitert, MUSS Aurik die nächste Stufe versuchen — nie sofort abbrechen oder exportieren.**
 
-### Vollständige Recovery-Kaskade
+### [RELEASE_MUST] Vollständige Recovery-Kaskade
 
 | Stufe | Aktion | Trigger |
 | --- | --- | --- |
@@ -3883,7 +3883,7 @@ processed = model(audio_pad)
 processed = processed[:, ctx:ctx + n_samples]  # deterministischer Strip
 ```
 
-### Stereo-Lag-Invariante (Pflicht)
+### [RELEASE_MUST] Stereo-Lag-Invariante (Pflicht)
 
 - Werden L und R getrennt durch denselben Algorithmus geführt, müssen `ctx`, Strip-Offset und Zielsamplezahl identisch sein.
 - **VERBOTEN**: Kanalindividuelles Resampling als primäre Korrektur nach Boundary-Verarbeitung.
@@ -4043,7 +4043,7 @@ for phase_id in planned_phases:
     audio, result = self._profiled_phase_call_with_delta(phase_fn, audio, phase_id)
 ```
 
-### Invarianten
+### [RELEASE_MUST] Invarianten
 
 - **VERBOTEN**: Pipeline läuft nach `_mas_fully_achieved = True` weiter.
 - **VERBOTEN**: Phase ohne Pre/Post-Delta-Log (kein `_profiled_phase_call_with_delta()`-Aufruf).
@@ -4107,7 +4107,7 @@ else:
     _voiced = _shared_f0["voiced_flag"]
 ```
 
-### §2.66c Phasen-Bindung (MUSS shared_f0 nutzen)
+### [RELEASE_MUST] §2.66c Phasen-Bindung (MUSS shared_f0 nutzen)
 
 | Phase | F0-Nutzung |
 | --- | --- |

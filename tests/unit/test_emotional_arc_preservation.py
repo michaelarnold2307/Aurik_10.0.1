@@ -1,3 +1,4 @@
+import pytest
 """Unit-Tests für core/emotional_arc_preservation.py — EmotionalArcPreservationMetric.
 
 Spec §8.2 Punkt 12: Emotionaler Dynamik-Bogen, Arousal/Valence Pearson, Klimax-Erhalt.
@@ -50,6 +51,7 @@ def _dynamic_signal(secs: float = 60.0) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestEmotionalArcInit:
     def test_01_class_importable(self):
         assert EmotionalArcPreservationMetric is not None

@@ -17,6 +17,7 @@ import pytest
 # ═══════════════════════════════════════════════════════════════════════
 
 
+@pytest.mark.unit
 class TestHPSSKernelFix:
     """§9.10.119 — Kleinere HPSS-Kernel für präzisere Transient-Extraktion."""
 

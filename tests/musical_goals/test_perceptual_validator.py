@@ -55,6 +55,7 @@ def validator_with_ab_tests():
         yield validator
 
 
+@pytest.mark.unit
 class TestPerceptualScore:
     """Test PerceptualScore dataclass."""
 

@@ -304,3 +304,13 @@ bei kleinen Gains. Export-Pfad dokumentiert.
 | `backend/core/regulator/mastering.py` | crossfade_ms entfernt |
 | `cli/aurik_cli.py` | --dry-run, --json, --abx Flags + Logik |
 | `batch_processor.py` | `correlate_defects_across_tracks()` für Album-Intelligenz |
+
+
+## SNR/Spectrum/Harmonic-Adaption (Juli 2026)
+
+**Prinzip:** Kein blinder Material-Glaube. Jeder Song wird individuell gemessen.
+
+- `_estimate_local_snr()`: 100ms-Fenster-basierte SNR-Schätzung → adaptive Click/Tape-Splice/Detektor-Thresholds
+- `_measure_spectral_deviation()`: 4-Band FFT → adaptive EQ-Gains in Phase 16
+- `_measure_spectral_balance()`: 4-Band FFT → adaptive Mastering-EQ in Phase 17
+- `_measure_harmonic_density()`: Even/Odd-Harmonic-Ratio → adaptive Saturation in Phase 17

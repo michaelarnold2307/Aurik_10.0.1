@@ -1,9 +1,11 @@
+import pytest
 from __future__ import annotations
 
 from backend.core.defect_scanner import MaterialType
 from backend.core.phases.phase_12_wow_flutter_fix import WowFlutterFix
 
 
+@pytest.mark.unit
 def test_profile_keys_present() -> None:
     p = WowFlutterFix._compute_adaptive_threshold_profile(
         material=MaterialType.VINYL,

@@ -34,6 +34,7 @@ def _slight_denoise_fn(audio, sr):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 def test_00_import():
     from backend.core.ensemble_processor import EnsembleProcessor
 

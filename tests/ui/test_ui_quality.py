@@ -1,3 +1,4 @@
+import pytest
 from pathlib import Path
 
 GUI_FILE = Path("Aurik10/ui/modern_window.py")
@@ -6,6 +7,7 @@ PROGNOSE_FILE = Path("Aurik10/ui/song_prognose_widget.py")
 DEFECT_SCANNER_FILE = Path("backend/core/defect_scanner.py")
 
 
+@pytest.mark.unit
 def test_ui_heartbeat_reassures_during_long_processing_phases() -> None:
     src = GUI_FILE.read_text(encoding="utf-8")
     assert 't("status.processing_reassure_analysis")' in src

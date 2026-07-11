@@ -57,6 +57,7 @@ def silence_2s():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestHistoricalCurves:
     EXPECTED_VARIANTS = [
         "columbia_1938",

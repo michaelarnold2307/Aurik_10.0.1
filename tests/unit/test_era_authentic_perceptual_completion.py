@@ -1,3 +1,4 @@
+import pytest
 """Tests für core/era_authentic_perceptual_completion.py — Spec §2.35.
 
 ≥ 25 Unit-Tests: Aktivierungsbedingungen, Bandbreiten-Erkennung, era-Ceiling,
@@ -46,6 +47,7 @@ def _stereo(dur: float = 2.0) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestEraBrillanzCeiling:
     def test_ceiling_keys_are_decades(self):
         for decade in ERA_BRILLANZ_CEILING:

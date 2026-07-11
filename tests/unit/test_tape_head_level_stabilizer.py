@@ -78,6 +78,7 @@ def _inject_level_dips(
 # ===========================================================================
 
 
+@pytest.mark.unit
 class TestDefectTypeEnum:
     def test_01_tape_head_level_dip_exists(self):
         from backend.core.defect_scanner import DefectType

@@ -40,6 +40,7 @@ def _clipped_sine(clip_level=0.7, freq=440, dur=0.5, sr=SR):
 # ══════════════════════════════════════════════════════════════════════
 
 
+@pytest.mark.unit
 class TestAdaptiveJanssenIterative:
     def setup_method(self):
         from dsp.adaptive_janssen_iterative import AdaptiveJanssenIterative

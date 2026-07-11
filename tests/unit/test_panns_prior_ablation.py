@@ -31,6 +31,7 @@ def clf() -> GenreClassifier:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestPANNsFuseInvariant:
     """_fuse_non_schlager_with_panns must keep fused >= original at all times."""
 

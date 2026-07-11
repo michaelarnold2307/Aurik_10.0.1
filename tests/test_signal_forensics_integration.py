@@ -73,6 +73,7 @@ def chain_builder():
     return AdaptiveChainBuilder()
 
 
+@pytest.mark.unit
 class TestFullForensicsPipeline:
     """Test full forensics pipeline from audio to chain."""
 

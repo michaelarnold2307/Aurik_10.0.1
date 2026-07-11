@@ -1,3 +1,4 @@
+import pytest
 """Erweiterte Unit-Tests für forensics.medium_detector (v10.0).
 
 Testet:
@@ -25,6 +26,7 @@ from forensics.medium_detector import (
 )
 
 
+@pytest.mark.unit
 class TestV100MediumDetectorExtended:
     """Erweiterte Tests für MediumDetector v10.0."""
 

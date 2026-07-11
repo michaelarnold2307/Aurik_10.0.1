@@ -1,3 +1,4 @@
+import pytest
 from __future__ import annotations
 
 import types
@@ -6,6 +7,7 @@ from pathlib import Path
 import numpy as np
 
 
+@pytest.mark.unit
 def test_main_aborts_export_when_quality_gate_fails(monkeypatch, tmp_path):
     import _aurik_run_excellence as runner
 

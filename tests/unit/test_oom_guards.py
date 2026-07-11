@@ -31,6 +31,7 @@ class _MemProbe:
         self.percent = percent
 
 
+@pytest.mark.unit
 def test_try_allocate_blocks_when_physical_memory_too_low(monkeypatch):
     _reset_budget_state()
 

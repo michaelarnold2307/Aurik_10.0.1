@@ -1,3 +1,4 @@
+import pytest
 """Gap Closure Tests für v9.12.10 — EraVocalProfile, Pre-Echo, RestorationMemory.
 
 Unit-Tests für die geschlossenen Lücken:
@@ -14,6 +15,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 
 
+@pytest.mark.unit
 class TestEraVocalProfileVQIGate(unittest.TestCase):
     """§EraVocalProfile: Verify era_vocal_profile is passed to compute_vqi in VocalNoHarmGate._evaluate_vqi."""
 

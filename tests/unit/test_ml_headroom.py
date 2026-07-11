@@ -61,6 +61,7 @@ def _reset_budget(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestBudgetAllocation:
     """try_allocate / release contract tests."""
 

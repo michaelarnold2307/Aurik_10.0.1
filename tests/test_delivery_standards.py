@@ -30,6 +30,7 @@ from backend.core.delivery_standards import (
 )
 
 
+@pytest.mark.unit
 class TestStandardConfig:
     """Test StandardConfig und predefined standards."""
 

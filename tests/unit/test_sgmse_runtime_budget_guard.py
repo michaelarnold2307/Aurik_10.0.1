@@ -14,6 +14,7 @@ import pytest
 from plugins.sgmse_plugin import SGMSEPlusPlugin, _quarantine_corrupt_torchscript
 
 
+@pytest.mark.unit
 def test_chunked_runtime_budget_triggers_fallback_for_remaining_audio() -> None:
     """When budget is exceeded, remaining tail must be processed by WPE fallback."""
     plugin = object.__new__(SGMSEPlusPlugin)

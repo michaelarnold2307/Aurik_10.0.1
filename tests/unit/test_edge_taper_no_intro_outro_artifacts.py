@@ -75,6 +75,7 @@ def _estimate_lr_delay_samples(audio: np.ndarray, max_lag: int = 256) -> int:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+@pytest.mark.unit
 class TestPhase03EdgeTaper:
     """Phase 03 darf kein Artefakt im Intro/Outro (erste/letzte 0.5 s) einbringen."""
 

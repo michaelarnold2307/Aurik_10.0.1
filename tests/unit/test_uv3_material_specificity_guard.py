@@ -1,3 +1,4 @@
+import pytest
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -6,6 +7,7 @@ from backend.core.defect_scanner import MaterialType
 from backend.core.unified_restorer_v3 import UnifiedRestorerV3
 
 
+@pytest.mark.unit
 def test_preserve_specific_transport_material_for_cassette_chain() -> None:
     mc_result = SimpleNamespace(
         confidence=0.40,

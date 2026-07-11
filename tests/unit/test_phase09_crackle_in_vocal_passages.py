@@ -69,6 +69,7 @@ def phase09():
     return CrackleRemovalPhase(sample_rate=SR)
 
 
+@pytest.mark.unit
 def test_crackle_regions_detected_in_vocal_passage(phase09):
     """crackle_regions must be non-empty when clicks overlay a harmonic signal."""
     audio = _make_vocal_with_crackle()

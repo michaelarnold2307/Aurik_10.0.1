@@ -1,4 +1,4 @@
-# Spec §09 — Globale Kalibrierungs-Matrix für reproduzierbare Optimalwerte
+# Spec §09 — Globale Kalibrierungs-Matrix für reproduzierbare Optimalwerte | §v10 Pleasantness-First
 
 **Aurik 10.11.14+ | Gültig ab: 18. April 2026 | Stand: 19. April 2026 (v9.11.14+) | Normativ übergeordnet über einzelne Phase-Konfigurationen**
 
@@ -1263,7 +1263,7 @@ for goal_name, goal_score in _goal_snapshot.items():
 > `backend/core/calibration_matrix.py`. Bis v9.12.0 nur in Copilot Instructions beschrieben —
 > hier erstmalig als Spec-Grundlage spezifiziert.
 
-### §09.11a `_GOAL_TO_RECOVERY_PHASES_RESTORATION`
+### [RELEASE_MUST] §09.11a `_GOAL_TO_RECOVERY_PHASES_RESTORATION`
 
 ```python
 _GOAL_TO_RECOVERY_PHASES_RESTORATION: Dict[str, List[str]] = {
@@ -1317,7 +1317,7 @@ _GOAL_TO_RECOVERY_PHASES_STUDIO_EXTRAS: Dict[str, List[str]] = {
 }
 ```
 
-### §09.11c Richtungsregel (Anti-Inversion-Guard)
+### [RELEASE_MUST] §09.11c Richtungsregel (Anti-Inversion-Guard)
 
 **VERBOTEN**: Recovery-Phase darf nicht in entgegengesetzter Richtung zum Goal-Defizit wirken.
 

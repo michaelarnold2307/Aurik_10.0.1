@@ -1,3 +1,4 @@
+import pytest
 from __future__ import annotations
 
 import numpy as np
@@ -5,6 +6,7 @@ import numpy as np
 from backend.core.phases.phase_55_diffusion_inpainting import DiffusionInpaintingPhase
 
 
+@pytest.mark.unit
 def test_local_strength_respects_protected_zone_cap() -> None:
     sr = 48_000
     audio = np.full(sr, 0.5, dtype=np.float32)

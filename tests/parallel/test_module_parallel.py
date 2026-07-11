@@ -38,6 +38,7 @@ def processor():
     return ModuleParallelProcessor(max_workers=4, enable_parallel=True)
 
 
+@pytest.mark.unit
 class TestBasicProcessing:
     """Test basic module parallel processing."""
 

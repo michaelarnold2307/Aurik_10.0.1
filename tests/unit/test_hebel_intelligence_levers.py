@@ -36,6 +36,7 @@ def short_audio():
 # ─── Hebel 3: PhaseConductor ──────────────────────────────────────────────────
 
 
+@pytest.mark.unit
 class TestPhaseConductor:
     """Tests for backend/core/phase_conductor.py (Hebel 3)."""
 

@@ -1,3 +1,4 @@
+import pytest
 """
 §Spec04 Wall-Time-Budget: Non-Exempt-Only Tracking — Regressions-Test
 
@@ -42,6 +43,7 @@ def _make_audio(duration_s: float = 3.0, sr: int = 48000) -> np.ndarray:
 # ── Kern-Tests ───────────────────────────────────────────────────────────────
 
 
+@pytest.mark.unit
 class TestWallTimeBudgetNonExemptTracking:
     """Stellt sicher dass exempt-Phasen-Zeit das Non-Exempt-Budget nicht aufbraucht."""
 

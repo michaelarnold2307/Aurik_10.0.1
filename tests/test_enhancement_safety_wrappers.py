@@ -211,6 +211,7 @@ def dummy_stereo_widener(audio: np.ndarray, sr: int, width: float = 0.5) -> np.n
 # ============================================================================
 
 
+@pytest.mark.unit
 def test_harmonic_exciter_with_headroom(mono_audio, temp_log_dir):
     """Test harmonic exciter with sufficient headroom."""
     audio, sr = mono_audio

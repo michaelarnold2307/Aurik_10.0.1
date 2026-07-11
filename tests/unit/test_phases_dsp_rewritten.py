@@ -63,6 +63,7 @@ def _assert_phase_result(result, orig_audio, check_clipping: bool = True):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestPhase10Compression:
     def setup_method(self):
         from backend.core.phases.phase_10_compression import CompressionPhase

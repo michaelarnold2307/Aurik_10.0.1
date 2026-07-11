@@ -67,6 +67,7 @@ def _expected_253_metadata() -> dict:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestRestaurierDenkerMetadataPropagation:
     """Stellt sicher dass RestaurierDenker das vollständige UV3-Metadata weitergibt."""
 

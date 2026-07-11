@@ -1,3 +1,4 @@
+import pytest
 """§2.59.14 A1-Test: PhaseInterface.surgical_dispatch() — Zeitfenster-Phasenausführung."""
 import sys
 from pathlib import Path
@@ -12,6 +13,7 @@ class _MockPhase:
     def get_metadata(self): return self._metadata
     def process(self, audio, sample_rate, material_type="unknown", **kwargs): return audio * 2.0
 
+@pytest.mark.unit
 def test_surgical_dispatch_single_zone():
     sr = 48000; audio = np.random.randn(2, sr*2).astype(np.float32)*0.1; orig = audio.copy()
     result = PhaseInterface.surgical_dispatch(_MockPhase(), audio, sr, "vinyl", time_ranges=[(1.0, 1.1)])

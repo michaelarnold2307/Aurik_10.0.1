@@ -1,3 +1,4 @@
+import pytest
 #!/usr/bin/env python3
 """
 Policy-Engine Decision Logic Test
@@ -25,6 +26,7 @@ logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
 
 
+@pytest.mark.unit
 def test_denoise_selections():
     """Test denoise model selection logic (🔬 semantic-aware)."""
     logger.info("\n" + "=" * 60)

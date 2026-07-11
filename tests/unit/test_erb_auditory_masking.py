@@ -70,6 +70,7 @@ def silence_with_click(sr):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestERBFormulas:
     def test_erb_hz_at_1khz(self):
         from backend.core.erb_auditory_masking import erb_hz

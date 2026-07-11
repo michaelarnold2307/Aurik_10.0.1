@@ -1,3 +1,4 @@
+import pytest
 #!/usr/bin/env python3
 """
 Phase 31 ML-Hybrid Integration Test
@@ -68,6 +69,7 @@ def create_test_audio_with_speed_error(
     return audio
 
 
+@pytest.mark.unit
 def test_phase_31_mode(phase, audio, sr, mode: str):
     """Test Phase 31 with specific quality mode."""
     print(f"\n{'=' * 60}")

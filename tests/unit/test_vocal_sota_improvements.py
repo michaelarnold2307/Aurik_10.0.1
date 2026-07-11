@@ -73,6 +73,7 @@ def _formant_freqs_with_cluster(has_cluster: bool, n_frames: int = 50) -> np.nda
 # ─── 1. WORLD formant correction ─────────────────────────────────────────────
 
 
+@pytest.mark.unit
 class TestWorldFormantCorrection:
     """12 tests for _warp_sp_frame and WORLD correct() branch."""
 

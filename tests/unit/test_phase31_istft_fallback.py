@@ -1,3 +1,4 @@
+import pytest
 """Regression-Tests fuer phase_31 iSTFT-Notfallpfad."""
 
 from __future__ import annotations
@@ -14,6 +15,7 @@ def _sine(freq: float = 440.0, dur: float = 1.2, sr: int = SR) -> np.ndarray:
     return (0.45 * np.sin(2.0 * np.pi * freq * t)).astype(np.float64)
 
 
+@pytest.mark.unit
 def test_phase31_istft_exception_uses_ola_fallback(monkeypatch):
     phase = SpeedPitchCorrectionPhase()
     audio = _sine()

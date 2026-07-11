@@ -1,3 +1,4 @@
+import pytest
 """Tests für core/physical_ceiling_estimator.py — Spec §2.33.
 
 ≥ 25 Unit-Tests: Ceiling-Bounds, SNR-Profil, Material-Priors,
@@ -62,6 +63,7 @@ def _current_scores(value: float = 0.70) -> dict:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestResultStructure:
     def test_returns_dataclass(self):
         audio = _sine()

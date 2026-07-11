@@ -56,6 +56,7 @@ def constant_tone():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestFrissonCandidateDetector:
     def test_01_detect_returns_list(self, detector, silence_then_music):
         """detect() must always return a list."""

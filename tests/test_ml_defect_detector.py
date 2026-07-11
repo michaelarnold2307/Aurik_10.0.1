@@ -106,6 +106,7 @@ def trained_defect_detector(defect_dataset):
     return detector
 
 
+@pytest.mark.unit
 class TestDefectFeatureExtractor:
     """Test suite for Defect Feature Extractor."""
 

@@ -25,6 +25,7 @@ def _make_stereo_sine(sr=48000, duration=0.5, freq_L=440.0, freq_R=440.0, amp_L=
     return np.column_stack([L, R])  # (samples, 2)
 
 
+@pytest.mark.unit
 class TestWSOLAStereoBalance:
     """WSOLA darf die L/R-Amplitudenbeziehung nicht zerstören."""
 

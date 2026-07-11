@@ -1,3 +1,4 @@
+import pytest
 """Quality-first policy guard for time-limited phase paths.
 
 Ensures known runtime caps/skip guards are quality-gated in high-end modes
@@ -13,6 +14,7 @@ def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
+@pytest.mark.unit
 def test_known_time_limited_phases_are_quality_gated() -> None:
     root = Path(__file__).resolve().parents[2]
 

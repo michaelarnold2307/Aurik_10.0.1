@@ -1,3 +1,4 @@
+import pytest
 from typing import cast
 
 import numpy as np
@@ -12,6 +13,7 @@ def _test_audio(sr: int = 48000) -> np.ndarray:
     return cast(np.ndarray, 0.2 * np.sin(2.0 * np.pi * 440.0 * t))
 
 
+@pytest.mark.unit
 def test_studio_2026_alias_routes_to_maximum_hybrid(monkeypatch):
     phase = SpeedPitchCorrectionPhase()
     called = {"mode": None}

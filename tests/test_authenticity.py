@@ -135,6 +135,7 @@ def transient_audio(sample_rate):
     return audio, sr
 
 
+@pytest.mark.unit
 class TestBreathDetector:
     """Test BreathDetector."""
 

@@ -1,3 +1,4 @@
+import pytest
 """
 Tests for completeness audit items — ISO 532-1 Zwicker, DeepFilterNet Tier-1,
 SNR > 35 dB bypass, RestorabilityEstimator tier alias.
@@ -17,6 +18,7 @@ import numpy as np
 # ── §4.1b: ISO 532-1 Zwicker Loudness ──────────────────────────────────
 
 
+@pytest.mark.unit
 class TestZwickerLoudness:
     """Tests for dsp/psychoacoustics.py — compute_specific_loudness_zwicker."""
 

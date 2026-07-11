@@ -1,3 +1,4 @@
+import pytest
 """v9.10.120 — Harmonisierte Maximierung aller Musical-Goals-Metriken + PQS.
 
 Tests verifizieren die recalibrierten Divisoren/Multiplikatoren und die
@@ -64,6 +65,7 @@ def _dynamic_music(dur: float = 3.0, seed: int = 99) -> np.ndarray:
 # ═══════════════════════════════════════════════════════════════════════════
 
 
+@pytest.mark.unit
 class TestBrillanzRecalibration:
     """§9.10.120: HF Crest Factor scoring must be more generous for clean HF."""
 

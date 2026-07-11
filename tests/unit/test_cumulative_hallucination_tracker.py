@@ -18,6 +18,7 @@ def _sine(freq: float = 440.0, sr: int = 48000, duration_s: float = 1.0) -> np.n
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 def test_singleton_returns_same_instance():
     from backend.core.dsp.cumulative_hallucination_tracker import get_cumulative_hallucination_tracker
 

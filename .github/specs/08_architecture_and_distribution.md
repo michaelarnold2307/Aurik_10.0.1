@@ -1,4 +1,4 @@
-# Aurik 10 — Spec 08: Architektur, Code-Standards & Distribution
+# Aurik 10 — Spec 08: Architektur, Code-Standards & Distribution | §v10 Pleasantness-First
 
 > Softwareschichten, Code-Konventionen, Frontend-Regeln, Plugin-Policy,
 > CLI, Distribution (AppImage/NSIS), Out-of-the-Box-Pflicht.
@@ -506,7 +506,7 @@ def _check_audio_buffer_size(audio: np.ndarray, file_path: str) -> None:
 **Code-Sync v9.10.130:** Das normative Limit ist auf 4 GB harmonisiert und entspricht
 dem aktuellen UV3-Guard in `backend/core/unified_restorer_v3.py`.
 
-### §3.9.8 Lock-Acquisition-Order — Deadlock-Prävention zwischen ARM und PLM
+### [RELEASE_MUST] §3.9.8 Lock-Acquisition-Order — Deadlock-Prävention zwischen ARM und PLM
 
 **Problem**: `AdaptiveResourceManager` (ARM) und `PluginLifecycleManager` (PLM) halten eigene Locks. Ein zirkulärer Lock-Erwerb (ARM-Lock → PLM-Lock in einem Thread; PLM-Lock → ARM-Lock in einem anderen) ist ein klassisches Deadlock-Muster.
 
@@ -822,7 +822,7 @@ Das Tonträger-Display-System in `Aurik10/ui/modern_window.py` hat **drei unabh�
 
 **Invariante**: Pfad B und C überschreiben Pfad A. Pfad A ist Vorläufig-Anzeige.
 
-### Single Source of Truth — Modul-Level-Konstanten und -Helfer
+### [RELEASE_MUST] Single Source of Truth — Modul-Level-Konstanten und -Helfer
 
 ```python
 # Aurik10/ui/modern_window.py (Modul-Level — NUR HIER definiert)
@@ -875,7 +875,7 @@ logger.debug(
 )
 ```
 
-### Icon-HTML ohne Plaintext-Fallback — Verboten
+### [RELEASE_MUST] Icon-HTML ohne Plaintext-Fallback — Verboten
 
 `_render_carrier_html()` ist die einzige erlaubte Implementierung:
 
@@ -1136,7 +1136,7 @@ _gui_dispatch = pyqtSignal(object)
 self._dispatch_to_gui(lambda: widget.setText("..."))
 ```
 
-### Progress Bar
+### [RELEASE_MUST] Progress Bar
 
 - **`setRange(0, 10000)`** immer — 1 Einheit = 0.01 %
 - Signale senden 0–100, Slot skaliert `v * 100`
@@ -1226,7 +1226,7 @@ Bei fehlendem Backend: `_BRIDGE_AVAILABLE = False` mit 17 Stub-Funktionen.
 | Gating / Schutz | `gate` | `#c0392b` (Rot) | PMGG, Rollback |
 | Ein-/Ausgabe | `io` | `#2c3e50` (Dunkel) | Audio-Eingang, Result |
 
-### Software-Schichten (korrigiert)
+### [RELEASE_MUST] Software-Schichten (korrigiert)
 
 ```
 Frontend["PyQt5 Frontend"] --> Bridge["backend/api/bridge.py (direkte Python-Aufrufe)"]
@@ -1260,7 +1260,7 @@ _gui_dispatch = pyqtSignal(object)
 self._dispatch_to_gui(lambda: widget.setText("..."))
 ```
 
-### Progress Bar
+### [RELEASE_MUST] Progress Bar
 
 - **`setRange(0, 10000)`** immer — 1 Einheit = 0.01 %
 - Signale senden 0–100, Slot skaliert `v * 100`
@@ -1350,7 +1350,7 @@ Bei fehlendem Backend: `_BRIDGE_AVAILABLE = False` mit 17 Stub-Funktionen.
 | Gating / Schutz | `gate` | `#c0392b` (Rot) | PMGG, Rollback |
 | Ein-/Ausgabe | `io` | `#2c3e50` (Dunkel) | Audio-Eingang, Result |
 
-### Software-Schichten (korrigiert)
+### [RELEASE_MUST] Software-Schichten (korrigiert)
 
 ```
 Frontend["PyQt5 Frontend"] --> Bridge["backend/api/bridge.py (direkte Python-Aufrufe)"]

@@ -59,6 +59,7 @@ def _fake_defect_result(material: str = "vinyl") -> MagicMock:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 def test_singleton_returns_same_instance() -> None:
     a = get_phase_interaction_denker()
     b = get_phase_interaction_denker()

@@ -2,7 +2,7 @@
 
 > Legacy-Hinweis: Historischer Bericht aus 2026-02.
 > Inhalte mit historischem Restorer-Integrationsstand oder damaligen Weltklasse-Claims sind nicht normativer
-> Release-Vertrag. Verbindlich sind `.github/specs/01-08` und `docs/CHANGELOG_HISTORY.md`.
+> Release-Vertrag. Verbindlich sind `.github/specs/01-14` und `docs/CHANGELOG_HISTORY.md`.
 
 ## Advanced Vocal Enhancement (90-95% World-Class Quality)
 

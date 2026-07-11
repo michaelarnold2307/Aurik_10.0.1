@@ -95,6 +95,7 @@ def processor():
     return BatchParallelProcessor(n_jobs=2, enable_parallel=True, show_progress=False)
 
 
+@pytest.mark.unit
 class TestBasicProcessing:
     """Test basic batch parallel processing."""
 

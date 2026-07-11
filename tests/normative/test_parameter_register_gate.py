@@ -1,3 +1,4 @@
+import pytest
 """[RELEASE_MUST] §8.5 Globales Parameterregister — automatischer CI-Gate-Test (v9.11.14)
 
 Spec reference:  .github/specs/07_quality_and_tests.md §8.5
@@ -49,6 +50,7 @@ def _spec07_source() -> str:
 # ===========================================================================
 
 
+@pytest.mark.unit
 class TestR01SRContract:
     """Processing-SR=48000 und Analysis-SR=import_sr sind normativ festgelegt."""
 

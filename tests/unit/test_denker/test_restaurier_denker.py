@@ -1,3 +1,4 @@
+import pytest
 """tests/unit/test_denker/test_restaurier_denker.py
 
 Tests für RestaurierDenker — Hauptrestaurierung via UnifiedRestorerV3.
@@ -22,6 +23,7 @@ def _sine(dur: float = 1.0) -> np.ndarray:
 # ─── RestaurierErgebnis ───────────────────────────────────────────────────────
 
 
+@pytest.mark.unit
 class TestRestaurierErgebnisFields:
     def _make(self):
         from denker.restaurier_denker import RestaurierErgebnis

@@ -73,6 +73,7 @@ def stereo_audio():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestTDPSeparate:
     def test_01_separate_returns_two_arrays(self, tdp, sine_440_2s):
         perc, harm = tdp.separate(sine_440_2s, SR)

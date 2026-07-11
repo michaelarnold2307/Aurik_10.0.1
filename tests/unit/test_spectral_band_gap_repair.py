@@ -107,6 +107,7 @@ def _import_phase56():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestImport:
     """Test-01: Import und Klassen-Verfügbarkeit."""
 

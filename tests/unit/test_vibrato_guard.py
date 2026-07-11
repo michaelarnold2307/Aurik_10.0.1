@@ -35,6 +35,7 @@ def _make_sine(freq_hz: float = 440.0, n: int = _N) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestVibratoGuardImport:
     def test_import_function(self):
         from backend.core.dsp.vibrato_guard import check_vibrato_depth_preservation

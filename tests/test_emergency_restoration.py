@@ -112,6 +112,7 @@ def critically_damaged_audio():
 # === Test DamageAnalyzer ===
 
 
+@pytest.mark.unit
 class TestDamageAnalyzer:
     """Test damage analysis."""
 

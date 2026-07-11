@@ -1,3 +1,4 @@
+import pytest
 """Tests für §GOAL_BASELINE_CHECK Optimierungen v9.12.8.
 
 Prio 1: FC-SECONDARY — Sekundärphasen-Injection für below-floor Goals in FeedbackChain
@@ -13,6 +14,7 @@ import numpy as np
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestTriggerMarginWidened:
     def test_margin_covers_proxy_uncertainty(self):
         """Margin 0.97 deckt Proxy-Unsicherheit ±2-3% ab.

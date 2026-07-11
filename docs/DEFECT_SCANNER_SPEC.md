@@ -1,11 +1,11 @@
 # DefectScanner Specification - Aurik 9.x.x
 
-**Version:** 9.12.8  
+**Version:** 9.20.3  
 **Stand:** Mai 2026  
 **Status:** ✅ Production-Ready  
 **Location:** `core/defect_scanner.py` (~2500 lines)
 
-> Hinweis: Verbindlicher Ist-Stand liegt in `.github/specs/01-08` und `docs/CHANGELOG_HISTORY.md`.
+> Hinweis: Verbindlicher Ist-Stand liegt in `.github/specs/01-14` und `docs/CHANGELOG_HISTORY.md`.
 
 ---
 
@@ -177,6 +177,32 @@ PERFORMANCE_OVERHEAD_MAX = 0.10  # <10% of audio duration
 2. **Chunked Processing:** Process in 1-second chunks for memory efficiency
 3. **Parallel Analysis:** All 11 detectors run concurrently (future: multi-threaded)
 4. **Early Exit:** Skip detailed analysis if material type obvious
+
+---
+
+## 5b. §v10 SNR-Adaptive Detection (Juli 2026)
+
+**Prinzip:** Kein blinder Material-Glaube. Jeder Song wird individuell gemessen.
+
+### 5b.1 _estimate_local_snr()
+
+100ms-Fenster-basierte SNR-Schätzung (Median). Liefert 2–40 dB.
+Fließt in ALLE Detektionsschwellen ein.
+
+### 5b.2 Adaptive Click-Detection
+
+- Outlier-Faktor: `clip(8.0 - snr/5.0, 3.5, 8.0)` statt `5.0` fest
+- Strict-Threshold: `clip(16.0 - snr/3.0, 8.0, 16.0)` statt `12.0` fest
+- Floor: `clip(0.15 + snr/200, 0.15, 0.50)` statt `0.35` fest
+
+### 5b.3 Adaptive Tape-Splice
+
+- Jump-Threshold: `clip(local_dyn_range/4, 3.0, 8.0)` dB statt `6.0` dB fest
+
+### 5b.4 Adaptive MATERIAL_SENSITIVITY
+
+- Alle 8 Detektor-Thresholds SNR-skaliert: `clip(30.0/max(5,snr), 0.6, 1.4)`
+- WOW/FLUTTER/PRINT_THROUGH unskaliert (physikalisch an Tonträger gebunden)
 
 ---
 

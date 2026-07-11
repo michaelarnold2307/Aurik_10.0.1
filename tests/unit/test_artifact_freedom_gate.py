@@ -1,3 +1,4 @@
+import pytest
 """
 tests/unit/test_artifact_freedom_gate.py — ArtifactFreedomGate §2.49 Test-Suite (≥ 25 Tests)
 Alle Tests synthetisch, kein ML-Modell erforderlich.
@@ -24,6 +25,7 @@ def _stereo(mono: np.ndarray) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 def test_00_import():
     from backend.core.artifact_freedom_gate import ArtifactFreedomGate, get_artifact_freedom_gate
 

@@ -76,6 +76,7 @@ def make_complex(duration_s: float = 5.0, sr: int = SR) -> np.ndarray:
 # ===========================================================================
 
 
+@pytest.mark.unit
 class TestPsychoacousticMaskingModel:
     """≥ 35 Tests für core/psychoacoustic_masking_model.py"""
 

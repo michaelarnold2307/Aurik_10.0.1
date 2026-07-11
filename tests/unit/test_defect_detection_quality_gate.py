@@ -1,3 +1,4 @@
+import pytest
 from __future__ import annotations
 
 from backend.core.defect_detection_quality_gate import (
@@ -8,6 +9,7 @@ from backend.core.defect_detection_quality_gate import (
 )
 
 
+@pytest.mark.unit
 def test_worldclass_gate_passes_high_recall_precision_locality_and_runtime() -> None:
     cases = [
         DefectBenchmarkCaseResult(

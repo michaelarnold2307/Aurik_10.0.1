@@ -1,3 +1,4 @@
+import pytest
 from types import SimpleNamespace
 
 import numpy as np
@@ -5,6 +6,7 @@ import numpy as np
 from backend.core.unified_restorer_v3 import UnifiedRestorerV3
 
 
+@pytest.mark.unit
 def test_cached_restorability_score_wins_over_estimator():
     score, source, result = UnifiedRestorerV3._resolve_pmgg_restorability_score(
         cached_result=SimpleNamespace(restorability_score=42.0),

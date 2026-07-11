@@ -1,3 +1,4 @@
+import pytest
 """
 Unit tests for GenderDetector.detect() / _detect_f0() / _classify_gender().
 
@@ -46,6 +47,7 @@ def _add_noise(sig: np.ndarray, snr_db: float = 20.0) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestDetectF0:
     """_detect_f0 must return fundamental, not an octave-up harmonic."""
 

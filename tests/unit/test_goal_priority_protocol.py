@@ -1,3 +1,4 @@
+import pytest
 """Tests für core/goal_priority_protocol.py — Spec §2.34.
 
 ≥ 25 Unit-Tests: Prioritätsregeln, Konfliktlösung, Iterations-Abbruch,
@@ -49,6 +50,7 @@ def _gpp() -> GoalPriorityProtocol:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestPriorityMap:
     def test_all_15_goals_in_map(self):
         gpp = _gpp()

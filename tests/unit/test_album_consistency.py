@@ -53,6 +53,7 @@ def _white(dur: float = 2.0, amp: float = 0.1, sr: int = SR) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 def test_singleton_returns_same_instance():
     a = get_album_consistency_pass()
     b = get_album_consistency_pass()

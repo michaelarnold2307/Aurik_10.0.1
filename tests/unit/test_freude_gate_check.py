@@ -1,3 +1,4 @@
+import pytest
 from __future__ import annotations
 
 import json
@@ -23,6 +24,7 @@ def _run_gate(tmp_path: Path, payload: dict, *extra_args: str) -> subprocess.Com
     return subprocess.run(cmd, capture_output=True, text=True, check=False)
 
 
+@pytest.mark.unit
 def test_freude_gate_pass(tmp_path: Path):
     items = [
         {"item_id": f"s{i}", "mushra": 82.0, "enjoyment": 4.4, "fatigue": 2.0, "artifact_flag": False}

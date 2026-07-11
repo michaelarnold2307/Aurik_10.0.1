@@ -1,3 +1,4 @@
+import pytest
 """Tests für PlaybackDeviceProfile (§PDV-1).
 
 Spec: §PDV-1 Translation-EQ für Consumer-Geräte
@@ -6,6 +7,7 @@ Spec: §PDV-1 Translation-EQ für Consumer-Geräte
 import numpy as np
 
 
+@pytest.mark.unit
 class TestPlaybackDeviceProfileModule:
     def test_list_device_ids_not_empty(self):
         from backend.core.playback_device_profile import list_device_ids

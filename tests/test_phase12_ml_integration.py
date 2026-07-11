@@ -12,6 +12,7 @@ import pytest
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 
+@pytest.mark.unit
 def test_phase12_ml_routing():
     """Test Phase 12 with ML routing for different quality modes."""
     print("=" * 80)

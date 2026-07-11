@@ -1,3 +1,4 @@
+import pytest
 """Regression tests for medium detector deduplication in DefectScanner.scan()."""
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ def _silence(sr: int = 48_000, duration_s: float = 0.1) -> np.ndarray:
     return np.zeros(n, dtype=np.float32)
 
 
+@pytest.mark.unit
 def test_scan_uses_cached_forensic_medium_without_second_detect_call() -> None:
     """If forensic_medium_result is provided, no second MediumDetector call is allowed."""
     scanner = DefectScanner()

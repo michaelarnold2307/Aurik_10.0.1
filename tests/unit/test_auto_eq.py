@@ -1,8 +1,10 @@
+import pytest
 import numpy as np
 
 from dsp.auto_eq import AutoEQ
 
 
+@pytest.mark.unit
 def test_auto_eq_process_mono_shape_and_finite() -> None:
     sr = 48000
     t = np.linspace(0.0, 1.0, sr, endpoint=False)

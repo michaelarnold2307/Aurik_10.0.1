@@ -1,10 +1,10 @@
 # Aurik 9 — Intelligentes Musik-Restaurierungssystem
 
-**Version:** 9.12.8 | **Status:** ✅ Produktionsbereit — auf Spitzenqualität ausgerichtet
+**Version:** 9.20.3 | **Status:** ✅ Produktionsbereit — auf Spitzenqualität ausgerichtet
 
 **Datum:** Mai 2026
 
-> Hinweis: Verbindliche Detailstände liegen in `.github/specs/01-08` und `docs/CHANGELOG_HISTORY.md`.
+> Hinweis: Verbindliche Detailstände liegen in `.github/specs/01-14` und `docs/CHANGELOG_HISTORY.md`.
 
 ---
 
@@ -47,7 +47,7 @@
 
 ---
 
-## 🎯 Aurik 9.12.8 — Highlights
+## 🎯 Aurik 9.20.3 — Highlights
 
 ### ✅ Produktionsbereit (Mai 2026)
 
@@ -61,7 +61,7 @@
 - ✅ **CPU/GPU (AMD ROCm/DirectML)** — Mixed-Mode, GPU optional
 - ✅ **100 % offline** nach Installation (keine Cloud)
 
-**Schlüssel-Module (v9.12.8):**
+**Schlüssel-Module (v9.20.3):**
 
 1. **14 Musical Goals** — Brillanz, Wärme, Natürlichkeit, Authentizität, Emotionalität, Transparenz, Bass-Kraft, Groove, Raumtiefe, Timbre-Authentizität, Tonales Zentrum, Mikro-Dynamik, Separation-Treue, Artikulation
 2. **Transient Decoupled Processing (TDP)** — Transienten separat durch Pipeline führen; GrooveMetric +0.03–0.06
@@ -119,7 +119,7 @@ Keine Python-Kenntnisse, kein Terminal, kein `pip install` erforderlich.
 
 ## 🖥️ GPU-Unterstützung (AMD ROCm / DirectML)
 
-Aurik 9.12.8 beschleunigt rechenintensive Phasen (Defect-Scanning, MERT-Embeddings,
+Aurik 9.20.3 beschleunigt rechenintensive Phasen (Defect-Scanning, MERT-Embeddings,
 PSLA, CLAP-Referenz-Matching, Whisper-Tiny-ONNX) automatisch über die GPU, wenn
 verfügbar **und** der Anwender GPU-Compute explizit aktiviert hat.
 

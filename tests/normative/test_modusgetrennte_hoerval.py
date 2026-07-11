@@ -16,6 +16,7 @@ import pytest
 
 
 @pytest.fixture
+@pytest.mark.unit
 def test_audio_mono():
     """3s mono test signal at 48 kHz."""
     sr = 48000

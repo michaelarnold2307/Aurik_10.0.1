@@ -48,6 +48,7 @@ def _make_silence_music_audio(
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 def test_ssip_singleton_returns_same_instance():
     a = get_structural_silence_isolator()
     b = get_structural_silence_isolator()

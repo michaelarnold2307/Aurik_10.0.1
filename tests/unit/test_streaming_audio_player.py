@@ -92,6 +92,7 @@ def _pump(player, frames=1024):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestPrepareAudio:
     """Tests for _prepare() shape normalisation and resampling."""
 

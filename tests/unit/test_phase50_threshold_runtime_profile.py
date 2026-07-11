@@ -1,3 +1,4 @@
+import pytest
 from __future__ import annotations
 
 import numpy as np
@@ -5,6 +6,7 @@ import numpy as np
 from backend.core.phases.phase_50_spectral_repair import SpectralRepairPhase
 
 
+@pytest.mark.unit
 def test_runtime_profile_keys_and_bounds() -> None:
     p = SpectralRepairPhase._compute_threshold_runtime_profile(
         material_key="vinyl",

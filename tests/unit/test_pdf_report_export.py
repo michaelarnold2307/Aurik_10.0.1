@@ -1,3 +1,4 @@
+import pytest
 """Tests for PDF export in audit.processing_report_generator.
 
 Verifies that ReportExporter.export_pdf() produces a valid PDF file
@@ -122,6 +123,7 @@ def _make_full_report() -> ProcessingReport:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestPdfExportBasic:
     def test_export_creates_file(self, tmp_path):
         pdf_path = tmp_path / "report.pdf"

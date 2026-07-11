@@ -1,3 +1,4 @@
+import pytest
 from __future__ import annotations
 
 import numpy as np
@@ -5,6 +6,7 @@ import numpy as np
 from backend.core.phases.phase_01_click_removal import ClickRemovalPhase
 
 
+@pytest.mark.unit
 def test_stereo_sparse_patch_keeps_clean_counter_channel_untouched(monkeypatch) -> None:
     sr = 48_000
     n = sr // 2

@@ -1,3 +1,4 @@
+import pytest
 """
 tests/unit/test_gp_memory_migration.py — Unit-Tests für das GP-Memory-Migrations-Modul (§6.4).
 
@@ -35,6 +36,7 @@ def _write_raw(path: pathlib.Path, content: str) -> None:
 # ─── v1-Dateien ─────────────────────────────────────────────────────────────
 
 
+@pytest.mark.unit
 class TestMigrateV1toV2:
     """Testet Migration von Schema-Version 1 auf 2."""
 

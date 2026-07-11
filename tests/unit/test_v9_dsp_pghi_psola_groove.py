@@ -25,6 +25,7 @@ import pytest
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestPghiReconstructor:
     """Tests für dsp/pghi.py — Phase Gradient Heap Integration."""
 

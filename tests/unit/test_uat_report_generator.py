@@ -1,3 +1,4 @@
+import pytest
 """Unit tests for UAT report generator marker parsing."""
 
 from __future__ import annotations
@@ -7,6 +8,7 @@ from pathlib import Path
 from audit.uat_report_generator import ResultStatus, UATReportGenerator
 
 
+@pytest.mark.unit
 def test_parse_pytest_output_prefers_machine_readable_marker(tmp_path: Path) -> None:
     generator = UATReportGenerator(output_dir=tmp_path, json_output=tmp_path / "uat.json")
     output = "\n".join(

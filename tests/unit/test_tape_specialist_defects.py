@@ -1,3 +1,4 @@
+import pytest
 from __future__ import annotations
 
 import numpy as np
@@ -42,6 +43,7 @@ def _head_clog_signal(secs: float = 5.0) -> np.ndarray:
     return np.clip(audio, -1.0, 1.0)
 
 
+@pytest.mark.unit
 class TestTapeSpecialistDefectScanner:
     def test_material_sensitivity_contains_new_tape_specialists(self) -> None:
         scanner = DefectScanner(sample_rate=SR)

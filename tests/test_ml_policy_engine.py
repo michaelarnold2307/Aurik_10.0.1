@@ -32,6 +32,7 @@ def policy_engine():
     return MLModelPolicyEngine()
 
 
+@pytest.mark.unit
 class TestDenoiseModelSelection:
     """Test denoise model selection logic."""
 

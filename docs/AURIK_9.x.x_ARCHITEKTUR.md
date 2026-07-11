@@ -1,10 +1,10 @@
 # Aurik 9.x.x — Implementierte Architektur
 
 **Stand:** Mai 2026  
-**Version:** 9.12.8  
+**Version:** 9.20.3  
 **Status:** ✅ Produktionsbereit
 
-> Hinweis: Diese Seite ist eine Architekturübersicht. Normative Details stehen in `.github/specs/01-08`.
+> Hinweis: Diese Seite ist eine Architekturübersicht. Normative Details stehen in `.github/specs/01-14`.
 
 ---
 
@@ -84,7 +84,7 @@ assert sample_rate == 48000, f"SR muss 48000 Hz sein, erhalten: {sample_rate}"
 
 ---
 
-## Wichtige neue Module (v9.9–v9.12.8)
+## Wichtige neue Module (v9.9–v9.20.3)
 
 | Modul | Zweck | Position in Pipeline |
 | --- | --- | --- |
@@ -142,4 +142,4 @@ Frontend kommuniziert ausschließlich über API-Schicht oder Qt-Signals/Slots.
 
 ---
 
-**Aurik 9.12.8 — Mai 2026**
+**Aurik 9.20.3 — Mai 2026**

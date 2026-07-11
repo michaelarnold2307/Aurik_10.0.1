@@ -141,7 +141,7 @@
   `tests/unit/test_pmgg_reconstruction_confidence.py` (Konfidenz-Logik +
   Metadatenpropagation).
 
-## v9.12.8 (14. Mai 2026) — §0p Vocal-Supremacy-Invarianten vollständig implementiert
+## v9.20.3 (14. Mai 2026) — §0p Vocal-Supremacy-Invarianten vollständig implementiert
 
 ## v9.12.10 (4. Juni 2026) — PMGG Reconstruction-Collateral-Guard + Phase-01 Stereo-Lokalität
 

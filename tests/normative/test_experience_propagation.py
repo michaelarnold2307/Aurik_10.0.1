@@ -14,6 +14,7 @@ import pytest
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestExperienceMetadataFields:
     """RestorationResult.metadata must contain §2.53 fields."""
 

@@ -16,6 +16,7 @@ from dsp.stereo_width_enhancer import StereoWidthEnhancer
 from dsp.true_peak_limiter import TruePeakLimiter
 
 
+@pytest.mark.unit
 class TestTruePeakLimiter:
     """Tests für True Peak Limiter."""
 

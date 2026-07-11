@@ -1,3 +1,4 @@
+import pytest
 from __future__ import annotations
 
 import json
@@ -6,6 +7,7 @@ from pathlib import Path
 from audit import release_check
 
 
+@pytest.mark.unit
 def test_calculate_release_score_full_compliance_reaches_10() -> None:
     audit_data = [{"results": {"gate_a": True, "gate_b": True}}]
     score = release_check.calculate_release_score(True, [], audit_data)

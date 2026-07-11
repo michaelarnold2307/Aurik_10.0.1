@@ -4,7 +4,7 @@
 
 > Normativer Ist-Stand: `.github/specs/`, `.github/copilot-instructions.md`, `CHANGELOG.md`, `denker/README.md`.
 
-![Tests](https://img.shields.io/badge/tests-285%2B%20Denker%20%2B%2015.000%2B%20gesamt-brightgreen)
+![Tests](https://img.shields.io/badge/tests-285%2B%20Denker%20%2B%2018.400%2B%20gesamt-brightgreen)
 ![DefectTypes](https://img.shields.io/badge/Defekttypen-62%2F62%20erkannt%20%26%20gemappt-brightgreen)
 ![Materials](https://img.shields.io/badge/Materialien-16%20Typen-blue)
 ![Genres](https://img.shields.io/badge/Genres-19%20Profile-blue)
@@ -15,9 +15,9 @@
 
 ---
 
-## 🎯 Was ist Aurik 9.x.x?
+## 🎯 Was ist Aurik 10?
 
-Aurik 9.x.x ist ein **intelligentes, kontextbewusstes Musik- und
+Aurik 10 ist ein **intelligentes, kontextbewusstes Musik- und
 Gesangs-Restaurations-, Reparatur- und Rekonstruktions-Denkersystem**.
 
 Es kombiniert psychoakustisch fundierte DSP, Bayesianische Kausalinferenz,
@@ -152,6 +152,16 @@ DefectScanner (62 Typen)
 - **11 Playback-Profile** (inkl. Car-Sedan, SUV, Bluetooth-Speaker, Club-PA)
 - **ISRC/UPC-Metadaten**, **Multi-Format-Export**
 - **Continuous Learning**: UCB1 + State-Persistenz + Decay-Faktor 0.99
+
+### §v10 Pleasantness-First: Jeder Song individuell (Juli 2026)
+- **SNR-Adaptive Defekterkennung**: Kein blinder Material-Glaube — jeder Song wird gemessen.
+  Click-Thresholds, Tape-Splice, alle 8 Detektoren passen sich dem gemessenen SNR an.
+- **Spectrum-Aware EQ**: Final EQ (Phase 16) + Mastering Polish (Phase 17) messen
+  das IST-Spektrum und skalieren Gains adaptiv. Kein Song bekommt dieselbe EQ.
+- **Harmonic-Aware Saturation**: Phase 17 misst Even/Odd-Harmonic-Ratio —
+  bereits gesättigte Songs bekommen weniger Enhancement.
+- **No-Blind-Trust-Prinzip**: `_estimate_local_snr()`, `_measure_spectral_deviation()`,
+  `_measure_harmonic_density()` — 3 neue Messfunktionen für individuelle Song-Optimierung.
 
 ### Behobene Bugs
 | Bug | Fix |
@@ -411,7 +421,7 @@ TransientDecoupledProcessing → RestorabilityEstimator → EraClassifier
 | Pitch-Tracking mono | CREPE full (85 MB) | pYIN (DSP) |
 | Pitch-Tracking polyphon | BasicPitch (ONNX) | pYIN Multi-Pitch |
 | Audio-Tagging / Genre | PANNs CNN14 (81 KB) | DSP Spectral Fingerprint |
-| Bandbreiten-Erweiterung | AudioSR (5,9 GB, lazy) | Sinusoidal+Stoch. |
+| Bandbreiten-Erweiterung | **BW Harmonic Exciter** (DSP, 0 MB) | AudioSR (5,9 GB, lazy) |
 | Vocos-Vocoder (Synthese) | **Vocos 24 kHz** (52 MB) | HiFi-GAN → PGHI-ISTFT |
 | MOS Musik (ohne Referenz) | **CDPAM** (102 MB) | PQS-DSP (Gammatone) |
 | MOS Musik (mit Referenz) | **ViSQOL v3 `--audio`** | PQS-DSP |
@@ -501,14 +511,23 @@ und `GoalApplicabilityFilter`). Regression in einem Ziel macht das Feature ungü
 
 ## 🧪 Testing & Validation
 
-### Test-Suite
+### Test-Suite (~18.400 Tests, 511 mit Markern)
 
 ```bash
 # Alle Tests
 pytest tests/ --disable-warnings --tb=short
 
-# Unit-Tests (schnell)
-pytest tests/unit -p no:xdist --timeout=30 --tb=short -q
+# Unit-Tests (schnell, alle mit @pytest.mark.unit)
+pytest tests/unit -m unit --timeout=30 --tb=short -q
+
+# Pleasantness-First Tests
+pytest -m pleasantness
+
+# Goal-Achievement Tests (beweisen Weltklasse-Klang)
+pytest -m goal_achievement
+
+# No-Blind-Trust Verifikation
+pytest tests/unit/test_no_blind_trust.py
 
 # Musical Goals
 pytest tests/musical_goals tests/unit -q
@@ -531,7 +550,20 @@ pytest tests/normative/test_modern_window_gui_contract.py -v
 **Test-Mindestanforderung pro neuem Modul:** ≥ 35 Unit-Tests,
 inkl. NaN/Inf-Tests, Bounds-Tests, Mono+Stereo, Edge-Cases, Thread-Safety.
 
-### Ära-Klassifikation & AMRB-Benchmark
+#
+
+### 🔍 Pre-Commit Static-Value-Guard (§v10)
+
+Verhindert blinde statische Werte ohne Song-Messung:
+```bash
+# Manuell ausführen
+python scripts/pre_commit_static_guard.py --ci
+
+# Als pre-commit Hook (automatisch bei jedem Commit)
+# Bereits in .pre-commit-config.yaml aktiviert
+```
+
+## Ära-Klassifikation & AMRB-Benchmark
 
 ```bash
 # Voranalyse läuft automatisch vor jedem CLI- und GUI-Lauf über die Bridge.

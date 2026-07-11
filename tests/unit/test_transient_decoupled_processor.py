@@ -1,3 +1,4 @@
+import pytest
 """Unit-Tests für core/transient_decoupled_processor.py — TransientDecoupledProcessing.
 
 Spec §2.27: HPSS-Trennung, separate(), recombine(), GrooveMetric-Invariante.
@@ -47,6 +48,7 @@ def _impulse_train(secs: float = 2.0, bpm: float = 120.0) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestTransientDecoupledInit:
     def test_01_class_importable(self):
         assert TransientDecoupledProcessing is not None

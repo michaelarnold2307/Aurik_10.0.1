@@ -1,3 +1,4 @@
+import pytest
 """Core tests for §2.36 LyricsGuidedEnhancement production path.
 
 This test file intentionally validates only the authoritative production module:
@@ -24,6 +25,7 @@ def _make_audio(sr: int = 48_000, seconds: float = 1.0) -> np.ndarray:
     return np.clip(audio, -1.0, 1.0).astype(np.float32)
 
 
+@pytest.mark.unit
 def test_singleton_returns_same_instance() -> None:
     a = get_lyrics_guided_enhancement()
     b = get_lyrics_guided_enhancement()

@@ -1,3 +1,4 @@
+import pytest
 """§2.59.11: Garantiert dass chirurgische Zonen NIEMALS den gesamten Song umfassen."""
 import sys
 from pathlib import Path
@@ -6,6 +7,7 @@ _REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_REPO))
 
 
+@pytest.mark.unit
 def test_surgical_zones_are_localized():
     """Stellt sicher dass Zonen aus echten Locations kommen, nicht aus Placeholdern."""
     from backend.core.surgical_defect_analyzer import SurgicalDefectAnalyzer

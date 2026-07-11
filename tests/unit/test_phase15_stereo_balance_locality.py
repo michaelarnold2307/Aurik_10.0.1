@@ -1,3 +1,4 @@
+import pytest
 from __future__ import annotations
 
 import numpy as np
@@ -5,6 +6,7 @@ import numpy as np
 from backend.core.phases.phase_15_stereo_balance import StereoBalancePhaseV2
 
 
+@pytest.mark.unit
 def test_locality_profile_is_event_strength_adaptive() -> None:
     sr = 48000
     profile, coverage = StereoBalancePhaseV2._build_locality_profile(

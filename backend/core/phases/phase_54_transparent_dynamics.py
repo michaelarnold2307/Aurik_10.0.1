@@ -403,6 +403,21 @@ class TransparentDynamicsV1(PhaseInterface):
             control_floor = float(np.clip(0.25 + 0.65 * ((compression_pressure - 0.25) / 0.75), 0.25, 0.90))
         control_strength = float(max(effective_strength, control_floor))
 
+        # ── §v10 Vocal-Transient-Protection ──────────────────────────
+        # Energetische Gesangspassagen: Attack-Transienten der Stimme
+        # dürfen NICHT durch Kompression plattgedrückt werden.
+        # Vocal-Attacks (Consonants, Belting) sind keine Drum-Transients.
+        _panns_singing = float(kwargs.get("panns_singing", 0.0))
+        if _panns_singing >= 0.35:
+            # Reduziere Kompressions-Stärke proportional zur Gesangspräsenz
+            # panns=0.35 → Faktor 0.85, panns=1.0 → Faktor 0.55
+            _vocal_protect = float(np.clip(1.0 - 0.45 * (_panns_singing - 0.35) / 0.65, 0.55, 1.0))
+            control_strength = float(control_strength * _vocal_protect)
+            logger.debug(
+                "§v10 Phase 54 Vocal-Protect: panns=%.2f factor=%.2f control=%.2f",
+                _panns_singing, _vocal_protect, control_strength
+            )
+
         if control_strength <= 1e-6:
             dry = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
             dry = np.clip(dry, -1.0, 1.0)

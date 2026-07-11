@@ -1,3 +1,4 @@
+import pytest
 import unittest
 
 from backend.core.musical_goals.convergence_detector import MusicalGoalsConvergenceDetector
@@ -7,6 +8,7 @@ from backend.core.musical_goals.goal_optimizer import MusicalGoalsOptimizer
 from backend.core.musical_goals.live_monitor import MusicalGoalsLiveMonitor
 
 
+@pytest.mark.unit
 class TestMusicalGoalsLiveMonitoring(unittest.TestCase):
     def setUp(self):
         self.monitor = MusicalGoalsLiveMonitor(

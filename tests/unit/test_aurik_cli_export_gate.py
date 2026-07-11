@@ -1,3 +1,4 @@
+import pytest
 """Unit-Tests für adaptive Export-Gate-Profile in cli/aurik_cli.py."""
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ def _sine(duration_s: float = 1.0, freq: float = 440.0) -> np.ndarray:
     return np.asarray(np.sin(2.0 * np.pi * freq * t), dtype=np.float32)
 
 
+@pytest.mark.unit
 def test_export_signal_signature_returns_finite_metrics() -> None:
     sig = _compute_export_signal_signature(_sine(1.0), SR)
     for key in ("crest_db", "hf_ratio", "transient_ratio", "micro_dynamic_db"):

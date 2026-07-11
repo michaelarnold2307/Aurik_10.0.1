@@ -126,6 +126,7 @@ def character_lost_audio(vinyl_audio):
 # === Tests: Problem Diagnosis ===
 
 
+@pytest.mark.unit
 class TestProblemDiagnosis:
     """Test problem identification."""
 

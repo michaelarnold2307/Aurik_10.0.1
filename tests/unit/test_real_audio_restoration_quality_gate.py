@@ -1,3 +1,4 @@
+import pytest
 from __future__ import annotations
 
 import json
@@ -31,6 +32,7 @@ def _execution_case(**overrides):
     return base
 
 
+@pytest.mark.unit
 def test_restoration_quality_gate_flags_worldclass_gaps() -> None:
     execution_report = {
         "gate": {"runtime_factor": 19.5},

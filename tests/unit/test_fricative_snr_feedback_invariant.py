@@ -59,6 +59,7 @@ def _stereo(mono: np.ndarray) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestMeasureFricativeSNR:
     """§2.8-kompatible SNR-Messung im adaptiven Frikativband."""
 

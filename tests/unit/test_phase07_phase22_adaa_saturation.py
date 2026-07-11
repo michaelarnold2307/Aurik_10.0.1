@@ -54,6 +54,7 @@ def phase22():
 # ──────────────────────────────────────────────────────────────────────────────
 
 
+@pytest.mark.unit
 class TestTanhAdaa07:
     """Tests for HarmonicRestorationPhase._tanh_adaa."""
 

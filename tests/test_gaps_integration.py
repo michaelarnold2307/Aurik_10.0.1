@@ -96,6 +96,7 @@ def severely_damaged_test_audio():
 # === Integration Test Suite 1: Multi-Pass + Delivery Standards ===
 
 
+@pytest.mark.unit
 class TestMultiPassWithDeliveryStandards:
     """Test integration zwischen Multi-Pass Strategy und Delivery Standards."""
 

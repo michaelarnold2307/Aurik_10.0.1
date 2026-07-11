@@ -1,6 +1,6 @@
 # Aurik 9.x.x — Installation Guide
 
-**Version:** 9.12.8  
+**Version:** 9.20.3  
 **Datum:** Mai 2026  
 **Status:** ✅ Production Ready
 

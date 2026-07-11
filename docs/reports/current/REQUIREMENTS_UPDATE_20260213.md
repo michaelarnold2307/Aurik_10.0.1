@@ -1,7 +1,7 @@
 📊 VOLLSTÄNDIGE REQUIREMENTS-AKTUALISIERUNG
 ═══════════════════════════════════════════════════════════════
 Stand: 13. Februar 2026
-Aurik 6.0 - Validierte Produktionsumgebung
+Aurik 9.20.3 - Validierte Produktionsumgebung
 
 🎯 VALIDIERTE VERSIONEN (Kern-Pakete):
 ───────────────────────────────────────

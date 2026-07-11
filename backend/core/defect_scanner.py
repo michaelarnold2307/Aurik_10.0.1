@@ -77,6 +77,38 @@ _scan_cache_lock = threading.Lock()
 _SCAN_CACHE_MAX = 128  # FIFO-Trim bei Überschreitung
 
 
+# ── §v10 SNR-adaptive helper ───────────────────────────────────────────────
+
+
+def _estimate_local_snr(audio: np.ndarray, sample_rate: int) -> float:
+    """Schätzt das lokale SNR für adaptive Threshold-Skalierung.
+
+    SNR ~20 dB (clean) → niedrigere Click-Thresholds (subtile Clicks)
+    SNR ~5 dB (noisy)  → höhere Click-Thresholds (keine False Positives)
+
+    Berechnung: Energie-Verhältnis Signal/Noise in 100ms-Fenstern,
+    Median über alle Fenster als robuste SNR-Schätzung.
+    """
+    mono = audio if audio.ndim == 1 else audio.mean(axis=0)
+    frame_len = int(0.1 * sample_rate)
+    if len(mono) < frame_len * 2:
+        return 20.0
+
+    n_frames = max(1, len(mono) // frame_len)
+    snr_values = np.zeros(n_frames, dtype=np.float64)
+    eps = 1e-12
+
+    for i in range(n_frames):
+        start = i * frame_len
+        end = min(start + frame_len, len(mono))
+        frame = mono[start:end]
+        rms = float(np.sqrt(np.mean(frame**2)) + eps)
+        noise_floor = float(np.percentile(np.abs(frame), 5) + eps)
+        snr_values[i] = 20.0 * np.log10(rms / noise_floor)
+
+    return float(np.clip(np.median(snr_values), 2.0, 40.0))
+
+
 def _audio_scan_cache_key(audio: np.ndarray, sr: int, material: object | None) -> str:
     """Deterministischer Cache-Key für DefectScanner.scan()."""
     h = hashlib.sha256()
@@ -1315,6 +1347,33 @@ class DefectScanner:
         self._codec_disc = make_discriminator(list(_fmd_chain) if isinstance(_fmd_chain, (list, tuple)) else None)
 
         self.thresholds = self.MATERIAL_SENSITIVITY[material_type]
+
+        # §v10 SNR-adaptive threshold scaling: Der Material-Default ist der
+        # AUSGANGSPUNKT, nicht das ENDERGEBNIS. Jeder Song hat ein eigenes SNR,
+        # und Thresholds müssen sich daran anpassen:
+        #   Hohes SNR (clean)  → sensitiver (niedrigerer Threshold)
+        #   Niedriges SNR (noisy) → konservativer (höherer Threshold)
+        # Ausnahme: Defekttypen die physikalisch NUR bei bestimmten Materialien
+        # auftreten (z.B. WOW nur bei analog) — deren Thresholds bleiben unskaliert.
+        _NON_SCALING_DEFECTS: frozenset[DefectType] = frozenset({
+            DefectType.WOW,
+            DefectType.FLUTTER,
+            DefectType.PRINT_THROUGH,
+        })
+        _measured_snr = _estimate_local_snr(
+            audio[: min(len(audio), sample_rate * 5)],
+            sample_rate
+        )
+        _snr_scale = float(np.clip(30.0 / max(5.0, _measured_snr), 0.6, 1.4))
+        for _dt in self.thresholds:
+            if _dt not in _NON_SCALING_DEFECTS:
+                self.thresholds[_dt] = float(np.clip(
+                    self.thresholds[_dt] * _snr_scale, 0.05, 0.98
+                ))
+        logger.debug(
+            "§v10 SNR-adaptive thresholds: snr=%.1fdB scale=%.2f material=%s",
+            _measured_snr, _snr_scale, material_type.name if hasattr(material_type, 'name') else str(material_type)
+        )
 
         # §9.x [RELEASE_MUST] Chain-adaptive threshold merge — Tonträgerkette darf niemals
         # ignoriert werden.  Wenn die Kette Stufen enthält, die für bestimmte Defekttypen
@@ -2925,13 +2984,16 @@ class DefectScanner:
         local_median = float(np.median(diff)) + 1e-10
 
         # --- Anti-FP: outlier-robust threshold ---
-        # Clicks are extreme outliers (>> 5× median diff).  Using only
-        # percentile(99.5) × factor fails for pure tones where the 99.5th
-        # percentile is close to the normal diff maximum.
-        min_outlier_factor = 5.0
+        # Clicks are extreme outliers relative to local signal statistics.
+        # The outlier factor is SNR-ADAPTIVE (§v10): clean recordings have
+        # a well-defined noise floor → lower factor catches subtle clicks.
+        # Noisy recordings have high baseline variation → higher factor
+        # prevents false positives from noise transients.
+        _snr_est = _estimate_local_snr(audio, sample_rate)
+        _outlier_factor = float(np.clip(8.0 - _snr_est / 5.0, 3.5, 8.0))
         base_threshold = max(
             float(np.percentile(diff, 99.9)),
-            local_median * min_outlier_factor,
+            local_median * _outlier_factor,
         )
         threshold_dynamic = self.thresholds[DefectType.CLICKS] * base_threshold
 
@@ -2964,7 +3026,15 @@ class DefectScanner:
             if group_width <= max_click_width:
                 verified_groups.append(group)
 
-        strict_threshold = max(float(np.percentile(diff, 99.99)), local_median * 12.0, 0.35)
+        # ── §v10 SNR-adaptive strict threshold ─────────────────────────
+        # Clean signals: lower strict threshold (catches subtle clicks)
+        # Noisy signals: higher strict threshold (avoids false positives)
+        _strict_factor = float(np.clip(16.0 - _snr_est / 3.0, 8.0, 16.0))
+        strict_threshold = max(
+            float(np.percentile(diff, 99.99)),
+            local_median * _strict_factor,
+            float(np.clip(0.15 + _snr_est / 200.0, 0.15, 0.50))
+        )
         strict_indices = np.where(diff > strict_threshold)[0]
         if len(strict_indices) > 0:
             strict_groups: list[list[int]] = []
@@ -6503,7 +6573,6 @@ class DefectScanner:
             env_win = max(1, int(0.020 * sr))  # 20 ms
             env_hop = max(1, int(0.010 * sr))  # 10 ms
             ref_win_s = 0.500  # 500 ms
-            dip_thresh_db = 3.0
             min_dip_frames = 3  # 30 ms minimum
 
             n_frames = max(0, (n - env_win) // env_hop)
@@ -6524,6 +6593,12 @@ class DefectScanner:
             from scipy.ndimage import percentile_filter  # pylint: disable=import-outside-toplevel
 
             ref_db = percentile_filter(rms_db, percentile=75, size=ref_frames, mode="reflect")
+
+            # §v10 SNR-adaptive dip threshold: Leise Passagen → sensitiver,
+            # laute Passagen → konservativer. Ein 3dB-Dip ist in leisen
+            # Stellen hörbar, in lauten nicht.
+            _local_dyn = float(np.percentile(rms_db, 90) - np.percentile(rms_db, 10) + 1.0)
+            dip_thresh_db = float(np.clip(_local_dyn / 8.0, 2.0, 5.0))
 
             # Dip mask
             dip_mask = rms_db < (ref_db - dip_thresh_db)
@@ -8083,10 +8158,13 @@ class DefectScanner:
             ).copy()
             rms_env = np.sqrt(np.mean(frames**2, axis=1) + 1e-12)
 
-            # Level jumps: sudden RMS change > 6 dB in one frame
+            # Level jumps: SNR-adaptive threshold (§v10).
+            # Leise Passagen: 3 dB Sprung schon auffällig → niedriger Threshold.
+            # Hochdynamische Passagen (Orchester): 8 dB Sprung normal → höher.
             rms_db = 20.0 * np.log10(rms_env + 1e-12)
             level_diffs = np.abs(np.diff(rms_db))
-            jump_threshold = 6.0  # dB
+            _local_dyn_range_db = float(np.percentile(rms_db, 95) - np.percentile(rms_db, 5) + 1.0)
+            jump_threshold = float(np.clip(_local_dyn_range_db / 4.0, 3.0, 8.0))
             jump_indices = np.where(level_diffs > jump_threshold)[0]
 
             if len(jump_indices) == 0:

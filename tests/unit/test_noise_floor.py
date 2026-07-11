@@ -147,6 +147,7 @@ def _detect_musical_noise_events(
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestNoiseFloorMeasurement:
     """Grundlegende Rauschboden-Messung (Referenz-Tests)."""
 

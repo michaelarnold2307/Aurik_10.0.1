@@ -1,3 +1,4 @@
+import pytest
 """Tests for GrooveMetric LF proxy robustness.
 
 Verifies:
@@ -54,6 +55,7 @@ def _compute_onset_times_lf(audio: np.ndarray, sr: int, cutoff: float = 200.0) -
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestGrooveDTWAlignment:
     """Groove metric should detect timing alignment via DTW."""
 

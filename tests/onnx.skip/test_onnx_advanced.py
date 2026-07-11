@@ -50,6 +50,7 @@ def sample_audio_tensor():
     return torch.randn(1, 1, 16000)
 
 
+@pytest.mark.unit
 class TestONNXConverter:
     """Test ONNX converter."""
 

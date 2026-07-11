@@ -27,6 +27,7 @@ from audit.processing_report_generator import (
 )
 
 
+@pytest.mark.unit
 class TestReportSection:
     """Test ReportSection dataclass."""
 

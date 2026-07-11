@@ -1,3 +1,4 @@
+import pytest
 """Tests für TRANSPORT_BUMP – Erkennung, kausales Reasoning und Reparatur.
 
 ≥ 40 Unit-Tests: synthetische Signale, kein echtes Audio.
@@ -121,6 +122,7 @@ def _make_gradual_level_dip_audio(
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestTransportBumpEnum:
     """Enum-Mitgliedschaft und Grundeigenschaften."""
 

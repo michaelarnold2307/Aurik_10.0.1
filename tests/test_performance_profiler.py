@@ -1,3 +1,4 @@
+import pytest
 """
 Tests for Performance Profiler
 ==============================
@@ -15,6 +16,7 @@ import numpy as np
 from usability.performance_profiler import FunctionProfile, PerformanceProfiler, ResourceSnapshot, profile_function
 
 
+@pytest.mark.unit
 class TestResourceSnapshot:
     """Test ResourceSnapshot dataclass"""
 

@@ -70,6 +70,7 @@ class _FakeDefectResult:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestSaveCheckpoint:
     """Tests for save_checkpoint()."""
 

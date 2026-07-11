@@ -1,3 +1,4 @@
+import pytest
 """Regressionstests fuer gemeinsamen De-Esser-Intensitaetsrechner und Phasen-Integration."""
 
 from __future__ import annotations
@@ -44,6 +45,7 @@ class _DummySegmentTimeline:
     language: str = "de"
 
 
+@pytest.mark.unit
 def test_helper_intensity_scales_with_sibilance_pressure_and_affricate_drive():
     from backend.core.dsp.deesser_intensity import compute_optimal_deesser_intensity
 

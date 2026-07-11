@@ -1,3 +1,4 @@
+import pytest
 """Tests for §8.3.1 Tiefen-Immersions-Prinzip.
 
 Verifies the 5 acoustic depth layers that enable a listener to
@@ -78,6 +79,7 @@ def _mono_compat_correlation(audio_stereo: np.ndarray) -> float:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestAirLayer:
     """Air layer must be audible above noise floor."""
 

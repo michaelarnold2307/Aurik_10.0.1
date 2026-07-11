@@ -1,3 +1,4 @@
+import pytest
 """Tests for Micro-Temporal Envelope Fidelity (MTEF) module.
 
 Tests: ≥ 35 — Abdeckung: measure, morph, envelope, scales, edge-cases, mono, stereo, singleton
@@ -40,6 +41,7 @@ def _make_am_signal(dur_s: float = 1.0, carrier: float = 440.0, mod_rate: float 
 # ── MTEFResult dataclass ─────────────────────────────────────────────────────
 
 
+@pytest.mark.unit
 def test_mtef_result_fields():
     r = MTEFResult(
         pearson_attack=0.95,

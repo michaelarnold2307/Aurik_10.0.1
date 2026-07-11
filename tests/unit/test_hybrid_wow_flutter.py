@@ -1,6 +1,8 @@
+import pytest
 import numpy as np
 
 
+@pytest.mark.unit
 def test_polyphonic_implausible_speed_curve_falls_back_to_pyin(monkeypatch):
     from backend.core.hybrid.hybrid_wow_flutter import PolyphonicSpeedCurveEstimator
 

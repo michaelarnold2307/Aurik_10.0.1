@@ -27,6 +27,7 @@ def _stereo(sr: int = 48000, duration: float = 3.0) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 def test_stem_level_restorer_singleton():
     from backend.core.dsp.stem_level_restorer import get_stem_level_restorer
 

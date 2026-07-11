@@ -1,8 +1,10 @@
+import pytest
 import numpy as np
 
 from dsp.multiband_compressor import MultibandCompressor
 
 
+@pytest.mark.unit
 def test_multiband_compressor_reduces_peaks():
     sr = 44100
     t = np.linspace(0, 1, sr, endpoint=False)

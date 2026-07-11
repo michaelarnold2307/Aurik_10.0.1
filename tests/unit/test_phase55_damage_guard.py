@@ -1,3 +1,4 @@
+import pytest
 from __future__ import annotations
 
 import numpy as np
@@ -5,6 +6,7 @@ import numpy as np
 from backend.core.phases import phase_55_diffusion_inpainting as phase55
 
 
+@pytest.mark.unit
 def test_process_channel_skips_ml_plugins_on_thrashing(monkeypatch):
     audio = np.full(512, 0.02, dtype=np.float32)
     audio[200:260] = 0.0

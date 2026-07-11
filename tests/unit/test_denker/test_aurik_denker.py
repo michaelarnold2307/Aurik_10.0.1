@@ -102,6 +102,7 @@ def _make_exzellenz_mock(audio: np.ndarray, versa_mos: float = 0.0) -> MagicMock
 # ─── AurikErgebnis-Dataclass-Tests ────────────────────────────────────────────
 
 
+@pytest.mark.unit
 class TestAurikErgebnis:
     def _make(self, chain_info=None) -> AurikErgebnis:
         from denker.aurik_denker import AurikErgebnis

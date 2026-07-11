@@ -1,3 +1,4 @@
+import pytest
 """Tests für v9.10.113-Features: Phase-40 Studio-2026-LUFS, Phase-09-Severity-Blend,
 Phase-29-HF-G-Floor, Phase-55-AR-Order.
 
@@ -20,6 +21,7 @@ import inspect
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestPhase40LufsStudio2026:
     """Phase 40 muss im Studio-2026- und Maximum-Modus immer target_lufs=-14 setzen."""
 

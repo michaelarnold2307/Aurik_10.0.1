@@ -1,3 +1,4 @@
+import pytest
 """Unit-Tests für backend/core/clipping_detection.py — §6.3 CLIPPING vs. SOFT_SATURATION.
 
 ≥ 35 Tests:
@@ -97,6 +98,7 @@ def _make_clean_signal(amp: float = 0.3, freq: float = 440.0, dur: float = 0.5) 
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestClippingTypeEnum:
     def test_01_enum_has_clipping(self):
         assert ClippingType.CLIPPING.value == "clipping"

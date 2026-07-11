@@ -1,3 +1,4 @@
+import pytest
 """Unit-Tests: IntermodulationReductionPhase._compute_imd_profile() (§2.56)."""
 
 import numpy as np
@@ -9,6 +10,7 @@ def _profile(material: str, qm: str = "balanced", rest: float = 50.0) -> dict:
     return IntermodulationReductionPhase._compute_imd_profile(material, qm, rest)
 
 
+@pytest.mark.unit
 def test_vinyl_less_sensitive_than_cd():
     vinyl = _profile("vinyl")
     cd = _profile("cd_digital")

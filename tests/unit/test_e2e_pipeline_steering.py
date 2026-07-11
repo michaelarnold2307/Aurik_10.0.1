@@ -43,6 +43,7 @@ def _make_stereo_defective() -> np.ndarray:
     return np.stack([mono, mono * 0.85], axis=1).astype(np.float32)
 
 
+@pytest.mark.unit
 class TestE2EPipeline:
     """End-to-End Tests mit synthetischem Defekt-Audio."""
 

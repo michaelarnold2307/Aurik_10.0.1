@@ -1,3 +1,4 @@
+import pytest
 """
 Test: 2 Magic Buttons in Aurik 9.0
 ====================================
@@ -15,6 +16,7 @@ import numpy as np
 sys.path.insert(0, ".")
 
 from backend.core.ai_framework import AurikAIFramework
+@pytest.mark.unit
 
 
 def generate_test_audio(sample_rate=48000, duration=3.0):

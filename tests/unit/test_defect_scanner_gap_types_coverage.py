@@ -1,3 +1,4 @@
+import pytest
 from __future__ import annotations
 
 import numpy as np
@@ -19,6 +20,7 @@ def _make_test_audio(seconds: float = 1.2) -> np.ndarray:
     return np.clip(x.astype(np.float32), -1.0, 1.0)
 
 
+@pytest.mark.unit
 def test_scanner_includes_gap_defect_types_with_valid_ranges() -> None:
     scanner = DefectScanner(sample_rate=SR)
     audio = _make_test_audio()

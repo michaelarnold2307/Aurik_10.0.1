@@ -68,6 +68,7 @@ def _assert_phase_result(result, orig_audio, *, check_clipping: bool = True, cli
 # ===========================================================================
 # Phase 11 – Limiting
 # ===========================================================================
+@pytest.mark.unit
 class TestPhase11Limiting:
     def setup_method(self):
         from backend.core.phases.phase_11_limiting import LimitingPhase

@@ -1,3 +1,4 @@
+import pytest
 """
 tests/unit/test_v99_narrator.py — RestorationNarrator Test-Suite (≥ 35 Tests)
 
@@ -68,6 +69,7 @@ def _base_narrate(**overrides):
 # ===========================================================================
 
 
+@pytest.mark.unit
 class TestNarratorResult:
     def test_01_result_has_required_fields(self):
         """NarratorResult enthält alle Pflichtfelder."""

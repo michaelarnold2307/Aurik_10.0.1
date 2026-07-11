@@ -9,6 +9,7 @@ def _audio(dur=2.0, stereo=True):
     m=m.astype(np.float32)
     return np.stack([m,m*0.9],axis=1) if stereo else m
 
+@pytest.mark.unit
 class TestStudio2026Chain:
     def test_01_init(self):
         from backend.core.studio2026_chain import reprocess_studio2026, Studio2026Result

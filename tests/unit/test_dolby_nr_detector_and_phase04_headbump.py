@@ -58,6 +58,7 @@ def tape_with_dolby_b_sim():
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
+@pytest.mark.unit
 class TestDolbyNRDetectorFunctions:
     """Tests for detect_dolby_encoding and apply_inverse_filter."""
 

@@ -3825,6 +3825,23 @@ class PerPhaseMusicalGoalsGate:
         if sr != 48000:
             logger.debug("PMGG: SR=%s (nicht 48000) — Goal-Messung läuft trotzdem", sr)
 
+        # ── §v10 Input/Output-Validation ─────────────────────────────
+        # Validiert Input-Audio vor Phase-Ausführung. NaN/Inf/corrupted
+        # audio würde Goal-Scores verfälschen und Phasen crashen lassen.
+        if not np.all(np.isfinite(audio)):
+            logger.error("PMGG wrap_phase: Input-Audio enthält NaN/Inf — Phase %s übersprungen", phase_id)
+            _safe = np.nan_to_num(audio, nan=0.0, posinf=1.0, neginf=-1.0)
+            _safe = np.clip(_safe, -1.0, 1.0)
+            return _safe, scores_before or {}, PhaseGateLogEntry(
+                phase_id=phase_id,
+                action="validation_error",
+                regression=0.0,
+                strength=0.0,
+                rms_drop_db=0.0,
+                hpe_delta=0.0,
+                metadata={"error": "input_contains_nan_inf"},
+            )
+
         if phase_kwargs is None:
             phase_kwargs = {}
 

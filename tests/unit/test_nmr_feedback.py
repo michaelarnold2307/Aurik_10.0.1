@@ -1,3 +1,4 @@
+import pytest
 """Tests für backend/core/dsp/nmr_feedback.py — NMR-Feedback-Modul.
 
 Abdeckung:
@@ -33,6 +34,7 @@ def _clean_sine(freq_hz: float = 440.0, duration_s: float = 1.0, amplitude: floa
     return out
 
 
+@pytest.mark.unit
 class TestNMRResult:
     """NMRResult dataclass — Grundattribute."""
 

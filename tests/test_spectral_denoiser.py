@@ -1,8 +1,10 @@
+import pytest
 import numpy as np
 
 from dsp.spectral_denoiser import SpectralDenoiser
 
 
+@pytest.mark.unit
 def test_spectral_denoiser_reduces_noise():
     sr = 16000
     t = np.linspace(0, 1, sr, endpoint=False)

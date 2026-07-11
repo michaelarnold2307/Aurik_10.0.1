@@ -1,8 +1,10 @@
+import pytest
 import numpy as np
 
 from plugins.deepfilternet_v3_ii_plugin import _DF_ORDER, DeepFilterNetV3IIPlugin
 
 
+@pytest.mark.unit
 def test_deepfilternet_v3_ii_plugin_aurik90():
     np.random.randn(16000).astype(np.float32)
     plugin = DeepFilterNetV3IIPlugin()

@@ -1,3 +1,4 @@
+import pytest
 """
 Unit tests for backend/core/dsp/silence_mask.py
 
@@ -49,6 +50,7 @@ def _breath(duration_s: float = 0.3, sr: int = 48_000, level_dbfs: float = -46.0
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestModuleImport:
     def test_module_imports_cleanly(self):
         """silence_mask.py kann fehlerfrei importiert werden."""

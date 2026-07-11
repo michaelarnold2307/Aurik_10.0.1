@@ -1,3 +1,4 @@
+import pytest
 """
 Test suite for backend/quality_control.py - QualityControl class
 Tests non-destructive checks, A/B tests, psychoacoustic scoring
@@ -13,6 +14,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from backend.quality_control import QualityControl
 
 
+@pytest.mark.unit
 def test_quality_control_initialization():
     """Test QualityControl initializes with empty logs"""
     qc = QualityControl()

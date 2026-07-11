@@ -1,9 +1,11 @@
+import pytest
 """§2.60.2: Normative-Gate — Denker-Intelligenz & PhaseEffectCatalog-Korrektheit."""
 import sys
 from pathlib import Path
 _REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_REPO))
 
+@pytest.mark.unit
 def test_catalog_has_all_required_phases():
     from backend.core.phase_effect_catalog import PHASE_EFFECT_CATALOG
     required = ["phase_01_click_removal","phase_02_hum_removal","phase_03_denoise",

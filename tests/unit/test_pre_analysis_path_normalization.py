@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 
+@pytest.mark.unit
 def test_path_normalization_absolute_vs_relative():
     """Verify os.path.normpath(os.path.realpath()) works correctly."""
     with tempfile.TemporaryDirectory() as tmpdir:

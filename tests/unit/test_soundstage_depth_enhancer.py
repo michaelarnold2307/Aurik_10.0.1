@@ -1,3 +1,4 @@
+import pytest
 import numpy as np
 
 from dsp.soundstage_depth_enhancer import SoundstageDepthEnhancer
@@ -11,6 +12,7 @@ def _stereo_noise(sr: int = 48000, dur_s: float = 1.0) -> np.ndarray:
     return np.stack([left, right], axis=1).astype(np.float64)
 
 
+@pytest.mark.unit
 def test_soundstage_depth_enhancer_stereo_shape_and_finite() -> None:
     audio = _stereo_noise()
     enh = SoundstageDepthEnhancer(depth_amount=0.6, room_size=0.5)

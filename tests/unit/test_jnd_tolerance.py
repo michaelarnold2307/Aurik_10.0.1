@@ -12,6 +12,7 @@ import numpy as np
 import pytest
 
 
+@pytest.mark.unit
 class TestResolveJNDToleranceDB:
     """resolve_jnd_tolerance_db — Frequenzabhängige JND-Toleranz."""
 

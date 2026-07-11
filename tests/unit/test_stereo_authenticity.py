@@ -1,3 +1,4 @@
+import pytest
 """Pflicht-Tests für StereoAuthenticitiyInvariant (§2.18).
 
 Testkonventionen:
@@ -75,6 +76,7 @@ def _mono_1d(duration_s: float = 3.0) -> np.ndarray:
 # ---------------------------------------------------------------------------
 # Klasse 1: StereoAuthResult-Felder
 # ---------------------------------------------------------------------------
+@pytest.mark.unit
 class TestStereoAuthResultFields:
     def test_01_check_returns_result_instance(self) -> None:
         """check() gibt ein StereoAuthResult-Objekt zurück."""

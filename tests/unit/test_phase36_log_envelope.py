@@ -46,6 +46,7 @@ def _rel_samp(ms: float = REL_MS) -> int:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestEnvelopeApi:
     def test_output_shape_matches_input(self, shaper):
         n = 4800

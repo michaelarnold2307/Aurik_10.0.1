@@ -1,3 +1,4 @@
+import pytest
 """Unit-Tests für core/genre_classifier.py — GermanSchlagerClassifier.
 
 Spec §2.19: 7-Schicht-Ensemble Zero-Shot-Schlager-Erkennung.
@@ -70,6 +71,7 @@ def _repetitive_signal(sr: int = 48000, block_secs: float = 8.0, repeats: int = 
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestGenreClassifierImport:
     def test_01_import_classifier_class(self):
         assert GermanSchlagerClassifier is not None

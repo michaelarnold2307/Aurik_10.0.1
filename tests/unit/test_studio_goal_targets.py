@@ -1,8 +1,10 @@
+import pytest
 import numpy as np
 
 from backend.core.studio_goal_targets import estimate_song_goal_targets
 
 
+@pytest.mark.unit
 def test_legacy_era_targets_reduce_brilliance_in_restoration():
     old = estimate_song_goal_targets(
         is_studio_2026=False,

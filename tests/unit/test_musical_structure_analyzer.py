@@ -29,6 +29,7 @@ def analyzer():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 def test_short_audio_returns_empty_structure(analyzer):
     audio = np.zeros(SR * 10, dtype=np.float32)
     structure = analyzer.analyze(audio, SR)

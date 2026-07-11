@@ -1,8 +1,10 @@
+import pytest
 """Unit-Tests fuer den zentralen Phase-Strength-Contract."""
 
 from backend.core.phase_strength_contract import resolve_phase_strength_contract
 
 
+@pytest.mark.unit
 def test_strength_contract_defaults_are_stable():
     ctx = resolve_phase_strength_contract({})
     assert ctx["phase_locality_factor"] == 1.0

@@ -1,3 +1,4 @@
+import pytest
 """
 tests/unit/test_v99_genre_schlager.py — GermanSchlagerClassifier Test-Suite (≥ 35 Tests)
 Alle Tests synthetisch, kein ML-Modell-Download erforderlich.
@@ -64,6 +65,7 @@ def _repeat_block(dur: float = 40.0) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 def test_00_import_module():
     from backend.core.genre_classifier import GermanSchlagerClassifier
 

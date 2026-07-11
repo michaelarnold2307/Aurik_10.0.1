@@ -1,3 +1,4 @@
+import pytest
 import numpy as np
 
 from backend.core.defect_scanner import MaterialType
@@ -9,6 +10,7 @@ def _rms_db(x: np.ndarray) -> float:
     return float(20.0 * np.log10(np.sqrt(np.mean(xr**2) + 1e-12)))
 
 
+@pytest.mark.unit
 def test_phase12_loudness_guard_limits_large_drop() -> None:
     phase = WowFlutterFix()
     n = 48000

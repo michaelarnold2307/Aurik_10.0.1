@@ -56,6 +56,7 @@ def _shift_integer(signal: np.ndarray, delay_samples: int) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestEstimateDelay:
     def test_zero_delay_returns_zero(self):
         sig = _make_tone(440.0)

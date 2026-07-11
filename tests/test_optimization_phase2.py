@@ -56,6 +56,7 @@ from backend.core.optimization.uncertainty_quantification import (
 # ============================================================================
 
 
+@pytest.mark.unit
 class TestNeuralArchitectureSearch:
     """Tests for NAS components."""
 

@@ -28,6 +28,7 @@ def _make_audio(shape=(48000,)) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestG3ConservativeGoalWeights:
     """§2.56 Gap G3: wenn SGI und Label-Fallback beide fehlschlagen,
     darf self._song_goal_weights NICHT None sein."""

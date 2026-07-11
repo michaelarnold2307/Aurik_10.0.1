@@ -43,6 +43,7 @@ def _signal_with_transient(
     return np.clip(audio, -1.0, 1.0)
 
 
+@pytest.mark.unit
 class TestForwardMaskingZone:
     """ForwardMaskingZone dataclass — Attribute."""
 

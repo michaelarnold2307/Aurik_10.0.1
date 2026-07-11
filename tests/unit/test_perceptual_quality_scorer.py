@@ -1,3 +1,4 @@
+import pytest
 """Unit-Tests für core/perceptual_quality_scorer.py — PerceptualQualityScorer.
 
 Spec §2.6: Gammatone-NSIM + MCD + LUFS + MOS-Mapping für Musik-Qualitätsbewertung.
@@ -43,6 +44,7 @@ def _stereo(secs: float = 1.0) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestPQSImport:
     def test_01_class_importable(self):
         assert PerceptualQualityScorer is not None

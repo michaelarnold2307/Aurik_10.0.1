@@ -32,6 +32,7 @@ def _register_fake(mgr: PluginLifecycleManager, name: str, unloaded: dict[str, b
     mgr.register(name, size_gb=1.0, unload_fn=_unload)
 
 
+@pytest.mark.unit
 class TestEvictForPhaseWindow:
     """evict_for_phase_window schützt Modelle aller anstehenden Phasen."""
 

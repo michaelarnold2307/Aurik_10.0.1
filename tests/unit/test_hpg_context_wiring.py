@@ -18,6 +18,7 @@ import pytest
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestHPGEvaluateRestoration:
     """Unit-Tests für HolisticPerceptualGate.evaluate_restoration() Kontext-Parameter."""
 

@@ -1,3 +1,4 @@
+import pytest
 from __future__ import annotations
 
 import json
@@ -6,6 +7,7 @@ from pathlib import Path
 from audit.build_voice_first_audit_snapshot import build_snapshot
 
 
+@pytest.mark.unit
 def test_build_snapshot_normalizes_legacy_voice_first_keys(tmp_path: Path) -> None:
     src = tmp_path / "audit_trail.json"
     src.write_text(

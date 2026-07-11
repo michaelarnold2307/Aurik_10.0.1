@@ -21,6 +21,7 @@ def _make_silence(duration_s: float = 4.0) -> np.ndarray:
     return np.zeros(int(duration_s * SR), dtype=np.float32)
 
 
+@pytest.mark.unit
 class TestTemporalContinuityResultDataclass:
     def test_fields_present(self):
         r = TemporalContinuityResult(ok=True, variance_ratio=1.2, phase_id="phase_03")

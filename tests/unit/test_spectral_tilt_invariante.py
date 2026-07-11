@@ -30,6 +30,7 @@ def _make_audio(duration_s: float = 2.0, amplitude: float = 0.3) -> np.ndarray:
     return filtered
 
 
+@pytest.mark.unit
 class TestSpectralTiltInvariantConstants:
     """_TILT_MATERIAL_TOLERANCE must have all key material entries."""
 

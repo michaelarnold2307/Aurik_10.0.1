@@ -1,3 +1,4 @@
+import pytest
 """Unit-Tests für backend/core/pipeline_main.py.
 
 Spec §2.1: AurikAutonomousPipeline (primär).
@@ -71,6 +72,7 @@ def _make_pipeline_with_mock_engine(audio: np.ndarray, mode=ProcessingMode.RESTO
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestImportAndConstants:
     def test_01_autonomous_pipeline_importable(self):
         assert AurikAutonomousPipeline is not None

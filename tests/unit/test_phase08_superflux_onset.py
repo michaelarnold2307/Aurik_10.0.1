@@ -59,6 +59,7 @@ def _impulse_train(n_impulses: int, dur: float, amp: float = 0.8) -> np.ndarray:
 # ──────────────────────────────────────────────────────────────────────────────
 
 
+@pytest.mark.unit
 class TestSuperfluxReturnContract:
     def test_returns_two_arrays(self, phase):
         audio = _sine(440.0, 0.5)

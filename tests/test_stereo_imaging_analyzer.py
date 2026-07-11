@@ -24,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from dsp.stereo_imaging_analyzer import StereoImagingAnalyzer, StereoImagingFixer
 
 
+@pytest.mark.unit
 class TestPhaseCorrelationAnalysis:
     """Test phase correlation analysis."""
 

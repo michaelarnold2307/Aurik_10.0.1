@@ -1,3 +1,4 @@
+import pytest
 """
 tests/unit/test_i18n.py — Unit-Tests für das i18n-Framework (§3.5).
 
@@ -13,6 +14,7 @@ from typing import Any
 from Aurik10.i18n import get_language, set_language, t
 
 
+@pytest.mark.unit
 class TestSetLanguage:
     """Tests für set_language()."""
 

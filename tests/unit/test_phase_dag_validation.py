@@ -1,8 +1,10 @@
+import pytest
 """
 Tests für PhaseDAG / validate_phase_order (§7.5a).
 """
 
 
+@pytest.mark.unit
 class TestPhaseDagImport:
     def test_import_ok(self):
         from backend.core.phase_dag import HARD_BEFORE_CONSTRAINTS, validate_phase_order

@@ -71,6 +71,7 @@ def loud_audio():
 # ===== LUFSNormalizer Tests =====
 
 
+@pytest.mark.unit
 class TestLUFSNormalizer:
     def test_initialization(self):
         """Test LUFSNormalizer initialization"""

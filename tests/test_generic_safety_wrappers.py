@@ -121,6 +121,7 @@ def aggressive_processor(audio, sr, **kwargs):
 # ============================================================================
 
 
+@pytest.mark.unit
 class TestGenericNoiseReductionSafety:
     """Tests for GenericNoiseReductionSafety wrapper."""
 

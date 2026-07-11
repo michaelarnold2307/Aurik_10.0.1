@@ -64,6 +64,7 @@ def complex_tone(sr):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestERBGrid:
     def test_centre_frequencies_count(self):
         from backend.core.tfs_preservation_guard import _erb_centre_frequencies

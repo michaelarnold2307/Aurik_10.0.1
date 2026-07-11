@@ -1,3 +1,4 @@
+import pytest
 """
 tests/unit/test_progressive_quality_mode.py — ProgressiveQualityMode Test-Suite (≥ 15 Tests)
 Alle Tests synthetisch, kein Datei-I/O, SR = 48_000.
@@ -26,6 +27,7 @@ def _silence(dur: float = 3.0) -> np.ndarray:
 # ─── Tests ────────────────────────────────────────────────────────────────────
 
 
+@pytest.mark.unit
 def test_00_import():
     from backend.core.progressive_quality_mode import (
         PreviewResult,

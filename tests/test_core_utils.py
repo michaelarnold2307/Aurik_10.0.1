@@ -1,3 +1,4 @@
+import pytest
 """
 Test suite for core/core_utils.py
 Tests basic utility functions: compute_rms, compute_loudness, audio_stats
@@ -14,6 +15,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from backend.core.core_utils import audio_stats, compute_loudness, compute_rms, log_message
 
 
+@pytest.mark.unit
 def test_compute_rms_simple():
     """Test RMS computation for simple signals"""
     # DC signal

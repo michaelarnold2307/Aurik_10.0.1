@@ -1,3 +1,4 @@
+import pytest
 """Unit-Tests: SpectralBandGapRepairPhase._compute_band_gap_profile() (§2.56)."""
 
 import numpy as np
@@ -13,6 +14,7 @@ def _profile(material: str, qm: str = "balanced", rest: float = 50.0) -> dict:
     return SpectralBandGapRepairPhase._compute_band_gap_profile(material, qm, rest)
 
 
+@pytest.mark.unit
 def test_tape_has_lower_confidence_gate_than_cd():
     tape = _profile("tape")
     cd = _profile("cd_digital")

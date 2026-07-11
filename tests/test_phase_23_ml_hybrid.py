@@ -1,3 +1,4 @@
+import pytest
 #!/usr/bin/env python3
 """
 Test Phase 23 ML-Hybrid Integration
@@ -68,6 +69,7 @@ def create_test_audio(duration: float = 2.0, sample_rate: int = 44100) -> np.nda
     return audio
 
 
+@pytest.mark.unit
 def test_quality_modes():
     """Test Phase 23 in all quality modes."""
     print("\n" + "=" * 70)

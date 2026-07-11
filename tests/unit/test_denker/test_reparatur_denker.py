@@ -57,6 +57,7 @@ def _make_reparatur_ergebnis():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestReparaturErgebnisFields:
     """01–06: Struktur von ReparaturErgebnis."""
 

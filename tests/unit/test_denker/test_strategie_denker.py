@@ -40,6 +40,7 @@ def _make_defekt_ergebnis(primary_defect: str = "hiss", confidence: float = 0.7)
 # ─── StrategieErgebnis ────────────────────────────────────────────────────────
 
 
+@pytest.mark.unit
 class TestStrategieErgebnisFields:
     def _make(self):
         from denker.strategie_denker import StrategieErgebnis

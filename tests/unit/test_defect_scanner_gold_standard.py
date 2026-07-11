@@ -138,6 +138,7 @@ def _get_severity(result, defect_name: str) -> float:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestCleanAudioFalsePositiveRate:
     """Sauberes Audio darf keine Kern-Defekte schwer flaggen (Precision-Guard)."""
 

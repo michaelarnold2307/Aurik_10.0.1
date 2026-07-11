@@ -57,6 +57,7 @@ def processed_audio(sample_audio):
 # =============================================================================
 
 
+@pytest.mark.unit
 class TestBasicUndoRedo:
     """Test basic undo/redo functionality."""
 

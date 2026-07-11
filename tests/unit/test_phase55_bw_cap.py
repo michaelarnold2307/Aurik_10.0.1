@@ -38,6 +38,7 @@ def _spectral_energy_above_hz(audio: np.ndarray, sr: int, cutoff_hz: float) -> f
 # ── _MATERIAL_BW_CAP_HZ Tabelleninhalt ────────────────────────────────────
 
 
+@pytest.mark.unit
 def test_bw_cap_table_has_wax_cylinder():
     """_MATERIAL_BW_CAP_HZ enthält wax_cylinder ≤ 5 kHz (§0 VERBOTEN-Invariante)."""
     from backend.core.phases.phase_55_diffusion_inpainting import _MATERIAL_BW_CAP_HZ

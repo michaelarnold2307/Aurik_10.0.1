@@ -17,6 +17,7 @@ if str(_REPO) not in sys.path:
 # goosebumps_factor
 # ═══════════════════════════════════════════════════════════════════════════
 
+@pytest.mark.unit
 class TestGoosebumpsFactor:
     """Stellt sicher, dass GoosebumpsResult korrekt definiert ist und compute_goosebumps läuft."""
 

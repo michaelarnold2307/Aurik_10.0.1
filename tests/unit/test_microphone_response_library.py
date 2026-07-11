@@ -1,3 +1,4 @@
+import pytest
 """
 Tests für MicrophoneResponseLibrary (§6.4a).
 """
@@ -8,6 +9,7 @@ from pathlib import Path
 import numpy as np
 
 
+@pytest.mark.unit
 class TestMicrophoneResponseLibraryImport:
     def test_import_ok(self):
         from backend.core.microphone_response_library import (

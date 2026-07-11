@@ -1,3 +1,4 @@
+import pytest
 """Unit tests for phase_26_dynamic_range_expansion._compute_expansion_profile (§2.56, §6.2b)."""
 
 import numpy as np
@@ -5,6 +6,7 @@ import numpy as np
 from backend.core.phases.phase_26_dynamic_range_expansion import DynamicRangeExpansion
 
 
+@pytest.mark.unit
 class TestExpansionProfile:
     def _p(self, material="vinyl", qm="balanced", rest=50.0):
         return DynamicRangeExpansion._compute_expansion_profile(material, qm, rest)

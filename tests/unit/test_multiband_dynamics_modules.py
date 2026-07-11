@@ -1,3 +1,4 @@
+import pytest
 import numpy as np
 
 from dsp.multiband_expander import MultibandExpander
@@ -13,6 +14,7 @@ def _mixture(sr: int = 48000, dur_s: float = 1.0) -> np.ndarray:
     return x.astype(np.float64)
 
 
+@pytest.mark.unit
 def test_multiband_gate_supports_more_than_three_bands() -> None:
     audio = _mixture()
     proc = MultibandGate(bands=5, crossovers=(180.0, 700.0, 2200.0, 6500.0)).process(audio, 48000)

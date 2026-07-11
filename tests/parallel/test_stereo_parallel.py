@@ -42,6 +42,7 @@ def processor():
     return StereoParallelProcessor(max_workers=2, enable_parallel=True)
 
 
+@pytest.mark.unit
 class TestBasicProcessing:
     """Test basic stereo parallel processing."""
 

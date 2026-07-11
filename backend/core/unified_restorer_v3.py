@@ -25051,7 +25051,7 @@ class UnifiedRestorerV3:
                     continue
             return float(max(vals)) if vals else 0.0
 
-        _dropout_evidence = _score_for_keys(("dropout", "tape_head_level_dip", "splice", "tape_splice"))
+        _dropout_evidence = _score_for_keys(("dropout", "tape_head_level_dip", "transport_bump", "splice", "tape_splice"))
         _inpaint_evidence = _score_for_keys(("dropout", "gap", "splice", "band_gap", "print_through"))
 
         _causal_dropout_prob = 0.0
@@ -25059,7 +25059,7 @@ class UnifiedRestorerV3:
             try:
                 for _cause, _prob in list(getattr(causal_plan, "ranked_causes", []) or []):
                     _cause_s = str(_cause).lower()
-                    if any(_needle in _cause_s for _needle in ("dropout", "splice", "head_wear", "print_through")):
+                    if any(_needle in _cause_s for _needle in ("dropout", "transport_bump", "tape_head_level_dip", "splice", "head_wear", "print_through")):
                         _causal_dropout_prob = max(_causal_dropout_prob, float(_prob))
             except Exception:
                 _causal_dropout_prob = 0.0

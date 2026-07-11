@@ -88,6 +88,7 @@ def micro_dynamic_audio(sample_rate, duration):
 # =============================================================================
 
 
+@pytest.mark.unit
 class TestTransparentDynamicsProcessor:
     """Tests for GAP #10: Transparent Dynamics Restoration"""
 

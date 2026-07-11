@@ -80,3 +80,18 @@ Primaerquellen und konkrete Mess-/Validierungsprotokolle im Projekt.
 - Test-Referenz: `tests/unit/test_phase_strength_oracle.py`
 - Audit-Referenz: `audit/CHAIN_AWARE_ORACLE_WORLDCLASS_AUDIT_2026-05-20.md`
 - Governance-Referenz: `.github/specs/02_pipeline_architecture.md`, `.github/specs/09_global_calibration_matrix.md`, `.github/instructions/pipeline.instructions.md`
+
+
+## §v10-ADAPT: SNR/Spectrum/Harmonic-Messung (2026-07-11)
+
+| Invariante | Typ | Quelle | Messung |
+|-----------|-----|--------|---------|
+| SNR-Adaption | Dynamisch | `_estimate_local_snr()` | 100ms-Fenster, Median-SNR in dB |
+| Spectrum-Aware EQ | Dynamisch | `_measure_spectral_deviation()` | 4-Band FFT vs. Material-Referenz |
+| Harmonic-Aware Saturation | Dynamisch | `_measure_harmonic_density()` | Even/Odd-Harmonic-Ratio 100-2000Hz |
+| No-Blind-Trust | Prinzip | §v10 Pleasantness-First | Kein Material-Template ohne Song-Messung |
+
+**Wissenschaftliche Basis:**
+- SNR: ITU-R BS.1770-4 (RMS-Messung), 100ms-Fenster (ISO 532-1)
+- Spektrum: IEC 60098 (Shellac), IEC 60094-1 (Tape), RIAA (Vinyl)
+- Harmonische: Even/Odd-Ratio aus FFT (Zwicker & Fastl 1999, §8.2)

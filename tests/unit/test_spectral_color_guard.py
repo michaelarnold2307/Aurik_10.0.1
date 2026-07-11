@@ -31,6 +31,7 @@ def _make_noise(n: int = _N, amp: float = 0.1) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestSpectralColorGuardImport:
     def test_import_function(self):
         from backend.core.dsp.spectral_color_guard import check_spectral_color_preservation

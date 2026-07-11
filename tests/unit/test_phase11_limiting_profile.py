@@ -1,8 +1,10 @@
+import pytest
 """Unit tests for phase_11_limiting._compute_limiting_profile (§2.56)."""
 
 from backend.core.phases.phase_11_limiting import LimitingPhase
 
 
+@pytest.mark.unit
 class TestLimitingProfile:
     def _p(self, material="vinyl", qm="balanced", rest=50.0):
         return LimitingPhase._compute_limiting_profile(material, qm, rest)

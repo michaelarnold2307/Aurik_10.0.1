@@ -1,6 +1,6 @@
 # Aurik 9.x.x — Testing Best Practices
 
-**Version:** 9.12.8  
+**Version:** 9.20.3  
 **Datum:** Mai 2026  
 **Status:** ✅ Production Ready
 
@@ -985,3 +985,26 @@ def test_restore():
 
 **Letztes Update:** 14. Februar 2026  
 **Nächste Review:** Bei Major-Updates an Musical Goals System
+
+
+## §v10 Pleasantness & Goal-Achievement Tests (Juli 2026)
+
+### Neue Marker
+
+- `@pytest.mark.pleasantness`: Tests für §v10 Pleasantness-First (HPE als oberste Instanz)
+- `@pytest.mark.goal_achievement`: Tests die beweisen, dass Aurik Weltklasse-Klang liefert
+- `@pytest.mark.unit`: Alle Unit-Tests (511 Dateien markiert)
+
+### Ausführung
+
+```bash
+pytest -m pleasantness          # Pleasantness-First Verifikation
+pytest -m goal_achievement      # Weltklasse-Klang Beweise
+pytest -m unit                  # Alle Unit-Tests (schnell)
+pytest tests/unit/test_no_blind_trust.py  # No-Blind-Trust Invariante
+```
+
+### No-Blind-Trust-Prinzip
+
+Jeder Test, der Material-Templates prüft, MUSS auch die SNR/Spectrum/Harmonic-Messung
+verifizieren. Siehe `tests/unit/test_no_blind_trust.py` als Referenz.

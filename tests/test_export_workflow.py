@@ -36,6 +36,7 @@ def temp_export_dir():
     shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+@pytest.mark.unit
 def test_export_audio_basic(temp_export_dir):
     """Test basic audio export"""
     audio = np.random.randn(1000) * 0.5

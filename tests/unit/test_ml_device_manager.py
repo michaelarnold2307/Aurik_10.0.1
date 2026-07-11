@@ -72,6 +72,7 @@ def _make_manager_cpu_only() -> MLDeviceManager:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 def test_cpu_only_when_no_gpu():
     """get_torch_device() gibt stets 'cpu' zurück wenn kein GPU vorhanden."""
     mgr = _make_manager_cpu_only()

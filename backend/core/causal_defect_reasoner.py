@@ -3486,6 +3486,20 @@ class CausalDefectReasoner:
                 if param not in merged_params:
                     merged_params[param] = val
 
+        # §v10 SNR-adaptive param scaling: Noise-Reduction-Strength und
+        # verwandte Parameter aus dem gemessenen SNR ableiten, nicht aus
+        # statischen CAUSE_PARAMS. Cleaner Song → weniger NR nötig.
+        if hasattr(self, '_last_snr_estimate') and self._last_snr_estimate > 0:
+            _snr = self._last_snr_estimate
+            _snr_scale = float(np.clip(25.0 / max(5.0, _snr), 0.5, 1.5))
+            for _key in list(merged_params.keys()):
+                if 'strength' in _key or 'boost' in _key:
+                    merged_params[_key] = float(merged_params[_key] * _snr_scale)
+            logger.debug(
+                "§v10 CausalDefectReasoner SNR-adaptive: snr=%.1fdB scale=%.2f",
+                _snr, _snr_scale
+            )
+
         # §6.2b/c Material-Phase-Exclusion-Filter: Era-spezifische Verbote durchsetzen.
         # Entfernt materialspezifisch verbotene Phasen aus dem Restaurierungsplan
         # (z.B. wax_cylinder: phase_07 VERBOTEN per spec §ERA 1900-1925).

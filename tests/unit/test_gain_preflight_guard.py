@@ -1,3 +1,4 @@
+import pytest
 """Tests for preventive Pegelexplosion protection.
 
 §2.45a-II v10 — soft-knee sigmoid gate in apply_musical_gain_envelope.
@@ -40,6 +41,7 @@ def _rms_dbfs(x: np.ndarray) -> float:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 def test_01_quiet_zone_much_less_boosted_than_music():
     """Fadeout frames receive significantly less gain than musical frames (soft-knee).
 

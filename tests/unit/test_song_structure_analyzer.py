@@ -27,6 +27,7 @@ def short_audio():
     return audio, sr
 
 
+@pytest.mark.unit
 class TestSongStructureAnalyzerImport:
     def test_import_ok(self):
         from backend.core.song_structure_analyzer import get_song_structure_analyzer

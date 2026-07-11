@@ -1,8 +1,10 @@
+import pytest
 from __future__ import annotations
 
 from backend.core.phases.phase_06_frequency_restoration import FrequencyRestorationPhase
 
 
+@pytest.mark.unit
 def test_watchdog_profile_keys_and_bounds() -> None:
     p = FrequencyRestorationPhase._compute_audiosr_watchdog_profile(
         quality_mode="quality",

@@ -1,3 +1,4 @@
+import pytest
 """
 §2.55 PMGG-CIG-Synchronisations-Invariante — CI-Regression-Test
 =================================================================
@@ -42,6 +43,7 @@ def _pmgg_for_prefix(cig_prefix: str, pmgg_dict: dict) -> frozenset:
     return frozenset()
 
 
+@pytest.mark.unit
 def test_pmgg_to_cig_no_missing_p1p2_goals():
     """Jedes P1/P2-Goal das PMGG für eine Phase ausschließt MUSS auch in CIG ausgeschlossen sein.
 

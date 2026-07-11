@@ -66,6 +66,7 @@ def causal_data() -> tuple[list[str], dict[str, list[str]]]:
     return _parse_causal_defect_reasoner()
 
 
+@pytest.mark.unit
 class TestCauseToPhasesBidirectionalSync:
     """V12: Bidirektionale CAUSES ↔ CAUSE_TO_PHASES Invariante."""
 

@@ -63,6 +63,7 @@ def _flat_signal(duration_s: float = 60.0, sr: int = SR) -> np.ndarray:
 # ── Tests ──────────────────────────────────────────────────────────────────
 
 
+@pytest.mark.unit
 class TestAmplitudeDriftDetection:
     def test_detect_carrier_drift_high_severity(self) -> None:
         """Monoton steigendes Signal ohne Onset-Korrelation → Severity > 0.3, is_artistic=False."""

@@ -57,6 +57,7 @@ def _make_rekonstruktions_ergebnis():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestRekonstruktionsErgebnisFields:
     """01–06: Struktur von RekonstruktionsErgebnis."""
 

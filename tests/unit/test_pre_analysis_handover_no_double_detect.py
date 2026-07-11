@@ -27,6 +27,7 @@ def audio_48k_mono():
     return np.random.randn(48000).astype(np.float32)
 
 
+@pytest.mark.unit
 def test_pre_analysis_result_cached_then_passed_to_denker(audio_48k_mono):
     """
     Verify that a full PreAnalysisResult from run_pre_analysis() can be

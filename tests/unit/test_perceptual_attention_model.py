@@ -22,6 +22,7 @@ def _silence(dur: float = 3.0):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 def test_00_import():
     from backend.core.perceptual_attention_model import PerceptualAttentionModel
 

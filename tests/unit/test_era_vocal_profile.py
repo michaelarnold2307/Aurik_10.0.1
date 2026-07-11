@@ -10,6 +10,7 @@ from backend.core.musical_goals.era_vocal_profile import (
 )
 
 
+@pytest.mark.unit
 class TestEraVocalProfileConstants:
     """Prüft die Konstanten in ERA_VOCAL_PROFILES."""
 

@@ -75,6 +75,7 @@ def _clipped(duration_s: float = 1.0) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestBSRoFormerPlugin:
     def test_01_import(self):
         from plugins.bs_roformer_plugin import BSRoFormerPlugin, get_bs_roformer

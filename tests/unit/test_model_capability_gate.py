@@ -1,3 +1,4 @@
+import pytest
 """Unit tests for §MCG-1 ModelCapabilityGate."""
 
 import types
@@ -8,6 +9,7 @@ from collections.abc import Mapping
 from backend.core.dsp.model_capability_gate import CapabilityReport, ModelCapabilityGate
 
 
+@pytest.mark.unit
 def test_model_capability_gate_recognizes_miipher_compensation_as_sota_real(monkeypatch, tmp_path):
     fake_miipher = types.SimpleNamespace(_MIIPHER_ONNX_PATH=None, _instance=None)
     fake_sgmse_model = tmp_path / "sgmse_plus.ts"

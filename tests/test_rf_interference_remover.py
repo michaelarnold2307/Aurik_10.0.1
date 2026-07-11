@@ -21,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from dsp.rf_interference_remover import RFInterferenceRemover
 
 
+@pytest.mark.unit
 class TestRFInterferenceDetection:
     """Test RF interference detection."""
 

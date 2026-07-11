@@ -1,3 +1,4 @@
+import pytest
 """Unit-Tests für §4.10-VintageVoice Vintage-Stimm-Identitätsschutz in phase_42.
 
 Prüft, dass bei Vintage-Material (shellac/vinyl/reel_tape/tape/cassette etc.)
@@ -38,6 +39,7 @@ def _make_vocal(f0: float = 220.0, duration_s: float = 1.0) -> np.ndarray:
     return (sig / (np.max(np.abs(sig)) + 1e-12) * 0.6).astype(np.float32)
 
 
+@pytest.mark.unit
 class TestPhase42VintageBreathDirectLogic:
     """Direkter Test der Vintage-Guard-Logik ohne volle Phase-Ausführung."""
 

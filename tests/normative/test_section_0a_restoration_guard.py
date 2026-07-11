@@ -203,6 +203,7 @@ def _find_forced_phases_in_source(source: str, filepath: Path) -> list[tuple[str
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestUV3ForbiddenSetComplete:
     """Ebene 1: UV3 _restoration_forbidden_stem_enhancement enthält alle §0a-verbotenen Phasen."""
 

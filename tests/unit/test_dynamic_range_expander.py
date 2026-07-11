@@ -1,8 +1,10 @@
+import pytest
 import numpy as np
 
 from dsp.dynamic_range_expander import DynamicRangeExpander
 
 
+@pytest.mark.unit
 def test_dynamic_range_expander_mono_finite_and_shape() -> None:
     sr = 48000
     t = np.linspace(0.0, 1.0, sr, endpoint=False)

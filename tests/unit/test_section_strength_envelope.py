@@ -18,6 +18,7 @@ from backend.core.dsp.section_strength_envelope import (
     get_section_strength_at,
 )
 
+@pytest.mark.unit
 class TestBuild:
     def test_empty_targets_returns_uniform(self):
         envelope = build_strength_envelope([], n_samples=48000, sample_rate=48000)

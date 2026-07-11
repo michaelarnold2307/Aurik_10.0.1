@@ -39,6 +39,7 @@ def identity_fn():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 def test_process_wrong_sr_raises(proc, identity_fn):
     audio = np.zeros(SR * 10, dtype=np.float32)
     with pytest.raises(AssertionError):

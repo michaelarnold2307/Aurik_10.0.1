@@ -13,6 +13,7 @@ import pytest
 from forensics.medium_detector import MediumDetector, MediumDetectionResult
 
 
+@pytest.mark.unit
 class TestFileExtDigitalPrior:
     """§2.59: file_ext muss als Digital-Prior im MediumDetector ankommen."""
 

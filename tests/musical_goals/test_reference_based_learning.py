@@ -64,6 +64,7 @@ def mock_calculator(reference_goals):
 
 
 @pytest.fixture
+@pytest.mark.unit
 def test_audio():
     """Generate test audio"""
     return np.random.randn(44100).astype(np.float32) * 0.1

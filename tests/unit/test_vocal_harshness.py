@@ -1,3 +1,4 @@
+import pytest
 """Tests for VOCAL_HARSHNESS DefectType — detection, routing, and remediation (v9.10.77).
 
 Validates:
@@ -79,6 +80,7 @@ def _harsh_vocal_sim(duration: float = 3.0, harshness: float = 0.8) -> np.ndarra
 # ============================================================
 
 
+@pytest.mark.unit
 class TestVocalHarshnessDefectType:
     """VOCAL_HARSHNESS must exist and be integrated into the system."""
 

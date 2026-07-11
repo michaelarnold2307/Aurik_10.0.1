@@ -49,6 +49,7 @@ def _loud_quiet(loud_amp: float = 0.8, quiet_amp: float = 0.1, dur: float = 1.0)
 # ──────────────────────────────────────────────────────────────────────────────
 
 
+@pytest.mark.unit
 class TestPeakEnvelope:
     def test_shape_preserved(self, phase):
         audio = _sine(440.0)

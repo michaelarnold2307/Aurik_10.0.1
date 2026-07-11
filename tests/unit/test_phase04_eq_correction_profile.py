@@ -1,8 +1,10 @@
+import pytest
 """Unit tests for phase_04_eq_correction._compute_eq_correction_profile (§2.56)."""
 
 from backend.core.phases.phase_04_eq_correction import EQCorrectionPhase
 
 
+@pytest.mark.unit
 class TestEqCorrectionProfile:
     def _p(self, material="vinyl", qm="balanced", rest=50.0):
         return EQCorrectionPhase._compute_eq_correction_profile(material, qm, rest)

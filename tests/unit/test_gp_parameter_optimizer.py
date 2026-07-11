@@ -36,6 +36,7 @@ from backend.core.gp_parameter_optimizer import (
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestImportAndConstants:
     def test_01_module_importable(self):
         assert GPParameterOptimizer is not None

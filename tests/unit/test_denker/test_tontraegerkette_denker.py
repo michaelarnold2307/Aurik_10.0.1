@@ -67,6 +67,7 @@ def _make_ketten_ergebnis():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestKettenErgebnisFields:
     """01–07: Struktur von KettenErgebnis."""
 

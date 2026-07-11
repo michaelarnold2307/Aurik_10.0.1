@@ -1,3 +1,4 @@
+import pytest
 import numpy as np
 
 from backend.core.calibration_matrix import (
@@ -13,6 +14,7 @@ from backend.core.calibration_matrix import (
 )
 
 
+@pytest.mark.unit
 def test_compute_tcci_is_bounded_and_chain_sensitive():
     shallow = compute_tcci(["cd_digital"])
     deep_lossy = compute_tcci(["shellac", "reel_tape", "cassette", "cd_digital", "mp3_low"])

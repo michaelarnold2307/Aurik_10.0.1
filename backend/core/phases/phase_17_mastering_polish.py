@@ -87,6 +87,69 @@ def _rms_dbfs_gated(sig: np.ndarray) -> float:
 logger = logging.getLogger(__name__)
 
 
+# ── §v10 Spectrum-Aware + Harmonic-Measurement Helpers ──────────────────────
+
+
+def _measure_spectral_balance(audio: np.ndarray, sample_rate: int) -> dict[str, float]:
+    """Misst die IST-Spektralbalance in 4 Bändern (§v10).
+
+    JEDER Song hat ein eigenes Spektrum. Diese Funktion misst es,
+    statt blind dem Material-Template zu vertrauen.
+
+    Returns:
+        Dict mit Band-Energien in dB (bass, low_mid, mid_high, high)
+    """
+    mono = audio if audio.ndim == 1 else audio.mean(axis=0)
+    n_fft = min(4096, len(mono))
+    freqs = np.fft.rfftfreq(n_fft, 1.0 / sample_rate)
+    spec = np.abs(np.fft.rfft(mono[:n_fft]))
+    eps = 1e-12
+
+    def _band_energy(lo: float, hi: float) -> float:
+        mask = (freqs >= lo) & (freqs <= hi)
+        if not mask.any():
+            return -120.0
+        return float(20.0 * np.log10(max(eps, np.mean(spec[mask]))))
+
+    return {
+        "bass": _band_energy(20, 150),
+        "low_mid": _band_energy(150, 800),
+        "mid_high": _band_energy(800, 5000),
+        "high": _band_energy(5000, 20000),
+    }
+
+
+def _measure_harmonic_density(audio: np.ndarray, sample_rate: int) -> float:
+    """Misst die vorhandene harmonische Sättigung im Signal (§v10).
+
+    Berechnet den Even/Odd-Harmonic-Ratio im 100-2000 Hz Bereich.
+    Hohe Werte → Song ist bereits stark gesättigt → weniger Enhancement nötig.
+    Niedrige Werte → Song ist clean → mehr Enhancement möglich.
+
+    Returns:
+        Float 0.0–1.0 (0.0 = keine Sättigung, 1.0 = stark gesättigt)
+    """
+    mono = audio if audio.ndim == 1 else audio.mean(axis=0)
+    n_fft = min(8192, len(mono))
+    spec = np.abs(np.fft.rfft(mono[:n_fft]))
+    eps = 1e-12
+
+    # Analyse im Bereich wo Harmonische dominant sind (100–2000 Hz Fundamentale)
+    freqs = np.fft.rfftfreq(n_fft, 1.0 / sample_rate)
+    mask = (freqs >= 100) & (freqs <= 2000)
+    if not mask.any():
+        return 0.0
+
+    spec_band = spec[mask]
+    # Even/Odd-Harmonic-Ratio: höher = mehr Sättigung
+    even_energy = float(np.sum(spec_band[::2] ** 2))
+    odd_energy = float(np.sum(spec_band[1::2] ** 2))
+    harmonic_ratio = even_energy / max(eps, odd_energy)
+
+    # Normalisiere: Ratio 1.0 (balanced) → 0.5, Ratio 0.5 (clean) → 0.0, Ratio 2.0 (saturated) → 1.0
+    return float(np.clip((harmonic_ratio - 0.5) / 1.5, 0.0, 1.0))
+
+
 class MasteringPolishPhase(PhaseInterface):
     """
     Professional Mastering Chain mit Multi-Band Processing, Enhancement und Imaging.
@@ -443,16 +506,36 @@ class MasteringPolishPhase(PhaseInterface):
         self, audio: np.ndarray, sample_rate: int, material: MaterialType, strength: float = 1.0
     ) -> tuple[np.ndarray, dict]:
         """
-        Wendet Multi-Band Parametric EQ an.
+        Wendet Multi-Band Parametric EQ an — mit §v10 Spectrum-Aware Adaptation.
         """
         eq_config = self.MASTERING_EQ.get(material, self.MASTERING_EQ[MaterialType.VINYL])
+
+        # ── §v10 Spectrum-Aware: Messe IST-Spektrum vor EQ ────────────
+        # Das Material-Template ist der AUSGANGSPUNKT. Der tatsächliche
+        # Song kann davon abweichen. Ein bereits bassstarker Song braucht
+        # weniger Bass-Boost als ein bassschwacher — unabhängig vom Material.
+        _measured = _measure_spectral_balance(audio, sample_rate)
+        # Referenz: neutraler Frequenzgang (alle Bänder ≈ gleich)
+        _ref_level = np.mean(list(_measured.values()))
+        _deviations = {b: _ref_level - _measured[b] for b in _measured}
+        logger.debug(
+            "§v10 Mastering-EQ spectrum-aware: measured=%s dev=%s",
+            {k: f"{v:.1f}dB" for k, v in _measured.items()},
+            {k: f"{v:+.1f}dB" for k, v in _deviations.items()},
+        )
 
         eq_audio = audio.copy()
         band_gains = {}
 
-        # Für jeden Band: Parametric EQ (Peaking Filter)
+        # Für jeden Band: Parametric EQ (Peaking Filter) mit adaptivem Gain
         for band_name, (center_freq, gain_db, q) in eq_config.items():
-            gain_db = gain_db * strength  # Scale by PMGG strength
+            # §v10: Spektrale Abweichung moduliert den Template-Gain
+            # Positiv deviation → Band zu leise → Boost verstärken
+            # Negativ deviation → Band zu laut  → Boost dämpfen
+            _spec_factor = 1.0
+            if band_name in _deviations:
+                _spec_factor = float(np.clip(1.0 + _deviations[band_name] / 6.0, 0.3, 1.7))
+            gain_db = gain_db * strength * _spec_factor  # Scale by PMGG strength + spectrum
             if abs(gain_db) > 0.1:  # Nur wenn signifikanter Gain
                 # Peaking Filter (Bell EQ)
                 # iirpeak gibt (b, a) zurück, nicht sos
@@ -568,7 +651,20 @@ class MasteringPolishPhase(PhaseInterface):
         Wendet Harmonic Excitation (Saturation) an.
         """
         strength = self.HARMONIC_ENHANCEMENT.get(material, self.HARMONIC_ENHANCEMENT[MaterialType.VINYL])
-        strength = strength * strength_scale  # Scale by PMGG strength
+
+        # §v10 Harmonic-Aware: Messe vorhandene Sättigung vor Enhancement.
+        # Ein bereits gesättigter Song (z.B. verzerrte Gitarre) braucht
+        # WENIGER zusätzliche Sättigung als ein cleaner Song — unabhängig
+        # vom Material-Template.
+        _existing_saturation = _measure_harmonic_density(audio, 48000)
+        _harmonic_scale = float(np.clip(1.0 - _existing_saturation * 0.7, 0.2, 1.0))
+        strength = strength * strength_scale * _harmonic_scale
+        logger.debug(
+            "§v10 Harmonic-Aware: material=%s template=%.2f existing_sat=%.2f scale=%.2f final=%.2f",
+            material.name if hasattr(material, 'name') else str(material),
+            self.HARMONIC_ENHANCEMENT.get(material, 0.25),
+            _existing_saturation, _harmonic_scale, strength,
+        )
 
         if strength < 0.01:
             # Kein Enhancement

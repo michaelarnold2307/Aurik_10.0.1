@@ -53,6 +53,7 @@ def _clipped(secs: float = 0.5) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestImportAndConstants:
     def test_01_module_importable(self):
         assert CausalDefectReasoner is not None

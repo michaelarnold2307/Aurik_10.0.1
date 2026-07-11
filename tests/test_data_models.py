@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from backend.core.data_models import AudioFile, DefectType, Genre, MediaType
 
 
+@pytest.mark.unit
 def test_audio_file_basic():
     """Test AudioFile model with valid data"""
     audio = AudioFile(

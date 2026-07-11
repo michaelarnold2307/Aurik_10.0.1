@@ -23,6 +23,7 @@ from backend.core.processing_modes import (
 )
 
 
+@pytest.mark.unit
 class TestProcessingMode:
     """Test ProcessingMode enum."""
 

@@ -27,6 +27,7 @@ def extractor():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 def test_extract_context_wrong_sr_raises(extractor):
     audio = np.zeros(48000 * 10, dtype=np.float32)
     with pytest.raises(AssertionError):

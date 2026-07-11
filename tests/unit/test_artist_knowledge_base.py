@@ -11,6 +11,7 @@ import pytest
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 def test_singleton_returns_same_instance():
     from backend.core.artist_knowledge_base import get_artist_knowledge_base
 

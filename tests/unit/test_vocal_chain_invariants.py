@@ -20,6 +20,7 @@ np.random.seed(42)  # §5.4: Reproduzierbarkeit
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestVocalChainInvariants:
     """§2.8 Vokal-Restaurierungskette — Pflicht-Invarianten (W-4)."""
 

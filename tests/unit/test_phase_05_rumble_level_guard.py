@@ -110,6 +110,7 @@ def _zone_peak_db(audio: np.ndarray, start: int, end: int) -> float:
     return float(20.0 * np.log10(peak + 1e-12))
 
 
+@pytest.mark.unit
 class TestPhase05LoudnessGuard:
     """Phase 05 Rumble Filter darf den musikalischen Pegel nicht zerstören."""
 

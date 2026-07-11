@@ -1,17 +1,26 @@
-# Aurik 9.x.x - Architektur-Ueberblick
+# Aurik 9.20.3 — Architektur-Überblick
 
-**Stand:** Mai 2026  
-**Version:** 9.12.8  
-**Status:** RELEASE_MUST-konform
+**Stand:** Juli 2026
+**Version:** 9.20.3
+**Status:** RELEASE_MUST-konform | §v10 Pleasantness-First aktiv
 
-Verbindlicher Wahrheitsstand: `.github/specs/01-08` und `docs/CHANGELOG_HISTORY.md`.
+Verbindlicher Wahrheitsstand: `.github/specs/01-14` und `CLAUDE.md`.
+
+## Kernprinzip (§v10)
+
+**Aurik optimiert JEDEN individuellen Song autonom.** Kein blinder Material-Glaube,
+keine statischen Schwellwerte ohne Messung. Die Tonträgerkette, das gemessene SNR,
+das tatsächliche Spektrum und die harmonische Dichte des Songs bestimmen ALLE
+Parameter — nicht der erkannte Materialtyp allein.
 
 ## Kernzahlen (aktuell)
 
-- 64 Phasen (01-64)
-- 54 DetectionTypes (DefectScanner)
-- 62 Kausal-Ursachen (CausalDefectReasoner)
-- 14 Musical Goals
+- 64 Phasen (01–64)
+- 54 DetectionTypes (DefectScanner) — ALLE SNR-adaptiv
+- 62 Kausal-Ursachen (CausalDefectReasoner) — CAUSE_PARAMS SNR-skaliert
+- 15 Musical Goals (Pleasantness-First)
+- ~18.400 Tests (511 mit Markern)
+- 3 neue Messfunktionen: `_estimate_local_snr()`, `_measure_spectral_deviation()`, `_measure_harmonic_density()`
 
 ## Kanonischer Release-Vertrag
 

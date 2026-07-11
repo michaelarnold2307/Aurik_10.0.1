@@ -1,5 +1,17 @@
 # Changelog — Aurik 10.0.2
 
+## 10.0.3 (2026-07-11) — BW Harmonic Exciter
+
+### 🎵 Bandbreiten-Erweiterung via DSP (kein ML)
+- **BW Harmonic Exciter**: DSP-basierte harmonische Obertongenerierung oberhalb der Cutoff-Frequenz
+- Waveshaping (Soft-Clip + Rectification) für gerade/ungerade Harmonische
+- Spektrale Hüllkurven-Extrapolation via Polynom-Fit für natürliche Klangbalance
+- STFT-basierte Rekonstruktion mit Original-Phasen (keine Phasenartefakte)
+- Garantiert: blend=0 = Passthrough, verschlechtert nie das Originalsignal
+- <10ms Latenz pro 3s-Segment auf CPU, 0 MB Modellgröße
+- Pipeline-Stage: `BWExciterStage` für `UnifiedRestorerV3`
+- Plugin: `plugins/bw_harmonic_exciter.py`
+
 ## 10.0.2 (2026-07-10) — SOTA-Workflow & Architektur-Vereinheitlichung
 
 ### 🧠 SOTA-Workflow: HPE-gesteuerter Phase-Loop

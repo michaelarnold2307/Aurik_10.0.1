@@ -31,7 +31,7 @@ Referenz-Implementierungen:
 
 ## 1. Purpose
 
-The **UnifiedRestorerV3** is the **main orchestrator** for Aurik 9.0's audio restoration pipeline. It coordinates:
+The **UnifiedRestorerV3** is the **main orchestrator** for Aurik 9.20.3's audio restoration pipeline. It coordinates:
 
 - **DefectScanner:** Material detection + 11 defect types analysis
 - **Adaptive Phase Selection:** Only run phases needed for detected defects

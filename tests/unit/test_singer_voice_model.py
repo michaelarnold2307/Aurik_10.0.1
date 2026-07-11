@@ -14,6 +14,7 @@ from backend.core.singer_voice_model import (
 )
 
 
+@pytest.mark.unit
 class TestSingerVoiceModelResult:
     """Dataclass + to_dict()."""
 

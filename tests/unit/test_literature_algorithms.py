@@ -35,6 +35,7 @@ def _rng_audio(n: int, seed: int = 42) -> np.ndarray:
 # ──────────────────────────────────────────────────────────────────────────────
 
 
+@pytest.mark.unit
 class TestPhase09ARInterpolation:
     """LPC-basierte AR-Lücken-Interpolation in Phase 09."""
 

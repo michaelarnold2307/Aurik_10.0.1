@@ -11,6 +11,7 @@ import numpy as np
 import pytest
 
 
+@pytest.mark.unit
 class TestComputeAudioFingerprint:
     def test_deterministic_same_audio(self):
         from backend.core.song_strategy_cache import compute_audio_fingerprint

@@ -1,3 +1,4 @@
+import pytest
 """tests/unit/test_denker/test_defekt_denker.py
 
 Tests für DefektDenker — Defekterkennung & -klassifikation.
@@ -28,6 +29,7 @@ def _noisy(dur: float = 1.0) -> np.ndarray:
 # ─── DefektErgebnis ───────────────────────────────────────────────────────────
 
 
+@pytest.mark.unit
 class TestDefektErgebnisFields:
     def _make(self):
         from denker.defekt_denker import DefektErgebnis

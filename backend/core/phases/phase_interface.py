@@ -347,7 +347,11 @@ class PhaseInterface(abc.ABC):
         material_type: str = "unknown",
         **kwargs: Any,
     ) -> PhaseResult:
-        """Wrapper mit Timing, Exception-Handling und NaN-Guard."""
+        """Wrapper mit Timing, Exception-Handling, NaN-Guard, ComfortGuard und VocalQualityGate.
+
+        §Rolls-Royce-Phantom: Jede Phase wird automatisch auf Hörkomfort und
+        Gesangsqualität geprüft. Kein manuelles Eingreifen nötig.
+        """
         assert sample_rate == 48000, f"Interne SR muss 48000 Hz sein, erhalten: {sample_rate}"
         t0 = time.monotonic()
         try:
@@ -363,6 +367,38 @@ class PhaseInterface(abc.ABC):
                 warnings=[f"Phase fehlgeschlagen: {exc}"],
                 quality_estimate=0.95,
             )
+
+        # ── ComfortGuard: Automatische Hörmüdungs-Prävention ──────────
+        try:
+            from backend.core.comfort_guard import apply_comfort_guard
+            result.audio = apply_comfort_guard(result.audio, sample_rate)
+        except Exception as _cg_exc:
+            self._logger.debug("ComfortGuard skipped: %s", _cg_exc)
+
+        # ── VocalQualityGate: Gesangsqualität prüfen (nur bei Vokal-Phasen) ─
+        phase_id = self.get_metadata().phase_id
+        if any(kw in phase_id for kw in ("42", "65", "vocal", "voice", "deess")):
+            try:
+                from backend.core.vocal_quality_gate import get_vocal_quality_gate
+                gate = get_vocal_quality_gate()
+                decision = gate.evaluate(
+                    pre_audio=audio,
+                    post_audio=result.audio,
+                    sr=sample_rate,
+                    phase_name=phase_id,
+                )
+                if decision.rollback_needed:
+                    result.warnings.append(
+                        f"VocalQualityGate: Rollback empfohlen (Δ={decision.naturalness_delta:.1f})"
+                    )
+                    result.warnings.extend(decision.warnings)
+                    # Leichte Qualitätsabwertung bei Rollback
+                    result.quality_estimate = max(0.5, result.quality_estimate - 0.1)
+                if decision.recommendations:
+                    result.metadata["vocal_recommendations"] = decision.recommendations
+            except Exception as _vqg_exc:
+                self._logger.debug("VocalQualityGate skipped: %s", _vqg_exc)
+
         result.execution_time_seconds = time.monotonic() - t0
         return result
 

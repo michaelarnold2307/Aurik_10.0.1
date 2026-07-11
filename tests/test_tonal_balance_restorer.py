@@ -96,6 +96,7 @@ def masked_audio(sample_rate, duration):
 # =============================================================================
 
 
+@pytest.mark.unit
 class TestAdaptiveTonalBalanceRestorer:
     """Tests for GAP #7: Adaptive Tonal Balance Restoration"""
 

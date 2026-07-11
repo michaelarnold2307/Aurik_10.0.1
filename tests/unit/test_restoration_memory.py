@@ -11,6 +11,7 @@ def mem(tmp_path):
     return RestorationMemory(path=tmp_path / "restoration_memory.json")
 
 
+@pytest.mark.unit
 class TestRestorationMemoryBasic:
     def test_get_prior_returns_none_for_unknown_key(self, mem):
         result = mem.get_prior((1960, "vinyl", "abc12345"))

@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from backend.core.forensics.analysis_and_modules import FeatureExtractor, PolicyManager
 
 
+@pytest.mark.unit
 class TestPolicyManager:
     def test_policy_manager_init(self):
         """Test PolicyManager initialization"""

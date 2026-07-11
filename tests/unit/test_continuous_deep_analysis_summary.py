@@ -1,3 +1,4 @@
+import pytest
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -8,6 +9,7 @@ import scripts.continuous_deep_analysis as cda_module
 from scripts.continuous_deep_analysis import ContinuousDeepAnalyzer, PhaseCheckpoint
 
 
+@pytest.mark.unit
 def test_collect_checkpoints_prefers_phase_local_hpi_and_afg() -> None:
     analyzer = ContinuousDeepAnalyzer(realtime=False)
 

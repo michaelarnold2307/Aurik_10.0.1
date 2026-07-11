@@ -1,4 +1,4 @@
-# Aurik 10 — Spec 11: Entscheidungsintelligenz
+# Aurik 10 — Spec 11: Entscheidungsintelligenz | §v10 Pleasantness-First
 
 > **Normative Quelle** für alle Entscheidungsmodule.
 > **Invarianten** sind mit `§INV` markiert und MÜSSEN bei allen Änderungen erhalten bleiben.
@@ -6,9 +6,9 @@
 
 ---
 
-## IMPLEMENTIERT (v9.20.3)
+## IMPLEMENTIERT (v9.20.3) [RELEASE_MUST]
 
-## §INV-1: Zentrale Entscheidungsintelligenz im Denker
+## §INV-1 [RELEASE_MUST]: Zentrale Entscheidungsintelligenz im Denker
 
 Die **Entscheidungsintelligenz liegt zentral bei den Denkern** (`denker/`).
 Der Denker berechnet den `global_scalar` aus allen verfügbaren Informationen.
@@ -18,7 +18,7 @@ Einzelne Phasen treffen **keine** eigenständigen „sei konservativer"-Entschei
 - „Kann ich auf diesem Material überhaupt etwas Sinnvolles tun?" → Ja/Nein
 - **Nicht erlaubt:** „Ich reduziere meine Stärke um 30% weil bw_loss hoch ist."
 
-## §INV-2: SongCalibration — Multi-Faktor global_scalar
+## §INV-2 [RELEASE_MUST]: SongCalibration — Multi-Faktor global_scalar
 
 | Faktor | Formel | Wirkung |
 |---|---|---|
@@ -33,7 +33,7 @@ Einzelne Phasen treffen **keine** eigenständigen „sei konservativer"-Entschei
 
 Wertebereich: `[0.50, 1.50]`.
 
-## §INV-3: SectionStrengthEnvelope — Kontinuierliche per-Segment-Anpassung
+## §INV-3 [RELEASE_MUST]: SectionStrengthEnvelope — Kontinuierliche per-Segment-Anpassung
 
 ```
 SectionGoalAdapter (6 Sektionen)
@@ -53,7 +53,7 @@ Phase: strength = base × envelope[frame].mean()
 
 **Garantien:** Räumlichkeit/Rauschflor/LUFS bleiben song-global. Keine hörbaren Sprünge.
 
-## §INV-4: Effektive Tonträgerkette
+## §INV-4 [RELEASE_MUST]: Effektive Tonträgerkette
 
 ```
 reel_tape → vinyl → cassette → mp3_low
@@ -66,7 +66,7 @@ reel_tape → vinyl → cassette → mp3_low
 
 Physical-Detektion schlägt statistischen Prior. Era-Information bleibt als Precursor erhalten.
 
-## §INV-5: Defekt-Differenzierung pro Tonträger
+## §INV-5 [RELEASE_MUST]: Defekt-Differenzierung pro Tonträger
 
 | Defekt | Cassette | Reel_Tape | Begründung |
 |---|---|---|---|
@@ -76,7 +76,7 @@ Physical-Detektion schlägt statistischen Prior. Era-Information bleibt als Prec
 | Wow | 0.22 | 0.40 | Billiger Capstan-Motor |
 | Flutter | 0.25 | 0.35 | Schmale Bandführung |
 
-## §INV-6: Qualitätsmetriken mit Hörbarkeits-Gate
+## §INV-6 [RELEASE_MUST]: Qualitätsmetriken mit Hörbarkeits-Gate
 
 - **GrooveMetric Onset-Guard:** DTW=0 ∧ onset≥90% → Score≥0.85
 - **PQS-MOS < 2.5:** → `quality_gate_rollback` an ExzellenzDenker
@@ -92,7 +92,7 @@ Physical-Detektion schlägt statistischen Prior. Era-Information bleibt als Prec
 
 ## ROADMAP (v9.15+)
 
-## §ROADMAP-1: Cross-Phase Consensus (§3.0)
+## §ROADMAP-1 [RELEASE_MUST]: Cross-Phase Consensus (§3.0)
 
 **Status:** ✅ **Implementiert.** `denker/cross_phase_coordinator.py` (754 Zeilen).
 Aktiv in `_profiled_phase_call` mit Overlap-Matrix, Budget-Verteilung (≤1.0 pro Band),
@@ -118,7 +118,7 @@ CrossPhaseCoordinator.analyze(phase_plan)
 
 ---
 
-## §ROADMAP-2: SectionStrengthEnvelope aktivieren (§2.17.1)
+## §ROADMAP-2 [RELEASE_MUST]: SectionStrengthEnvelope aktivieren (§2.17.1)
 
 **Status:** ✅ **Implementiert.** Aktiv in Phase 18 (Noise Gate), 19 (De-Esser) und 38 (Presence Boost).
 Alle drei lesen `kwargs.get("strength_envelope")` und modulieren `_effective_strength`.
@@ -141,7 +141,7 @@ if envelope is not None:
 
 ---
 
-## §ROADMAP-3: Artist/Track-Fingerprint-Persistenz (§4.0)
+## §ROADMAP-3 [RELEASE_MUST]: Artist/Track-Fingerprint-Persistenz (§4.0)
 
 **Status:** ✅ **Implementiert.** `SingerVoiceModel`-Ergebnisse werden via
 `_batch_intelligence.store()` im `BatchSessionLearner` persistiert (song_id-basiert).
@@ -168,7 +168,7 @@ VocalFocusAnalyzer: startet mit Prior statt blank
 
 ---
 
-## §ROADMAP-4: Dynamic Phase Ordering (§5.0)
+## §ROADMAP-4 [RELEASE_MUST]: Dynamic Phase Ordering (§5.0)
 
 **Status:** ✅ **Implementiert.** `PhaseInteractionDenker._dag_reorder()` sortiert
 Phasen material-abhängig: Shellac→additive vor subtractive, Tape→subtractive vor additive.
@@ -188,7 +188,7 @@ bänder. Der Denker topologisch sortiert für minimale kumulative Artefakte.
 
 ---
 
-## §ROADMAP-5: Real-Time Preview (§6.0)
+## §ROADMAP-5 [RELEASE_MUST]: Real-Time Preview (§6.0)
 
 **Problem:** Der Nutzer wartet 30 Minuten auf das Ergebnis und kann erst danach
 beurteilen, ob die Restaurierung gelungen ist. Zu spät für Korrekturen.

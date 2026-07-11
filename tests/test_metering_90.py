@@ -21,6 +21,7 @@ from dsp.professional_meters import (
 
 
 @pytest.fixture
+@pytest.mark.unit
 def test_audio_mono():
     """Generate 1s test tone (1 kHz, -20 dBFS)"""
     sr = 48000

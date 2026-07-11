@@ -255,6 +255,7 @@ def dummy_stereo_widener(audio, sr, width=0.5):
 # ============================================================================
 
 
+@pytest.mark.unit
 def test_complete_vocal_restoration_pipeline(realistic_vocal_audio, temp_log_dir):
     """Test complete vocal restoration: Defects -> Vocal -> Enhancement."""
     audio, sr = realistic_vocal_audio

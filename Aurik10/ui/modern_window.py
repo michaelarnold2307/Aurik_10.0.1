@@ -18107,7 +18107,7 @@ class ModernMainWindow(QMainWindow):
         if _ww is not None and getattr(_ww, "audio_data", None) is not None:
             _sr = max(1, getattr(_ww, "sample_rate", 48000))
             _audio_dur_s = _ww.audio_data.shape[0] / _sr
-        _per_file_ms = max(5_400_000, int(_audio_dur_s * 64_000) + 3_600_000)  # 64xRT + 60min overhead
+        _per_file_ms = max(5_400_000, int(_audio_dur_s * 32_000) + 1_800_000)  # 32xRT + 30min overhead (Spec §11.4)
         _watchdog_ms = max(5_400_000, stats["pending"] * _per_file_ms)
         if self._watchdog_timer is None:
             self._watchdog_timer = QTimer(self)
@@ -18141,7 +18141,7 @@ class ModernMainWindow(QMainWindow):
             return  # Watchdog nicht aktiv (Batch bereits abgeschlossen oder gestoppt)
         # Noch verbleibende ausstehende Dateien (aktuelle Datei + noch nicht gestartete)
         _pending = max(1, self.batch_queue.get_stats().get("pending", 1))
-        _per_file_ms = max(5_400_000, int(audio_duration_s * 64_000) + 3_600_000)
+        _per_file_ms = max(5_400_000, int(audio_duration_s * 32_000) + 1_800_000)
         _watchdog_ms = max(5_400_000, _pending * _per_file_ms)
         self._watchdog_timer.start(_watchdog_ms)
         logger.debug(

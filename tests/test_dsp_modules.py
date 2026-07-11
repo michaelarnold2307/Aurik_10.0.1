@@ -10,6 +10,7 @@ from dsp.multiband_compressor import MultibandCompressor
 from dsp.spectral_denoiser import SpectralDenoiser
 
 
+@pytest.mark.unit
 class TestAutomaticDeclicker:
     def test_declicker_init(self):
         declicker = AutomaticDeclicker()

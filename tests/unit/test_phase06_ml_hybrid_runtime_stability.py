@@ -1,3 +1,4 @@
+import pytest
 from __future__ import annotations
 
 import threading
@@ -40,6 +41,7 @@ def _make_rolloff_audio(sr: int = 48_000, duration_s: float = 0.35) -> np.ndarra
     return np.column_stack([rolled, rolled * 0.98]).astype(np.float32)
 
 
+@pytest.mark.unit
 def test_phase06_uses_ml_hybrid_when_audiosr_available(monkeypatch) -> None:
     # Mock psutil so the phase_06 headroom guard (requires 9.5 GB available) passes
     # on memory-constrained dev machines. Tests ML path logic, not RAM availability.

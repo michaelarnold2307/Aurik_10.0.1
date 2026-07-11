@@ -173,6 +173,7 @@ def dummy_declipper(audio: np.ndarray, sr: int, severity: float = 0.5) -> np.nda
 # ============================================================================
 
 
+@pytest.mark.unit
 def test_formant_shifter_safety_clean_audio(clean_vocal_audio, temp_log_dir):
     """Test formant shifter safety with clean vocal audio."""
     audio, sr = clean_vocal_audio

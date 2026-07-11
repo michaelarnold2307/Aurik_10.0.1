@@ -25,6 +25,7 @@ from backend.core.forensics.defect_quantifier import (
 )
 
 
+@pytest.mark.unit
 class TestDefectQuantifier:
     """Test defect quantifier functionality."""
 

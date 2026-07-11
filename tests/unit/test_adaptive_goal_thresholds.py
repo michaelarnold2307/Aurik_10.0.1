@@ -74,6 +74,7 @@ def _make_assessment(quality_level: MaterialQuality, degradation: float) -> Mate
 # ────────────────────────────────────────────────────────────────────────────
 
 
+@pytest.mark.unit
 class TestMaterialQualityEnum:
     """Prüft vollständige Enum-Spezifikation (7 Stufen, Sektion §2.31)."""
 

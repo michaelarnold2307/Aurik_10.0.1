@@ -61,6 +61,7 @@ def _vibrato(dur_s: float = 2.0, sr: int = SR, f0: float = 220.0, rate: float = 
 # ===========================================================================
 
 
+@pytest.mark.unit
 class TestSibilancePathology:
     def test_import(self):
         from backend.core.dsp.sibilance_pathology import (

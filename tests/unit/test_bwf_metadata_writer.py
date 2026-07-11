@@ -1,3 +1,4 @@
+import pytest
 """
 Unit-Tests für core/delivery_standards.py — BWFMetadataWriter
 
@@ -37,6 +38,7 @@ def _create_test_wav(path: Path, n_samples: int = 4410, sr: int = 44100) -> Path
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestBWFMetadataWriter:
     def test_returns_true_for_valid_wav(self, tmp_path):
         wav = _create_test_wav(tmp_path / "test.wav")

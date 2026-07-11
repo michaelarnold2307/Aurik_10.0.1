@@ -1,3 +1,4 @@
+import pytest
 """Erweiterte Unit-Tests für Genre-Classifier und Genre-Profile (v10.0).
 
 Testet:
@@ -49,6 +50,7 @@ SCHLAGER_CONFIDENCE_THRESHOLD = GermanSchlagerClassifier.SCHLAGER_CONFIDENCE_THR
 HSI_THRESHOLD = GermanSchlagerClassifier.HSI_THRESHOLD
 
 
+@pytest.mark.unit
 class TestV100GenreClassifierProfiles:
     """Erweiterte Tests für Genre-Classifier v10.0."""
 

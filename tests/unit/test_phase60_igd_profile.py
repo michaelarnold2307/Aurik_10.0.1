@@ -1,3 +1,4 @@
+import pytest
 """Unit-Tests: InnerGrooveDistortionRepairPhase._compute_igd_profile() (§2.56)."""
 
 import numpy as np
@@ -9,6 +10,7 @@ def _profile(material: str, qm: str = "balanced", rest: float = 50.0) -> dict:
     return InnerGrooveDistortionRepairPhase._compute_igd_profile(material, qm, rest)
 
 
+@pytest.mark.unit
 class TestIgdProfileMaterial:
     def test_vinyl_lower_min_than_cd(self):
         v = _profile("vinyl")["min_igd_score"]

@@ -1,3 +1,4 @@
+import pytest
 """
 Tests für RecordingProductionKB und Singer-School-Klassifikation (v9.12.x)
 
@@ -20,6 +21,7 @@ import numpy as np
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestProductionProfileLookup:
     """Testet get_production_profile() — Lookup-Logik."""
 

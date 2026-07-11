@@ -1,3 +1,4 @@
+import pytest
 """Regression-Tests fuer Phase-12 C3-Notfallpfad."""
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ def _noise(dur: float = 1.5, sr: int = SR) -> np.ndarray:
     return (0.18 * rng.standard_normal(n)).astype(np.float32)
 
 
+@pytest.mark.unit
 def test_phase12_c3_exception_uses_emergency_smoothing(monkeypatch):
     phase = WowFlutterFix()
     audio = _noise()

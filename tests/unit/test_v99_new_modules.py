@@ -81,6 +81,7 @@ def _stereo_wide(mono: np.ndarray, spread: float = 0.4) -> np.ndarray:
 # ===========================================================================
 
 
+@pytest.mark.unit
 class TestTonalCenterMetric:
     """Tests für TonalCenterMetric (§1.2 — 11. Musical Goal)."""
 

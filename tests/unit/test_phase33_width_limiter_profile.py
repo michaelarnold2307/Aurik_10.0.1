@@ -1,8 +1,10 @@
+import pytest
 """Unit tests for phase_33_stereo_width_limiter._compute_width_limiter_profile (§2.56)."""
 
 from backend.core.phases.phase_33_stereo_width_limiter import StereoWidthLimiterPhaseV2
 
 
+@pytest.mark.unit
 class TestWidthLimiterProfile:
     def _p(self, material="vinyl", qm="balanced", rest=50.0):
         return StereoWidthLimiterPhaseV2._compute_width_limiter_profile(material, qm, rest)

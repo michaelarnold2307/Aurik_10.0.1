@@ -14,6 +14,7 @@ import pytest
 from dsp.automatic_dehum import AutomaticDehum
 
 
+@pytest.mark.unit
 def test_dehum_basic():
     """Test dass AutomaticDehum.dehum() funktioniert"""
     print("=" * 80)

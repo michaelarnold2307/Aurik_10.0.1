@@ -66,6 +66,7 @@ def restored_5s(audio_5s):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestMDEMMorph:
     def test_01_returns_ndarray(self, mdem, restored_5s, audio_5s):
         out = mdem.morph(restored_5s, audio_5s, SR)

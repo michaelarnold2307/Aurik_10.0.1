@@ -1,3 +1,4 @@
+import pytest
 """
 tests/unit/test_v99_ab_compare.py — ABCompareManager Test-Suite (≥ 35 Tests)
 
@@ -65,6 +66,7 @@ def _fresh_manager() -> ABCompareManager:
 # ===========================================================================
 
 
+@pytest.mark.unit
 class TestABDiff:
     def test_01_as_dict_all_keys_present(self):
         d = ABDiff(

@@ -1,3 +1,4 @@
+import pytest
 """Tests for §2.35b vocal_proximity_score (compute_vocal_proximity_score).
 
 Verifies:
@@ -33,6 +34,7 @@ def _make_vocal_signal(sr: int = 48000, duration_s: float = 2.0) -> np.ndarray:
     return sig.astype(np.float32)
 
 
+@pytest.mark.unit
 class TestVocalProximityScore:
     """§2.35b compute_vocal_proximity_score unit tests."""
 

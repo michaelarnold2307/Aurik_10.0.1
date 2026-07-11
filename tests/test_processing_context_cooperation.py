@@ -19,6 +19,7 @@ import pytest
 from backend.core.processing_context import ModuleState, ModuleType, ProcessingContext
 
 
+@pytest.mark.unit
 class TestModuleCooperation:
     """Test module cooperation features."""
 

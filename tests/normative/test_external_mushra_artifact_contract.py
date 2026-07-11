@@ -240,6 +240,7 @@ def _make_valid_artifact(
 # ===========================================================================
 
 
+@pytest.mark.unit
 class TestMushraSchemaContractDefinitions:
     """Tests: Die normativen Kontrakt-Konstanten sind korrekt definiert."""
 

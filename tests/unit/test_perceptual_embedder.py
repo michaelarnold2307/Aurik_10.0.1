@@ -47,6 +47,7 @@ def _short(n: int = 64) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestImportAndStructure:
     def test_01_module_importable(self):
         assert PerceptualEmbedder is not None

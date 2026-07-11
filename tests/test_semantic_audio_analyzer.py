@@ -1,3 +1,4 @@
+import pytest
 """
 Tests for Semantic Audio Analyzer (Innovation #3)
 ==================================================
@@ -26,6 +27,7 @@ from backend.semantic.semantic_audio_analyzer import (
 )
 
 
+@pytest.mark.unit
 class TestSemanticAudioAnalyzer:
     """Test suite for Semantic Audio Analyzer."""
 

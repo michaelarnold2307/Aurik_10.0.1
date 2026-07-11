@@ -1,3 +1,4 @@
+import pytest
 """Unit-Tests: GrooveEchoCancellationPhase._compute_groove_echo_profile() (§2.56)."""
 
 import numpy as np
@@ -10,6 +11,7 @@ def _profile(material: str, qm: str | None = "balanced", rest: float = 50.0) -> 
     return GrooveEchoCancellationPhase._compute_groove_echo_profile(material, quality_mode, rest)
 
 
+@pytest.mark.unit
 def test_vinyl_more_sensitive_than_cd():
     vinyl = _profile("vinyl")
     cd = _profile("cd_digital")

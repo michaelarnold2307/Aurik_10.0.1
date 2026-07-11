@@ -1,3 +1,4 @@
+import pytest
 """
 tests/unit/test_v99_backend_modules_3537.py
 ============================================
@@ -62,6 +63,7 @@ AUDIO_STEREO = _stereo(AUDIO_SINE)
 # ===========================================================================
 
 
+@pytest.mark.unit
 class TestListeningFatigueAnalyzer:
     """v9.10.35 — analyze_listening_fatigue()"""
 

@@ -17,6 +17,7 @@ def _anti_phase_stereo(n: int = 128) -> np.ndarray:
     )
 
 
+@pytest.mark.unit
 def test_mono_guard_applies_side_softening() -> None:
     """Anti-Phasen-Stereo: Side-Pegel wird reduziert (kein harter Mono-Downmix)."""
     audio = _anti_phase_stereo(96)

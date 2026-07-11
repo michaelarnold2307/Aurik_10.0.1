@@ -1,3 +1,4 @@
+import pytest
 """
 tests/unit/test_loudness_cascade_guard.py — §2.45a Mid-Pipeline-Loudness-Drift-Guard 3-Stage Cascade
 
@@ -81,6 +82,7 @@ def _musical_gain_envelope(
 # ------ Tests ------
 
 
+@pytest.mark.unit
 class TestGatedRMS:
     """§2.45a-I: Frame-based gated RMS, only frames > -50 dBFS."""
 

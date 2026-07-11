@@ -1,8 +1,10 @@
+import pytest
 import numpy as np
 
 from dsp.analysis_and_quality import RMSEnergy, SpectralCentroid, SpectralRolloff, ZeroCrossingRate
 
 
+@pytest.mark.unit
 def test_spectral_centroid_basic():
     audio = np.ones(1024)
     sr = 44100

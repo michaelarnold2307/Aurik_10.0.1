@@ -1,8 +1,10 @@
+import pytest
 import numpy as np
 
 from dsp.harmonic_exciter import HarmonicExciter, HarmonicExciterStudio
 
 
+@pytest.mark.unit
 def test_harmonic_exciter_mono_shape_finite_and_clip() -> None:
     sr = 48000
     t = np.linspace(0.0, 1.0, sr, endpoint=False)

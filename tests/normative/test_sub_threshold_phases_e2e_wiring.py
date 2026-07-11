@@ -1,3 +1,4 @@
+import pytest
 """
 §2.47b Normativtest: sub_threshold_phases End-to-End-Wiring
 
@@ -13,6 +14,7 @@ Normative Referenz:
 from __future__ import annotations
 
 
+@pytest.mark.unit
 class TestSubThresholdPhasesUV3Aggregation:
     """UV3 aggregiert sub_threshold_phases-Einträge aus PMGG-Log-Entries."""
 

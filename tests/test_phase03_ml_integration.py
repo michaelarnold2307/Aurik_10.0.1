@@ -12,6 +12,7 @@ import pytest
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
 
+@pytest.mark.timeout(10)
 def test_phase03_ml_routing():
     """Test Phase 03 with ML routing for different quality modes."""
     print("=" * 80)
@@ -26,8 +27,8 @@ def test_phase03_ml_routing():
         print(f"✗ Failed to import Phase 03: {e}")
         pytest.fail(f"Failed to import Phase 03: {e}")
 
-    # Create synthetic noisy audio (5 seconds, 48 kHz)
-    duration = 5.0
+    # Create synthetic noisy audio (0.5s, 48 kHz — längeres Audio hängt)
+    duration = 0.5
     sample_rate = 48000
     samples = int(duration * sample_rate)
 

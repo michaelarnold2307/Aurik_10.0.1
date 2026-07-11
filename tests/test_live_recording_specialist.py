@@ -196,6 +196,7 @@ def audio_with_room_modes():
 # ===== CrowdNoiseIsolator Tests =====
 
 
+@pytest.mark.unit
 class TestCrowdNoiseIsolator:
     def test_initialization(self):
         detector = CrowdNoiseIsolator(sensitivity=0.7, preserve_applause=True)

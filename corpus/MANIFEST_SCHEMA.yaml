@@ -1,0 +1,101 @@
+# MANIFEST_SCHEMA.yaml — Schema für corpus/*/manifest.yaml
+
+schema_version: "1.0"
+description: "Metadaten-Schema für Echt-Audio-Test-Corpus (§15.2)"
+
+required_fields:
+  - file
+  - duration_s
+  - sample_rate
+  - channels
+  - material
+  - license
+
+fields:
+  file:
+    type: string
+    description: "Dateiname relativ zum manifest.yaml-Verzeichnis"
+    example: "jazz_78_shellac_1938.wav"
+
+  duration_s:
+    type: float
+    description: "Dauer in Sekunden"
+    example: 24.5
+
+  sample_rate:
+    type: integer
+    description: "Abtastrate in Hz"
+    example: 48000
+
+  channels:
+    type: integer
+    description: "Anzahl Kanäle (1=mono, 2=stereo)"
+    enum: [1, 2]
+
+  material:
+    type: string
+    description: "Tonträgermaterial"
+    enum: [shellac, wax_cylinder, lacquer_disc, wire_recording, vinyl, tape, reel_tape, cassette, digital]
+
+  era:
+    type: integer
+    description: "Aufnahmejahr (best estimate)"
+    example: 1938
+
+  genre:
+    type: string
+    description: "Musikgenre"
+    example: "Jazz"
+
+  defects:
+    type: list[string]
+    description: "Bekannte Defekttypen"
+    items:
+      enum:
+        - clicks
+        - pops
+        - crackle
+        - surface_noise
+        - hiss
+        - hum
+        - rumble
+        - wow
+        - flutter
+        - dropouts
+        - distortion
+        - clipping
+        - bandwidth_limited
+        - stereo_imbalance
+        - phase_issues
+        - print_through
+        - crosstalk
+        - groove_echo
+        - inner_groove_distortion
+        - modulation_noise
+
+  source:
+    type: string
+    description: "Quelle der Aufnahme"
+    example: "Internet Archive — 78rpm Collection"
+
+  source_url:
+    type: string
+    description: "URL zur Quelle"
+
+  license:
+    type: string
+    description: "Lizenz"
+    enum: ["Public Domain", "CC0", "CC BY 4.0", "Other — see license_url"]
+
+  license_url:
+    type: string
+    description: "URL zum Lizenztext"
+
+  checksum_sha256:
+    type: string
+    description: "SHA-256-Hash der Audiodatei"
+    example: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+
+  notes:
+    type: string
+    description: "Freitext-Notizen"

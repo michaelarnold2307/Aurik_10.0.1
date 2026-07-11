@@ -13,6 +13,7 @@ import numpy as np
 import pytest
 
 
+@pytest.mark.unit
 def test_optimization_integration():
     """Canonical CLI exists and exposes the current AurikDenker-based interface."""
     cli_path = Path("cli/aurik_cli.py")

@@ -34,6 +34,7 @@ AUDIO_STEREO = np.stack([AUDIO_SINE, AUDIO_SINE], axis=1)
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 def test_versa_plugin_importable():
     """VersaPlugin muss aus plugins.versa_plugin importierbar sein."""
     from plugins.versa_plugin import VersaPlugin

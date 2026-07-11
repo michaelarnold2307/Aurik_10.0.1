@@ -9,6 +9,7 @@ from backend.core.recording_chain_profiler import (
 )
 
 
+@pytest.mark.unit
 class TestRecordingChainProfilerBelowThreshold:
     def test_two_causes_returns_empty_profile(self):
         rcp = RecordingChainProfiler()

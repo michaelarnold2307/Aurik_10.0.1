@@ -1,3 +1,4 @@
+import pytest
 """Unit-Tests für core/psychoacoustic_masking_model.py — PsychoacousticMaskingModel.
 
 Spec §4.5: ISO 11172-3 Masking-Modell als Restaurierungs-Regler.
@@ -39,6 +40,7 @@ def _silence(secs: float = 1.0) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestPsychoacousticMaskingInit:
     def test_01_class_importable(self):
         assert PsychoacousticMaskingModel is not None

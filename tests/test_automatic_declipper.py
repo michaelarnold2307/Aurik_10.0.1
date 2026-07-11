@@ -1,8 +1,10 @@
+import pytest
 import numpy as np
 
 from dsp.automatic_declipper import AutomaticDeclipper
 
 
+@pytest.mark.unit
 def test_declipper_removes_clipping():
     sr = 44100
     t = np.linspace(0, 1, sr, endpoint=False)

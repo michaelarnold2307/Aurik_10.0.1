@@ -208,12 +208,37 @@ class VocalOverprocessingDetector:
     SIBILANCE_BAND = (5000.0, 10000.0)
     SIBILANCE_RATIO_THRESHOLD: float = 0.40
 
+    # ── §v10 Adaptive Thresholds ──────────────────────────────────────
+
+    def _adapt_thresholds(
+        self, vocals: np.ndarray, sr: int, era_decade: int | None = None
+    ) -> dict[str, float]:
+        """SNR/Era-adaptive Schwellwerte (§v10)."""
+        mono = vocals if vocals.ndim == 1 else vocals.mean(axis=0)
+        rms = float(np.sqrt(np.mean(mono**2)) + 1e-12)
+        noise_floor = float(np.percentile(np.abs(mono), 5) + 1e-12)
+        snr_est = float(np.clip(20.0 * np.log10(rms / noise_floor), 5.0, 40.0))
+        snr_scale = float(np.clip(25.0 / max(8.0, snr_est), 0.6, 1.3))
+        era_scale = 1.0
+        if era_decade is not None:
+            if era_decade < 1960:   era_scale = 1.30
+            elif era_decade < 1980: era_scale = 1.15
+            elif era_decade >= 2000: era_scale = 0.90
+        return {
+            "lisp_threshold": float(self.LISP_VARIANCE_THRESHOLD_DB * snr_scale * era_scale),
+            "sibilance_threshold": float(
+                self.SIBILANCE_RATIO_THRESHOLD * (2.0 - snr_scale) * (2.0 - min(era_scale, 1.5))
+            ),
+            "formant_threshold": float(self.FORMANT_DRIFT_THRESHOLD_PCT * snr_scale * era_scale),
+        }
+
     def check_de_essing(
         self,
         vocals_pre: np.ndarray,
         vocals_post: np.ndarray,
         sr: int,
         phase_id: str = "phase_19",
+        era_decade: int | None = None,
     ) -> VocalOverprocessingResult:
         """Check for lisp and sibilance over-reduction after de-essing.
 
@@ -222,23 +247,25 @@ class VocalOverprocessingDetector:
             vocals_post: Vocal audio after the de-essing phase.
             sr:          Sample rate.
             phase_id:    Phase identifier for reporting.
+            era_decade:  Optional era decade for adaptive thresholds (§v10).
 
         Returns:
             VocalOverprocessingResult.
         """
         warnings: list[str] = []
+        _th = self._adapt_thresholds(vocals_pre, sr, era_decade)
 
         # ── Lisp Detection ────────────────────────────────────────────
         lisp_var_pre = _band_variance_db(vocals_pre, sr, *self.LISP_BAND)
         lisp_var_post = _band_variance_db(vocals_post, sr, *self.LISP_BAND)
         lisp_variance_db = lisp_var_post - lisp_var_pre
-        lisp_detected = lisp_var_post > self.LISP_VARIANCE_THRESHOLD_DB
+        lisp_detected = lisp_var_post > _th["lisp_threshold"]
 
         if lisp_detected:
             msg = (
                 f"§VOD-1 Lisp detected after {phase_id}: "
                 f"6–10 kHz variance = {lisp_var_post:.1f} dB > "
-                f"{self.LISP_VARIANCE_THRESHOLD_DB} dB. De-essing may be too aggressive."
+                f"{_th['lisp_threshold']:.1f} dB (adaptive). De-essing may be too aggressive."
             )
             warnings.append(msg)
             logger.warning(msg)
@@ -247,13 +274,13 @@ class VocalOverprocessingDetector:
         sib_pre = _band_energy(vocals_pre, sr, *self.SIBILANCE_BAND)
         sib_post = _band_energy(vocals_post, sr, *self.SIBILANCE_BAND)
         sib_ratio = float(np.clip(sib_post / max(sib_pre, 1e-12), 0.0, 2.0))
-        sib_over_reduced = sib_ratio < self.SIBILANCE_RATIO_THRESHOLD
+        sib_over_reduced = sib_ratio < _th["sibilance_threshold"]
 
         if sib_over_reduced:
             msg = (
                 f"§VOD-1 Sibilance over-reduction after {phase_id}: "
-                f"post/pre ratio = {sib_ratio:.3f} < {self.SIBILANCE_RATIO_THRESHOLD}. "
-                f"Original sibilance energy was reduced by > {100 * (1 - self.SIBILANCE_RATIO_THRESHOLD):.0f} %."
+                f"post/pre ratio = {sib_ratio:.3f} < {_th['sibilance_threshold']:.3f} (adaptive). "
+                f"Original sibilance energy was significantly reduced."
             )
             warnings.append(msg)
             logger.warning(msg)

@@ -1,3 +1,4 @@
+import pytest
 """
 tests/unit/test_holistic_perceptual_gate.py — §2.44 HolisticPerceptualGate Test-Suite (≥ 25 Tests)
 Alle Tests synthetisch, kein ML-Modell erforderlich.
@@ -18,6 +19,7 @@ def _audio(dur: float = 1.0, amp: float = 0.3, freq: float = 440.0):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 def test_00_import():
     from backend.core.holistic_perceptual_gate import HolisticPerceptualGate, get_holistic_gate
 

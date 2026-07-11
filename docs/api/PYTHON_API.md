@@ -1,6 +1,6 @@
 # Aurik 9.x.x - Python API (Kanonischer Vertrag)
 
-**Version:** 9.12.8  
+**Version:** 9.20.3  
 **Stand:** Mai 2026  
 **Status:** RELEASE_MUST-konform
 

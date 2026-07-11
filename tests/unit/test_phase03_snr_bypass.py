@@ -1,3 +1,4 @@
+import pytest
 """Unit tests — §2.47 Phase_03 SNR > 35 dB Dry-Signal Bypass."""
 
 from __future__ import annotations
@@ -9,6 +10,7 @@ from backend.core.phases.phase_03_denoise import DenoisePhase
 SR = 48_000
 
 
+@pytest.mark.unit
 def test_phase03_snr_bypass_for_clean_signal() -> None:
     """Clean signal must bypass denoise to avoid unnecessary artefacts."""
     t = np.arange(SR, dtype=np.float32) / SR

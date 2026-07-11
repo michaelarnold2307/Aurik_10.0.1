@@ -59,6 +59,7 @@ def _make_mock_defect_score(severity: float, confidence: float, metadata: dict |
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestConfidenceWeighting:
     """§9.11.1 Confidence-Weighting in _salience_adjusted_severity."""
 

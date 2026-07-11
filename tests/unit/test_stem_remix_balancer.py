@@ -25,6 +25,7 @@ def _stereo(dur: float = 3.0, amp: float = 0.3):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 def test_00_import():
     from backend.core.stem_remix_balancer import StemRemixBalancer
 

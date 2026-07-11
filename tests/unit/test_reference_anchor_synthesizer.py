@@ -41,6 +41,7 @@ def _mock_era():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 def test_00_import():
     from backend.core.reference_anchor_synthesizer import ReferenceAnchorSynthesizer
 

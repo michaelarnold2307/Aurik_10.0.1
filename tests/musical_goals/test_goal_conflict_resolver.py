@@ -47,6 +47,7 @@ def zero_deltas():
     }
 
 
+@pytest.mark.unit
 class TestConflictDetection:
     """Test conflict detection logic."""
 

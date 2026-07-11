@@ -1,3 +1,4 @@
+import pytest
 """
 Unit-Tests für dsp/ultra_low_latency.py
 
@@ -44,6 +45,7 @@ def _loud(n: int = SR, amp: float = 3.0) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestUltraLowLatencyLimiter:
     def test_output_shape_preserved(self):
         audio = _sine()

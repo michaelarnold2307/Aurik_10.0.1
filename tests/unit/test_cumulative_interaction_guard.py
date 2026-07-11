@@ -1,3 +1,4 @@
+import pytest
 """
 tests/unit/test_cumulative_interaction_guard.py — §2.48 Interaktions-Guard Test-Suite (≥ 25 Tests)
 Alle Tests synthetisch, kein ML-Modell erforderlich.
@@ -30,6 +31,7 @@ def _goals(nat=0.92, auth=0.90, tonal=0.96, timbre=0.89, artic=0.87):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 def test_00_import():
     from backend.core.cumulative_interaction_guard import (
         CumulativeInteractionGuard,

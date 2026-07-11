@@ -1,3 +1,4 @@
+import pytest
 """Unit tests for the productive DSP phoneme boundary detector."""
 
 import numpy as np
@@ -16,6 +17,7 @@ def _fricative_noise(sr: int = 48000, duration: float = 0.25) -> np.ndarray:
         return noise
 
 
+@pytest.mark.unit
 def test_detects_fricative_frames_from_high_band_noise():
     from backend.core.dsp.phoneme_boundary_detector import PhonemeClass, get_phoneme_features_dsp
 

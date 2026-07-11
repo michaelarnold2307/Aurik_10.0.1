@@ -10,6 +10,7 @@ from backend.core.klang_guards import GuardWisdom, CrossGuardCoordinator
 from backend.core.goal_budget import GoalBudget
 
 
+@pytest.mark.unit
 class TestGuardWisdomIntegrationSmoke:
     def test_guard_wisdom_strength_drops_on_violations(self):
         """GuardWisdom.get_strength_mod() must drop below 1.0 after violations."""

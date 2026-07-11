@@ -61,6 +61,7 @@ def sample_processed_file():
 # =============================================================================
 
 
+@pytest.mark.unit
 class TestSessionCreation:
     """Test session creation and basic management."""
 

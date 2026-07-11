@@ -346,9 +346,19 @@ def list_device_ids() -> list[str]:
 # Singleton
 # ---------------------------------------------------------------------------
 
+import threading
+
+_instance: dict[str, PlaybackDeviceProfile] | None = None
+_lock = threading.Lock()
+
 
 def get_cached_profile(device_id: str) -> PlaybackDeviceProfile:
     """Thread-safe singleton cache for device profiles."""
+    global _instance
+    if _instance is None:
+        with _lock:
+            if _instance is None:
+                _instance = {}
     if device_id not in _instance:
         with _lock:
             if device_id not in _instance:

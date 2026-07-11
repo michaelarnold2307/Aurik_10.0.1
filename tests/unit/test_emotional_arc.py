@@ -1,3 +1,4 @@
+import pytest
 """
 tests/unit/test_emotional_arc.py — EmotionalArcPreservationMetric Test-Suite (≥ 15 Tests)
 Alle Tests synthetisch, kein Datei-I/O, SR = 48_000.
@@ -35,6 +36,7 @@ def _dynamic_audio(dur: float = 40.0) -> np.ndarray:
 # ─── Tests ────────────────────────────────────────────────────────────────────
 
 
+@pytest.mark.unit
 def test_00_import():
     from backend.core.emotional_arc_preservation import (
         EmotionalArcPreservationMetric,

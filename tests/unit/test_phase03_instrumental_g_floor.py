@@ -21,6 +21,7 @@ def _make_sine(f0: float = 440.0, duration_s: float = 1.0, amplitude: float = 0.
     return (amplitude * np.sin(2 * np.pi * f0 * t)).astype(np.float32)
 
 
+@pytest.mark.unit
 class TestPhase03InstrumentalGFloorBoost:
     """§4.5b: g_floor wird bei panns_singing < 0.10 um +0.05 erhöht."""
 

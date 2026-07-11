@@ -1,3 +1,4 @@
+import pytest
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -6,6 +7,7 @@ import Aurik10.ui.audio_player as audio_player_mod
 from Aurik10.ui.audio_player import StreamingAudioPlayer
 
 
+@pytest.mark.unit
 def test_streaming_player_unavailable_when_sounddevice_missing(monkeypatch) -> None:
     monkeypatch.setattr(audio_player_mod, "_SD_AVAILABLE", False)
     monkeypatch.setattr(audio_player_mod, "sd", None)

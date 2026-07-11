@@ -1,8 +1,10 @@
+import pytest
 from __future__ import annotations
 
 from backend.core.phases.phase_49_advanced_dereverb import AdvancedDereverbPhase
 
 
+@pytest.mark.unit
 def test_wet_mix_guard_profile_keys_and_bounds() -> None:
     p = AdvancedDereverbPhase._adaptive_wet_mix_guard_profile(
         material_key="vinyl",

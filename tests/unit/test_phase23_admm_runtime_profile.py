@@ -1,3 +1,4 @@
+import pytest
 from __future__ import annotations
 
 import numpy as np
@@ -6,6 +7,7 @@ from backend.core.defect_scanner import MaterialType
 from backend.core.phases.phase_23_spectral_repair import SpectralRepair
 
 
+@pytest.mark.unit
 def test_admm_runtime_profile_keys_and_bounds() -> None:
     p = SpectralRepair._compute_admm_runtime_profile(
         material=MaterialType.VINYL,

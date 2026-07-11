@@ -18,6 +18,7 @@ import pytest
 from backend.core.onnx.plugin_manager import ONNXPluginManager, load_model
 
 
+@pytest.mark.unit
 class TestONNXPluginManager:
     """Test suite for ONNXPluginManager."""
 

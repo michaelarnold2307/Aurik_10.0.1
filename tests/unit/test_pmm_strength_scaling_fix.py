@@ -40,6 +40,7 @@ def _sine_plus_noise(freq: float = 440.0, secs: float = 2.0, noise_amp: float = 
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestPhase18BlendOrdering:
     """Stellt sicher dass Wet/Dry-Blend VOR Loudness-Preservation in phase_18 stattfindet.
 

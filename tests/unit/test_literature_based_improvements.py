@@ -1,3 +1,4 @@
+import pytest
 """
 tests/unit/test_literature_based_improvements.py — Literatur-gestützte Verbesserungen
 
@@ -28,6 +29,7 @@ SR = 48000
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+@pytest.mark.unit
 class TestZwickerMaskingSpread:
     """_apply_excitation_spread folgt ISO 532-1 Spreading-Funktion."""
 

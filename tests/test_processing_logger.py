@@ -50,6 +50,7 @@ def temp_output_dir():
         yield Path(tmpdir)
 
 
+@pytest.mark.unit
 class TestQualityMetrics:
     """Test QualityMetrics computation."""
 

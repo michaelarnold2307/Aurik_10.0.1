@@ -1,3 +1,4 @@
+import pytest
 from __future__ import annotations
 
 import json
@@ -10,6 +11,7 @@ from audit.bridge_import_status_dashboard import (
 )
 
 
+@pytest.mark.unit
 def test_build_bridge_import_status_summary_warning_case() -> None:
     consolidated = {
         "bridge_import_status_present": True,

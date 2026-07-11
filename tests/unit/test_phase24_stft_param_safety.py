@@ -1,3 +1,4 @@
+import pytest
 """Phase 24 short-context STFT safety tests.
 
 Ensures tonal/atonal repair paths stay stable for short before/after windows
@@ -9,6 +10,7 @@ import numpy as np
 from backend.core.phases.phase_24_dropout_repair import DropoutRepairPhase
 
 
+@pytest.mark.unit
 def test_phase24_repair_tonal_short_context_finite():
     phase = DropoutRepairPhase()
     phase.sample_rate = 48000

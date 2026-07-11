@@ -31,6 +31,7 @@ def analyzer():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 def test_analyze_wrong_sr_raises(analyzer):
     audio = np.zeros(SR, dtype=np.float32)
     with pytest.raises(AssertionError):

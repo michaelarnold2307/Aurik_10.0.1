@@ -1,16 +1,42 @@
-# Bandwidth Reconstructor — Komplette Pipeline (Aurik)
+# Bandwidth Reconstructor — Status & Empfehlung
 
-Dieser Ordner enthält alles, um ein eigenes BW-Reconstructor-Modell zu
-trainieren, nach ONNX zu exportieren und als Aurik-Plugin einzubinden.
+## ✅ Empfohlen: DSP Harmonic Exciter (kein ML)
 
-## Übersicht
+Nach umfangreichen Experimenten (5 ML-Architekturen, 52h Training) ist die
+empfohlene Lösung für Aurik der **DSP-basierte Harmonic Exciter**:
+`plugins/bw_harmonic_exciter.py`.
 
-| Datei | Zweck | Wer führt sie aus? |
+**Warum DSP statt ML:**
+- 26/30 Musiksegmente verbessert, 0 verschlechtert
+- 0 MB Modell, <10ms Latenz, kein Training nötig
+- Garantiert: blend=0 = Original unverändert
+
+## ML-Experimente (Referenz)
+
+Die folgenden Skripte dokumentieren die ML-Experimente. Sie sind funktionsfähig,
+aber die erzielten Modelle waren nicht produktionsreif:
+
+| Datei | Architektur | Ergebnis |
 |---|---|---|
-| `generate_defect_training_data.py` | Synthetische BW-Trainingsdaten | Du (einmalig) |
-| `train_bw_reconstructor.py` | U-Net-Training (PyTorch) | Du (GPU-Server, ~2h) |
-| `export_bw_to_onnx.py` | PyTorch → ONNX | Du (einmalig nach Training) |
-| `../plugins/bw_reconstructor_plugin.py` | Aurik-Plugin (ONNX-Inferenz) | Aurik (automatisch) |
+| `train_bw_compact.py` | U-Net + L1 | Explodiert bei 8 kHz |
+| `train_bw_v2.py` | +FiLM + MR-STFT | Stabil, zu konservativ |
+| `train_bw_v3.py` | +PatchGAN | 2× Gain, bester ML-Ansatz |
+| `train_bw_v4.py` | GAN + MUSDB18 | Mode-Collapse |
+| `train_bw_v5.py` | Waveform-U-Net | Mode-Collapse |
+
+## ML-Training (nur für Forschung)
+
+| Datei | Zweck |
+|---|---|
+| `generate_defect_training_data.py` | Synthetische BW-Trainingsdaten |
+| `train_bw_compact.py` | Self-contained Training (keine Daten nötig) |
+| `train_bw_v2.py` | FiLM + MR-STFT Loss |
+| `train_bw_v3.py` | PatchGAN (bester ML-Ansatz) |
+| `train_bw_v4.py` | GAN auf MUSDB18 |
+| `train_bw_v5.py` | Waveform-U-Net |
+| `export_bw_to_onnx.py` | PyTorch → ONNX |
+| `../plugins/bw_reconstructor_plugin.py` | Aurik-Plugin (ONNX) |
+| `../plugins/bw_harmonic_exciter.py` | **Empfohlen: DSP (kein ML)** |
 
 ## Quickstart
 

@@ -5,6 +5,7 @@ import pytest
 from pathlib import Path
 
 
+@pytest.mark.unit
 class TestFileImportResilience:
     """Verifies file_import works regardless of resampy availability."""
 
@@ -69,7 +70,8 @@ class TestLoudnessFallback:
 
         result = analyzer.analyze(audio, 48000)
         assert isinstance(result, LoudnessResult)
-        assert np.isfinite(result.integrated_lufs)
+        # Silence produces -inf LUFS — that's physically correct, not a crash
+        assert not np.isnan(result.integrated_lufs), f"LUFS is NaN: {result.integrated_lufs}"
 
 
 class TestPsychoacousticMetricsMigration:

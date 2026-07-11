@@ -39,6 +39,7 @@ def _signal_mag(n: int = 512, level: float = 0.5) -> np.ndarray:
 # ===========================================================================
 
 
+@pytest.mark.unit
 class TestAdaptiveOMLSA:
     # --- OMLSA Grundfunktion ---
 

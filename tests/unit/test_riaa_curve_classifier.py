@@ -44,6 +44,7 @@ def riaa_shaped_audio():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 def test_riaa_slope_profiles_has_required_entries():
     from backend.core.dsp.riaa_curve_classifier import RIAA_SLOPE_PROFILES
 

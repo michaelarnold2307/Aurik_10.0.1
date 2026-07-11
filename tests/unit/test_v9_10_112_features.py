@@ -1,3 +1,4 @@
+import pytest
 """Tests für v9.10.112-Features: Phase-12-Qualität, UV3-Reihenfolge, Queue-Drag&Drop,
 Phase-06/20/42 DSP-Qualitätsverbesserungen.
 
@@ -21,6 +22,7 @@ import uuid
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestPhase12QualityConstants:
     """Phase 12 muss 75 % Overlap (factor=4) und 2048er STFT-Fenster verwenden."""
 

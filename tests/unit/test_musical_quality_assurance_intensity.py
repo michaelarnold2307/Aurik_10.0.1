@@ -61,6 +61,7 @@ def _integrity_ok() -> IntegrityCheckResult:
     )
 
 
+@pytest.mark.unit
 def test_validate_final_quality_uses_unique_modules_for_intensity(monkeypatch):
     """Duplicate module names must not inflate processing intensity."""
     mqa = MusicalQualityAssurance()

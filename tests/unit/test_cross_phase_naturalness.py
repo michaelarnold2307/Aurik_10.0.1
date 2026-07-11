@@ -1,9 +1,11 @@
+import pytest
 """Unit tests for cross_phase_naturalness.py"""
 import numpy as np, pytest
 from backend.core.cross_phase_naturalness import (CrossPhaseTracker,get_tracker,reset_tracker,
     estimate_band_effects,guard_stage,BANDS)
 _SR=48000
 
+@pytest.mark.unit
 class TestCrossPhaseTracker:
     def test_01_init(self):
         t=CrossPhaseTracker()

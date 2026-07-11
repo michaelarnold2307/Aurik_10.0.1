@@ -1,0 +1,16 @@
+- file: placeholder_digital_electronic_2020.wav
+  duration_s: 0.0
+  sample_rate: 0
+  channels: 0
+  material: digital
+  era: 2020
+  genre: Electronic
+  defects:
+  - clipping
+  source: Freesound (CC0)
+  source_url: https://freesound.org
+  license: CC0
+  license_url: ''
+  checksum_sha256: ''
+  notes: 'PLACEHOLDER: Bitte durch echte CC0-Aufnahme ersetzen'
+  _status: placeholder

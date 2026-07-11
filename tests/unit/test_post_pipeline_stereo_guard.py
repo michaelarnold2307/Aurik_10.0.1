@@ -1,3 +1,4 @@
+import pytest
 """
 tests/unit/test_post_pipeline_stereo_guard.py — §2.49b Post-Pipeline Cumulative Stereo-Collapse Guard
 
@@ -61,6 +62,7 @@ def _guard_logic(
 # ------ Tests ------
 
 
+@pytest.mark.unit
 class TestStereoCollapseDetection:
     """Imbalance detection logic."""
 

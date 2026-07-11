@@ -25,6 +25,7 @@ from forensics.medium_detector import (
 )
 
 
+@pytest.mark.unit
 class TestMediumDetector:
     """Tests für MediumDetector-Klasse."""
 

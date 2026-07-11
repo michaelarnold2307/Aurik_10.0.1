@@ -1,3 +1,4 @@
+import pytest
 """Quality-first contract audit across all 64 phases.
 
 This test enforces two invariants:
@@ -11,6 +12,7 @@ import re
 from pathlib import Path
 
 
+@pytest.mark.unit
 def test_phase_file_count_is_64() -> None:
     root = Path(__file__).resolve().parents[2]
     phases = sorted((root / "backend/core/phases").glob("phase_[0-9][0-9]_*.py"))

@@ -1,7 +1,7 @@
 # KI-Agent Integration Guide — AURIK 9.x.x
 
 **Erstellt:** 15. Februar 2026 | **Aktualisiert:** 19. Mai 2026  
-**Version:** 9.12.8  
+**Version:** 9.20.3  
 **Zielgruppe:** KI-Agenten (GitHub Copilot, Claude, GPT) die an AURIK arbeiten  
 **Status:** 🟢 AKTIV — Verbindlich für alle KI-Agenten
 
@@ -458,5 +458,5 @@ Jede neue DSP-Funktion MUSS auf mindestens einem dieser Prinzipien basieren:
 
 ---
 
-**KI-Agent Integration Guide — Aurik 9.12.8 — Mai 2026**
+**KI-Agent Integration Guide — Aurik 9.20.3 — Mai 2026**
 **Bindend für: GitHub Copilot, Claude, GPT-Instanzen**

@@ -745,7 +745,7 @@ Formel:  w > 1.5 → w' = 1.5 + excess/(1 + 3·excess)    // Asymptote: 1.83
 - Alle Audio-Features sind **optional** (None → Schritt wird übersprungen). Rein label-basierte Berechnung bleibt valide.
 - Genre-Alias-Resolution: `"soul"` → `"soul/r&b"`, `"deutscher schlager"` → `"schlager"` etc.
 
-### §2.56e Messverfahren-Konventionen (normativ)
+### [RELEASE_MUST] §2.56e Messverfahren-Konventionen (normativ)
 
 | Feature | Korrekt | VERBOTEN |
 | --- | --- | --- |
@@ -811,7 +811,7 @@ Formel:  w > 1.5 → w' = 1.5 + excess/(1 + 3·excess)    // Asymptote: 1.83
 
 CREPE ändert `w_crepe` 0.0→0.18 zwischen before/after → Pseudo-Regression Δ ≈ 0.15–0.28 → false P1-Kaskade → Phase_03 best-effort @ 5.6 % → Noise-Floor −55 dBFS → Tiefen-Immersion zerstört.
 
-### quality_estimate-Formel (einzige erlaubte)
+### [RELEASE_MUST] quality_estimate-Formel (einzige erlaubte)
 
 ```python
 quality_estimate = max(0.0, min(1.0, 0.40 * (1 - defect_severity) + 0.60 * (pqs_mos - 1) / 4))

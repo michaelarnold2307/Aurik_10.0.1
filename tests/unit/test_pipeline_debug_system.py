@@ -130,6 +130,7 @@ def mock_result(minimal_log_entry, entry_with_regression):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 def test_phase_gate_log_entry_has_scores_fields():
     """PhaseGateLogEntry muss scores_before und scores_after haben."""
     from backend.core.per_phase_musical_goals_gate import PhaseGateLogEntry

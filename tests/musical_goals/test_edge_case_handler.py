@@ -206,6 +206,7 @@ def clipped_audio():
 # =============================================================================
 
 
+@pytest.mark.unit
 class TestExtremeDegradationDetection:
     """Test extreme degradation detection."""
 

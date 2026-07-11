@@ -28,6 +28,7 @@ from backend.core.multi_pass_strategy import (
 from backend.core.processing_modes import ProcessingMode
 
 
+@pytest.mark.unit
 class TestProcessingVariant:
     """Test ProcessingVariant creation und Konfiguration."""
 

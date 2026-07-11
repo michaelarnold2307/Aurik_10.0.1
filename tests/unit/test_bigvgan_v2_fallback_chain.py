@@ -1,3 +1,4 @@
+import pytest
 """Unit tests for BigVGAN-v2 productive fallback chain."""
 
 import types
@@ -10,6 +11,7 @@ def _audio(sr: int = 48000, duration: float = 0.25) -> np.ndarray:
     return (0.2 * np.sin(2.0 * np.pi * 440.0 * t)).astype(np.float32)
 
 
+@pytest.mark.unit
 def test_bigvgan_fallback_prefers_loaded_vocos(monkeypatch):
     from plugins.bigvgan_v2_plugin import BigVGANv2Plugin
 

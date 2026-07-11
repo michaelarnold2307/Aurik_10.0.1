@@ -1,3 +1,4 @@
+import pytest
 """Unit-Tests für backend/core/adaptive_chunk_processor.py — §7.6 Severity-adaptive Chunks.
 
 ≥ 20 Tests: Chunk-Größen, Crossfade, Stereo, NaN-Guard, Silence, Edge-Cases.
@@ -43,6 +44,7 @@ def _boost_fn(audio, **kwargs):
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestComputeChunkSize:
     def test_01_silence_returns_120s(self):
         assert compute_chunk_size_s(0.0, is_silence=True) == CHUNK_SILENCE_S

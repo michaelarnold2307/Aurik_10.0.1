@@ -83,6 +83,7 @@ def detector():
 # ============================================================
 
 
+@pytest.mark.unit
 def test_detector_initialization():
     """Test ArtifactDetector initialization."""
     detector = ArtifactDetector(sensitivity=0.7, frame_size=4096, hop_size=1024)

@@ -1,12 +1,12 @@
 # Aurik 9.x.x - Dokumentationsindex
 
-Offizielle Dokumentation fuer Aurik 9.12.8.
+Offizielle Dokumentation fuer Aurik 9.20.3.
 
 ## Normativer Vorrang
 
 Bei Abweichungen zwischen Einzel-Dokumenten und Spezifikation gilt immer:
 
-1. `.github/specs/01-08`
+1. `.github/specs/01-14`
 2. `docs/CHANGELOG_HISTORY.md`
 
 ## Kernfakten
@@ -15,7 +15,7 @@ Bei Abweichungen zwischen Einzel-Dokumenten und Spezifikation gilt immer:
 - Musical Goals: 14
 - DetectionTypes: 54
 - Kausal-Ursachen: 62
-- Tests: ~13.662
+- Tests: ~18.400
 
 ## Release-Must-Leitplanken
 

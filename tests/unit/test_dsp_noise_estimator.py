@@ -37,6 +37,7 @@ def _sine_plus_noise(duration_s: float = 2.0, sr: int = SR, noise_rms: float = 0
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+@pytest.mark.unit
 class TestComputeImcraNoisePSD:
     """compute_imcra_noise_estimate — Grundfunktionalität."""
 

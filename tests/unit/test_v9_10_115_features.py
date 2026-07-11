@@ -31,6 +31,7 @@ import pytest
 # ===========================================================================
 
 
+@pytest.mark.unit
 class TestSourceFidelityReconstructorBasics:
     """Grundlegende Modul-Tests: Import, Singleton, Datenklasse."""
 

@@ -65,6 +65,64 @@ from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, Phase
 logger = logging.getLogger(__name__)
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# §v10 Spectrum-Aware Adaptation: Misst IST-Spektrum vs. Tonträger-Referenz
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def _measure_spectral_deviation(
+    audio: np.ndarray,
+    sample_rate: int,
+    material: MaterialType,
+) -> dict[str, float]:
+    """Misst die Abweichung des IST-Spektrums vom Tonträger-Referenzspektrum.
+
+    JEDER Song ist anders. Ein audiophil gepresster Vinyl hat einen anderen
+    Frequenzgang als ein Billig-Presswerk. Diese Funktion MISST das
+    tatsächliche Spektrum und berechnet die Abweichung vom physikalisch
+    erwarteten Referenzspektrum des Tonträgers (§v10).
+
+    Returns:
+        Dict mapping band_name -> deviation_db (positiv = Band zu leise)
+    """
+    mono = audio if audio.ndim == 1 else audio.mean(axis=0)
+    n_fft = min(4096, len(mono))
+    freqs = np.fft.rfftfreq(n_fft, 1.0 / sample_rate)
+    spec = np.abs(np.fft.rfft(mono[:n_fft]))
+    eps = 1e-12
+
+    def _band_energy(lo_hz: float, hi_hz: float) -> float:
+        mask = (freqs >= lo_hz) & (freqs <= hi_hz)
+        if not mask.any():
+            return -120.0
+        return float(20.0 * np.log10(max(eps, np.mean(spec[mask]))))
+
+    bands_db = {
+        "low": _band_energy(20, 150),
+        "low_mid": _band_energy(150, 800),
+        "high_mid": _band_energy(800, 5000),
+        "high": _band_energy(5000, 20000),
+    }
+
+    # Wissenschaftlich begründete Referenzspektren (IEC 60098, IEC 60094-1, RIAA)
+    _mat_str = material.name.lower() if hasattr(material, "name") else str(material).lower()
+    _ref = {
+        "shellac": {"low": 3.0, "low_mid": 0.0, "high_mid": -2.0, "high": -6.0},
+        "vinyl": {"low": 1.5, "low_mid": 0.0, "high_mid": -0.5, "high": -2.0},
+        "tape": {"low": 0.0, "low_mid": 0.5, "high_mid": -1.0, "high": -3.0},
+        "cassette": {"low": 0.0, "low_mid": 0.5, "high_mid": -1.5, "high": -4.0},
+    }.get(_mat_str, {"low": 0.0, "low_mid": 0.0, "high_mid": 0.0, "high": 0.0})
+
+    deviation = {b: float(_ref.get(b, bands_db[b]) - bands_db[b]) for b in bands_db}
+    logger.debug(
+        "§v10 Spectrum-Aware: material=%s bands=%s dev=%s",
+        _mat_str,
+        {k: f"{v:.1f}dB" for k, v in bands_db.items()},
+        {k: f"{v:+.1f}dB" for k, v in deviation.items()},
+    )
+    return deviation
+
+
 class FinalEQ(PhaseInterface):
     """
     Professional Multi-Band Linear-Phase Equalizer.
@@ -211,10 +269,24 @@ class FinalEQ(PhaseInterface):
 
         is_stereo = audio.ndim == 2
         config = {k: dict(v) for k, v in self.EQ_CONFIG.get(material, self.EQ_CONFIG[MaterialType.CD_DIGITAL]).items()}
-        for _band in config.values():
-            _band["gain_db"] = float(_band["gain_db"] * _effective_strength)  # type: ignore[operator]
 
-        # Check if EQ is needed
+        # ── §v10 Spectrum-Aware Adaptation: Material-Referenz ≠ Song-IST ─────
+        # Die EQ_CONFIG liefert die physikalisch ERWARTETE Korrektur für den
+        # Tonträger. Aber: JEDER Song ist anders. Ein audiophil gepresster Vinyl
+        # braucht weniger Bass-Korrektur als ein Billig-Presswerk-Vinyl.
+        # Wir MESSEN das tatsächliche Spektrum und skalieren die Gains adaptiv.
+        _measured_correction = _measure_spectral_deviation(audio, sample_rate, material)
+        for _band_key, _band in config.items():
+            _nominal_gain = float(_band["gain_db"])  # Material-Template
+            # Spektrale Abweichung dämpft die Korrektur wenn der Song bereits
+            # nah am Zielspektrum liegt, verstärkt sie wenn stark abweichend.
+            if _band_key in _measured_correction:
+                _spec_factor = float(np.clip(abs(_measured_correction[_band_key]) / 6.0, 0.3, 1.5))
+                _band["gain_db"] = float(_nominal_gain * _spec_factor * _effective_strength)
+            else:
+                _band["gain_db"] = float(_nominal_gain * _effective_strength)
+
+        # Total-Gain-Check nach adaptiver Skalierung
         total_gain = sum(abs(band["gain_db"]) for band in config.values())  # type: ignore[arg-type]
         if total_gain < 0.5:
             logger.info("Total EQ gain < 0.5 dB - skipping for %s", material.name)

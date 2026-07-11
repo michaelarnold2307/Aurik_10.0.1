@@ -1,3 +1,4 @@
+import pytest
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -5,6 +6,7 @@ from types import SimpleNamespace
 import numpy as np
 
 
+@pytest.mark.unit
 def test_check_dsp_skips_audio_probe_when_musical_goals_already_fail(monkeypatch):
     from backend.core.quality_gate import QualityGate
 

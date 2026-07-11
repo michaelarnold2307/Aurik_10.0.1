@@ -56,6 +56,7 @@ def stereo_audio():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestPhase56Metadata:
     def test_01_metadata_returns_object(self, phase):
         meta = phase.get_metadata()

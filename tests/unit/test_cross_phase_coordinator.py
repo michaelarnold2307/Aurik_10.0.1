@@ -1,3 +1,4 @@
+import pytest
 """
 Tests für denker/cross_phase_coordinator.py — Cross-Phase Naturalness Consensus §3.0.
 
@@ -35,6 +36,7 @@ def _known_phase_ids():
 
 # ── Overlap-Matrix Tests ──────────────────────────────────────────────
 
+@pytest.mark.unit
 def test_singleton_returns_same_instance():
     CPC, get_cpc = _import_cpc()
     a = get_cpc()

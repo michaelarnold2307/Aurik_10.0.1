@@ -1,8 +1,10 @@
+import pytest
 import os
 
 from backend.core.unified_restorer_v3 import UnifiedRestorerV3
 
 
+@pytest.mark.unit
 def test_phase_intervention_registry_covers_all_phase_modules() -> None:
     phase_dir = os.path.join(
         os.path.dirname(__file__),

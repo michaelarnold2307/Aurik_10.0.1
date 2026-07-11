@@ -1,3 +1,4 @@
+import pytest
 from __future__ import annotations
 
 import numpy as np
@@ -27,6 +28,7 @@ class _DummyChecker:
         }
 
 
+@pytest.mark.unit
 def test_excellence_optimizer_rolls_back_on_core_goal_regression(monkeypatch):
     # Monkeypatch Goal-Messung, damit wir den Guard deterministisch triggern.
     monkeypatch.setattr(

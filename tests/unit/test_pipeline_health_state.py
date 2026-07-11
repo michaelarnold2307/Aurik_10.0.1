@@ -1,3 +1,4 @@
+import pytest
 """Unit tests for shared pipeline health state helpers."""
 
 from __future__ import annotations
@@ -11,6 +12,7 @@ from backend.core.pipeline_health_state import (
 )
 
 
+@pytest.mark.unit
 def test_normalize_pipeline_health_state_unknown_defaults_ok():
     state = normalize_pipeline_health_state("unexpected")
     assert state == PipelineHealthState.OK

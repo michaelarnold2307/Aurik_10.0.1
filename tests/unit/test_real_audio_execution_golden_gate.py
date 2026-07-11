@@ -48,6 +48,7 @@ def _case(**overrides):
     return ExecutionCaseResult(**base)
 
 
+@pytest.mark.unit
 def test_execution_gate_aggregates_contract_failures() -> None:
     gate = _evaluate_execution_gate(
         [

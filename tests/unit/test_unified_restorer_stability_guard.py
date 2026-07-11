@@ -1,3 +1,4 @@
+import pytest
 """Stability guard tests for bounded-but-non-edge behavior.
 
 Ensures calibration scalars and implicit phase strengths are pulled away from
@@ -42,6 +43,7 @@ class _DummyPhase:
         return create_phase_result(audio=np.asarray(audio, dtype=np.float32))
 
 
+@pytest.mark.unit
 def test_song_calibration_pullback_avoids_hard_edges():
     profile = UnifiedRestorerV3._build_song_calibration_profile(
         material_type=MaterialType.SHELLAC,

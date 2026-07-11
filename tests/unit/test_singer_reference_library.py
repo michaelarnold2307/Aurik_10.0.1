@@ -1,3 +1,4 @@
+import pytest
 """Tests für SingerReferenceLibrary (§SRL-1).
 
 Spec: §SRL-1 Singer-Reference-Library (v9.12.1)
@@ -6,6 +7,7 @@ Spec: §SRL-1 Singer-Reference-Library (v9.12.1)
 import numpy as np
 
 
+@pytest.mark.unit
 class TestVocalFingerprintCompute:
     """Tests für compute_vocal_fingerprint()."""
 

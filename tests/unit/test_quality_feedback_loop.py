@@ -1,3 +1,4 @@
+import pytest
 from __future__ import annotations
 
 import numpy as np
@@ -63,6 +64,7 @@ class _SeqMetrics:
         }
 
 
+@pytest.mark.unit
 def test_feedback_loop_uses_previous_iteration_improvement():
     """Regression: improvement guard must compare against previous iteration, not best-so-far value."""
     audio = np.ones(1024, dtype=np.float32) * 0.1

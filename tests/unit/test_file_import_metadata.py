@@ -1,9 +1,11 @@
+import pytest
 import numpy as np
 import soundfile as sf
 
 from backend.file_import import load_audio_file
 
 
+@pytest.mark.unit
 def test_load_audio_file_reports_effective_metadata_after_downmix_resample(tmp_path):
     sr_in = 44100
     duration_s = 0.25

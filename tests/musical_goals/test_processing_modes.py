@@ -25,6 +25,7 @@ from backend.core.musical_goals.processing_modes import (
 # =============================================================================
 
 
+@pytest.mark.unit
 class TestProcessingModeConfigs:
     """Test that all processing mode configurations are valid."""
 

@@ -1,8 +1,10 @@
+import pytest
 from __future__ import annotations
 
 from backend.core.phases.phase_03_denoise import DenoisePhase
 
 
+@pytest.mark.unit
 def test_adaptive_guard_profile_keys_and_bounds() -> None:
     profile = DenoisePhase._compute_adaptive_guard_profile(
         material_type="vinyl",

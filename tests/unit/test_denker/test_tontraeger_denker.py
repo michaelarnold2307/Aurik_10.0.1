@@ -1,3 +1,4 @@
+import pytest
 """tests/unit/test_denker/test_tontraeger_denker.py
 
 Tests für TontraegerDenker — Trägermaterial-Erkennung.
@@ -22,6 +23,7 @@ def _sine(dur: float = 1.0, freq: float = 440.0) -> np.ndarray:
 # ─── TontraegerErgebnis ───────────────────────────────────────────────────────
 
 
+@pytest.mark.unit
 class TestTontraegerErgebnisFields:
     def _make(self):
         from denker.tontraeger_denker import TontraegerErgebnis

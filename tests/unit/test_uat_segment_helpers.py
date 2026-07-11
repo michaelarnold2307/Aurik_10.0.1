@@ -1,3 +1,4 @@
+import pytest
 """Unit tests for vocal-focused UAT segment helpers."""
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ def _vocal_like(duration_s: float, freq: float = 220.0) -> np.ndarray:
     return np.clip(0.20 * envelope * harmonics, -1.0, 1.0).astype(np.float32)
 
 
+@pytest.mark.unit
 def test_vocal_focus_score_prefers_voiced_signal_over_noise() -> None:
     rng = np.random.default_rng(42)
     vocal = _vocal_like(2.5)

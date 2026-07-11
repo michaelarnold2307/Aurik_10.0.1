@@ -1,0 +1,60 @@
+{
+  "engine_config": {
+    "provider": "cpu",
+    "device_id": 0,
+    "fallback_to_cpu": true,
+    "onnx_providers": [
+      "CPUExecutionProvider"
+    ],
+    "provider_version": "",
+    "gpu_name": "",
+    "vram_mb": 0.0,
+    "warnings": [
+      "GPU-Backend nicht verfügbar — CPU wird verwendet"
+    ]
+  },
+  "onnxruntime": {
+    "version": "1.23.2",
+    "providers": [
+      "AzureExecutionProvider",
+      "CPUExecutionProvider"
+    ],
+    "available": true
+  },
+  "libraries": [
+    {
+      "name": "onnxruntime",
+      "available": true,
+      "error": null
+    },
+    {
+      "name": "onnxruntime-gpu (CUDA)",
+      "available": true,
+      "error": null
+    },
+    {
+      "name": "torch (PyTorch)",
+      "available": true,
+      "error": null
+    },
+    {
+      "name": "torch.cuda",
+      "available": true,
+      "error": null
+    },
+    {
+      "name": "coremltools (Apple)",
+      "available": false,
+      "error": "No module named 'coremltools'"
+    }
+  ],
+  "estimated_vram_mb": null,
+  "summary": {
+    "recommended_backend": "CPU",
+    "gpu_available": false,
+    "onnx_providers": [
+      "CPUExecutionProvider"
+    ],
+    "fallback_to_cpu": true
+  }
+}

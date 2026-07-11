@@ -49,6 +49,7 @@ def _audio_has_any(result, *attrs) -> bool:
 # ============================================================================
 
 
+@pytest.mark.unit
 class TestArtifactDetectionPlugin:
     """ArtifactDetectionPlugin.detect_artifacts(audio, sr) → Dict"""
 

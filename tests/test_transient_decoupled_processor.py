@@ -1,3 +1,4 @@
+import pytest
 """
 Tests für TransientDecoupledProcessing (TDP) — §2.27
 =====================================================
@@ -61,6 +62,7 @@ def _stereo(dur: float = 2.0) -> np.ndarray:
 # ---------------------------------------------------------------------------
 # Testklasse §2.27
 # ---------------------------------------------------------------------------
+@pytest.mark.unit
 class TestTransientDecoupledProcessor:
     # --- Singleton -----------------------------------------------------------
 

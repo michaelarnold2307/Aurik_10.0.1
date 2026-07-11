@@ -1,3 +1,4 @@
+import pytest
 import types
 
 import numpy as np
@@ -61,6 +62,7 @@ def _build_restorer() -> UnifiedRestorerV3:
     return restorer
 
 
+@pytest.mark.unit
 def test_budget_pressure_reason_reserves_budget_for_later_vocal_phase() -> None:
     restorer = _build_restorer()
     reason = restorer._budget_pressure_skip_reason(

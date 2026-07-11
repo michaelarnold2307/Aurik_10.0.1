@@ -1,8 +1,10 @@
+import pytest
 """Unit tests for phase_08_transient_preservation._compute_transient_profile (§2.56)."""
 
 from backend.core.phases.phase_08_transient_preservation import TransientPreservationPhase
 
 
+@pytest.mark.unit
 class TestTransientProfile:
     def _p(self, material="vinyl", qm="balanced", rest=50.0):
         return TransientPreservationPhase._compute_transient_profile(material, qm, rest)

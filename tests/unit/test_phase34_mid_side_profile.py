@@ -1,3 +1,4 @@
+import pytest
 """Unit-Tests: MidSideProcessing._compute_mid_side_profile() (§2.56)
 
 Verifiziert dass der adaptive transient_preserve-Parameter
@@ -22,6 +23,7 @@ def _profile(material: str, qm: str = "balanced", rest: float = 50.0) -> dict:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestMidSideProfileMaterial:
     """Material-adaptive Basiswerte."""
 

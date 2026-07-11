@@ -1,10 +1,10 @@
 # Aurik 9.x.x — Pipeline Flow Analysis
 
 **Stand:** Mai 2026  
-**Version:** 9.12.8  
+**Version:** 9.20.3  
 **Status:** 64-Phasen-Defect-First-Pipeline, vollständig implementiert
 
-> Hinweis: Verbindlicher Ist-Stand liegt in `.github/specs/01-08` und `docs/CHANGELOG_HISTORY.md`.
+> Hinweis: Verbindlicher Ist-Stand liegt in `.github/specs/01-14` und `docs/CHANGELOG_HISTORY.md`.
 
 ---
 
@@ -109,4 +109,4 @@ CausalReasoner), dann optimiert intervenieren (GP-Optimizer), dann verifizieren
 
 ---
 
-_Aurik 9.12.8 — Mai 2026_
+_Aurik 9.20.3 — Mai 2026_

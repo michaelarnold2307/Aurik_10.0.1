@@ -1,3 +1,4 @@
+import pytest
 """tests/unit/test_medium_detector_short_clip.py
 
 Tests für §2.47/§0c Fix: rotation_strength-Maskierung bei kurzen Clips
@@ -75,6 +76,7 @@ def _make_tape_short(duration_s: float = 3.0, sr: int = SR) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestShortClipRotationMasking:
     """§2.47/§0c: rotation_strength bei kurzen Clips (< 6 s) ausblenden."""
 

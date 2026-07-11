@@ -149,6 +149,7 @@ def _build_report_with_regression(
 # ===========================================================================
 
 
+@pytest.mark.unit
 class TestNormativeMatrixDefinition:
     """Tests: Die vorgeschriebene 5×6-Matrix ist vollständig definiert."""
 

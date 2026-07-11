@@ -17,6 +17,7 @@ SR = 48000
 # Tier 1: Psychoacoustics
 # ═══════════════════════════════════════════════════════════════════════════
 
+@pytest.mark.unit
 class TestATHISO226:
     """ATH (Absolute Threshold of Hearing) nach ISO 226:2023."""
 

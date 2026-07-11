@@ -1,7 +1,7 @@
 # Aurik 9.x.x Roadmap – Stand April 2026 (Historischer Snapshot + aktueller Stand)
 
 > **Aurik 9 ist ein intelligentes, kontextbewusstes Musik- und Gesangs-Restaurierungs-, Reparatur- und Rekonstruktions-System. Aktuelle Version: 9.10.102 (April 2026), 64 Phasen, ~11.023 Tests.**
-> Hinweis: Diese Roadmap bildet überwiegend einen historischen Planungsstand ab. Für den aktuellen normativen Zustand gelten `.github/specs/01-08` und `docs/CHANGELOG_HISTORY.md`.
+> Hinweis: Diese Roadmap bildet überwiegend einen historischen Planungsstand ab. Für den aktuellen normativen Zustand gelten `.github/specs/01-14` und `docs/CHANGELOG_HISTORY.md`.
 > Releasepfad-Norm: Bridge -> `AurikDenker.denke(...)` -> `export_guard()`. Aeltere v2-/Server-/Docker-Planpunkte sind `LEGACY_NON_RELEASE`.
 
 ## Abgeschlossene Versionen (Highlights)
@@ -424,7 +424,7 @@
   - [x] Issue Templates (bug, feature, performance, docs)
   - [x] Label-System (26 Labels)
   - [x] Issue Management Dokumentation
-- [ ] Alpha Release (Release Tag v9.0.0-alpha1)
+- [ ] Alpha Release (Release Tag v9.20.3-alpha1)
 - [ ] Beta Release (Community Testing)
 - [ ] Stable Release 1.0
 
@@ -1063,7 +1063,7 @@ _Verbleibend: Lyrics-Guided Enhancement Implementation (v10.0-R&D), AutoMix/Auto
 
 - **Migrations-Plan:** 6-Wochen Sprint-Plan erstellt ([V3_MIGRATION_PLAN.md](V3_MIGRATION_PLAN.md))
 - **Timeline:** 3 Sprints (Foundation → GUI Integration → Testing & Release)
-- **Ziel:** V3 als Standard, ≥1.2× Performance, Quality Parity, Release Candidate 9.0.0-rc1
+- **Ziel:** V3 als Standard, ≥1.2× Performance, Quality Parity, Release Candidate 9.20.3-rc1
 - **Status:** Sprint 1, Woche 1 - Code Review + V2 Feature-Analyse
 
 ### 15. Februar 2026 - Quick Wins (Option A) abgeschlossen! ✅
@@ -1263,3 +1263,20 @@ _Verbleibend: Lyrics-Guided Enhancement Implementation (v10.0-R&D), AutoMix/Auto
 ---
 
 <!-- existing code -->
+
+
+## ✅ Abgeschlossen: §v10 Pleasantness-First (Juli 2026)
+
+- SNR-Adaptive Defekterkennung (_estimate_local_snr)
+- Spectrum-Aware EQ (Phase 16, Phase 17)
+- Harmonic-Aware Saturation (Phase 17)
+- No-Blind-Trust-Prinzip in allen Detektoren
+- Pleasantness + Goal-Achievement Test-Marker
+- Pre-Commit Static-Value-Guard
+
+## 🔜 Nächste Meilensteine
+
+- CAUSE_PARAMS vollständig SNR-adaptiv
+- MATERIAL_SENSITIVITY komplett auf Messung umstellen
+- Watchdog E2E-Checkpoint-Export-Test
+- Goal-Erreichungs-Matrix automatisieren (100 Songs → HPI>0 in ≥95%)

@@ -1,3 +1,4 @@
+import pytest
 """Unit-Tests fuer Phase 40 Amplituden-Drift-Lokalitaet."""
 
 import numpy as np
@@ -5,6 +6,7 @@ import numpy as np
 from backend.core.phases.phase_40_loudness_normalization import LoudnessNormalizationPhase
 
 
+@pytest.mark.unit
 def test_drift_locality_profile_is_event_strength_adaptive():
     sr = 48000
     profile, coverage = LoudnessNormalizationPhase._build_drift_locality_profile(

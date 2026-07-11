@@ -41,6 +41,7 @@ def _fm_sine(
     return np.asarray(0.5 * np.sin(phase), dtype=np.float32)
 
 
+@pytest.mark.unit
 class TestZwickerMetricsResult:
     """ZwickerMetricsResult dataclass — Attribute-Check."""
 

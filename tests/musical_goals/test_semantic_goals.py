@@ -24,6 +24,7 @@ from backend.core.musical_goals.semantic_goals import (
 )
 
 
+@pytest.mark.unit
 class TestEnums:
     """Test enum definitions"""
 

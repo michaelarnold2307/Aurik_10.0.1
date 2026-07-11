@@ -1,3 +1,4 @@
+import pytest
 """Unit-Tests fuer Spec-Upgrade Gate (§2.81 / §MG-UPG)."""
 
 from __future__ import annotations
@@ -10,6 +11,7 @@ def _scores(default: float = 0.8) -> dict[str, float]:
     return dict.fromkeys(ALL_GOAL_NAMES, default)
 
 
+@pytest.mark.unit
 class TestSpecUpgradeGate:
     """Prueft Promotion nur bei Safety + 15-Goal-Nicht-Regression."""
 

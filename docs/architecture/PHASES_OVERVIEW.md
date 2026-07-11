@@ -1,6 +1,6 @@
 # Aurik 9.x.x — 64-Phasen-Pipeline Überblick
 
-**Version:** 9.12.8  
+**Version:** 9.20.3  
 **Stand:** Mai 2026  
 **Status:** ✅ Produktionsbereit
 
@@ -159,4 +159,4 @@ Max. 5 Retries; P1/P2-Regression → volle Retry-Kaskade (4 Retries + Emergency)
 
 ---
 
-**Aurik 9.12.8 — Mai 2026**
+**Aurik 9.20.3 — Mai 2026**

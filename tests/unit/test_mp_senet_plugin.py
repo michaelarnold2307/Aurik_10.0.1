@@ -1,3 +1,4 @@
+import pytest
 import numpy as np
 
 
@@ -48,6 +49,7 @@ def _build_retry_layout_session(call_log):
     return _Session()
 
 
+@pytest.mark.unit
 def test_mp_senet_short_input_is_padded_to_fixed_time(monkeypatch):
     from plugins.mp_senet_plugin import MpSenetPlugin
 

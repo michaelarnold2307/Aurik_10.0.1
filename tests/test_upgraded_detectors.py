@@ -1,3 +1,4 @@
+import pytest
 #!/usr/bin/env python3
 """Test upgraded defect detectors (phase_issues, bias_error, riaa_curve_error, aliasing)."""
 
@@ -6,6 +7,7 @@ import numpy as np
 from backend.core.defect_scanner import DefectScanner
 
 
+@pytest.mark.unit
 def test_phase_issues():
     """Test upgraded _detect_phase_issues."""
     print("\n=== Testing _detect_phase_issues ===")

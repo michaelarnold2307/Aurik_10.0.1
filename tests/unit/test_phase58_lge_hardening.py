@@ -1,8 +1,10 @@
+import pytest
 import types
 
 import numpy as np
 
 
+@pytest.mark.unit
 def test_phase58_load_retry_then_passthrough(monkeypatch):
     from backend.core.phases.phase_58_lyrics_guided_enhancement import Phase58LyricsGuidedEnhancement
 

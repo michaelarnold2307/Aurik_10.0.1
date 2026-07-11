@@ -98,6 +98,7 @@ def generate_test_signal(sr: int, duration: float = 1.0, freq: float = 440.0) ->
 # --- WienerDereverb Tests ---
 
 
+@pytest.mark.unit
 class TestWienerDereverb:
     def test_initialization(self):
         """Test WienerDereverb initialization."""

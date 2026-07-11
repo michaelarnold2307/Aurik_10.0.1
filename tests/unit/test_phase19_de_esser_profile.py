@@ -1,3 +1,4 @@
+import pytest
 """Unit tests for phase_19_de_esser._compute_de_esser_profile (§2.56)."""
 
 import numpy as np
@@ -5,6 +6,7 @@ import numpy as np
 from backend.core.phases.phase_19_de_esser import DeEsserPhase
 
 
+@pytest.mark.unit
 class TestDeEsserProfile:
     def _p(self, material="vinyl", qm="balanced", rest=50.0):
         return DeEsserPhase._compute_de_esser_profile(material, qm, rest)

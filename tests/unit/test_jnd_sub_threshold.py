@@ -21,6 +21,7 @@ from backend.core.per_phase_musical_goals_gate import (
 SR = 48000
 
 
+@pytest.mark.unit
 class TestJNDMinDeltaConstants:
     """JND_MIN_DELTA dict must contain normative values for all 15 goals."""
 

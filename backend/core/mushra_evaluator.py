@@ -65,15 +65,23 @@ def _safe_fft_size(length: int, target: int = 2048, minimum: int = 64) -> int:
 class MushraResult:
     """Ergebnis einer MUSHRA-Bewertung.
 
+    ⚠️  WICHTIG: Dies ist eine **objektive Approximation** (algorithmische Schätzung),
+    kein echter subjektiver MUSHRA-Hörertest nach ITU-R BS.1534-3.
+    Jeder Score muss als "estimated" behandelt werden — siehe _is_approximation.
+
+    Für echte MUSHRA-Hörertests: backend/core/mushra_listener.py (geplant).
+    Empfohlener Import-Pfad: backend/core/objective_mushra_estimator.py.
+
     Attributes:
-        mushra_score:     Objektiver MUSHRA-Score ∈ [0, 100].
-        grade:            Kategoriebezeichnung (Excellent/Good/Fair/Poor/Bad).
-        itu_grade:        ITU-R-konforme Grad-Bezeichnung (A–E).
-        nsim:             Perceptuelle Ähnlichkeit zur Referenz ∈ [0, 1].
-        musical_goals:    Dict mit allen 9 Musical-Goal-Scores.
-        anchor_score:     MUSHRA-Score des 3.5-kHz-Anchors (Kalibrierung).
-        hidden_ref_score: MUSHRA-Score der verdeckten Referenz (sollte≈100).
-        details:          Zusätzliche Metriken für Debugging/Reporting.
+        mushra_score:        Objektiver MUSHRA-Score ∈ [0, 100] (approximiert).
+        grade:               Kategoriebezeichnung (Excellent/Good/Fair/Poor/Bad).
+        itu_grade:           ITU-R-konforme Grad-Bezeichnung (A–E).
+        nsim:                Perceptuelle Ähnlichkeit zur Referenz ∈ [0, 1].
+        musical_goals:       Dict mit allen 9 Musical-Goal-Scores.
+        anchor_score:        MUSHRA-Score des 3.5-kHz-Anchors (Kalibrierung).
+        hidden_ref_score:    MUSHRA-Score der verdeckten Referenz (sollte≈100).
+        details:             Zusätzliche Metriken für Debugging/Reporting.
+        _is_approximation:   IMMER True — dies ist eine algorithmische Schätzung.
     """
 
     mushra_score: float
@@ -84,6 +92,7 @@ class MushraResult:
     anchor_score: float
     hidden_ref_score: float
     details: dict[str, float] = field(default_factory=dict)
+    _is_approximation: bool = True  # §15.10: Jeder Score muss als "estimated" markiert sein
 
     def passes_mushra_threshold(self, min_score: float = 80.0) -> bool:
         """Prüft ob der Score die Mindestanforderung erfüllt.

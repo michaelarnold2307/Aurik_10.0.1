@@ -30,7 +30,7 @@
 - **Primärmetrik**: Code-Präsenz (ja/nein) — alle drei Phasen lesen jetzt
   `kwargs.get("strength_envelope")`.
 - **Effektstärke**: Qualitativ — per-Sektion-Stärke statt globaler Konstant-Stärke.
-- **95%-CI**: n/a (Code-Änderung, keine Messung).
+- **95 %-CI**: n/a (Code-Änderung, keine Messung).
 - **p-Wert**: n/a.
 
 ### 4. Reproduzierbarkeit

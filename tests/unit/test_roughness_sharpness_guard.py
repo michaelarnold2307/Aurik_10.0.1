@@ -35,6 +35,7 @@ def _noise(duration_s: float = 3.0, amplitude: float = 0.1) -> np.ndarray:
     return (rng.standard_normal(int(duration_s * SR)) * amplitude).astype(np.float32)
 
 
+@pytest.mark.unit
 class TestRoughnessSharpnessGuardConstants:
     """Constant values must match spec §2.49c."""
 

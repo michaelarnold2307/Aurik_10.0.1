@@ -1,6 +1,8 @@
+import pytest
 from audit.audit_report_generator import generate_audit_report
 
 
+@pytest.mark.unit
 def test_audit_log_dummy():
     """Audit report generator is available and writes all required formats."""
     import tempfile

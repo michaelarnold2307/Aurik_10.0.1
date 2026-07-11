@@ -1,3 +1,4 @@
+import pytest
 from __future__ import annotations
 
 import numpy as np
@@ -11,6 +12,7 @@ def _pitch_from_cents(base_hz: float, cents: np.ndarray) -> np.ndarray:
     return (base_hz * np.power(2.0, cents / 1200.0)).astype(np.float64)
 
 
+@pytest.mark.unit
 def test_sinusoidal_wow_fit_reduces_noisy_transport_curve_error() -> None:
     phase = WowFlutterFix()
     frame_rate = SR / ((phase.PITCH_WINDOW_MS * SR // 1000) // phase.PITCH_HOP_FACTOR)

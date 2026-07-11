@@ -1,3 +1,4 @@
+import pytest
 """Unit-Tests: ModulationNoiseReductionPhase._compute_modulation_noise_profile() (§2.56)."""
 
 import numpy as np
@@ -9,6 +10,7 @@ def _profile(material: str, qm: str | None = "balanced", rest: float = 50.0) -> 
     return ModulationNoiseReductionPhase._compute_modulation_noise_profile(material, qm, rest)
 
 
+@pytest.mark.unit
 def test_tape_more_sensitive_than_cd():
     tape = _profile("tape")
     cd = _profile("cd_digital")

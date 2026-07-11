@@ -1,4 +1,4 @@
-# Aurik 10 — Spec 05: Material-System
+# Aurik 10 — Spec 05: Material-System | §v10 Pleasantness-First
 
 > Definiert alle 15 Materialtypen (+ 2 Multichannel → Downmix), defektdichte-adaptive Verarbeitungsregeln,
 > GP-Gedächtnis, Export, Sample-Rate-Strategie, Tonträgerketten-Erkennung.
@@ -43,7 +43,7 @@ SUPPORTED_MATERIALS = [
 
 ---
 
-## §6.2 Material-spezifische Verarbeitungsregeln
+## [RELEASE_MUST] §6.2 Material-spezifische Verarbeitungsregeln
 
 | Material | Hauptdefekte | Prioritäts-Phasen | PQS-Erwartung |
 | --- | --- | --- | --- |
@@ -461,7 +461,7 @@ Format:
 
 ---
 
-## §6.5 Export-Formate & Regeln
+## [RELEASE_MUST] §6.5 Export-Formate & Regeln
 
 | Format | Qualität | Anwendungsfall |
 | --- | --- | --- |

@@ -1,3 +1,4 @@
+import pytest
 """Tests für temporale locations in DefectScanner (§C — Aurik v9.10.45).
 
 ≥ 17 Unit-Tests: synthetische Signale, kein echtes Audio, np.random.seed(42).
@@ -61,6 +62,7 @@ def _locations_valid(locations: list) -> bool:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 def test_01_clicks_known_positions():
     """Injizierte Clicks werden mit korrekten Zeitmarken detektiert (±5 ms)."""
     sc = _scanner()

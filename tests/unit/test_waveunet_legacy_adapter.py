@@ -1,3 +1,4 @@
+import pytest
 """Unit tests for WaveUNet legacy adapter routing."""
 
 import numpy as np
@@ -8,6 +9,7 @@ def _audio(sr: int = 48000, duration: float = 0.2) -> np.ndarray:
     return (0.1 * np.sin(2.0 * np.pi * 440.0 * t)).astype(np.float32)
 
 
+@pytest.mark.unit
 def test_waveunet_delegates_to_sota_router(monkeypatch):
     import backend.core.dsp.sota_vocal_model_router as router_mod
     from backend.core.dsp.sota_vocal_model_router import StemSeparationRouteResult

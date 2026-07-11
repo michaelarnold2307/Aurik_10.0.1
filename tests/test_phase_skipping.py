@@ -65,6 +65,7 @@ def noisy_audio(sample_rate):
     return audio, sr
 
 
+@pytest.mark.unit
 class TestDefectAnalyzer:
     """Test DefectAnalyzer."""
 

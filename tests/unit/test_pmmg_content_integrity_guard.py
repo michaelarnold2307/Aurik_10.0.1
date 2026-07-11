@@ -1,3 +1,4 @@
+import pytest
 """Regression tests for PMGG content-integrity guard.
 
 Guard objective:
@@ -19,6 +20,7 @@ def _sine(sr: int = 48000, seconds: float = 1.0) -> np.ndarray:
     return (0.4 * np.sin(2.0 * np.pi * 440.0 * t)).astype(np.float32)
 
 
+@pytest.mark.unit
 def test_content_integrity_penalty_detects_catastrophic_drop():
     from backend.core import per_phase_musical_goals_gate as m
 

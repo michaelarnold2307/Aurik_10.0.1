@@ -1,3 +1,4 @@
+import pytest
 """Tests for §2.8 Vocal Chain Integration — Gender, PhonemeDetector, BreathDetector.
 
 Validates the integration of vocal processing modules that were previously
@@ -38,6 +39,7 @@ def _make_vocal_signal(duration_s: float = 1.0, f0: float = 220.0) -> np.ndarray
 # ---------------------------------------------------------------------------
 # Test: Phase 42 accepts and uses vocal_gender from kwargs
 # ---------------------------------------------------------------------------
+@pytest.mark.unit
 class TestPhase42GenderIntegration:
     """Phase 42 should extract vocal_gender from kwargs and pass it to FormantSystem."""
 

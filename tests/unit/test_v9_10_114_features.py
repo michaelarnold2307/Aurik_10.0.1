@@ -1,3 +1,4 @@
+import pytest
 """Tests für v9.10.114 — Perceptual Depth & Musical Presence.
 
 Abgedeckte Verbesserungen:
@@ -20,6 +21,7 @@ import numpy as np
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestExcellenceOptimizerBoostValues:
     """_MODULATION_STRENGTH und _HARM_BOOST_DB müssen deutlich über früheren konservativen Werten liegen."""
 

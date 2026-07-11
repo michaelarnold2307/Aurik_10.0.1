@@ -39,6 +39,7 @@ from backend.core.musical_goals.quality_gate import (
 
 
 @pytest.fixture
+@pytest.mark.unit
 def test_audio_mono():
     """Generate 1 second mono test audio (48 kHz)."""
     sr = 48000

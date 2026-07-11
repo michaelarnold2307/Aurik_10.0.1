@@ -32,6 +32,7 @@ def _make_vocal_signal(duration_s: float = 3.0) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestVocalFocusAnalyzerImport:
     def test_import_ok(self):
         from backend.core.vocal_focus_analyzer import get_vocal_focus_analyzer

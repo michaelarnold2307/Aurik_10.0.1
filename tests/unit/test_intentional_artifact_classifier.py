@@ -24,6 +24,7 @@ def clf():
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 def test_singleton_returns_same_instance():
     from backend.core.intentional_artifact_classifier import get_intentional_artifact_classifier
 

@@ -31,6 +31,7 @@ def _make_vocal(duration_s: float = 1.0, f0: float = 220.0) -> np.ndarray:
 # ---------------------------------------------------------------------------
 # 1. PerceptualSalience → UV3 defect score annotation
 # ---------------------------------------------------------------------------
+@pytest.mark.unit
 class TestPerceptualSalienceAnnotation:
     """§9.1c PerceptualSalience: masked defects get reduced severity."""
 

@@ -1,3 +1,4 @@
+import pytest
 """Unit-Tests für core.introduced_artifact_detector Re-Export.
 
 Testet:
@@ -20,6 +21,7 @@ from backend.core.introduced_artifact_detector import (
 )
 
 
+@pytest.mark.unit
 class TestCoreIADReexport:
     """Tests für core.introduced_artifact_detector Re-Export."""
 

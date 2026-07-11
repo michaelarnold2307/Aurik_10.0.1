@@ -1,6 +1,6 @@
 # Aurik GPU Setup — AMD ROCm & DirectML
 
-**Version:** 9.12.8 | **Stand:** Mai 2026
+**Version:** 9.20.3 | **Stand:** Mai 2026
 
 Aurik beschleunigt rechenintensive Phasen (Defect-Scanning, MERT-Embeddings, PSLA,
 CLAP-Referenz-Matching, Whisper-Tiny-ONNX) optional über die GPU. Auf AMD-GPUs

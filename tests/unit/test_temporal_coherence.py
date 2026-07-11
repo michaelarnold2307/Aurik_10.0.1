@@ -1,3 +1,4 @@
+import pytest
 """Pflicht-Tests für TemporalQualityCoherenceMetric (§2.16).
 
 Testkonventionen:
@@ -45,6 +46,7 @@ def _silence(duration_s: float = 35.0, sr: int = SR) -> np.ndarray:
 # ---------------------------------------------------------------------------
 # Klasse 1: Rückgabetyp und Felder
 # ---------------------------------------------------------------------------
+@pytest.mark.unit
 class TestTemporalCoherenceResultFields:
     def test_01_returns_result_instance(self) -> None:
         """measure() gibt ein TemporalCoherenceResult-Objekt zurück."""

@@ -1,3 +1,4 @@
+import pytest
 """§2.64 v9.12.2 — Unit-Tests für _fast_goal_snapshot Proxy-Kalibrierung.
 
 Schützt vor Regression der drei systemischen Proxy-Bugs, die zu persistenten
@@ -69,6 +70,7 @@ def _make_compressed_pop(n: int = _SR * 4, sr: int = _SR) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestNatuerlichkeitProxy:
     def test_tonal_higher_than_noise(self):
         """Tonales Signal muss deutlich höhere natuerlichkeit haben als Rauschen."""

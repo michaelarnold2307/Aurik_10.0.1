@@ -32,6 +32,7 @@ def _profile() -> dict:
     }
 
 
+@pytest.mark.unit
 class TestStrictConflictArtifactFeedback:
     """Artifact-related conflicts must tighten future phase intervention online."""
 

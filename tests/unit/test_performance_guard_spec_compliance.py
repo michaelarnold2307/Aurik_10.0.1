@@ -7,6 +7,7 @@ import pytest
 from backend.core.performance_guard import PerformanceGuard, QualityMode
 
 
+@pytest.mark.unit
 class TestPerformanceGuardSpecCompliance:
     """Spec-Compliance für PerformanceGuard (§RT8/2026)."""
 

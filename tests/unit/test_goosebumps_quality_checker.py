@@ -1,3 +1,4 @@
+import pytest
 """
 tests/unit/test_goosebumps_quality_checker.py — §8.3 GoosebumpsQualityChecker Tests
 ====================================================================================
@@ -64,6 +65,7 @@ def _make_transient_signal(sr: int = SR, duration_s: float = 3.0) -> np.ndarray:
 # ─── Basic Output Tests ──────────────────────────────────────────────────────
 
 
+@pytest.mark.unit
 class TestGoosebumpsBasicOutput:
     def test_01_returns_goosebumps_result(self):
         tone = _make_tone()

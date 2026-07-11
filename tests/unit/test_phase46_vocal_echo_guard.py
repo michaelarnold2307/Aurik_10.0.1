@@ -1,3 +1,4 @@
+import pytest
 """Regressiontests fuer Phase 46 Vocal-Echo-Guard in Restoration."""
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ def _make_stereo_signal(sr: int = 48000, seconds: float = 1.0) -> np.ndarray:
     return np.column_stack([left, right]).astype(np.float32)
 
 
+@pytest.mark.unit
 def test_phase46_vocal_safe_mode_for_vocals_in_restoration() -> None:
     phase = SpatialEnhancementPhase()
     audio = _make_stereo_signal()

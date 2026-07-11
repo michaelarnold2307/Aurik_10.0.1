@@ -1,3 +1,4 @@
+import pytest
 from datetime import datetime
 
 from backend.core.data_models import (
@@ -91,6 +92,7 @@ def make_minimal_profile(medium, tape_type=None):
     )
 
 
+@pytest.mark.unit
 def test_decision_logic_cassette():
     profile = make_minimal_profile(MediaType.CASSETTE, tape_type="cassette")
     logic = DSPDecisionLogic()

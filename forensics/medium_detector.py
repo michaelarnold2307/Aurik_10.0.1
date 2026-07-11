@@ -1468,9 +1468,20 @@ class MediumDetector:
         # via Bayesian-Posterior gefunden wurde und _analog_zeroed=False).
         _pa_conf_thresh: float = 0.40
         _feature_ok: bool = True
-        if _analog_zeroed and best_analog is None:
+        # §2.46a: Physische Analog-Quellen auch bei penalized (nicht zeroed) Codec-Containern
+        # inferieren. MP3/AAC-Dateien attenuieren die Bayesian-Posteriors für Analog-Materialien,
+        # aber physikalische Cues (Wow/Flutter, Rotation, Infrasonic) überleben die Codec-Kodierung
+        # und müssen für Multi-Generation-Chains (z.B. vinyl→reel_tape→mp3) ausgewertet werden.
+        _needs_physical_inference = (
+            _analog_zeroed
+            or (_ext_lower in _DIGITAL_FILE_EXTS and fp.codec_artifact_score > self._CODEC_ARTIFACT_THRESHOLD)
+            or fp.codec_artifact_score > 0.30
+        )
+        if _needs_physical_inference:
             _physical_analog_sources = self._infer_analog_source_from_fingerprint(fp)
-            if _physical_analog_sources:
+            # Physical-Gate: nur aktivieren wenn Bayesian keinen analogen Primary gefunden hat
+            _use_physical_gate = best_analog is None
+            if _physical_analog_sources and _use_physical_gate:
                 # §2.46a: Codec-adaptive thresholds — multi-generation transfers
                 # (vinyl→cassette→MP3) attenuate analog fingerprints through each
                 # transfer stage. Fixed thresholds miss genuine analog origins when
@@ -1854,8 +1865,16 @@ class MediumDetector:
             # Wenn best_analog durch Physical-Gate gesetzt wurde (Primär- oder Rotation-
             # Fallback-Gate), bleibt dieser Primary unverändert. Physical-Gate-Evidence
             # ist direkter als Bayesian-Posterior-basiertes §6.1b-Prinzip.
+            # §2.46a AUSNAHME 2: Wenn Physical-Inference zusätzliche Tape-Stufen in
+            # eine Disc→Tape→Codec-Kette einfügt (z.B. vinyl→reel_tape→mp3), bleibt
+            # der Disc-Träger als Primary erhalten — er ist der ursprüngliche Träger.
             if not _best_analog_set_by_physical_gate:
-                primary = _analog_in_chain[-1]
+                _disc_types_local = {"vinyl", "shellac", "lacquer_disc"}
+                _disc_in_chain = [m for m in chain if m in _disc_types_local]
+                if _disc_in_chain and _analog_in_chain[0] == _disc_in_chain[0]:
+                    primary = _disc_in_chain[0]
+                else:
+                    primary = _analog_in_chain[-1]
         is_multi = len(chain) > 1
         # Confidence wird aus Minimum, Mittelwert und Primärposterior geblendet:
         # der schwächste Link bleibt wichtig, aber solide Mehrfach-Evidenz darf

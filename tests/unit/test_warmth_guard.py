@@ -31,6 +31,7 @@ def _make_warmth_signal(n: int = _N) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestWarmthGuardImport:
     def test_import_function(self):
         from backend.core.dsp.warmth_guard import measure_warmth_band_delta

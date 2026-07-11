@@ -1,6 +1,8 @@
+import pytest
 from audit.live_intermediate_state_monitor import _detect_spec_gap_from_line, _has_offtrack_trigger
 
 
+@pytest.mark.unit
 def test_stereo_remediation_is_not_treated_as_open_spec_gap() -> None:
     line = (
         "[2026-05-24 10:56:41,814] WARNING backend.core.unified_restorer_v3: "

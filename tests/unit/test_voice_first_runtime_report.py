@@ -1,3 +1,4 @@
+import pytest
 from __future__ import annotations
 
 import json
@@ -7,6 +8,7 @@ import audit.build_voice_first_runtime_report as runtime_report_module
 from audit.build_voice_first_runtime_report import build_guard_coverage_manifest, build_runtime_report
 
 
+@pytest.mark.unit
 def test_build_runtime_report_passes_when_all_voice_first_blockers_true(tmp_path: Path) -> None:
     snapshot = tmp_path / "current_voice_first_audit.json"
     snapshot.write_text(

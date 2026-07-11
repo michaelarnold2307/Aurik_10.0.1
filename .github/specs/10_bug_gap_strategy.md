@@ -1,4 +1,4 @@
-# Spec 10 — Bug & Gap Detection Strategy (v9.20.0)
+# Spec 10 — Bug & Gap Detection Strategy (v9.20.0) | §v10 Pleasantness-First
 
 > **Scope**: Systematische Erkennung und Eliminierung aller Bugs und Gaps über alle Ebenen —
 > Frontend, Bridge/CLI, Denker, UV3-Pipeline, Phasen/DSP/Plugins, Tests.
@@ -93,7 +93,7 @@ P3 (Backlog): TYPE-SAFETY, Linter-Coverage, Dokumentation
 
 ---
 
-## §10.5 Behebungs-Workflow (§0f-konform)
+## [RELEASE_MUST] §10.5 Behebungs-Workflow (§0f-konform)
 
 ```
 1. ERKENNEN: Layer-Scan (§10.1) → Bug-Klasse (§10.3) → Priorität (§10.4)
@@ -105,7 +105,7 @@ P3 (Backlog): TYPE-SAFETY, Linter-Coverage, Dokumentation
 7. COMMIT: `fix §X systemic: ...` (systemisch) oder `fix(phase_XX): ...` (punktuell)
 ```
 
-### §10.5a Systemisch vs. Punktuell (§0f-Regel)
+### [RELEASE_MUST] §10.5a Systemisch vs. Punktuell (§0f-Regel)
 
 | Signal | Vorgehen |
 | --- | --- |
@@ -192,7 +192,7 @@ In dieser Session behoben (2026-06-26): 27 Pylance-Fehler in 13 Dateien:
 
 ---
 
-## §10.7 Session-Start-Protokoll (KI-Agent)
+## [RELEASE_MUST] §10.7 Session-Start-Protokoll (KI-Agent)
 
 Zu Beginn jeder Session, bevor Implementierung beginnt:
 
@@ -212,7 +212,7 @@ tail -20 .github/VERBOTEN.md
 
 ---
 
-## §10.8 Kontinuierlicher Scan-Rhythmus
+## [RELEASE_MUST] §10.8 Kontinuierlicher Scan-Rhythmus
 
 | Rhythmus | Aktion |
 | --- | --- |
@@ -329,7 +329,7 @@ Skriptbar wenn Pattern homogen.
 # Startwert: 939. Reduziert sich mit Sprint 3.
 ```
 
-### §10.9f Linter-Erweiterungen für neue Anti-Patterns
+### [RELEASE_MUST] §10.9f Linter-Erweiterungen für neue Anti-Patterns
 
 Neue Anti-Patterns aus dieser Session → neue VERBOTEN-Einträge:
 

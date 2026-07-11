@@ -1,4 +1,4 @@
-
+ | §v10 Pleasantness-First
 # Aurik 10 — Spec 04: DSP-Standards & SOTA-Algorithmen
 >
 > Psychoakustische Fundierung, SOTA-Entscheidungsmatrix, Pflicht-Algorithmen.
@@ -140,7 +140,7 @@ def hz_to_mel(f_hz: float) -> float:
 
 ---
 
-## §4.4 SOTA-ML-Entscheidungsmatrix (Stand 2025/2026)
+## [RELEASE_MUST] §4.4 SOTA-ML-Entscheidungsmatrix (Stand 2025/2026)
 
 | Anwendungsfall | Primär (SOTA) | DSP-Fallback (Post-2018) | VERBOTEN |
 | --- | --- | --- | --- |
@@ -345,7 +345,7 @@ Kritische Architekturnotiz (Stand April 2026):
     eines musik-spezifischen ML-Denoiser-Modells verbindlich.
 ```
 
-### Inpainting (Phase 24, 55)
+### [RELEASE_MUST] Inpainting (Phase 24, 55)
 
 ```text
 Kurze Lücken < 50 ms: NMF mit β-Divergenz (β=0, Itakura-Saito) + PGHI
@@ -416,7 +416,7 @@ VERBOTEN: Apollo für Amplituden-Clipping (Apollo = Codec-Artefakte-Training).
     Apollo NUR für digitale Codec-Komprimierungsartefakte (mp3/aac/ogg-Distortion).
 ```
 
-### Print-Through-Reduktion (Phase 29, reel_tape)
+### [RELEASE_MUST] Print-Through-Reduktion (Phase 29, reel_tape)
 
 ```text
 Pflicht: Bidirektionale Adaptive Temporal Subtraction (LMS-basiert, Widrow & Stearns 1985)
@@ -451,7 +451,7 @@ ZONES = {
 # PGHI per Zone; Kreuzfade Hanning 10 ms an Zonenübergängen
 ```
 
-### Neuronale Synthese / Vocoder-Kaskade (wenn PQS-MOS < 4.3)
+### [RELEASE_MUST] Neuronale Synthese / Vocoder-Kaskade (wenn PQS-MOS < 4.3)
 
 ```text
 4-stufige Fallback-Kaskade (Studio-2026):
@@ -591,7 +591,7 @@ Vollständige Spec: **Spec 02 §2.46e** (Hallucination-Guard).
 
 > Kreuzreferenz: Spec 02 §2.46e; `backend/core/dsp/hallucination_guard.py`
 
-### Phasen-Rekonstruktion (nach JEDER Spektral-Modifikation)
+### [RELEASE_MUST] Phasen-Rekonstruktion (nach JEDER Spektral-Modifikation)
 
 ```text
 PFLICHT: PGHI (Perraudin et al. 2013)
@@ -637,7 +637,7 @@ audio_out = pghi_reconstruct_from_stft(Zxx, n_samples=len(audio_in))
 # PFLICHT: mode='constant', constant_values=0.0 (Stille statt Artefakt-Klon).
 ```
 
-### Dithering (24→16 bit Export)
+### [RELEASE_MUST] Dithering (24→16 bit Export)
 
 ```text
 PRIMÄR: POW-r Typ 3 (Wannamaker et al. 1992) — ~+6 dB effektiver SNR
@@ -645,7 +645,7 @@ FALLBACK: TPDF-Dithering (±1 LSB)
 VERBOTEN: Truncation ohne Dithering
 ```
 
-### MP3-Export
+### [RELEASE_MUST] MP3-Export
 
 ```text
 PRIMÄR: LAME VBR V0 via FFmpeg (q:a=0) — adaptiv bis 320 kbps, ≈245 kbps Ø
@@ -878,7 +878,7 @@ if _preserve_mask is not None:
     effective_gain = np.maximum(effective_gain, 0.10)
 ```
 
-### §4.8a-iii Invarianten
+### [RELEASE_MUST] §4.8a-iii Invarianten
 
 - **VERBOTEN**: DSP-Algorithmus ignoriert `preserve_mask` aus `_restoration_context`.
 - Alle NR-Phasen (phase_03, phase_29, phase_03_sgmse, phase_28_apollo) MÜSSEN `preserve_mask` akzeptieren.
@@ -1451,7 +1451,7 @@ Leichte CPU-Modelle (< 200 MB) sind ausgenommen, da Emergency-Eviction sie nicht
 
 ## §4.6b Material×Defect DSP-Entscheidungsbaum (konsolidiert aus Skill aurik-dsp-decision)
 
-### MRSA-Zonen (5 Pflicht-Zonen)
+### [RELEASE_MUST] MRSA-Zonen (5 Pflicht-Zonen)
 
 | Zone | FFT-Size | Bereich |
 | --- | --- | --- |

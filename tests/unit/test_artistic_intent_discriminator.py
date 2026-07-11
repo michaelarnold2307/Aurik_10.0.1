@@ -25,6 +25,7 @@ def _distorted(sr: int = 44100, duration_s: float = 2.0) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 def test_singleton_returns_same_instance():
     from backend.core.artistic_intent_discriminator import get_artistic_intent_discriminator
 

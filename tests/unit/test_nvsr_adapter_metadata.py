@@ -1,3 +1,4 @@
+import pytest
 """Unit tests for NVSR productive adapter metadata."""
 
 import numpy as np
@@ -8,6 +9,7 @@ def _audio(sr: int = 48000, duration: float = 0.25) -> np.ndarray:
     return (0.15 * np.sin(2.0 * np.pi * 5000.0 * t)).astype(np.float32)
 
 
+@pytest.mark.unit
 def test_nvsr_reports_productive_dsp_capability_without_model(monkeypatch, tmp_path):
     import plugins.nvsr_plugin as nvsr_mod
     from plugins.nvsr_plugin import NvsrPlugin

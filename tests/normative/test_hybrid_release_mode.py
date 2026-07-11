@@ -60,6 +60,7 @@ _REQUIRED_COMPONENTS = {"fcpe", "sgmse_plus", "versa", "flow_matching", "gacela"
 _VALID_MODES = {"primary", "fallback", "blocked"}
 
 
+@pytest.mark.unit
 def test_all_required_components_present(runtime_rows):
     """Alle normativ geforderten Kernkomponenten erscheinen in den Checks."""
     found = {r["name"] for r in runtime_rows}

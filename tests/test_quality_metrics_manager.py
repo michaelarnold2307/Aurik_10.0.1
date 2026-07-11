@@ -1,3 +1,4 @@
+import pytest
 """Test Quality Metrics Manager Integration."""
 
 import tempfile
@@ -12,6 +13,7 @@ from backend.quality_metrics_manager import (
 )
 
 
+@pytest.mark.unit
 def test_quality_metrics_manager_initialization():
     """Test QualityMetricsManager initialization."""
     manager = QualityMetricsManager(enable_all=False)

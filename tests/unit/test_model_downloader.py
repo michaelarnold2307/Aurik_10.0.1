@@ -103,6 +103,7 @@ def downloader_with_empty_manifest(tmp_path: Path):
 # ──────────────────────────────────────────────────────────────────────────────
 
 
+@pytest.mark.unit
 class TestVerifyModel:
     def test_01_correct_sha256_returns_true(self, fake_model_file):
         path, sha = fake_model_file

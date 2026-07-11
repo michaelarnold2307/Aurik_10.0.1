@@ -1,3 +1,4 @@
+import pytest
 """
 Tests for v9.10.117 — Denker full-context optimization.
 
@@ -25,6 +26,7 @@ import numpy as np
 # ── ReparaturDenker Tests ─────────────────────────────────────────────────
 
 
+@pytest.mark.unit
 class TestReparaturDenkerMaterialProfiles:
     """§2.41: Material-adaptive threshold profiles."""
 

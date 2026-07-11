@@ -105,6 +105,7 @@ def _make_vinyl_with_infrasonic(duration_s: float = 6.0, sr: int = SR) -> np.nda
 # ============================================================================
 
 
+@pytest.mark.unit
 class TestRotationPeriodicityDetector:
     """Tests for _SpectralFingerprinter._rotation_periodicity()."""
 

@@ -81,6 +81,7 @@ def defect_scanner():
 # ==================== Test 1: Initialization ====================
 
 
+@pytest.mark.unit
 def test_scanner_initialization(defect_scanner):
     """Test 1: DefectScanner initialization."""
     print("\n" + "=" * 70)

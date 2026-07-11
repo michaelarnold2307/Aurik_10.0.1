@@ -1,3 +1,4 @@
+import pytest
 """[RELEASE_MUST] Automatischer Spec-Konsistenz-Validator (v9.12.0)
 
 CI-Gate das DAUERHAFT und AUTOMATISCH folgende Invarianten prüft:
@@ -130,6 +131,7 @@ def _get_code_causes_and_c2p() -> tuple[list[str], dict[str, list[str]]]:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestSpecInfrastructure:
     """Prüft, dass alle notwendigen Dateien existieren."""
 

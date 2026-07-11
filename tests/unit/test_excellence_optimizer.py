@@ -1,3 +1,4 @@
+import pytest
 """Unit-Tests für core/excellence_optimizer.py — ExcellenceOptimizer.
 
 Spec §2.x: Kontext-bewusstes Post-Processing (Spectral Continuity,
@@ -47,6 +48,7 @@ def _noise(secs: float = 1.0, amp: float = 0.05) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.unit
 class TestExcellenceOptimizerImport:
     def test_01_class_importable(self):
         assert ExcellenceOptimizer is not None

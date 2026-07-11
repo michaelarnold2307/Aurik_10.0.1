@@ -1,9 +1,11 @@
+import pytest
 from __future__ import annotations
 
 from backend.core.defect_scanner import MaterialType
 from backend.core.phases.phase_42_vocal_enhancement import VocalEnhancement as VocalEnhancementPhase
 
 
+@pytest.mark.unit
 def test_formant_recovery_guard_profile_keys_and_bounds() -> None:
     p = VocalEnhancementPhase._compute_formant_recovery_guard_profile(
         material_type=MaterialType.VINYL,

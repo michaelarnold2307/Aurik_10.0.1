@@ -1,3 +1,4 @@
+import pytest
 """Guard tests for EraVocalProfile propagation at critical VQI callsites.
 
 These checks prevent regressions where historical-vocal paths call compute_vqi
@@ -30,6 +31,7 @@ def _assert_vqi_calls_have_era_profile(path: pathlib.Path) -> None:
     )
 
 
+@pytest.mark.unit
 def test_vqi_callsites_include_era_profile_in_critical_paths() -> None:
     critical_files = [
         ROOT / "backend/core/unified_restorer_v3.py",

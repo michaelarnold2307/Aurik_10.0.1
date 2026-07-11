@@ -1,3 +1,4 @@
+import pytest
 from __future__ import annotations
 
 import json
@@ -11,6 +12,7 @@ def _write_json(path: Path, payload: dict) -> None:
     path.write_text(json.dumps(payload), encoding="utf-8")
 
 
+@pytest.mark.unit
 def test_consolidate_detects_contradiction(tmp_path: Path) -> None:
     release = tmp_path / "release_report.json"
     runtime = tmp_path / "runtime_spec_report.json"

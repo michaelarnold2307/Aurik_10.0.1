@@ -742,3 +742,33 @@ def test_competitive_worker_time_budget_respects_grace_override(monkeypatch: pyt
     assert benchmark_timeout_s == 660.0
     assert timeout_grace_s == 20.0
     assert effective_timeout_s == 680.0
+
+
+# ── Open-Source Competitive Benchmark (v10.0.0-Phantom) ─────────────────────
+
+@pytest.mark.competitive_oss
+@pytest.mark.timeout(60)
+def test_open_source_competitive_benchmark() -> None:
+    """§15.1 [RELEASE_MUST]: Aurik muss Open-Source-Tools in OQS schlagen.
+
+    Führt den open_source_benchmark aus und prüft:
+      - Aurik gewinnt ≥50% der Vergleiche
+      - Mean OQS-Delta > 0
+    """
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    result = subprocess.run(
+        [sys.executable, "benchmarks/competitive/open_source_benchmark.py", "--all", "--ci"],
+        capture_output=True,
+        text=True,
+        timeout=50,
+        cwd=str(Path(__file__).parent.parent.parent),
+    )
+
+    assert result.returncode == 0, (
+        f"Open-Source Competitive Benchmark fehlgeschlagen (rc={result.returncode}):\n"
+        f"STDOUT:\n{result.stdout[-1000:]}\n"
+        f"STDERR:\n{result.stderr[-500:]}"
+    )

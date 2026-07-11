@@ -1,3 +1,4 @@
+import pytest
 """
 tests/unit/test_team_coordination_telemetry.py
 ===============================================
@@ -31,6 +32,7 @@ SR = 48000
 # ===========================================================================
 
 
+@pytest.mark.unit
 class TestConflictRegistry:
     def test_phase09_conflicts_phase50(self):
         """Crackle-Reparatur schützt Spectral-Repair-Bins."""
