@@ -4605,3 +4605,90 @@ Die Tonträgerkette wird vor dem Export vom `TontraegerketteDenker` per
 `exporter.set_chain_metadata()` gesetzt und während `export_audio()` via
 `_build_chain_metadata()` ausgelesen und an `MetadataPreserver.transfer(transfer_chain=...)`
 weitergereicht.
+
+
+## §2.46b: Deep-Transfer-Chain — Mehrstufige Tonträgerketten-Inferenz (v10.0.0)
+
+**Pflicht**: Die vollständige Tonträgerkette (z. B. `reel_tape → vinyl → cassette → mp3_low`)
+muss aus allen verfügbaren Quellen rekonstruiert werden. Eine Verkürzung auf die letzte
+Stufe (z. B. `mp3_low`) ist unzulässig.
+
+### 2.46b-I: Datenquellen für die Ketten-Rekonstruktion
+
+Drei unabhängige Signal-Pfade speisen die Ketten-Inferenz:
+
+| Quelle | Modul | Signal-Typ | Was sie liefert |
+|--------|-------|-----------|-----------------|
+| 1. Digitaler Container | `MediumDetector` via `detect(audio, sr, file_ext=…)` | Dateiendung + Spektral-Fingerprint | Letzte Kettenstufe (z. B. `mp3_low`) |
+| 2. Physikalische Defekte | `DefectScanner` via `auto_detected_material` | Crackle, Wow, Flutter, Hiss | Analoges Zwischenmedium (z. B. `cassette`) |
+| 3. Aufnahme-Ära | `EraClassifier` via `material_prior` | Frequenzgang, Rauschtextur, Produktions-Marker | Ursprünglicher Primärträger (z. B. `reel_tape`) |
+
+### 2.46b-II: DefectScanner auto_detected_material
+
+Der `DefectScanner` detektiert das Material **unabhängig vom externen Hint**:
+
+```python
+# DefectScanner.scan() — auto-detection läuft IMMER:
+_auto_material = self._auto_detect_material(audio)  # §6.6.1
+material_type = hint or _auto_material              # Hint hat Vorrang für Thresholds
+
+# Ergebnis speichert BEIDE Werte:
+DefectAnalysisResult(
+    material_type=material_type,                    # Für Threshold-Setup verwendet
+    auto_detected_material=_auto_material,          # Was der Scanner WIRKLICH sieht
+)
+```
+
+**Regel**: Wenn `auto_detected_material ≠ material_type` (z. B. Hint=`mp3_low` aber
+auto=`cassette`), MUSS die Ketten-Inferenz das auto-detektierte Material als
+alternative Kettenstufe prüfen. Der Hint bestimmt die Defekt-Thresholds, aber
+**nicht** die Ketten-Rekonstruktion.
+
+### 2.46b-III: Deep-Transfer-Chain Injection in pre_analysis
+
+`backend/core/pre_analysis.py` baut die Kette nach folgendem Algorithmus:
+
+```
+1. _chain = MediumDetector.transfer_chain          (z.B. ["mp3_low"])
+2. _era_material = EraClassifier.material_prior    (z.B. "reel_tape")
+3. _defect_material = DefectAnalysisResult.auto_detected_material  (z.B. "cassette")
+   Fallback: DefectAnalysisResult.material_type
+4. Für jedes analoge Material aus {2, 3}:
+   Wenn nicht in _chain → VOR der ersten digitalen Stufe einfügen
+5. Vinyl-Inference (§2.46b-IV): Wenn reel_tape + cassette + 1950≤decade≤1990
+   → "vinyl" zwischen reel_tape und cassette einfügen
+
+Ergebnis: reel_tape → vinyl → cassette → mp3_low
+```
+
+### 2.46b-IV: Vinyl-Inference (Heuristik, kein Audio-Eingriff)
+
+**Bedingung**: Alle drei Kriterien müssen erfüllt sein:
+1. `reel_tape` ist in der Kette (Master-Aufnahme auf Band)
+2. `cassette` ist in der Kette (Consumer-Überspielung)
+3. Die Aufnahme-Ära liegt zwischen 1950 und 1990 (Vinyl-Ära)
+
+**Aktion**: `"vinyl"` wird VOR `"cassette"` in die Kette eingefügt.
+
+**Begründung**: In der Vinyl-Ära (1950–1990) war die kommerzielle Veröffentlichung
+einer Band-Aufnahme praktisch immer auf Vinyl. Die Kassette war das Consumer-Format,
+aber die Vinyl-Pressung war der Zwischenschritt vom Masterband zum Consumer-Markt.
+
+**Spezifikationstreue**: Keine Audio-Veränderung — rein logische Inferenz.
+
+### 2.46b-V: Minimal-Reproduktions-Skript
+
+```bash
+# Reproduktion der Ketten-Inferenz (ohne GUI):
+cd Aurik_Standalone
+python3 -c "
+from backend.core.pre_analysis import run_pre_analysis
+import soundfile as sf
+audio, sr = sf.read('test_song.mp3')
+result = run_pre_analysis(audio, sr, file_path='test_song.mp3')
+md = result.medium
+print(f'Chain: {md.chain_label}')
+print(f'Primary: {md.primary_material}')
+print(f'Multi-Gen: {md.is_multi_generation}')
+"
+```
