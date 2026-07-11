@@ -353,6 +353,17 @@ class PhaseInterface(abc.ABC):
         Gesangsqualität geprüft. Kein manuelles Eingreifen nötig.
         """
         assert sample_rate == 48000, f"Interne SR muss 48000 Hz sein, erhalten: {sample_rate}"
+
+        # ── BreathPreserver: Atem-Erhalt vor NR-Phasen ─────────────────
+        _breath_mask = None
+        _is_nr = any(kw in self.get_metadata().phase_id for kw in ("denoise", "hiss", "noise", "nr", "03", "29"))
+        if _is_nr:
+            try:
+                from backend.core.breath_preserver import protect_breath
+                audio, _breath_mask = protect_breath(audio, sample_rate)
+            except Exception as _bp_exc:
+                self._logger.debug("BreathPreserver protect skipped: %s", _bp_exc)
+
         t0 = time.monotonic()
         try:
             result = self.process(audio, sample_rate, material_type, **kwargs)
@@ -367,6 +378,14 @@ class PhaseInterface(abc.ABC):
                 warnings=[f"Phase fehlgeschlagen: {exc}"],
                 quality_estimate=0.95,
             )
+
+        # ── BreathPreserver: Atem-Natürlichkeit wiederherstellen ────────
+        if _breath_mask is not None:
+            try:
+                from backend.core.breath_preserver import restore_breath
+                result.audio = restore_breath(result.audio, _breath_mask, audio)
+            except Exception as _bp_exc:
+                self._logger.debug("BreathPreserver restore skipped: %s", _bp_exc)
 
         # ── ComfortGuard: Automatische Hörmüdungs-Prävention ──────────
         try:

@@ -568,6 +568,29 @@ def main(importfile_path: str, out_path: str) -> None:
         json.dump({"rating": user_rating, "comment": user_comment}, f, indent=2)
 
 
+def auto_detect(audio: np.ndarray, sr: int = 48000) -> dict:
+    """PhantomDetector: Automatische Konfigurationserkennung (§16.1).
+
+    Nutzt PhantomDetector zur vollautomatischen Erkennung von Material,
+    Ära, Defekten, SNR und Qualitäts-Preset. Wird als Fallback verwendet,
+    wenn keine Pre-Analysis (MediumDetector/EraClassifier) verfügbar ist.
+    """
+    from backend.core.phantom_mode import detect_phantom_config
+    config = detect_phantom_config(audio, sr)
+    return {
+        "material": config.material,
+        "era": config.era,
+        "defects": config.defects,
+        "defect_severity": config.defect_severity,
+        "has_vocals": config.has_vocals,
+        "vocal_confidence": config.vocal_confidence,
+        "recommended_mode": config.recommended_mode,
+        "quality_preset": config.quality_preset,
+        "estimated_snr_db": config.estimated_snr_db,
+        "confidence": config.confidence,
+    }
+
+
 if __name__ == "__main__":
     if len(sys.argv) < 3:
         logger.info("Nutzung: python aurik_restore.py <importfile.json> <output.wav>")
