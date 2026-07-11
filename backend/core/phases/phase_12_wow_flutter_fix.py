@@ -828,6 +828,9 @@ class WowFlutterFix(PhaseInterface):
             )
 
         # Step 4: Calculate time-stretching factors from pitch deviation
+        # §2.46b: Store material for adaptive pitch-span threshold
+        self._mat_type_for_stretch = str(material_type)
+        self._wow_sev_for_stretch = float(kwargs.get("wow_severity", kwargs.get("flutter_severity", 0.0)) or 0.0)
         stretch_factors = self._calculate_stretch_factors(
             pitch_trajectory,
             confidence,
@@ -2902,16 +2905,20 @@ class WowFlutterFix(PhaseInterface):
             _cp_p95 = np.percentile(confident_pitches, 95)
             if _cp_p5 > 0.0 and _cp_p95 > _cp_p5:
                 _span_cents = 1200.0 * np.log2(_cp_p95 / _cp_p5)
-                if _span_cents > 100.0:  # > 1 semitone ⇒ melody, not transport speed drift
+                _mat_key = str(getattr(self, "_mat_type_for_stretch", "") or "").lower()
+                _wow_sev = float(getattr(self, "_wow_sev_for_stretch", 0.0) or 0.0)
+                _adaptive_limit = 400.0 if (_mat_key in ("cassette", "reel_tape", "tape") and _wow_sev >= 0.70) else 100.0
+                if _span_cents > _adaptive_limit:
                     logger.warning(
-                        "Phase 12 _calculate_stretch_factors: pitch span %.0f cents"
-                        " (P5=%.1f Hz P95=%.1f Hz) > 100 cents — melody content detected,"
-                        " bypassing wow/flutter timestretch (§0 Primum non nocere)",
-                        _span_cents,
-                        _cp_p5,
-                        _cp_p95,
+                        "Phase 12 pitch span %.0f cents > %.0f (mat=%s wow=%.2f)",
+                        _span_cents, _adaptive_limit, _mat_key, _wow_sev,
                     )
-                    return np.ones_like(pitch_trajectory)  # type: ignore[no-any-return]
+                    return np.ones_like(pitch_trajectory)
+                else:
+                    logger.info(
+                        "Phase 12 pitch span %.0f cents within limit %.0f (mat=%s wow=%.2f)",
+                        _span_cents, _adaptive_limit, _mat_key, _wow_sev,
+                    )
 
         target_pitch = np.median(confident_pitches)
 
