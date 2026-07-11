@@ -323,9 +323,9 @@ def _run_audiosr_ml(audio: np.ndarray, sr: int) -> np.ndarray | None:
                 zone_mono_1d = np.clip(zone_mono_1d, -1.0, 1.0)
                 try:
                     batch, _asr_duration = _make_batch_fn(input_file=None, waveform=zone_mono_1d)
-                    # §ROCm-NaN-Fix: generate_batch auf ROCm GPU → NaN im Vocoder.
-                    # Force gesamtes Modell + Batch auf CPU vor Inference.
-                    model.cpu()
+                    # §SOTA: DDIM-Diffusion auf GPU, Vocoder auf CPU (via Patch beim Modell-Load)
+                    # model.cpu() NICHT aufrufen — das würde GPU-DDIM zerstören.
+                    # Der HiFi-GAN-Vocoder ist bereits via _patched_mel2wav/_patched_decode auf CPU.
                     if hasattr(batch, "cpu"):
                         batch = batch.cpu()
                     with _asr_torch.no_grad():
