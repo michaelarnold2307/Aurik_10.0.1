@@ -1391,6 +1391,32 @@ class EraClassifier:
             )
             result = None
 
+        # ── Decade-Boundary-Softener ────────────────────────────────────
+        # CLAP general-purpose Audio-Modell klassifiziert borderline-Fälle
+        # (z.B. 1977 → 1980) manchmal um eine Dekade zu hoch, besonders bei
+        # MP3-komprimierten Aufnahmen deren spektrale Signatur Ähnlichkeit
+        # mit späteren Produktionen hat.  Bei moderater Confidence und
+        # analogen spektralen Charakteristika: eine Dekade zurück.
+        if result is not None and result.tier_used == 1:
+            _is_boundary_decade = result.decade in (1980, 1990, 2000)
+            _moderate_conf = 0.50 < result.confidence < 0.72
+            _analog_characteristics = (
+                rolloff_hz < 16000  # Bandbreite < 16 kHz → pre-digital
+                or (is_stereo and stereo_width is not None and stereo_width < 0.5)  # Narrow stereo
+                or (lf_presence is not None and lf_presence > 0.15)  # Analog LF rumble
+            )
+            if _is_boundary_decade and _moderate_conf and _analog_characteristics:
+                _original = result.decade
+                _corrected = result.decade - 10
+                logger.info(
+                    "🕰️ Decade-Boundary-Softener: %d→%d (CLAP-conf=%.2f, rolloff=%.0fHz) — "
+                    "analog characteristics suggest earlier decade",
+                    _original, _corrected, result.confidence, rolloff_hz,
+                )
+                result = dc_replace(result, decade=_corrected, era_label=f"{_corrected}er",
+                                   material_prior=DECADE_MATERIAL_PRIOR.get(_corrected, result.material_prior),
+                                   confidence=result.confidence * 0.90)
+
         # Tier-2: DSP-Fingerprint (multi-factor)
         if result is None or result.confidence < 0.40:
             result = self._tier2(
