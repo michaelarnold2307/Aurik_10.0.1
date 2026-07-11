@@ -34876,7 +34876,7 @@ class UnifiedRestorerV3:
                 # RAM-Notbremse: bei < 4 GB verfügbar ODER > 80% belegt ODER Swap-Thrashing
                 # → Plugin-Eviction erzwingen. systemd-oomd killt bei Memory-Pressure > 50%.
                 try:
-                    pass
+                    import psutil as _psutil_phase  # noqa: F811
 
                     _vm_phase = _psutil_phase.virtual_memory()
                     _avail_gb_phase = _vm_phase.available / (1024**3)
