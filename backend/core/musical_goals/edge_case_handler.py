@@ -30,7 +30,12 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, cast
 
-import librosa
+try:
+    import librosa
+    _LIBROSA_AVAILABLE = True
+except ImportError:
+    librosa = None  # type: ignore[assignment]
+    _LIBROSA_AVAILABLE = False
 import numpy as np
 
 from backend.core.musical_goals.musical_goals_metrics import MusicalGoalsChecker
@@ -535,6 +540,9 @@ class EdgeCaseHandler:
         filtered = filtfilt(b, a, audio)
 
         # Zero crossing rate
+        if not _LIBROSA_AVAILABLE:
+            logger.debug("librosa not available — crackle detection skipped")
+            return False
         zcr = librosa.feature.zero_crossing_rate(filtered)[0]
         mean_zcr = np.mean(zcr)
 
@@ -546,6 +554,9 @@ class EdgeCaseHandler:
         frame_length = int(sr * 0.02)  # 20ms frames
         hop_length = frame_length // 2
 
+        if not _LIBROSA_AVAILABLE:
+            logger.debug("librosa not available — dropout detection skipped")
+            return False
         energy = librosa.feature.rms(y=audio, frame_length=frame_length, hop_length=hop_length)[0]
 
         # Detect sudden drops (> 50% energy reduction)
@@ -725,6 +736,9 @@ class EdgeCaseHandler:
         _hop_ech = min(512, _n_fft_ech // 4)
 
         # Compute power spectrum
+        if not _LIBROSA_AVAILABLE:
+            logger.debug("librosa not available — spectrum profile skipped")
+            return SpectrumProfile()
         stft = librosa.stft(audio, n_fft=_n_fft_ech, hop_length=_hop_ech)
         magnitude = np.abs(stft)
         power = magnitude**2
