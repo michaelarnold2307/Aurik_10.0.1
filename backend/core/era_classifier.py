@@ -1393,29 +1393,37 @@ class EraClassifier:
 
         # ── Decade-Boundary-Softener ────────────────────────────────────
         # CLAP general-purpose Audio-Modell klassifiziert borderline-Fälle
-        # (z.B. 1977 → 1980) manchmal um eine Dekade zu hoch, besonders bei
-        # MP3-komprimierten Aufnahmen deren spektrale Signatur Ähnlichkeit
-        # mit späteren Produktionen hat.  Bei moderater Confidence und
-        # analogen spektralen Charakteristika: eine Dekade zurück.
-        if result is not None and result.tier_used == 1:
-            _is_boundary_decade = result.decade in (1980, 1990, 2000)
-            _moderate_conf = 0.50 < result.confidence < 0.72
-            _analog_characteristics = (
-                rolloff_hz < 16000  # Bandbreite < 16 kHz → pre-digital
-                or (is_stereo and stereo_width is not None and stereo_width < 0.5)  # Narrow stereo
-                or (lf_presence is not None and lf_presence > 0.15)  # Analog LF rumble
-            )
-            if _is_boundary_decade and _moderate_conf and _analog_characteristics:
+        # (z.B. 1977 → 1990) manchmal um mehrere Dekaden zu hoch, besonders
+        # bei MP3-komprimierten Aufnahmen.  Die spektrale Bandbreite ist der
+        # härteste physikalische Fakt — eine Aufnahme mit <10 kHz Rolloff
+        # KANN nicht aus den 1990ern stammen.
+        #
+        # Korrektur-Stärke hängt von der Bandbreite ab:
+        #   rolloff <  8 kHz → −3 Dekaden  (AM-Radio / Schellack-Ära)
+        #   rolloff < 12 kHz → −2 Dekaden  (frühes Tape / Vinyl)
+        #   rolloff < 16 kHz → −1 Dekade   (pre-digitales Equipment)
+        if result is not None and result.tier_used == 1 and result.decade >= 1980:
+            _rolloff = float(rolloff_hz or 22000)
+            _steps = 0
+            if _rolloff < 8000:
+                _steps = 3
+            elif _rolloff < 12000:
+                _steps = 2
+            elif _rolloff < 16000 and result.confidence < 0.72:
+                _steps = 1
+
+            if _steps > 0:
                 _original = result.decade
-                _corrected = result.decade - 10
-                logger.info(
-                    "🕰️ Decade-Boundary-Softener: %d→%d (CLAP-conf=%.2f, rolloff=%.0fHz) — "
-                    "analog characteristics suggest earlier decade",
-                    _original, _corrected, result.confidence, rolloff_hz,
-                )
-                result = dc_replace(result, decade=_corrected, era_label=f"{_corrected}er",
-                                   material_prior=DECADE_MATERIAL_PRIOR.get(_corrected, result.material_prior),
-                                   confidence=result.confidence * 0.90)
+                _corrected = max(1890, result.decade - _steps * 10)
+                if _corrected != _original:
+                    logger.info(
+                        "🕰️ Decade-Boundary-Softener: %d→%d (CLAP-conf=%.2f, rolloff=%.0fHz, steps=%d) — "
+                        "analog characteristics suggest earlier decade",
+                        _original, _corrected, result.confidence, _rolloff, _steps,
+                    )
+                    result = dc_replace(result, decade=_corrected, era_label=f"{_corrected}er",
+                                       material_prior=DECADE_MATERIAL_PRIOR.get(_corrected, result.material_prior),
+                                       confidence=result.confidence * 0.85)
 
         # Tier-2: DSP-Fingerprint (multi-factor)
         if result is None or result.confidence < 0.40:
