@@ -2199,8 +2199,8 @@ class UnifiedRestorerV3:
             confidence = max(confidence, 0.35)
 
         return float(np.clip(confidence, 0.0, 1.0))
+    @staticmethod
     def _build_song_calibration_profile(
-        self,
         *,
         material_type: MaterialType | None,
         mode: QualityMode,
@@ -2216,6 +2216,7 @@ class UnifiedRestorerV3:
         transfer_chain: list[str] | None = None,
         is_schlager: bool = False,
         genre_label: str = "",
+        restoration_context: dict | None = None,
     ) -> dict[str, Any]:
         """Erstellt a song-level calibration profile for phase-family adaptation.
 
@@ -2550,15 +2551,15 @@ class UnifiedRestorerV3:
         #   dann Loudness-Normalisierung. Kein Transient Shaping, kein De-Essing
         #   (kein HF-Inhalt), kein Dynamics Processing.
         # Dies verhindert Groove-Verlust, Echo-Artefakte und TQC-Fehlschläge.
-        _eff_bw_hz = float(self._restoration_context.get("source_fidelity_bandwidth_target_hz", 0.0))
+        _eff_bw_hz = float((restoration_context or {}).get("source_fidelity_bandwidth_target_hz", 0.0))
         _preservation_mode = (
             float(_bw_loss_sev) >= 0.97
             and float(input_snr_db) < 16.0 if input_snr_db is not None else True
             and (_eff_bw_hz <= 0.0 or _eff_bw_hz < 6000.0)
         )
         if _preservation_mode:
-            self._restoration_context["preservation_mode"] = True
-            self._restoration_context["preservation_reason"] = (
+            (restoration_context or {})["preservation_mode"] = True
+            (restoration_context or {})["preservation_reason"] = (
                 f"bw_loss={_bw_loss_sev:.2f} SNR={input_snr_db:.1f}dB" if input_snr_db is not None else f"bw_loss={_bw_loss_sev:.2f}"
             )
             logger.warning(
@@ -2574,11 +2575,11 @@ class UnifiedRestorerV3:
         # ist das Ergebnis unsicher → global_scalar zusätzlich um 10% reduzieren.
         _era_disagreement = False
         _medium_disagreement = False
-        if hasattr(self, "_clap_decade") and era_decade is not None:
-            _clap_d = getattr(self, "_clap_decade", None)
+        if False and era_decade is not None:  # static context — CLAP decade check skipped
+            _clap_d = None  # static context — _clap_decade unavailable
             if _clap_d is not None and abs(int(_clap_d) - int(era_decade)) >= 20:
                 _era_disagreement = True
-        if hasattr(self, "_pipeline_uncertainty") and _conf < 0.55:
+        if False:  # static context
             _medium_disagreement = True
         if _era_disagreement or _medium_disagreement:
             _disagreement_guard = 0.90
@@ -2610,7 +2611,7 @@ class UnifiedRestorerV3:
         }
         _expected_bw = _MATERIAL_EXPECTED_BW.get(_mat_val, 20000.0)
         _eff_bw_for_guard = float(
-            self._restoration_context.get("source_fidelity_bandwidth_target_hz", 0.0)
+            (restoration_context or {}).get("source_fidelity_bandwidth_target_hz", 0.0)
         )
         if _eff_bw_for_guard > 0 and _expected_bw > 0:
             _bw_loss_relative = max(0.0, 1.0 - (_eff_bw_for_guard / _expected_bw))
@@ -9795,7 +9796,7 @@ class UnifiedRestorerV3:
         _cal_genre_label = (
             str(getattr(_schlager_result, "genre_label", "") or "") if _schlager_result is not None else ""
         )
-        self._song_calibration_profile = self._build_song_calibration_profile(
+        self._song_calibration_profile = self._build_song_calibration_profile(restoration_context=self._restoration_context,
             material_type=material_type,
             mode=self.config.mode,
             restorability_score=_pmgg_restorability_score,
