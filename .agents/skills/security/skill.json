@@ -1,0 +1,15 @@
+{
+  "id": "security",
+  "name": "SECURITY",
+  "description": "| Version | Status | |---------|------------------------------| | 9.12.x | ✅ Unterstützt (aktiv) | | < 9.12 | ❌ Keine Sicherheits-Updates |",
+  "version": "0.0.0",
+  "entry": "SKILL.md",
+  "triggers": {
+    "commands": [],
+    "promptPatterns": [],
+    "fileTypes": []
+  },
+  "allowedTools": [],
+  "assets": [],
+  "priority": 0
+}

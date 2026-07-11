@@ -553,6 +553,17 @@ class AudioExporter:
             if tmp.exists():
                 tmp.unlink(missing_ok=True)
         self._write_metadata(output_path, bwf)
+        # §2.46a: Proper BWF bext/iXML chunks for WAV via bwf_writer (EBU Tech 3285)
+        if ext == ".wav":
+            try:
+                from backend.core.bwf_writer import write_bwf_chunks
+                write_bwf_chunks(
+                    str(output_path),
+                    description=f"Aurik v10 Bit-Perfect Archive (sha256={chk[:16]})",
+                    originator="Aurik v10 BP",
+                )
+            except Exception as _bwf_exc:
+                logger.debug("BWF chunk write skipped: %s", _bwf_exc)
         logger.info("Bit-Perfect: %s (%d Hz, sha256=%s)", output_path, sr, chk[:16])
         return output_path
 

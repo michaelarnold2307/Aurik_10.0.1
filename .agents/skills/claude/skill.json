@@ -1,0 +1,15 @@
+{
+  "id": "claude",
+  "name": "CLAUDE",
+  "description": "**Ziel:** Intelligente Musikwiederherstellung mit psychoakustischer Präzision, deterministischer Reproduzierbarkeit und vollständiger Ausrichtung auf den natürlichen Wohlklang für das menschliche Ohr.",
+  "version": "0.0.0",
+  "entry": "SKILL.md",
+  "triggers": {
+    "commands": [],
+    "promptPatterns": [],
+    "fileTypes": []
+  },
+  "allowedTools": [],
+  "assets": [],
+  "priority": 0
+}

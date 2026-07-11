@@ -1,0 +1,15 @@
+{
+  "id": "code-of-conduct",
+  "name": "CODE OF CONDUCT",
+  "description": "Im Interesse einer offenen und einladenden Gemeinschaft verpflichten wir uns als Beitragende und Betreuer, die Teilnahme an unserem Projekt und in unserer Gemeinschaft zu einer belästigungsfreien Erfahrung für alle zu machen — unabhängig von Alter, Körpergröße, Behinderung, ethnischer Zugehörigkeit, Geschlechtsmerkmalen, Geschlechtsidentität und -ausdruck, Erfahrungsgrad, Bildung, sozioökonomischem Status, Nationalität, persönlichem Erscheinungsbild, Rasse, Religion oder sexueller Identität und Orientierung.",
+  "version": "0.0.0",
+  "entry": "SKILL.md",
+  "triggers": {
+    "commands": [],
+    "promptPatterns": [],
+    "fileTypes": []
+  },
+  "allowedTools": [],
+  "assets": [],
+  "priority": 0
+}

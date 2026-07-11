@@ -1,16 +1,16 @@
 """
-Aurik 9.0 - Phase Module Exports
+Aurik 10.0 - Phase Module Exports
 ==================================
 
-Central import hub for all 42 processing phases.
+Central import hub for all 66 processing phases.
 
 Usage:
     from backend.core.phases import ClickRemovalPhase, DenoisePhase
     from backend.core.phases import PhaseInterface, PhaseCategory, PhaseMetadata
 
-Author: Aurik 9.0 Development Team
-Version: 9.0.0
-Date: 2026-02-15
+Author: Aurik 10.0 Development Team
+Version: 10.0.0
+Date: 2026-07-11
 """
 
 import logging as _logging
@@ -132,6 +132,79 @@ except ImportError as _p58_err:
     _PHASE58_OK = False
     Phase58LyricsGuidedEnhancement = None  # type: ignore[assignment,misc]
 
+
+# Phase 59: Modulation Noise Reduction — Tape modulation artifact removal (§6.7)
+try:
+    from .phase_59_modulation_noise_reduction import ModulationNoiseReductionPhase
+    _PHASE59_OK = True
+except ImportError as _p59_err:
+    _logger.debug("Phase 59 nicht verfügbar: %s", _p59_err)
+    _PHASE59_OK = False
+    ModulationNoiseReductionPhase = None  # type: ignore[assignment,misc]
+
+# Phase 60: Inner Groove Distortion Repair — Vinyl-specific (§6.8)
+try:
+    from .phase_60_inner_groove_distortion_repair import InnerGrooveDistortionRepairPhase
+    _PHASE60_OK = True
+except ImportError as _p60_err:
+    _logger.debug("Phase 60 nicht verfügbar: %s", _p60_err)
+    _PHASE60_OK = False
+    InnerGrooveDistortionRepairPhase = None  # type: ignore[assignment,misc]
+
+# Phase 61: Groove Echo Cancellation — Pre/post-echo removal (§6.9)
+try:
+    from .phase_61_groove_echo_cancellation import GrooveEchoCancellationPhase
+    _PHASE61_OK = True
+except ImportError as _p61_err:
+    _logger.debug("Phase 61 nicht verfügbar: %s", _p61_err)
+    _PHASE61_OK = False
+    GrooveEchoCancellationPhase = None  # type: ignore[assignment,misc]
+
+# Phase 62: Crosstalk Cancellation — Stereo bleed removal (§6.10)
+try:
+    from .phase_62_crosstalk_cancellation import CrosstalkCancellationPhase
+    _PHASE62_OK = True
+except ImportError as _p62_err:
+    _logger.debug("Phase 62 nicht verfügbar: %s", _p62_err)
+    _PHASE62_OK = False
+    CrosstalkCancellationPhase = None  # type: ignore[assignment,misc]
+
+# Phase 63: Intermodulation Reduction — IMD artifact cleanup (§6.11)
+try:
+    from .phase_63_intermodulation_reduction import IntermodulationReductionPhase
+    _PHASE63_OK = True
+except ImportError as _p63_err:
+    _logger.debug("Phase 63 nicht verfügbar: %s", _p63_err)
+    _PHASE63_OK = False
+    IntermodulationReductionPhase = None  # type: ignore[assignment,misc]
+
+# Phase 64: Tape Splice Repair — Physical tape splice artifact removal (§6.12)
+try:
+    from .phase_64_tape_splice_repair import TapeSpliceRepairPhase
+    _PHASE64_OK = True
+except ImportError as _p64_err:
+    _logger.debug("Phase 64 nicht verfügbar: %s", _p64_err)
+    _PHASE64_OK = False
+    TapeSpliceRepairPhase = None  # type: ignore[assignment,misc]
+
+# Phase 65: Vocal Naturalness Restoration — Formant/Vibrato preservation (§6.13)
+try:
+    from .phase_65_vocal_naturalness_restoration import VocalNaturalnessRestorationPhase
+    _PHASE65_OK = True
+except ImportError as _p65_err:
+    _logger.debug("Phase 65 nicht verfügbar: %s", _p65_err)
+    _PHASE65_OK = False
+    VocalNaturalnessRestorationPhase = None  # type: ignore[assignment,misc]
+
+# Phase 66: Stem-Targeted Noise Reduction — Source-separation NR (§6.14)
+try:
+    from .phase_66_stem_targeted_nr import StemTargetedNRPhase
+    _PHASE66_OK = True
+except ImportError as _p66_err:
+    _logger.debug("Phase 66 nicht verfügbar: %s", _p66_err)
+    _PHASE66_OK = False
+    StemTargetedNRPhase = None  # type: ignore[assignment,misc]
+
 # Exported symbols
 __all__ = [
     "AdvancedDereverbPhase",
@@ -206,9 +279,18 @@ __all__ = [
     "TruePeakLimiterPhase",
     "VocalEnhancement",
     "WowFlutterFix",
+    # Phase 59-66 (v10.0.0)
+    "ModulationNoiseReductionPhase",
+    "InnerGrooveDistortionRepairPhase",
+    "GrooveEchoCancellationPhase",
+    "CrosstalkCancellationPhase",
+    "IntermodulationReductionPhase",
+    "TapeSpliceRepairPhase",
+    "VocalNaturalnessRestorationPhase",
+    "StemTargetedNRPhase",
 ]
 
 # Version info
-__version__ = "9.15.0"
-__author__ = "Aurik 9.12 Development Team"
-__date__ = "2026-05-19"
+__version__ = "10.0.0"
+__author__ = "Aurik 10.0 Development Team"
+__date__ = "2026-07-11"

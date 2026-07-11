@@ -4563,3 +4563,45 @@ def test_ssip_reassembly_bit_exact_silence():
 ## v10: PIM & RLP
 
 Der **Perceptual Intensity Mapper (PIM)** wird VOR dem Phasen-Loop ausgeführt und kalibriert 10 Frequenzbänder × N Song-Sektionen. Der **Reflective Listening Pass (RLP)** läuft NACH dem Loop und bessert Restprobleme nach.
+
+
+## v10.0.0: Phasen 51–66 — Erweiterte Restaurierungsphasen
+
+| Phase | Modul | Klasse | Beschreibung |
+|-------|-------|--------|-------------|
+| 51 | `phase_51_drums_enhancement` | `DrumsEnhancementV1` | Schlagzeug-Transienten-Restaurierung |
+| 52 | `phase_52_piano_restoration` | `PianoRestorationV1` | Klavier-Harmonik-Rekonstruktion |
+| 53 | `phase_53_semantic_audio` | `SemanticAudioPhase` | BPM/Key/Genre-Analyse (Metadaten) |
+| 54 | `phase_54_transparent_dynamics` | `TransparentDynamicsV1` | Transparente Dynamik-Prozessierung |
+| 55 | `phase_55_diffusion_inpainting` | `DiffusionInpaintingPhase` | ML-basierte Lückenfüllung |
+| 56 | `phase_56_spectral_band_gap_repair` | `SpectralBandGapRepairPhase` | HEAD_WEAR Spektralband-Lücken |
+| 57 | `phase_57_print_through_reduction` | `PrintThroughReductionPhase` | Bidirektionale LMS Print-Through |
+| 58 | `phase_58_lyrics_guided_enhancement` | `Phase58LyricsGuidedEnhancement` | Lyrics-geführte Stimmoptimierung |
+| 59 | `phase_59_modulation_noise_reduction` | `ModulationNoiseReductionPhase` | Tonband-Modulationsrauschen (§6.7) |
+| 60 | `phase_60_inner_groove_distortion_repair` | `InnerGrooveDistortionRepairPhase` | Vinyl-Innenrillen-Verzerrung (§6.8) |
+| 61 | `phase_61_groove_echo_cancellation` | `GrooveEchoCancellationPhase` | Pre/Post-Echo-Entfernung (§6.9) |
+| 62 | `phase_62_crosstalk_cancellation` | `CrosstalkCancellationPhase` | Stereo-Übersprech-Kompensation (§6.10) |
+| 63 | `phase_63_intermodulation_reduction` | `IntermodulationReductionPhase` | IMD-Artefakt-Reduktion (§6.11) |
+| 64 | `phase_64_tape_splice_repair` | `TapeSpliceRepairPhase` | Physische Klebestellen-Reparatur (§6.12) |
+| 65 | `phase_65_vocal_naturalness_restoration` | `VocalNaturalnessRestorationPhase` | Formant/Vibrato-Erhalt (§6.13) |
+| 66 | `phase_66_stem_targeted_nr` | `StemTargetedNRPhase` | Source-Separation Rauschminderung (§6.14) |
+
+Alle Phasen werden über `backend/core/phases/__init__.py` mit bedingten Imports exportiert
+(try/except ImportError, Graceful Degradation).
+
+
+## §2.46a: Transferkette in Export-Metadaten (v10.0.0)
+
+**Pflicht**: Jeder Export (WAV, FLAC, MP3, AIFF, OGG) muss die erkannte
+Tonträgerkette als Metadaten-Tag einbetten.
+
+- **API**: `backend/exporter.py` → `set_chain_metadata()` / `_build_chain_metadata()`
+- **Format**: ID3 `COMM` (MP3/AIFF), Vorbis `COMMENT` (FLAC/OGG)
+- **Inhalt**: `"Chain: Vinyl→Cassette→WAV → 3 → light"`
+- **Thread-Sicherheit**: `threading.Lock`-geschützter Modul-Speicher
+- **BWF**: Zusätzlich BWF `bext`-Chunk via `bwf_writer.write_bwf_chunks()` für WAV/RF64
+
+Die Tonträgerkette wird vor dem Export vom `TontraegerketteDenker` per
+`exporter.set_chain_metadata()` gesetzt und während `export_audio()` via
+`_build_chain_metadata()` ausgelesen und an `MetadataPreserver.transfer(transfer_chain=...)`
+weitergereicht.

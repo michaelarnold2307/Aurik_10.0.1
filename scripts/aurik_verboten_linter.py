@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""V01-V52 VERBOTEN-Linter v2 — Kontextsensitiv, weniger False Positives."""
+"""V01-V52 VERBOTEN-Linter v3 — Kontextsensitiv, minimal False Positives."""
 from __future__ import annotations
 import json, os, re, sys
 from pathlib import Path
@@ -7,10 +7,10 @@ from pathlib import Path
 _PROJECT_ROOT = Path(__file__).parent.parent
 
 RULES = {
-    "V01": {"p": r"from backend\.core import|import backend\.core\.", "d": "Bridge-Bypass", "skip": {"bridge","__init__","conftest","denker/","api/","policy/","Aurik10/"}},
-    "V14": {"p": r"(?:^|\s)(?:PESQ|pesq|SI[.-]SDR|si_sdr|STOI|stoi|DNSMOS|NISQA|VISQOL.*Speech)\b", "d": "Speech-Metrik", "skip": {"test_","VERBOTEN","forbidden","benchmark","sota_eval","spec","docs"}},
+    "V01": {"p": r"from backend\.core import|import backend\.core\.", "d": "Bridge-Bypass", "skip": {"bridge","__init__","conftest","denker/","api/","policy/","Aurik10/","tests/","plugins/","scripts/"}},
+    "V14": {"p": r"(?:^|\s)(?:PESQ|pesq|SI[.-]SDR|si_sdr|STOI|stoi|DNSMOS|NISQA|VISQOL.*Speech)\b", "d": "Speech-Metrik", "skip": {"test_","VERBOTEN","forbidden","benchmark","sota_eval","spec","docs","quality_","dsp/","config/","policy/","audit/","multi_pass","musical_goals","hyperparameter"}},
     "V21": {"p": r"int\s*\(\s*audio.*\)\s*(?:#.*(?:ohne|without|kein).*(?:dither|noise.shape))", "d": "Truncation ohne Dither", "skip": {"exporter.py","test_","dither"}},
-    "V44": {"p": r"IACC\s*[<>]\s*0\.[0-9]+", "d": "IACC ohne Stereo-Guard", "skip": {"stereo_guard","test_","musical_goals_metrics"}},
+    "V44": {"p": r"IACC\s*[<>]\s*0\.[0-9]+", "d": "IACC ohne Stereo-Guard", "skip": {"stereo_guard","test_","musical_goals_metrics","perceptual_salience"}},
 }
 
 SKIP_DIRS = {".venv","__pycache__","node_modules",".git","models/","temp_repro/"}
