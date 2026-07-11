@@ -345,6 +345,8 @@ class SongPrognoseWidget(QWidget):
         self._grade: str = "unknown"
         self._score100: float = 0.0
         self._material: str = "unknown"
+        self._chain_label: str = ""
+        self._is_multi_generation: bool = False
         self._decade: int | None = None
         self._genre: str = ""
         self._result_obj: Any = None
@@ -608,6 +610,11 @@ class SongPrognoseWidget(QWidget):
         self._meta_rows["material"].setTextFormat(Qt.TextFormat.RichText)
         self._refresh_phase_prognosis()
 
+    def update_chain(self, chain_label: str, is_multi_generation: bool) -> None:
+        """§2.46b: Aktualisiert die Tonträgerkette-Anzeige im Prognose-Widget."""
+        self._chain_label = str(chain_label or "")
+        self._is_multi_generation = bool(is_multi_generation)
+
     def update_era_genre(self, decade: int | None, genre: str | None) -> None:
         """Aktualisiert era/genre rows. Call from GUI thread after EraClassifier."""
         self._decade = decade
@@ -684,6 +691,7 @@ class SongPrognoseWidget(QWidget):
         # Print terminal report
         _print_prognose_terminal(
             material=self._material,
+            chain_label=self._chain_label,
             decade=self._decade,
             genre=self._genre,
             score100=score100,
@@ -902,6 +910,7 @@ def _color_grade(grade: str, text: str) -> str:
 def _print_prognose_terminal(
     *,
     material: str,
+    chain_label: str = "",
     decade: int | None,
     genre: str,
     score100: float,
@@ -929,6 +938,11 @@ def _print_prognose_terminal(
         f"{_ANSI_BOLD}{_ANSI_BLUE}║        Aurik 10 — Song-Prognose (Pre-Flight)          ║{_ANSI_RESET}",
         f"{_ANSI_BOLD}{_ANSI_BLUE}╚══════════════════════════════════════════════════════╝{_ANSI_RESET}",
         f"  {_ANSI_DIM}Trägermedium{_ANSI_RESET}    : {mat_name}",
+    ]
+    # §2.46b: Tonträgerkette anzeigen wenn mehrstufig
+    if chain_label and " → " in chain_label:
+        lines.append(f"  {_ANSI_DIM}Tonträgerkette{_ANSI_RESET} : {_ANSI_CYAN}{chain_label}{_ANSI_RESET}")
+    lines.extend([
         f"  {_ANSI_DIM}Aufnahme-Ära{_ANSI_RESET}    : {f'{decade}er' if decade else '—'}",
         f"  {_ANSI_DIM}Genre{_ANSI_RESET}           : {genre if genre else '—'}",
         f"  {_ANSI_DIM}SNR{_ANSI_RESET}             : {snr_db:.1f} dB",
@@ -937,7 +951,7 @@ def _print_prognose_terminal(
         f"  {_ANSI_BOLD}MOS-Prognose{_ANSI_RESET}    : {predicted_mos:.2f}  [{mos_range[0]:.1f}–{mos_range[1]:.1f}]",
         f"  {_ANSI_BOLD}Phasen-Schätzung{_ANSI_RESET}: {lo}–{hi} Phasen",
         "",
-    ]
+    ])
 
     if limiting_defects:
         lines.append(f"  {_ANSI_AMBER}Hauptschäden{_ANSI_RESET}:")
