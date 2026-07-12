@@ -344,42 +344,42 @@ def run_pre_analysis(
         _step_fns["restorability"] = _run_restorability
 
     if _step_fns:
-        if len(_step_fns) == 1:
-            name, fn = next(iter(_step_fns.items()))
-            logger.debug("pre_analysis: single step=%s runs inline (no pool overhead)", name)
+        _total_steps = len(_step_fns)
+        _done_steps = 0
+
+        # Era und Genre teilen sich LAION-CLAP (2.2 GB). Paralleles Laden
+        # via ThreadPoolExecutor erzeugt GIL-Contention + Lock-Contention
+        # → 10× langsamer als sequentiell. Nur I/O-lastige Schritte (defect,
+        # restorability) profitieren von Parallelisierung.
+        #
+        # Strategie: Era + Genre SEQUENTIELL (shared CLAP resource),
+        #            Defect + Restorability PARALLEL (unabhängig).
+        _clap_steps = {k: v for k, v in _step_fns.items() if k in ("era", "genre")}
+        _other_steps = {k: v for k, v in _step_fns.items() if k not in ("era", "genre")}
+
+        # Phase A: CLAP-Schritte sequentiell
+        for name, fn in _clap_steps.items():
             try:
                 setattr(result, name, fn())
-                logger.debug("pre_analysis: step=%s done", name)
             except Exception as exc:
                 result.errors[name] = str(exc)
                 logger.warning("pre_analysis: step=%s failed (%s)", name, exc)
-        else:
-            _worker_count = max(1, min(4, len(_step_fns)))
-            logger.debug(
-                "pre_analysis: parallel steps=%d cached=%d workers=%d",
-                len(_step_fns),
-                4 - len(_step_fns),
-                _worker_count,
-            )
-            _pool = _cf.ThreadPoolExecutor(max_workers=_worker_count)
-            _had_substep_timeout = False
-            try:
-                _fut = {name: _pool.submit(fn) for name, fn in _step_fns.items()}
-                _total_steps = len(_fut)
-                _done_steps = 0
-                _fut_to_name: dict[_cf.Future, str] = {v: k for k, v in _fut.items()}
+            _done_steps += 1
+            _step_pct = 75 + int((_done_steps / max(_total_steps, 1)) * 15)
+            _cb(_step_pct, f"Analyse: {name} abgeschlossen ({_done_steps}/{_total_steps})…")
+            logger.info("pre_analysis: step=%s done (%d/%d)", name, _done_steps, _total_steps)
 
-                # as_completed: collect results as they finish, not sequentially.
-                # Fast steps (defect, restorability) report immediately instead
-                # of being blocked behind slow steps (era, genre).
-                # as_completed timeout is TOTAL across all futures.
-                # Cap at 600s (10 min) — enough for slowest classifier + margin.
-                _total_timeout = min(_SUBSTEP_TIMEOUT_S * max(_total_steps, 1), 600.0)
-                for fut in _cf.as_completed(_fut_to_name, timeout=_total_timeout):
-                    name = _fut_to_name[fut]
+        # Phase B: Übrige Schritte parallel (as_completed für sofortigen Progress)
+        if _other_steps:
+            _worker_count = max(1, min(4, len(_other_steps)))
+            _pool = _cf.ThreadPoolExecutor(max_workers=_worker_count)
+            try:
+                _fut = {_pool.submit(fn): name for name, fn in _other_steps.items()}
+                _total_timeout = _SUBSTEP_TIMEOUT_S * max(len(_other_steps), 1)
+                for fut in _cf.as_completed(_fut, timeout=_total_timeout):
+                    name = _fut[fut]
                     try:
-                        sub = fut.result(timeout=0.0)
-                        setattr(result, name, sub)
+                        setattr(result, name, fut.result(timeout=0.0))
                     except Exception as exc:
                         result.errors[name] = str(exc)
                         logger.warning("pre_analysis: step=%s failed (%s)", name, exc)
@@ -388,16 +388,12 @@ def run_pre_analysis(
                     _cb(_step_pct, f"Analyse: {name} abgeschlossen ({_done_steps}/{_total_steps})…")
                     logger.info("pre_analysis: step=%s done (%d/%d)", name, _done_steps, _total_steps)
             except (_cf.TimeoutError, TimeoutError):
-                _had_substep_timeout = True
-                for fut in _fut_to_name:
+                for fut in _fut:
                     if not fut.done():
-                        name = _fut_to_name[fut]
+                        name = _fut[fut]
                         result.errors[name] = f"timeout_after={_SUBSTEP_TIMEOUT_S:.1f}s"
                         fut.cancel()
-                        logger.warning(
-                            "pre_analysis: step=%s timed out after %.1fs",
-                            name, _SUBSTEP_TIMEOUT_S,
-                        )
+                        logger.warning("pre_analysis: step=%s timed out", name)
             finally:
                 _pool.shutdown(wait=False, cancel_futures=True)
     else:
