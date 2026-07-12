@@ -15826,11 +15826,17 @@ class ModernMainWindow(QMainWindow):
                         self._apply_status_text_style("warning")
                 return
             _bar.setValue(min(10000, int(round(_p * 100.0))))
-            _bar.setFormat(t("progress.scan_analysis", pct=_pct_fmt))
+            # Show live preanalysis step message if available, otherwise scan progress
+            _step_msg = getattr(self, '_preanalysis_step_msg', None)
+            if _step_msg and _p >= 75.0:
+                _bar.setFormat(_step_msg)
+            else:
+                _bar.setFormat(t("progress.scan_analysis", pct=_pct_fmt))
             # Status-Text: immer denselben _pct_fmt-Wert wie die Bar anzeigen.
             # Throttle nur auf den Style-Aufruf (teuer) — Text selbst ist billig.
             if hasattr(self, "status_text"):
-                self.status_text.setText(t("status.defect_scan_progress_text", percent=_pct_fmt))
+                _status_text = _step_msg if _step_msg else t("status.defect_scan_progress_text", percent=_pct_fmt)
+                self.status_text.setText(_status_text)
                 if _pct_int != getattr(self, "_last_scan_pct_int", -1):
                     self._last_scan_pct_int = _pct_int
                     self._apply_status_text_style("warning" if _pct_int < 100 else "success")

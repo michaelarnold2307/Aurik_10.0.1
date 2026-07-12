@@ -56,7 +56,7 @@ logger = logging.getLogger(__name__)
 
 # Observed: DefectScanner needs ~80s for 60s audio (133% overhead on this hardware).
 # 150s = 1.87x buffer. concurrent.futures.TimeoutError != builtins.TimeoutError in Python 3.10.
-_SUBSTEP_TIMEOUT_S = 150.0
+_SUBSTEP_TIMEOUT_S = 240.0
 
 # ---------------------------------------------------------------------------
 # Result dataclass
@@ -343,11 +343,17 @@ def run_pre_analysis(
             _had_substep_timeout = False
             try:
                 _fut = {name: _pool.submit(fn) for name, fn in _step_fns.items()}
+                _total_steps = len(_fut)
+                _done_steps = 0
 
                 for name, fut in _fut.items():
                     try:
                         sub = fut.result(timeout=_SUBSTEP_TIMEOUT_S)
                         setattr(result, name, sub)
+                        _done_steps += 1
+                        # Per-step progress: 75% → 80% → 85% → 90% je nach Anzahl
+                        _step_pct = 75 + int((_done_steps / max(_total_steps, 1)) * 15)
+                        _cb(_step_pct, f"Analyse: {name} abgeschlossen ({_done_steps}/{_total_steps})…")
                         logger.debug("pre_analysis: step=%s done", name)
                     except (TimeoutError, _cf.TimeoutError):  # Python 3.10: cf.TimeoutError != builtins.TimeoutError
                         _had_substep_timeout = True
