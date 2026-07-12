@@ -1746,7 +1746,15 @@ class BatchProcessingThread(QThread):
                         break
                     if not _scan_waited:
                         logger.info("BatchDiag: waiting for DefectScan to finish before audio load …")
+                        self.item_progress.emit(item.id, 210)  # 2.1 %
+                        self.phase_update.emit("⏳ Warte auf Abschluss der Schadensanalyse …")
                         _scan_waited = True
+                    # Heartbeat: alle 5s Fortschritt signalisieren
+                    _elapsed = time.monotonic() - (_scan_deadline - 240.0)
+                    if int(_elapsed) % 5 == 0 and _elapsed > 0:
+                        self.phase_update.emit(
+                            f"⏳ Schadensanalyse läuft … ({int(_scan_deadline - time.monotonic())}s Timeout)"
+                        )
                     time.sleep(0.5)
                 _scan_present = get_cached_defect_result(item.input_file) is not None
                 logger.info("BatchDiag: DefectScan ready=%s — now GC+malloc_trim before audio load", _scan_present)
