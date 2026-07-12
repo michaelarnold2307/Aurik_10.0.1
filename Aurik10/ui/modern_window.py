@@ -16357,18 +16357,43 @@ class ModernMainWindow(QMainWindow):
                 # Alle Carrier-Display-Pfade nutzen: _CARRIER_MEDIUM_DISPLAY, _CARRIER_EXT_DISPLAY,
                 # _CARRIER_ANALOG_MEDIA, _render_carrier_html(), _build_carrier_chain_html()
 
+                _scan_ticker_active = [True]
+                _scan_ticker_val = [0.0]
+
+                def _scan_ticker() -> None:
+                    """Langsamer Fortschritts-Pulse während era/genre laufen."""
+                    time.sleep(5.0)  # Kurze Pause, dann alle 3s pulsen
+                    while _scan_ticker_active[0]:
+                        _scan_ticker_val[0] = min(_scan_ticker_val[0] + 0.5, 73.5)
+                        try:
+                            self.emit_load_progress(float(_scan_ticker_val[0]))
+                        except RuntimeError:
+                            break
+                        time.sleep(3.0)
+                _ticker_thread = None
+
                 def _on_scan_progress(pct: float) -> None:
+                    nonlocal _ticker_thread
                     # DefectScan is only 1 of 3-4 parallel steps.
-                    # Cap at 70 %% so there's room for era/genre/restorability
+                    # Cap at 70%% so there's room for era/genre/restorability
                     # (75->90%%) and post-processing (93->99%%).
                     _capped = min(pct * 0.70, 70.0)
+                    _scan_ticker_val[0] = _capped
+                    # Start ticker when DefectScan nears completion (>60%%)
+                    if pct > 90.0 and _ticker_thread is None:
+                        _ticker_thread = threading.Thread(
+                            target=_scan_ticker, daemon=True, name="aurik-scan-ticker"
+                        )
+                        _ticker_thread.start()
                     try:
                         self.emit_load_progress(float(_capped))
                     except RuntimeError:
-                        pass  # Window closed
+                        _scan_ticker_active[0] = False
+                        pass
 
                 def _on_preanalysis_step(pct: int, msg: str) -> None:
                     """Forward pre-analysis step progress to GUI status text AND progress bar."""
+                    _scan_ticker_active[0] = False  # Stop ticker, real progress incoming
                     try:
                         self.dispatch_to_gui(lambda _p=pct, _m=msg: (
                             setattr(self, '_preanalysis_step_msg', _m),
