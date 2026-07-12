@@ -667,15 +667,17 @@ class MediumDetector:
         #   Studio reel-tape (Studer A80, Ampex ATR) hat wow/flutter 0.01–0.03 WRMS (IEC 60386,
         #   Pohlmann 2010). Nach Multi-Gen-Transfer + Codec-Encoding weiter gedämpft.
         #   Fester Floor 0.10 greift systematisch über dem physikalischen Signal.
-        #   Fix: Spezial-Pfad für has_disc=True (jegliche Disc→Tape→Codec-Kette).
-        if has_disc and _codec_contamination > 0.0:
+        #   Fix: Spezial-Pfad für has_disc=True (jegliche Disc→Tape-Kette).
+        #   Codec_contamination dämpft Flutter → Schwelle adaptiv, aber der Pfad
+        #   muss auch bei codec_contamination=0 aktiv sein (z.B. Disc→Tape ohne mp3).
+        if has_disc:
             # Studio reel-tape Pfad: Threshold auf Basis des Studio-Flutter-Bereichs
             # (0.010–0.030 WRMS) mit Codec-Dämpfungskorrektur.
             # rotation_strength Guard entfernt — Disc-Rotation ist erwartet, kein Ausschluss.
-            _tape_flutter_thresh_rt = max(0.010, 0.025 * (1.0 - 0.55 * _codec_contamination))
+            _tape_flutter_thresh_rt = max(0.008, 0.012 * (1.0 - 0.55 * _codec_contamination))
             if fp.wow_flutter_index > _tape_flutter_thresh_rt:
                 # Konfidenz über schmalen Studio-Bereich skalieren
-                tape_conf_rt = float(np.clip((fp.wow_flutter_index - _tape_flutter_thresh_rt) / 0.10, 0.12, 0.50))
+                tape_conf_rt = float(np.clip((fp.wow_flutter_index - _tape_flutter_thresh_rt) / 0.08, 0.12, 0.50))
                 if tape_conf_rt >= 0.12:
                     sources.append(("reel_tape", float(np.clip(tape_conf_rt, 0.12, 0.85))))
         else:
