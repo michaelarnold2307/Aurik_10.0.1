@@ -21,7 +21,7 @@ def _probe(path: Path, *, has_rocm: bool) -> RuntimeProbe:
 @pytest.mark.unit
 def test_select_runtime_python_prefers_rocm(monkeypatch, tmp_path: Path) -> None:
     repo_root = tmp_path
-    rocm_python = repo_root / ".venv_rocm" / "bin" / "python"
+    rocm_python = repo_root / ".venv_gpu" / "bin" / "python"
     aurik_python = repo_root / ".venv_aurik" / "bin" / "python"
     rocm_python.parent.mkdir(parents=True)
     aurik_python.parent.mkdir(parents=True)
@@ -39,7 +39,7 @@ def test_select_runtime_python_prefers_rocm(monkeypatch, tmp_path: Path) -> None
 
 def test_select_runtime_python_falls_back_to_cpu_venv(monkeypatch, tmp_path: Path) -> None:
     repo_root = tmp_path
-    rocm_python = repo_root / ".venv_rocm" / "bin" / "python"
+    rocm_python = repo_root / ".venv_gpu" / "bin" / "python"
     aurik_python = repo_root / ".venv_aurik" / "bin" / "python"
     rocm_python.parent.mkdir(parents=True)
     aurik_python.parent.mkdir(parents=True)
@@ -64,7 +64,7 @@ def test_select_runtime_python_uses_current_interpreter_if_no_venv(monkeypatch, 
 
 def test_select_runtime_python_prefers_rocm_windows_venv(monkeypatch, tmp_path: Path) -> None:
     repo_root = tmp_path
-    rocm_python = repo_root / ".venv_rocm" / "Scripts" / "python.exe"
+    rocm_python = repo_root / ".venv_gpu" / "Scripts" / "python.exe"
     aurik_python = repo_root / ".venv_aurik" / "Scripts" / "python.exe"
     rocm_python.parent.mkdir(parents=True)
     aurik_python.parent.mkdir(parents=True)
@@ -82,7 +82,7 @@ def test_select_runtime_python_prefers_rocm_windows_venv(monkeypatch, tmp_path: 
 
 def test_select_runtime_python_falls_back_to_aurik_windows_venv(monkeypatch, tmp_path: Path) -> None:
     repo_root = tmp_path
-    rocm_python = repo_root / ".venv_rocm" / "Scripts" / "python.exe"
+    rocm_python = repo_root / ".venv_gpu" / "Scripts" / "python.exe"
     aurik_python = repo_root / ".venv_aurik" / "Scripts" / "python.exe"
     rocm_python.parent.mkdir(parents=True)
     aurik_python.parent.mkdir(parents=True)
