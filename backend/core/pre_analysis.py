@@ -345,87 +345,57 @@ def run_pre_analysis(
 
     if _step_fns:
         _total_steps = len(_step_fns)
-        _done_steps = [0]  # Mutable for cross-thread updates
+        _done_steps = 0
 
-        # Era und Genre teilen sich LAION-CLAP (2.2 GB). Paralleles Laden
-        # via ThreadPoolExecutor erzeugt GIL-Contention → 10× langsamer.
-        #
-        # Strategie:
-        #   – Defect + Restorability sofort parallel (zeigen live Progress)
-        #   – Era + Genre sequentiell in EIGENEM Thread (blockiert nicht die UI)
-        #   – Era/genre läuft im Hintergrund weiter, DefectScan ist sofort sichtbar
+        # Era und Genre teilen sich LAION-CLAP (2.2 GB).
+        # Sequentiell im AUFRUFENDEN Thread (hat ROCm-Kontext).
+        # Defect + Restorability parallel im Pool (unabhängig).
         _clap_steps = {k: v for k, v in _step_fns.items() if k in ("era", "genre")}
         _other_steps = {k: v for k, v in _step_fns.items() if k not in ("era", "genre")}
 
-        _pool = _cf.ThreadPoolExecutor(max_workers=max(2, len(_other_steps) + 1))
-        _all_futs: dict[_cf.Future, str] = {}
-        _had_substep_timeout = False
-
-        try:
-            # Submit non-CLAP steps immediately (defect, restorability)
+        # Phase 1: Submit non-CLAP steps to pool → start immediately
+        _pool = None
+        _other_futs: dict[_cf.Future, str] = {}
+        if _other_steps:
+            _pool = _cf.ThreadPoolExecutor(max_workers=len(_other_steps))
             for name, fn in _other_steps.items():
-                _all_futs[_pool.submit(fn)] = name
+                _other_futs[_pool.submit(fn)] = name
 
-            # Submit CLAP steps as a sequential chain in one thread.
-            # Returns dict: {"era": result, "genre": result} or {"era": exc, ...} on error.
-            def _run_clap_chain() -> dict[str, object]:
-                _results: dict[str, object] = {}
-                for _name in ("era", "genre"):
-                    if _name in _clap_steps:
-                        try:
-                            _results[_name] = _clap_steps[_name]()
-                        except Exception as _exc:
-                            _results[_name] = _exc
-                return _results
+        # Phase 2: Run CLAP steps sequentially in THIS thread (has ROCm context)
+        for name, fn in _clap_steps.items():
+            try:
+                setattr(result, name, fn())
+            except Exception as exc:
+                result.errors[name] = str(exc)
+                logger.warning("pre_analysis: step=%s failed (%s)", name, exc)
+            _done_steps += 1
+            _step_pct = 75 + int((_done_steps / max(_total_steps, 1)) * 15)
+            _cb(_step_pct, f"Analyse: {name} abgeschlossen ({_done_steps}/{_total_steps})…")
+            logger.info("pre_analysis: step=%s done (%d/%d)", name, _done_steps, _total_steps)
 
-            if _clap_steps:
-                _all_futs[_pool.submit(_run_clap_chain)] = "clap_chain"
-
-            # as_completed: collect results as they finish
-            _total_timeout = _SUBSTEP_TIMEOUT_S * max(len(_other_steps) + 1, 1)
-            for fut in _cf.as_completed(_all_futs, timeout=_total_timeout):
-                name = _all_futs[fut]
-                try:
-                    val = fut.result(timeout=0.0)
-                    if name == "clap_chain" and isinstance(val, dict):
-                        for _cn, _cv in val.items():
-                            if isinstance(_cv, Exception):
-                                result.errors[_cn] = str(_cv)
-                                logger.warning("pre_analysis: step=%s failed (%s)", _cn, _cv)
-                            else:
-                                setattr(result, _cn, _cv)
-                        _done_steps[0] += len(val)
-                    else:
-                        setattr(result, name, val)
-                        _done_steps[0] += 1
-                except Exception as exc:
-                    if name == "clap_chain":
-                        for _cn in _clap_steps:
-                            result.errors[_cn] = str(exc)
-                        _done_steps[0] += len(_clap_steps)
-                    else:
+        # Phase 3: Collect pool results via as_completed
+        if _pool is not None and _other_futs:
+            try:
+                _total_timeout = _SUBSTEP_TIMEOUT_S * len(_other_futs)
+                for fut in _cf.as_completed(_other_futs, timeout=_total_timeout):
+                    name = _other_futs[fut]
+                    try:
+                        setattr(result, name, fut.result(timeout=0.0))
+                    except Exception as exc:
                         result.errors[name] = str(exc)
-                        _done_steps[0] += 1
-                    logger.warning("pre_analysis: step=%s failed (%s)", name, exc)
-
-                _step_pct = 75 + int((_done_steps[0] / max(_total_steps, 1)) * 15)
-                _cb(_step_pct, f"Analyse: {name} abgeschlossen ({_done_steps[0]}/{_total_steps})…")
-                logger.info("pre_analysis: step=%s done (%d/%d)", name, _done_steps[0], _total_steps)
-
-        except (_cf.TimeoutError, TimeoutError):
-            _had_substep_timeout = True
-            for fut, name in _all_futs.items():
-                if not fut.done():
-                    if name == "clap_chain":
-                        for _cn in ("era", "genre"):
-                            if _cn in _clap_steps:
-                                result.errors[_cn] = f"timeout_after={_SUBSTEP_TIMEOUT_S:.1f}s"
-                    else:
+                        logger.warning("pre_analysis: step=%s failed (%s)", name, exc)
+                    _done_steps += 1
+                    _step_pct = 75 + int((_done_steps / max(_total_steps, 1)) * 15)
+                    _cb(_step_pct, f"Analyse: {name} abgeschlossen ({_done_steps}/{_total_steps})…")
+                    logger.info("pre_analysis: step=%s done (%d/%d)", name, _done_steps, _total_steps)
+            except (_cf.TimeoutError, TimeoutError):
+                for fut, name in _other_futs.items():
+                    if not fut.done():
                         result.errors[name] = f"timeout_after={_SUBSTEP_TIMEOUT_S:.1f}s"
-                    fut.cancel()
-                    logger.warning("pre_analysis: step=%s timed out", name)
-        finally:
-            _pool.shutdown(wait=False, cancel_futures=True)
+                        fut.cancel()
+                        logger.warning("pre_analysis: step=%s timed out", name)
+            finally:
+                _pool.shutdown(wait=False, cancel_futures=True)
     else:
         logger.debug("pre_analysis: steps 2-5 vollständig aus Cache geladen")
 
