@@ -399,6 +399,27 @@ def audit_all_specs(
 
     return result
 
+# Token-Filter: Diese Woerter sind keine echten Aurik-Metriken
+_NON_METRIC_TOKENS: frozenset[str] = frozenset({
+    "float", "int", "str", "bool", "list", "dict", "tuple", "set",
+    "q", "n", "d", "z", "x", "y", "i", "j", "k",
+    "sr", "hz", "db", "ms", "s", "khz",
+    "delta", "threshold", "score", "scale", "ratio", "fraction",
+    "strength", "severity", "conf", "confidence",
+    "wet_mix", "g_floor", "blended", "axis", "iqr",
+    "holes", "regression", "shift", "sprung",
+    "scalar", "scale_factor", "ceiling_avg",
+    "recovery_ratio", "restored_compat", "af_penalty",
+    "schwellwert", "korrelation", "pearson",
+    "dateilänge", "dateien", "tonal_center",
+    "spectral_novelty", "hpi", "w_crepe",
+    "f_bump", "wet_mult", "gate",
+    "infrasonic_rms", "crackle_density", "rotation_strength",
+    "panns_singing_confidence", "panns_singing",
+    "in", "bei", "mit", "nach", "fehler", "floor", "segment",
+    "window_ms", "drift",
+})
+
 
 def _extract_metrics_from_spec(content: str) -> dict[str, dict[str, Any]]:
     """Extrahiert strukturierte Metriken aus Spec-Markdown.
@@ -435,7 +456,7 @@ def _extract_metrics_from_spec(content: str) -> dict[str, dict[str, Any]]:
     pattern = r"`?(\w+)`?\s*[≥>=]\s*([0-9]+\.?[0-9]*)"
     for match in re.finditer(pattern, content):
         name = match.group(1).lower().replace("`", "")
-        if name in _CODE_TOKENS:
+        if name in _NON_METRIC_TOKENS:
             continue
         try:
             value = float(match.group(2))
@@ -483,6 +504,8 @@ def _check_spec_internal_consistency(content: str, filename: str) -> list[str]:
     seen: dict[str, list[str]] = {}
     for match in re.finditer(pattern, content):
         name = match.group(1).lower()
+        if name in _NON_METRIC_TOKENS:
+            continue
         line_no = content[: match.start()].count("\n") + 1
         if name not in seen:
             seen[name] = []
