@@ -1392,7 +1392,7 @@ class DropoutRepairPhase(PhaseInterface):
             return processed_audio, stats
 
         corrected = np.asarray(processed_audio, dtype=np.float32).copy()
-        corrected[:, 1] = self._shift_channel_no_wrap(corrected[:, 1], int(lag_delta))
+        corrected[:, 1] = self._shift_channel_no_wrap(corrected[:, 1], -int(lag_delta))
         lag_corr = self._estimate_stereo_lag_samples(corrected, max_lag_samples=max_lag_samples)
         stats["lag_corrected"] = True
         stats["lag_output_corrected_samples"] = int(lag_corr)
