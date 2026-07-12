@@ -1624,6 +1624,7 @@ class BatchProcessingThread(QThread):
 
     def run(self):
         """Verarbeitet all items in queue with visualization updates."""
+        logger.info("BatchProcessingThread.run() START")
         try:
             # P1: Core-Imports AUSSCHLIEßLICH über Bridge (§11 Spec 08)
             # Singleton-Accessor: sichert Single-Orchestrator Ownership pro Prozess
@@ -18283,7 +18284,9 @@ class ModernMainWindow(QMainWindow):
         if hasattr(self, "_magic_hint_label"):
             self._magic_hint_label.setVisible(False)
         self._set_left_panel_processing_focus(True)
+        logger.info("BatchThread: calling start()...")
         self.batch_thread.start()
+        logger.info("BatchThread: start() returned")
         # Running state is now stable; release transition gate.
         self._processing_transition = False
 
