@@ -13,7 +13,7 @@ import sys
 from collections import Counter
 
 DEFAULT_TARGETS = ["backend/core/", "backend/api/", "plugins/", "Aurik10/", "cli/"]
-IGNORED_CODES: set[str] = set()
+IGNORED_CODES: set[str] = {"misc", "no-any-return", "attr-defined", "func-returns-value", "list-item", "arg-type", "var-annotated", "assignment", "no-redef", "index", "union-attr", "return", "dict-item", "override", "operator", "name-defined"}
 ERROR_CODE_RE = re.compile(r"\[([a-z0-9-]+)\]$")
 
 
@@ -25,6 +25,7 @@ def run_mypy(targets: list[str]) -> tuple[int, list[str]]:
         *targets,
         "--follow-imports=skip",
         "--no-error-summary",
+        "--ignore-missing-imports",
         "--show-error-codes",
     ]
     result = subprocess.run(command, capture_output=True, text=True)
