@@ -31,6 +31,17 @@ import importlib
 import logging
 import math
 import threading
+import warnings
+
+# madmom 0.17+ warnt fälschlich über veralteten `method`-Parameter,
+# obwohl Aurik bereits `histogram_processor=` (neue API) verwendet.
+# Der Check in madmom/features/tempo.py:724 feuert als False Positive.
+warnings.filterwarnings(
+    "ignore",
+    message="Usage of `method` is deprecated",
+    category=UserWarning,
+    module="madmom",
+)
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
