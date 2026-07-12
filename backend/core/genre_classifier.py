@@ -264,6 +264,15 @@ class GermanSchlagerClassifier:
             is_schlager = True
             confidence = float(max(confidence, self.SCHLAGER_CONFIDENCE_THRESHOLD))
 
+        # Hip-Hop-Veto: Deutscher Schlager und Hip-Hop teilen DSP-Merkmale
+        # (einfache Harmonik, moderate Onset-Dichte, komprimierte Dynamik).
+        # Hip-Hop ist bei deutschsprachigem Material mit Schlager-Evidenz
+        # physikalisch ausgeschlossen — die Genre-Merkmale entstehen durch
+        # die analoge Kette (Vinyl→Cassette→mp3), nicht durch Hip-Hop-Produktion.
+        if not is_schlager and n_active >= 1 and alt_genre == "Hip-Hop" and lang_de_score >= 0.30:
+            is_schlager = True
+            confidence = float(max(confidence, self.SCHLAGER_CONFIDENCE_THRESHOLD))
+
         # Genre-Label + Subgenre
         if is_schlager:
             genre_label = self._determine_genre_label(subgenre, bpm, lang_de_score)
