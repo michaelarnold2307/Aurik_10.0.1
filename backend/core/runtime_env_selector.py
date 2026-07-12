@@ -7,7 +7,7 @@ Supports: NVIDIA CUDA, AMD ROCm, CPU-only fallback.
 
 from __future__ import annotations
 
-import json
+import json, sys
 import logging
 import os
 import subprocess
@@ -18,7 +18,7 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 _PROBE_CODE = r"""
-import json
+import json, sys
 result = {"torch_import": False, "torch_cuda_available": False, "torch_hip": None,
           "torch_cuda_version": None, "onnxruntime_import": False, "ort_providers": []}
 try:
