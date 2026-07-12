@@ -284,14 +284,14 @@ def run_pre_analysis(
     # Steps 2–5 — Era, Genre, DefectScan, Restorability in parallel
     # ------------------------------------------------------------------
     def _run_era() -> object:
-        _gec = cast(Callable[[], Any], _load_symbol("backend.core.era_classifier", "get_era_classifier"))
-
-        return _gec().classify(audio_native, sr_native)
+        """Era classification via Bridge (kanonischer Pfad)."""
+        _classify = cast(Callable[..., Any], _load_symbol("backend.api.bridge", "get_era_classifier_fn"))
+        return _classify()(audio_native, sr_native)
 
     def _run_genre() -> object:
-        _ggc = cast(Callable[[], Any], _load_symbol("backend.core.genre_classifier", "get_genre_classifier"))
-
-        return _ggc().classify(audio_native, sr_native)
+        """Genre classification via Bridge (kanonischer Pfad)."""
+        _classify = cast(Callable[..., Any], _load_symbol("backend.api.bridge", "get_genre_classifier_fn"))
+        return _classify()(audio_native, sr_native)
 
     def _run_defects() -> object:
         _DS = cast(Callable[..., Any], _load_symbol("backend.core.defect_scanner", "DefectScanner"))

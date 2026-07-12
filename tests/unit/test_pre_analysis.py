@@ -73,10 +73,10 @@ class TestRunPreAnalysisFlow:
                 return MagicMock(scores={})
 
         def mock_load_symbol(module, name):
-            if "era_classifier" in module:
-                return lambda: MockEraClassifier()
-            if "genre_classifier" in module:
-                return lambda: MockGenreClassifier()
+            if "era_classifier" in module or ("bridge" in module and name == "get_era_classifier_fn"):
+                return lambda: lambda a, s: MockEraClassifier().classify(a, s)
+            if "genre_classifier" in module or ("bridge" in module and name == "get_genre_classifier_fn"):
+                return lambda: lambda a, s: MockGenreClassifier().classify(a, s)
             if "defect_scanner" in module:
                 return lambda **kw: MockDefectScanner(**kw)
             if "restorability" in module:
@@ -127,14 +127,10 @@ class TestRunPreAnalysisFlow:
         """Fehler in Einzelschritten werden in result.errors gesammelt."""
 
         def mock_load_symbol(module, name):
-            if "era_classifier" in module:
-                return lambda: MagicMock(
-                    classify=lambda *a: (_ for _ in ()).throw(RuntimeError("CLAP not available"))
-                )
-            if "genre_classifier" in module:
-                return lambda: MagicMock(
-                    classify=lambda *a: (_ for _ in ()).throw(RuntimeError("CLAP not available"))
-                )
+            if "bridge" in module and name == "get_era_classifier_fn":
+                return lambda: lambda a, s: (_ for _ in ()).throw(RuntimeError("CLAP not available"))
+            if "bridge" in module and name == "get_genre_classifier_fn":
+                return lambda: lambda a, s: (_ for _ in ()).throw(RuntimeError("CLAP not available"))
             if "defect_scanner" in module:
                 return lambda **kw: MagicMock(scan=lambda *a, **kw: MagicMock(scores={}))
             if "restorability" in module:
@@ -177,8 +173,8 @@ class TestRunPreAnalysisFlow:
                 return MagicMock(decade=1970, genre_label="Test")
 
         def mock_load_symbol(module, name):
-            if "era_classifier" in module or "genre_classifier" in module:
-                return lambda: MockClassifier()
+            if "bridge" in module and name in ("get_era_classifier_fn", "get_genre_classifier_fn"):
+                return lambda: lambda a, s: MockClassifier().classify(a, s)
             if "defect_scanner" in module:
                 return lambda **kw: MagicMock(scan=lambda *a, **kw: MagicMock(scores={}))
             if "restorability" in module:
