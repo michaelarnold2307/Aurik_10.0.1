@@ -302,6 +302,26 @@ class PipelineGuard:
         except Exception as e:
             logger.debug("PipelineGuard: adaptive goals error: %s", e)
 
+
+        # G41/G67: PleasantnessFirstGate — HPE-First validation
+        try:
+            from backend.core.pleasantness_first_gate import PleasantnessFirstGate
+            pfg = PleasantnessFirstGate()
+            pfg.start_session(self._original_audio if self._original_audio is not None else final_audio, sr)
+            check = pfg.check_phase_end("restoration", final_audio)
+            if check.delta < -0.05:
+                report["warnings"].append(
+                    f"G67 Pleasantness-Gate: restored WORSE than original (delta={check.delta:+.3f})"
+                )
+            elif check.delta > 0.03:
+                report["pleasantness_improved"] = True
+                report["pleasantness_delta"] = round(check.delta, 4)
+            # G46: Adaptive threshold comparison
+            if self._clp_result is not None:
+                report["adaptive_thresholds_active"] = True
+        except Exception as e:
+            logger.debug("PipelineGuard: PleasantnessFirstGate error: %s", e)
+
         elapsed = time.perf_counter() - self._start_time
         report["guard_overhead_ms"] = round(elapsed * 1000)
 
