@@ -470,6 +470,23 @@ Audio-Ausgang + RestorationResult
 
 ---
 
+
+### v10-Amendment (2026-07-12)
+
+**Hip-Hop-Veto bei deutschsprachigem Material** (v10, 2026-07-12):
+
+Deutscher Schlager aus den 1970ern, der durch eine analoge Kette (Vinyl→Cassette→mp3) degradiert wurde, teilt DSP-Merkmale mit Hip-Hop: einfache Harmonik (HSI 0.55–0.85), moderate Onset-Dichte (2.5–6.0/s), komprimierte Dynamik (DR < 15 dB), spektraler Schwerpunkt (1500–3200 Hz). Diese Überlappung führte zu Fehlklassifikationen (»Hip-Hop« statt »Deutscher Schlager«).
+
+**Fix**: Analog zu den existierenden Latin/Reggae-Vetoes in `GermanSchlagerClassifier.classify()`: Wenn `alt_genre == "Hip-Hop"` UND `lang_de_score >= 0.30` (deutschsprachiges Material) UND `n_active >= 1` (Schlager-Evidenz vorhanden) → Override zu Schlager.
+
+**Implementierung**: `backend/core/genre_classifier.py` → nach Latin/Reggae-Veto:
+```python
+if not is_schlager and n_active >= 1 and alt_genre == "Hip-Hop" and lang_de_score >= 0.30:
+    is_schlager = True
+    confidence = float(max(confidence, self.SCHLAGER_CONFIDENCE_THRESHOLD))
+```
+
+**Einschränkung**: Greift nur bei `lang_de_score >= 0.30`. Bei extrem degradiertem Material ohne erkennbare Sprachsignatur bleibt die Fehlklassifikation möglich — dann ist manuelles Genre-Override nötig.
 ## §2.30b [RELEASE_MUST] Post-Smoothing-Quiet-Zone-Clamp-Invariante (v9.11.15)
 
 **Normative Reihenfolge in UV3 (kanonisch):**
@@ -2117,6 +2134,29 @@ Risiko für das Audio.
 
 Implementiert in `backend/core/pre_analysis.py` (§Vinyl-Inference).
 
+
+### v10-Amendment (2026-07-12)
+
+**Transfer-Chain: Era-Material (Original-Aufnahmemedium) an Position 0** (v10, 2026-07-12):
+
+Der EraClassifier liefert das **Original-Aufnahmemedium** (z.B. `reel_tape` für eine Studio-Aufnahme der 1970er). Dieses muss chronologisch am ANFANG der Tonträgerkette stehen, nicht zwischen Zwischenträger und digitaler Stufe.
+
+**Vorher**: `vinyl → cassette → reel_tape → mp3_low` (falsch)
+**Nachher**: `reel_tape → vinyl → cassette → mp3_low` (korrekt)
+
+Chronologische Ordnung: Studio-Aufnahme → Veröffentlichung → Überspielung → Digitalisierung.
+
+**Implementierung** (`backend/core/pre_analysis.py`):
+`_era_material` wird separat behandelt und via `chain.insert(0, ...)` an den Anfang gesetzt. `_defect_material` und `physical_analog_sources` bleiben bei Insertion vor der digitalen Stufe.
+
+```python
+if _era_injected is not None:
+    _chain.insert(0, _era_injected)  # Original-Aufnahmemedium am Anfang
+if _chain_injected:
+    # Zwischenträger vor digitaler Stufe einfuegen
+    for _m in reversed(_chain_injected):
+        _chain.insert(_dpos, _m)
+```
 ## §2.46a [RELEASE_MUST] Deep-Transfer-Chain-Pflicht (v9.10.124)
 
 Importsongs mit **3+ Tonträgerstufen** müssen vollständig modelliert werden. Die
