@@ -149,32 +149,16 @@ def _get_ml_model() -> object | None:
                 _dev = _get_dev("AudioSR")
             except Exception:
                 _dev = "cpu"
-            # §SOTA: GPU für DDIM-Diffusion, nur HiFi-GAN-Vocoder auf CPU (ROCm-NaN-Fix)
-            model = build_model(model_name="basic", device=str(_dev))
-            # §ROCm-Fix v2: HiFi-GAN vocoder + first_stage_model produzieren NaN auf ROCm.
-            # Der alte Fix (nur vocoder.cpu()) deckt nicht alle Code-Pfade ab —
-            # generate_batch() ruft intern first_stage_model.decode() auf, das
-            # transposed convolutions auf GPU macht → NaN.
-            # Fix: gesamtes first_stage_model auf CPU. DDIM (model.model) bleibt auf GPU.
-            _fsm = model.first_stage_model
-            _fsm.cpu()
-            # Patch: alle Mel→Waveform-Pfade zwingen Input auf CPU
-            _orig_mel2wav = model.mel_spectrogram_to_waveform
-
-            def _patched_mel2wav(self, mel, savepath=".", bs=None, name="outwav", save=True):
-                mel_cpu = mel.cpu() if hasattr(mel, "cpu") else mel
-                return _orig_mel2wav(mel_cpu, savepath, bs, name, save)
-
-            model.mel_spectrogram_to_waveform = _patched_mel2wav.__get__(model)
-            # Zusätzlich: decode-Methode patchen (generate_batch ruft diese direkt)
-            if hasattr(_fsm, "decode"):
-                _orig_decode = _fsm.decode
-
-                def _patched_decode(self, z, **kw):
-                    z_cpu = z.cpu() if hasattr(z, "cpu") else z
-                    return _orig_decode(z_cpu, **kw)
-
-                _fsm.decode = _patched_decode.__get__(_fsm)
+            # §SOTA: AudioSR-Modell vollständig auf CPU laden.
+            # ROCm (AMD GPU) produziert NaN im HiFi-GAN-Vocoder (first_stage_model)
+            # aufgrund von transposed-convolution-Bugs im ROCm-Treiber.
+            # Der alte Fix (mixed device: DDIM auf GPU, Vocoder auf CPU) führte zu
+            # "Input type (torch.cuda.FloatTensor) and weight type (torch.FloatTensor)"
+            # weil sub-modules inkonsistent auf CPU/GPU verteilt waren.
+            # Fix: gesamtes Modell auf CPU. Für 225s Audio mit 50 DDIM-Steps ≈ 15 min,
+            # akzeptabel für Offline-Restoration.
+            model = build_model(model_name="basic", device="cpu")
+            # Keine device-Patches nötig — alles auf CPU, keine NaN-Probleme.
             _ml_model = model
             _actual_device = "cpu"
             if hasattr(model, "parameters"):
@@ -329,28 +313,16 @@ def _run_audiosr_ml(audio: np.ndarray, sr: int) -> np.ndarray | None:
                 zone_mono_1d = np.clip(zone_mono_1d, -1.0, 1.0)
                 try:
                     batch, _asr_duration = _make_batch_fn(input_file=None, waveform=zone_mono_1d)
-                    # §SOTA: DDIM-Diffusion auf GPU, Vocoder auf CPU (via Patch beim Modell-Load)
-                    # model.cpu() NICHT aufrufen — das würde GPU-DDIM zerstören.
-                    # Der HiFi-GAN-Vocoder ist bereits via _patched_mel2wav/_patched_decode auf CPU.
-                    # Robust device detection via parameters (not model.device attr)
-                    if hasattr(batch, "to"):
-                        _model_dev = "cpu"
-                        try:
-                            if hasattr(model, "parameters"):
-                                _model_dev = next(model.parameters()).device
-                        except (StopIteration, RuntimeError):
-                            _model_dev = "cpu"
-                        if hasattr(batch, "device") and batch.device != _model_dev:
-                            batch = batch.to(_model_dev)
+                    # Modell ist vollständig auf CPU (ROCm: keine GPU-Mixed-Devices)
                     with _asr_torch.no_grad():
-                        z_result_raw = model.generate_batch(  # type: ignore[attr-defined]
+                        z_result_raw = model.generate_batch(
                             batch,
                             unconditional_guidance_scale=3.5,
                             ddim_steps=_audiosr_ddim_steps,
                             duration=_asr_duration,
                         )
-                    # §AUDIOSR-NANFIX: generate_batch kann NaN in der Waveform-Rekonstruktion
-                    # produzieren (vocoder/interne valid_audio-Prüfung). Clean vor Weiterverarbeitung.
+                    # generate_batch kann NaN in der Waveform-Rekonstruktion
+                    # produzieren. Clean vor Weiterverarbeitung.
                     if hasattr(z_result_raw, "detach"):
                         _z_tmp = z_result_raw.detach().cpu().numpy()
                     else:
@@ -365,28 +337,11 @@ def _run_audiosr_ml(audio: np.ndarray, sr: int) -> np.ndarray | None:
                         zone_mono.shape[0] / max(1, sr),
                     )
                 except Exception as _direct_exc:
-                    # §SOTA Recovery: GPU-DDIM(50)→CPU-DDIM(20)→SBR-DSP→Passthrough
                     logger.warning(
-                        "AudioSR GPU-DDIM fehlgeschlagen: %.100s — Recovery 1/3: CPU+20steps",
+                        "AudioSR CPU-DDIM fehlgeschlagen: %.100s — Recovery: SBR-DSP",
                         str(_direct_exc),
                     )
-                    try:
-                        _model_cpu = model.cpu() if hasattr(model, "cpu") else model
-                        _batch_cpu = batch.cpu() if hasattr(batch, "cpu") else batch
-                        with _asr_torch.no_grad():
-                            z_result_raw = _model_cpu.generate_batch(
-                                _batch_cpu,
-                                unconditional_guidance_scale=3.5,
-                                ddim_steps=min(_audiosr_ddim_steps, 20),
-                                duration=_asr_duration,
-                            )
-                        logger.info("AudioSR Recovery 1/3: CPU-Mode erfolgreich")
-                    except Exception as _retry_exc:
-                        logger.warning(
-                            "AudioSR CPU-Retry fehlgeschlagen: %.100s — Recovery 2/3: SBR-DSP",
-                            str(_retry_exc),
-                        )
-                        z_result_raw = None  # Fällt durch zu SBR-DSP-Fallback (Line ~416)
+                    z_result_raw = None  # Fällt durch zu SBR-DSP-Fallback
             else:
                 # Fallback: WAV-Datei-Pfad (Legacy, falls make_batch_for_super_resolution fehlt)
                 _asr_tmp_dir: str | None = "/tmp" if os.access("/tmp", os.W_OK) else None  # nosec B108

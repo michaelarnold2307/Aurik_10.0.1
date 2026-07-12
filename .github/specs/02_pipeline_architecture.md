@@ -4791,21 +4791,25 @@ DefectScanner-bestätigtem Wow/Flutter (Score ≥ 0.70) NICHT durch starren
 - Datei: `backend/core/phases/phase_12_wow_flutter_fix.py`
 
 
-## §2.46d: AudioSR SOTA Recovery-Kette (v10.0.0)
+## §2.46d: AudioSR Recovery-Kette (v10.0.0 → v10.0.3)
 
-**Pflicht**: AudioSR muss 4-stufige Recovery vor Zone Passthrough implementieren.
+**Pflicht**: AudioSR muss Recovery vor Zone Passthrough implementieren.
 
 | Stufe | Verfahren | Steps | Device | Qualität |
 |-------|-----------|-------|--------|----------|
-| 1 | GPU-DDIM | 50 | ROCm/CUDA | ML-optimal |
-| 2 | CPU-DDIM (Retry) | 20 | CPU | ML-reduziert |
-| 3 | SBR-DSP (`_sbr_extend`) | — | CPU | DSP-Spektralspiegelung |
-| 4 | Zone Passthrough | — | — | Unverändert |
+| 1 | CPU-DDIM | 50 | CPU | ML-optimal |
+| 2 | SBR-DSP (`_sbr_extend`) | — | CPU | DSP-Spektralspiegelung |
+| 3 | Zone Passthrough | — | — | Unverändert |
 
-- DDIM auf GPU (ROCm/CUDA), HiFi-GAN-Vocoder auf CPU (Patch)
-- `model.cpu()` entfernt — zwang vorher gesamtes Modell auf CPU
+- **ROCm-Fix v3 (v10.0.3)**: Gesamtes Modell auf CPU.
+  - ROCm (AMD GPU) produziert NaN im HiFi-GAN-Vocoder (`first_stage_model`)
+    aufgrund von transposed-convolution-Bugs im ROCm-Treiber.
+  - Mixed-Device-Ansatz (GPU-DDIM + CPU-Vocoder) führte zu
+    `Input type (torch.cuda.FloatTensor) and weight type (torch.FloatTensor)`
+    wegen inkonsistenter Device-Platzierung der Sub-Module.
+  - `build_model(device="cpu")` — keine Patches nötig, alles auf einem Device.
 - AudioSR-Trainings-Limit: 2–8× Extension. Bei Extremfällen (375 Hz→17 kHz=45×)
-  sind Stufen 1–2 instabil, Stufe 3 (SBR-DSP) ist der wahrscheinlichste Pfad.
+  ist Stufe 1 instabil, Stufe 2 (SBR-DSP) ist der wahrscheinlichste Pfad.
 - Datei: `plugins/audiosr_plugin.py`
 
 
