@@ -14317,6 +14317,7 @@ class UnifiedRestorerV3:
                             _blend_scores = _mg_checker.measure_all(
                                 _blended, sample_rate, reference=_mg_ref, material_type=_ccr_mat_val
                             )
+                            _endgate_measure_count += 1
                             _resolved = sum(
                                 1
                                 for g in _p1p2_violations
@@ -14414,6 +14415,7 @@ class UnifiedRestorerV3:
                             _scores_u = _mg_checker.measure_all(
                                 _blended, sample_rate, reference=_mg_ref, material_type=_ccr_mat_val
                             )
+                            _endgate_measure_count += 1
                             _gap_u, _n_u = _compute_weighted_goal_gap(
                                 _scores_u,
                                 _effective_goal_thresholds,
@@ -14556,6 +14558,9 @@ class UnifiedRestorerV3:
                             _candidate_sources.append(("waerme_focus_rescue", _waerme_audio, 0.010))
                         _goal_recovery_meta["waerme_focus_rescue"] = dict(_waerme_rescue_meta)
 
+                    # §PERF Plateau-Detection: initialisiere Zähler vor Candidate-Schleife
+                    _eg_plateau_streak = 0
+                    _eg_plateau_last_v: frozenset | None = None
                     for _cand_name, _cand_audio_raw, _cand_penalty in _candidate_sources:
                         # §2.59.6: End-Gate-Budget-Guard — Abbruch wenn Zeit/Maße erschöpft
                         if (
@@ -14603,6 +14608,26 @@ class UnifiedRestorerV3:
                                     reference=_mg_ref,
                                     material_type=_ccr_mat_val,
                                 )
+                                _endgate_measure_count += 1
+                                # §PERF Plateau-Detection: wenn 3+ konsekutive Varianten
+                                # identische Violation-Sets liefern, brechen wir ab.
+                                _variant_violations = frozenset(
+                                    k for k in _variant_scores
+                                    if k in _applicable_goal_names
+                                    and float(_variant_scores.get(k, 0.0)) < _effective_goal_thresholds.get(k, 0.85)
+                                )
+                                if _variant_violations == _eg_plateau_last_v:
+                                    _eg_plateau_streak += 1
+                                    if _eg_plateau_streak >= 3:
+                                        logger.debug(
+                                            "End-Gate Plateau: %d identische Violation-Sets — "
+                                            "breche Candidate-Varianten ab",
+                                            _eg_plateau_streak,
+                                        )
+                                        break
+                                else:
+                                    _eg_plateau_streak = 1
+                                    _eg_plateau_last_v = _variant_violations
                                 _variant_rank = _rank_goal_recovery_candidate(
                                     scores=_variant_scores,
                                     baseline_scores=_musical_goal_scores,
