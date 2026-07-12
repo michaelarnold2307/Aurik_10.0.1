@@ -592,6 +592,16 @@ def run_pre_analysis(
                 _analog_in = [m for m in _chain if m in _analog]
                 if _analog_in:
                     _md.primary_material = _analog_in[-1]
+                # Chronological sort after all injections
+                if len(_chain) > 1:
+                    try:
+                        _sorter = _load_symbol("forensics.medium_detector", "get_medium_detector")()
+                        _sorted = sorted(_chain, key=lambda m: _sorter._MEDIUM_ORDER.get(m, 99))
+                        if _sorted != _chain:
+                            _chain = _sorted
+                    except Exception:
+                        pass
+
                 logger.info(
                     "pre_analysis: Deep-Transfer-Chain: %s (injected=%s, era=%s, defect=%s)",
                     " → ".join(_chain),
