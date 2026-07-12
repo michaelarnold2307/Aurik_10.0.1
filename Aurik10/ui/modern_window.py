@@ -16498,7 +16498,7 @@ class ModernMainWindow(QMainWindow):
                 _genre_errors = _result.errors.get("genre", "")
                 # Initialize tip_era early (used below before the main era block)
                 tip_era = ""
-                if _era_errors and er is None:
+                if _era_errors and (er is None or not decade_label):
                     decade_label = "nicht verfügbar"
                     tip_era += "Aufnahme-Ära: <b>Analyse nicht verfügbar</b><br>"
                 if _genre_errors and _result.genre is None:
