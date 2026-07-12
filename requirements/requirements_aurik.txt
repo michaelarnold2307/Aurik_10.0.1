@@ -1,5 +1,5 @@
 # Aurik 9 – requirements_aurik.txt (bereinigt, PyPI-verifiziert)
-# Aktualisiert: 22. Februar 2026
+# Aktualisiert: 12. Juli 2026
 # Validierte Versionen – §13.4 Out-of-the-Box-Pflicht
 #
 # ============================================================================
@@ -243,3 +243,6 @@ importlib-resources>=6.0.0 # Ressourcen-Management (Python 3.9+)
 msgpack>=1.0.0             # Serialisierung für Caching
 torchlibrosa>=0.1.0        # Librosa-kompatible Spektrogramme in Torch
 madmom>=0.17.0             # Beat-Tracking / Tempo-Erkennung
+
+# --- Audio-Effekte ---
+pedalboard>=0.9.0         # Spotify Audio Effects (Limiters, EQ, Reverb, etc.)
