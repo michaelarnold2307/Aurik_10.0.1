@@ -144,8 +144,10 @@ def create_phase_result(
     execution_time_seconds: float = 0.0,
     ml_used: bool = False,
     quality_estimate: float = 1.0,
+    phase_id: str = "",
+    phase_name: str = "",
 ) -> PhaseResult:
-    """Erzeugt ein NaN/Inf-bereinigtes PhaseResult.
+    """Erzeugt ein NaN/Inf-bereinigtes PhaseResult mit Fazit-Log.
 
     Args:
         audio:                  Verarbeitetes Audio-Signal (float32)
@@ -155,13 +157,48 @@ def create_phase_result(
         execution_time_seconds: Verarbeitungszeit in Sekunden
         ml_used:                Ob ML-Modell verwendet wurde
         quality_estimate:       Qualitätsschätzung 0–1
+        phase_id:               Phasen-Nummer (z.B. "03", "09")
+        phase_name:             Menschlicher Name (z.B. "Entrauschen")
 
     Returns:
-        PhaseResult mit bereinigtem Audio
+        PhaseResult mit bereinigtem Audio und Fazit-Log
     """
     audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
 
     audio = np.clip(audio, -1.0, 1.0)
+
+    # ── Fazit-Log ────────────────────────────────────────────────────
+    if phase_id and phase_name:
+        try:
+            from backend.core.phase_fazit import log_phase_fazit
+
+            _score = float(np.clip(quality_estimate * 10.0, 0.0, 10.0))
+            _mods = modifications or {}
+            # Build human-readable summary from modifications dict
+            _summary_parts = []
+            for k, v in _mods.items():
+                if isinstance(v, (int, float)):
+                    _summary_parts.append(f"{k}={v:.1f}" if isinstance(v, float) and v == v else f"{k}={v}")
+                elif isinstance(v, str) and len(v) < 40:
+                    _summary_parts.append(f"{k}={v}")
+            _summary = ", ".join(_summary_parts[:4]) if _summary_parts else "Phase abgeschlossen"
+
+            _details = {}
+            for k, v in list(_mods.items())[:3]:
+                if isinstance(v, (int, float, str)):
+                    _details[str(k)] = str(v)
+            if ml_used:
+                _details["ML"] = "ja"
+
+            log_phase_fazit(
+                phase=phase_id,
+                name=phase_name,
+                score=_score,
+                summary=_summary,
+                details=_details if _details else None,
+            )
+        except Exception:
+            pass  # Fazit-Log ist optional, darf Phase nicht blockieren
 
     return PhaseResult(
         audio=audio,
