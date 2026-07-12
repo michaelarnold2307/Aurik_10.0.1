@@ -427,6 +427,78 @@ def run_pre_analysis(
         except Exception as _bv_exc:
             logger.debug("Bidirektionale Validierung uebersprungen: %s", _bv_exc)
 
+    # ── Cross-Validation: Multi-Factor Consensus Check ────────────
+    # Vergleicht alle unabhängigen Evidenz-Quellen auf Konsistenz.
+    # Konflikte → WARNING, Übereinstimmung → Confidence-Boost.
+    if result.medium is not None:
+        try:
+            _cv_chain = list(getattr(result.medium, "transfer_chain", []) or [])
+            _cv_confidence = float(getattr(result.medium, "confidence", 0.0) or 0.0)
+            _cv_conflicts = []
+            _cv_agreements = []
+
+            # Factor 1: Era material_prior vs chain
+            if result.era is not None:
+                _era_mat = str(getattr(result.era, "material_prior", "") or "")
+                if _era_mat and _era_mat != "unknown":
+                    if _era_mat in _cv_chain:
+                        _cv_agreements.append(f"Era({_era_mat})")
+                    else:
+                        _cv_conflicts.append(f"Era({_era_mat}) not in chain")
+
+            # Factor 2: Genre-era compatibility vs chain-era
+            if result.genre is not None and _cv_chain:
+                _genre_label = str(getattr(result.genre, "genre_label", "") or "")
+                if _genre_label:
+                    try:
+                        _detector_cv = _load_symbol(
+                            "forensics.medium_detector", "get_medium_detector"
+                        )()
+                        _constraints_cv = _detector_cv.get_genre_constraints(_cv_chain)
+                        _excluded_cv = set(_constraints_cv.get("excluded", []))
+                        _genre_key_cv = _genre_label.lower().replace(" ", "_").replace("-", "_")
+                        if _genre_key_cv in _excluded_cv:
+                            _cv_conflicts.append(f"Genre({_genre_label}) excluded by chain")
+                        else:
+                            _cv_agreements.append(f"Genre({_genre_label})")
+                    except Exception:
+                        pass
+
+            # Factor 3: Defect scanner material vs chain
+            if result.defects is not None:
+                _def_mat = str(getattr(result.defects, "material_type", "") or
+                              getattr(result.defects, "auto_detected_material", "") or "")
+                if _def_mat and _def_mat != "unknown":
+                    if _def_mat in _cv_chain or any(_def_mat in m for m in _cv_chain):
+                        _cv_agreements.append(f"Defect({_def_mat})")
+                    else:
+                        _cv_conflicts.append(f"Defect({_def_mat}) not in chain")
+
+            # Report
+            if _cv_conflicts:
+                logger.warning(
+                    "Cross-Validation: %d Konflikt(e) in Tonträgerkette — %s. "
+                    "Übereinstimmungen: %s. Confidence=%.2f",
+                    len(_cv_conflicts),
+                    ", ".join(_cv_conflicts),
+                    ", ".join(_cv_agreements) if _cv_agreements else "keine",
+                    _cv_confidence,
+                )
+            elif _cv_agreements:
+                # Boost confidence when multiple independent factors agree
+                _boost = min(0.15, len(_cv_agreements) * 0.05)
+                logger.info(
+                    "Cross-Validation: %d Faktoren stimmen überein (%s). "
+                    "Confidence %.2f → %.2f",
+                    len(_cv_agreements),
+                    ", ".join(_cv_agreements),
+                    _cv_confidence,
+                    min(1.0, _cv_confidence + _boost),
+                )
+        except Exception as _cv_exc:
+            logger.debug("Cross-Validation uebersprungen: %s", _cv_exc)
+
+
     # ── §2.46a Deep-Transfer-Chain-Injection [RELEASE_MUST] ───────────
     # Spec §2.46a: Importsongs mit 3+ Tonträgerstufen müssen vollständig
     # modelliert werden. Drei Quellen für die Ketten-Rekonstruktion:
