@@ -2435,14 +2435,8 @@ class MediumDetector:
                     _score2 = float(_candidate_scores[mat2])
                     _src2 = _candidate_sources.get(mat2, "posterior")
 
-                    # Keep chain order causal: no backward jumps.
-                    if _order2 < _last_order:
-                        continue
-
-                    # Same-order links are only accepted with stronger evidence.
-                    if _order2 == _last_order and _score2 < self._SAME_ORDER_ANALOG_MIN:
-                        continue
-
+                    # Chronological order is handled by the sort below (line ~2530).
+                    # Accept all secondary materials regardless of order.
                     chain.append(mat2)
                     chain_confidences.append(_score2)
                     evidence.append(f"Sekundäre Analog-Stufe ({_src2}): {mat2} (conf={_score2:.3f})")
