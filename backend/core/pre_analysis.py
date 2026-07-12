@@ -372,7 +372,10 @@ def run_pre_analysis(
                 # as_completed: collect results as they finish, not sequentially.
                 # Fast steps (defect, restorability) report immediately instead
                 # of being blocked behind slow steps (era, genre).
-                for fut in _cf.as_completed(_fut_to_name, timeout=_SUBSTEP_TIMEOUT_S):
+                # as_completed timeout is TOTAL across all futures.
+                # Scale by step count to match old per-future behavior.
+                _total_timeout = _SUBSTEP_TIMEOUT_S * max(_total_steps, 1)
+                for fut in _cf.as_completed(_fut_to_name, timeout=_total_timeout):
                     name = _fut_to_name[fut]
                     try:
                         sub = fut.result(timeout=0.0)
