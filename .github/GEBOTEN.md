@@ -1,118 +1,72 @@
-# Aurik 10 — Vollständige GEBOTEN-Tabelle (PFLICHT-Regeln)
+# Aurik 10 — Vollständige GEBOTEN-Tabelle
 
-> **Normatives Gegenstück zu VERBOTEN.md**: Was MUSS vorhanden sein, nicht was verboten ist.
+> **Normative Quelle** für verpflichtende Patterns.
+> Ergänzt `.github/VERBOTEN.md` und `.github/copilot-instructions.md`.
+> Generiert aus der Betriebssicherheits-Analyse vom 12. Juli 2026.
 
-## Teil A — Code-Struktur (G01-G10)
+---
 
-| ID | Kategorie | PFLICHT | Erkennung |
-|----|----------|---------|-----------|
-| G01 | Logging | Jede .py-Datei MUSS `logger = logging.getLogger(__name__)` definieren | `logger = logging.getLogger` |
-| G02 | NaN-Schutz | Jede Phase MUSS `np.nan_to_num()` auf Ausgabe-Audio anwenden | `nan_to_num` oder `isfinite` |
-| G03 | Typisierung | Jede öffentliche Funktion MUSS Type-Hints haben | `def func(arg: Type) -> Type:` |
-| G04 | Docstring | Jede öffentliche Funktion MUSS einen Docstring haben | `"""..."""` nach `def` |
-| G05 | Dataclass | API-Rückgabewerte MÜSSEN `@dataclass` sein | `@dataclass` |
-| G06 | Singleton | Singletons MÜSSEN `threading.Lock()` verwenden | `threading.Lock()` |
-| G07 | ML-Fallback | Jedes ML-Plugin MUSS einen DSP-Fallback haben | DSP-Funktion nach ML-Try |
-| G08 | GPU | GPU-Zugriff MUSS über `get_torch_device()` erfolgen | `get_torch_device` |
-| G09 | Import | Audio-Import MUSS über `load_audio_file()` erfolgen | `load_audio_file` |
-| G10 | Test | Jede Spec-§-Referenz MUSS einen Test haben | Testdatei mit §-Referenz |
+## Kategorie A: Kontrakt-Validierung
 
-## Teil B — Audio-Qualität (G11-G20)
+| ID | Gebot | Begründung | Fundstelle |
+|----|-------|-----------|------------|
+| **G01** | Jedes Registrierungssystem (Plugin-Checks, Provider, Phase-Mapper) MUSS beim Modul-Import einen Selbsttest durchführen und Fehler als CRITICAL loggen | `PANNs._model_loaded` fehlte → 6 Monate unbemerkter DSP-Fallback | `ml_model_readiness._validate_all_checks()` |
+| **G02** | Jedes ML-Plugin MUSS von `MLPluginBase` erben und `_model_loaded` als Property implementieren | Ohne Basisklasse kein Compile-Zeit-Schutz vor fehlenden Attributen | `backend/core/plugin_base.py` |
+| **G03** | Jede Funktion/Variable, die in Log-Statements referenziert wird, MUSS importiert oder im Scope definiert sein | `phase_human_name` → NameError → Pipeline-Crash → Fallback-Pfad | `_execute_pipeline` L33303 |
 
-| ID | Kategorie | PFLICHT | Erkennung |
-|----|----------|---------|-----------|
-| G11 | Loudness | Ausgabe MUSS LUFS-normalisiert sein (ITU-R BS.1770) | `loudness` oder `LUFS` |
-| G12 | Zero-Phase | Filter auf Signal-Addition MÜSSEN `sosfiltfilt` verwenden | `sosfiltfilt` |
-| G13 | Artifact | Ausgabe MUSS `artifact_freedom >= 0.95` erreichen | `artifact_freedom` |
-| G14 | Vocal | Bei `panns_singing >= 0.25` MUSS VQI geprüft werden | `vqi` oder `vocal_quality` |
-| G15 | DC-Offset | reel_tape MUSS `filtfilt([1,-1],[1,-0.9995])` verwenden | `filtfilt.*-0.9995` |
-| G16 | Gate | Gate MUSS `reference_for_gate` verwenden | `reference_for_gate` |
-| G17 | Peak | Peak-Guard MUSS `np.percentile(99.9)` verwenden | `percentile.*99.9` |
-| G18 | Envelope | Gain MUSS `_musical_gain_envelope()` verwenden | `_musical_gain_envelope` |
-| G19 | Material | Jedes `dict[MaterialType, ...]` MUSS ALLE Materialien enthalten | vollständiges Material-Dict |
-| G20 | NR-Check | Nach NR MUSS `compute_nmr_score()` aufgerufen werden | `compute_nmr_score` |
+## Kategorie B: Konfiguration & Kalibrierung
 
-## Teil C — Pipeline (G21-G30)
+| ID | Gebot | Begründung | Fundstelle |
+|----|-------|-----------|------------|
+| **G04** | ALLE hardware-abhängigen Schwellwerte MÜSSEN beim Modul-Import aus `psutil.virtual_memory().total` kalibriert werden | `_HEAVY_MODEL_PREEMPTIVE_AVAIL_GB_MAX = 6.0` galt für 8 GB wie 64 GB | `ml_memory_budget._calibrate_guard_thresholds()` |
+| **G05** | Jeder Guard, der freien RAM prüft, MUSS modellgrößenabhängig sein: `safe_gb = f(model_size_gb)`, nicht `safe_gb = 6.0` | 1.1 GB Modell wurde mit derselben 6-GB-Schwelle blockiert wie 7 GB AudioSR | `_estimate_load_peak_factor()` |
+| **G06** | Beim Startup MUSS ein vollständiges Systemprofil geloggt werden (RAM total/available, Swap total/%, CPU) | Post-mortem-Diagnose ohne Systemkontext ist wertlos | `_log_system_profile()` |
 
-| ID | Kategorie | PFLICHT | Erkennung |
-|----|----------|---------|-----------|
-| G21 | Glue | Glue-Stage MUSS in ALLEN Modi laufen | Glue-Stage-Call |
-| G22 | PIM | PIM-Intensitäts-Map MUSS vor Phasen-Loop berechnet werden | `pim` oder `perceptual_intensity` |
-| G23 | RLP | RLP MUSS nach jedem Phasen-Loop ausgeführt werden | `rlp` oder `reflective_listening` |
-| G24 | Export | Export MUSS `artifact_freedom >= 0.95` prüfen | Export-Gate |
-| G25 | Warmup | ROCm-GPU MUSS beim Start gewarmupt werden | `warmup` oder `_ROCM_WARMUP` |
-| G26 | Recovery | Nach GPU-Fehler MUSS CPU-Fallback erfolgen | GPU-Fehler→CPU |
-| G27 | Budget | 8×RT-Budget MUSS eingehalten werden | `_3X_RT_LIMIT` |
-| G28 | Checkpoint | Crash-Recovery MUSS Checkpoints speichern | `save_checkpoint` |
-| G29 | Memory | ML-Memory-Budget MUSS vor Allocation geprüft werden | `ml_memory_budget` |
-| G30 | Cross-Phase | Cross-Phase-Guards MÜSSEN nach jeder Phase prüfen | `CumulativeInteractionGuard` |
+## Kategorie C: Resilience
 
-## Teil D — Tests & CI (G31-G40)
+| ID | Gebot | Begründung | Fundstelle |
+|----|-------|-----------|------------|
+| **G07** | Jeder negative Cache MUSS eine TTL haben (empfohlen: 30 s) | `_FAILURE_CACHE` war permanent → Modell einmal als "nicht verfügbar" markiert, für immer blockiert | `_FAILURE_CACHE_TTL_S = 30.0` |
+| **G08** | Jede Schleife, die einen externen ML-Schätzer aufruft, MUSS einen Circuit-Breaker haben (empfohlen: 3 konsekutive Fehler → deaktiviert) | Phase 12 rief PolyphonicSpeedCurveEstimator ~80× mit `consensus=0` auf | `_POLYPHONIC_CB_MAX_FAILURES = 3` |
+| **G09** | Erfolgreiche Modell-Allokation MUSS den Readiness-Cache invalidieren | TTL ist passiv; aktive Invalidierung schließt die Lücke sofort | `try_allocate()` → `invalidate_ml_readiness()` |
 
-| ID | Kategorie | PFLICHT | Erkennung |
-|----|----------|---------|-----------|
-| G31 | Unit-Test | Jede Phase MUSS einen Unit-Test haben | `test_phase_*.py` |
-| G32 | CI-Gate | CI MUSS `artifact_freedom`-Regression prüfen | CI-Config |
-| G33 | Coverage | Test-Coverage MUSS ≥ 80% sein | `--cov` |
-| G34 | Linter | Pre-Commit MUSS `ruff` + `mypy` ausführen | `.pre-commit-config.yaml` |
-| G35 | Benchmark | Release MUSS AMRB-Benchmark bestehen | AMRB-Skript |
-| G36 | Version | Änderungen MÜSSEN in CHANGELOG.md dokumentiert sein | CHANGELOG |
-| G37 | Lock | Jeder `threading.Lock()` MUSS `with`-Statement verwenden | `with.*lock` |
-| G38 | Path | Pfade MÜSSEN `pathlib.Path` verwenden | `Path(` |
-| G39 | Encoding | Dateien MÜSSEN UTF-8 sein | `encoding="utf-8"` |
-| G40 | License | Jede neue Datei MUSS den Aurik-Lizenzheader haben | Lizenzheader |
+## Kategorie D: Observability
 
-## Teil E — Wohlklang & Reproduzierbarkeit (G41-G50)
+| ID | Gebot | Begründung | Fundstelle |
+|----|-------|-----------|------------|
+| **G10** | C-Level-Bibliotheken (ONNX, CUDA, ROCm) MÜSSEN beim frühestmöglichen Import auf ERROR-Log-Level gesetzt werden | 40+ MIOpen-Epsilon-Warnungen pro Modell-Ladung | `ort.set_default_logger_severity(3)` |
+| **G11** | stderr MUSS beim Startup mit einem Deduplizierungs-Wrapper versehen werden | `os.environ` und `warnings.filterwarnings` greifen nicht bei C-Level-stderr | `stderr_dedup.install_stderr_dedup()` |
+| **G12** | Singleton-Zugriffe MÜSSEN auf DEBUG loggen; nur die ERSTE Instantiierung auf INFO | "BasicPitch geladen" erschien bei jedem Chunk | `hybrid_wow_flutter._init_basicpitch()` |
 
-| ID | Kategorie | PFLICHT | Erkennung |
-|----|----------|---------|-----------|
-| G41 | Pleasantness | HPE-Check MUSS vor/nach JEDER Phase laufen | `compute_pleasantness` |
-| G42 | Consistency | Gleicher Input MUSS gleichen Output produzieren | `deterministic\|seed\|reproducible` |
-| G43 | CLP | NR-Stärke MUSS CLP-Maske respektieren (2-5kHz) | `clp_max_attenuation\|CLPZone` |
-| G44 | Whisper | Leise-Passagen (< -40dBFS) MÜSSEN geschützt werden | `whisper_detail\|whisper_preservation` |
-| G45 | Dynamics | Nach Kompressor/Limiter MUSS Dynamik geprüft werden | `dynamics_preserver\|check_phase` |
-| G46 | Adaptive | Goal-Schwellen MÜSSEN aus Materialphysik berechnet werden | `compute_adaptive_thresholds` |
-| G47 | Version | Versionsnummer MUSS aus `version.py` kommen | `from backend.core.version import` |
-| G48 | Error | Jeder `except`-Block MUSS die Exception loggen | `logger.\|exc_info=True` |
-| G49 | Dither | 16-bit Export MUSS gedithert werden | `dither\|TPDF\|triangular` |
-| G50 | PhaseOrder | Phasen-Reihenfolge MUSS materialabhängig sein | `phase_order.*material\|adaptive.*phase.*order` |
+## Kategorie E: Stereo & Kanalintegrität
 
-## Teil F — Runtime-Garantien (G51-G55)
+| ID | Gebot | Begründung | Fundstelle |
+|----|-------|-----------|------------|
+| **G13** | Globaler Interchannel-Lag MUSS vor Phase 1 erkannt und als VORVERARBEITUNG korrigiert werden – nicht nur pro Chunk | ~183 ms Versatz war von `LAG_PROBE 0B` bis `load_audio_file` durchgängig präsent | Run-Log: lag=-8900 → -8064 samples |
+| **G14** | Nach Abschluss ALLER Phasen MUSS ein finaler Stereo-Lag-Check erfolgen und ggf. korrigieren | STCG korrigiert pro Chunk, aber keine Phase persistiert die Korrektur global | `load_audio_file: interchannel lag=-8064 samples before pipeline` |
+| **G15** | Stereo-Kreuzkorrelation MUSS nach der Lag-Korrektur verifiziert werden (`corr > 0.7`) | `mean_corr=0.025` bei 183 ms Versatz → brauchbare Werte erst nach Korrektur | `ArtifactFreedomGate: ratio=0.00, mean_corr=0.025` |
 
-| ID | Kategorie | PFLICHT | Erkennung |
-|----|----------|---------|-----------|
-| G51 | Watchdog | Watchdog MUSS in JEDEM Pipeline-Lauf aktiv sein | `WatchdogMonitor\|get_watchdog` |
-| G52 | Timeout | Jede Phase MUSS ein Timeout haben | `timeout\|_MAX_PHASE_SECONDS\|phase_timeout` |
-| G53 | Memory | Speicher-Limit MUSS vor ML-Modell-Ladung geprüft werden | `ml_memory_budget\|try_allocate\|memory_limit` |
-| G54 | ColdStart | Cold-Start MUSS eigenes Zeitbudget haben | `COLDSTART\|_coldstart\|first_run` |
-| G55 | GPUFallback | Nach GPU-Fehler MUSS ONNX auf CPU weitermachen | `CPUExecutionProvider\|cpu.*fallback.*onnx` |
+## Kategorie F: Pipeline-Integrität
 
-## Teil G — Ketten-Intelligenz (G56-G60)
+| ID | Gebot | Begründung | Fundstelle |
+|----|-------|-----------|------------|
+| **G16** | Jede Phase, die chunk-weise arbeitet, MUSS ihre chunk-übergreifenden Zustände (Stereo-Lag, Gain, Phase) in einem persistenten State-Objekt speichern | STCG speichert pro-Chunk-Korrektur nicht global → nächster Chunk beginnt bei Null | Phase 12 STCG: `correcting R channel` pro Chunk, keine Persistenz |
+| **G17** | Pipeline-Fallback-Pfade MÜSSEN dieselbe API-Signatur wie der Hauptpfad verwenden | `phase_human_name`-Fehler wurde gefangen, aber der gesamte Direkt-Pfad crasht → Fallback ist langsamer/schlechter | `restaurier_denker.py:567` |
 
-| ID | Kategorie | PFLICHT | Erkennung |
-|----|----------|---------|-----------|
-| G56 | Chain | Transfer-Ketten (tape→mp3) MÜSSEN erkannt werden | `transfer_chain\|chain_string\|Tontraegerkette` |
-| G57 | Bandwidth | ÄLTESTER Träger bestimmt Bandbreiten-Ziel | `oldest.*carrier\|primary.*bandwidth\|original.*medium` |
-| G58 | Codec | Codec-Artefakte (MP3/AAC) MÜSSEN getrennt behandelt werden | `codec.*artifact\|mpeg.*frame\|mp3.*artifact` |
-| G59 | Dolby | Dolby-NR-Typ MUSS vor Rauschunterdrückung erkannt werden | `DolbyNR\|dolby_nr\|dolby_type` |
-| G60 | RIAA | RIAA-EQ MUSS vor Vinyl-Verarbeitung invers angewendet werden | `RIAA\|riaa_eq\|riaa_curve` |
+---
 
-## Teil H — Vokal-Garantien (G61-G65)
+## GEBOTEN-Linter-Referenz
 
-| ID | Kategorie | PFLICHT | Erkennung |
-|----|----------|---------|-----------|
-| G61 | Primus | Bei panns_singing ≥ 0.25: Stimmqualität VORRANG | `panns_singing.*0\\.25\|primus.*inter.*pares\|vocal.*priority` |
-| G62 | Formant | Formant-Integrität MUSS nach Vokal-Phase geprüft werden | `formant.*guard\|formant.*integrity\|vocal_formant` |
-| G63 | Sibilance | Sibilanten MÜSSEN nach De-Essing unterscheidbar bleiben | `sibilance.*preserv\|deesser.*intelligibility\|sibilant` |
-| G64 | Vibrato | Vibrato MUSS erhalten bleiben | `vibrato.*preserv\|vibrato.*guard\|vibrato_continuity` |
-| G65 | Breath | Atemgeräusche MÜSSEN als musikalisch intentional gelten | `breath.*preserv\|breath.*emotion\|breath.*intentional` |
+Jede G-Regel kann durch einen Linter automatisiert geprüft werden:
 
-## Teil I — Qualitäts-Garantien (G66-G70)
-
-| ID | Kategorie | PFLICHT | Erkennung |
-|----|----------|---------|-----------|
-| G66 | Export | Vor Export: artifact_freedom ≥ 0.95 UND pleasantness ≥ 0.35 | `artifact_freedom.*0\\.95.*pleasantness\|export.*guard` |
-| G67 | PleasantnessGate | Wenn Pleasantness SCHLECHTER → Original ausgeben | `pleasantness.*worse\|hpe.*rollback\|restored.*worse` |
-| G68 | Regression | Jede Spec-Änderung MUSS einen Regression-Test haben | `test.*regression\|regression.*test\|spec.*test` |
-| G69 | Agent | KI-Agenten MÜSSEN SpecConstitution nutzen | `get_constitution\|SpecConstitution\|spec_constitution` |
-| G70 | VersionCheck | Keine hartcodierten Versionsnummern | `__version__\|AURIK_VERSION\|from.*version import` |
+| ID | Scope | Prüfung |
+|----|-------|---------|
+| G01 | `backend/core/*.py` mit `register_*`-Funktion | Modul MUSS `_validate_*()`-Aufruf nach Registrierung enthalten |
+| G02 | `plugins/*plugin*.py` | `class *Plugin(MLPluginBase)` oder Linter-Warning |
+| G03 | Alle `.py`-Dateien | `logger.info/logger.warning(f"...{name}...")` → `name` muss im Scope sein |
+| G04 | `backend/core/*.py` | `= 6.0` / `= 3072` nach `GB`/`MB`-Kommentar → WARNING |
+| G07 | `backend/core/*.py` | `_CACHE: dict` ohne `_TTL`- oder `_TIMESTAMPS`-Gegenstück → ERROR |
+| G08 | `backend/core/phases/phase_*.py` | `for chunk in ...` + `external_call()` ohne `_MAX_CONSECUTIVE_FAILURES` → WARNING |
+| G12 | Alle `.py` | `logger.info("... geladen")` in `__init__`/Getter ohne `_was_loaded`-Check → INFO |
+| G13 | `backend/core/unified_restorer_v3.py` | Kein `_detect_and_correct_global_interchannel_lag()` vor `_execute_pipeline()` → ERROR |
+| G14 | `backend/core/unified_restorer_v3.py` | Kein `_verify_stereo_integrity()` nach `_execute_pipeline()` → ERROR |

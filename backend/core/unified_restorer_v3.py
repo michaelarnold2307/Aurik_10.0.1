@@ -8991,6 +8991,41 @@ class UnifiedRestorerV3:
                     _lp0b_lag,
                     _lp0b_lag / sample_rate * 1000,
                 )
+                # §G13/F1: Globaler Interchannel-Lag MUSS vor Phase 1 korrigiert werden.
+                # Der Lag wird PRÄZISE via GCC-PHAT gemessen (kein statischer Offset).
+                # Er kann pro Song variieren, auch innerhalb eines Songs (positive/negative
+                # Werte).  Ohne Korrektur arbeiten alle Phasen auf zeitlich dekorrelierten
+                # Kanälen → Stereo-Metriken (IACC, spatial_depth, separation_fidelity)
+                # liefern falsche Werte.
+                #
+                # Strategie:
+                #   – GCC-PHAT misst den dominanten Lag im Gesamtsignal.
+                #   – Konsistente Lags (Tape-Head-Alignment, A/D-Versatz) werden global
+                #     korrigiert.  Zeitlich variierende Lags (Dropouts, Banddehnung)
+                #     überlässt man STCGs per-Chunk-Korrektur während Phase 12.
+                #   – Post-Check am Pipeline-Ende (LAG_PROBE 2a/3) verifiziert die
+                #     Korrektur; Residuals < 50 samples gelten als STCG-behandelt.
+                _MIN_CORRECTABLE_LAG_SAMPLES = 50  # ~1 ms @ 48 kHz – darunter nicht korrigieren
+                if abs(_lp0b_lag) > _MIN_CORRECTABLE_LAG_SAMPLES:
+                    _lag_abs = abs(_lp0b_lag)
+                    if _lp0b_lag < 0:
+                        # Negativer Lag: R-Kanal hängt hinter L → R trimmen und alignen
+                        audio = audio[:, :audio.shape[1] - _lag_abs] if audio.shape[1] > _lag_abs else audio
+                        audio[:, 1] = np.roll(audio[:, 1], _lag_abs)
+                    else:
+                        # Positiver Lag: L-Kanal hängt hinter R → L trimmen und alignen
+                        audio = audio[:, :audio.shape[1] - _lag_abs] if audio.shape[1] > _lag_abs else audio
+                        audio[:, 0] = np.roll(audio[:, 0], _lag_abs)
+                    logger.info(
+                        "§G13 Interchannel-Lag-Korrektur: GCC-PHAT misst %d samples (%.1f ms) — "
+                        "Kanal-Alignment durchgeführt. STCG behandelt residuale per-Chunk-Variationen.",
+                        _lp0b_lag,
+                        _lp0b_lag / sample_rate * 1000,
+                    )
+                    # Im Context vermerken, damit Downstream-Code (STCG, Export) Bescheid weiß
+                    _restoration_context["_lag_correction_applied"] = True
+                    _restoration_context["_lag_correction_samples"] = int(_lp0b_lag)
+                    _restoration_context["_lag_probe_0b_value"] = int(_lp0b_lag)
         except Exception as _lp0b_exc:
             logger.debug("LAG_PROBE_0B fehlgeschlagen: %s", _lp0b_exc)
 
@@ -30683,6 +30718,12 @@ class UnifiedRestorerV3:
             logger.debug("_execute_pipeline: NaN/Inf im Input-Audio bereinigt")
             audio = np.nan_to_num(audio, nan=0.0, posinf=0.9, neginf=-0.9)
         audio = np.clip(audio, -1.0, 1.0)
+        # §F2: phase_human_name für lesbare Log-Einträge
+        try:
+            from backend.core.phase_names import phase_human_name  # pylint: disable=import-outside-toplevel,redefined-outer-name
+        except ImportError:
+            def phase_human_name(phase_id: str) -> str:
+                return phase_id
         # §Längen-Guard: Originalsamplelänge merken — Phasen dürfen die Länge nicht verändern.
         _input_n_samples: int = audio.shape[-1] if audio.ndim >= 2 else len(audio)
         _active_quality_mode = quality_mode_override or self.config.mode

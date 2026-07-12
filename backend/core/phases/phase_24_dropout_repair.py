@@ -1097,7 +1097,7 @@ class DropoutRepairPhase(PhaseInterface):
             _before_sanitize = len(linked_dropouts)
             linked_dropouts = self._sanitize_dropout_regions(_mid_sc, linked_dropouts, params)
             if len(linked_dropouts) < _before_sanitize:
-                logger.info(
+                logger.debug(
                     "Dropout sanitizer (stereo): %d → %d Regionen",
                     _before_sanitize,
                     len(linked_dropouts),
@@ -1124,7 +1124,7 @@ class DropoutRepairPhase(PhaseInterface):
             _before_sanitize = len(all_dropouts)
             all_dropouts = self._sanitize_dropout_regions(audio, all_dropouts, params)
             if len(all_dropouts) < _before_sanitize:
-                logger.info(
+                logger.debug(
                     "Dropout sanitizer (mono): %d → %d Regionen",
                     _before_sanitize,
                     len(all_dropouts),

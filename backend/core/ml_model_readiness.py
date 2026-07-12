@@ -12,13 +12,8 @@ model is fully loaded and ready for inference.
 from __future__ import annotations
 
 import logging
-import os
-import warnings
+import time
 from typing import Callable
-
-# Suppress ONNX Runtime MIOPEN batch-norm epsilon warnings (harmless, ~50 lines per load).
-os.environ.setdefault("ORT_DISABLE_MIOPEN_BN_EPSILON_WARNINGS", "1")
-warnings.filterwarnings("ignore", message="ClampMiopenBatchNormEpsilon")
 
 logger = logging.getLogger(__name__)
 
@@ -31,8 +26,26 @@ def register_ml_check(model_id: str, check_fn: Callable[[], bool]) -> None:
     _MODEL_CHECKS[model_id] = check_fn
 
 
+def invalidate_ml_readiness(model_id: str) -> None:
+    """Clear failure cache entries for a specific model (call after successful load).
+
+    Called by ml_memory_budget.try_allocate() when a model is successfully
+    allocated, so that subsequent readiness checks reflect the new state.
+    """
+    to_delete = [k for k in _FAILURE_CACHE if k == model_id or k.startswith(f"{model_id}:")]
+    for k in to_delete:
+        del _FAILURE_CACHE[k]
+        _FAILURE_CACHE_TIMESTAMPS.pop(k, None)
+    if to_delete:
+        logger.debug("ml_model_readiness: invalidated %d cache entries for '%s'", len(to_delete), model_id)
+
+
 # Flood control: after first failed check, cache result to avoid log spam
 _FAILURE_CACHE: dict[str, bool] = {}
+# Time-based expiry: models may load later (e.g. Phase 20 checked before PANNs loaded).
+# Cache entries older than this many seconds are re-checked.
+_FAILURE_CACHE_TTL_S: float = 30.0
+_FAILURE_CACHE_TIMESTAMPS: dict[str, float] = {}
 
 def check_ml_model_ready(model_id: str, phase_name: str = "") -> bool:
     """Return True if the named ML model loaded successfully.
@@ -49,10 +62,22 @@ def check_ml_model_ready(model_id: str, phase_name: str = "") -> bool:
         True if the model is ready, False otherwise.
     """
     cache_key = f"{model_id}:{phase_name}" if phase_name else model_id
-    
-    # Return cached result silently
+
+    # §F4: Check model-level cache first (shared across all phases).
+    # If the model itself was checked recently, reuse the result regardless
+    # of which phase is asking.  This prevents 5+ WARNINGs for the same model
+    # from different phases (e.g. PANNs checked by Phase 01, 12, 20, 24, 28).
+    if phase_name and model_id in _FAILURE_CACHE:
+        _model_age = time.monotonic() - _FAILURE_CACHE_TIMESTAMPS.get(model_id, 0.0)
+        if _model_age < _FAILURE_CACHE_TTL_S:
+            return _FAILURE_CACHE[model_id]
+
+    # Return cached result silently, but honour TTL for re-check.
     if cache_key in _FAILURE_CACHE:
-        return _FAILURE_CACHE[cache_key]
+        _age = time.monotonic() - _FAILURE_CACHE_TIMESTAMPS.get(cache_key, 0.0)
+        if _age < _FAILURE_CACHE_TTL_S:
+            return _FAILURE_CACHE[cache_key]
+        # TTL expired — re-check the model.
 
     check_fn = _MODEL_CHECKS.get(model_id)
     if check_fn is None:
@@ -69,6 +94,11 @@ def check_ml_model_ready(model_id: str, phase_name: str = "") -> bool:
             f" — Phase {phase_name}" if phase_name else "",
         )
         _FAILURE_CACHE[cache_key] = False
+        _FAILURE_CACHE_TIMESTAMPS[cache_key] = time.monotonic()
+        # §F4: Also cache at model level so other phases benefit
+        if phase_name:
+            _FAILURE_CACHE[model_id] = False
+            _FAILURE_CACHE_TIMESTAMPS[model_id] = time.monotonic()
         return False
 
     if not ready:
@@ -78,6 +108,11 @@ def check_ml_model_ready(model_id: str, phase_name: str = "") -> bool:
             f" — Phase {phase_name}" if phase_name else "",
         )
         _FAILURE_CACHE[cache_key] = False
+        _FAILURE_CACHE_TIMESTAMPS[cache_key] = time.monotonic()
+        # §F4: Also cache at model level so other phases benefit
+        if phase_name:
+            _FAILURE_CACHE[model_id] = False
+            _FAILURE_CACHE_TIMESTAMPS[model_id] = time.monotonic()
         return False
 
     return True
@@ -86,6 +121,9 @@ def check_ml_model_ready(model_id: str, phase_name: str = "") -> bool:
 def clear_readiness_cache() -> None:
     """Clear the failure cache (call at start of each restoration run)."""
     _FAILURE_CACHE.clear()
+    _FAILURE_CACHE_TIMESTAMPS.clear()
+
+
 def _probe_plugin(module_path: str, getter_name: str, attr: str | None = None) -> Callable[[], bool]:
     """Return a check function that probes a plugin's getter + optional attr."""
     def _check() -> bool:
@@ -240,8 +278,6 @@ def _register_all() -> None:
 
     register_ml_check("AST-Perceptual-ONNX", _ast_ready)
 
-
-
     # --- Speech Enhancement / Separation ---
     register_ml_check("SGMSE+", _probe_plugin("plugins.sgmse_plugin", "get_sgmse_plus_plugin", "_model_loaded"))
     register_ml_check("ResembleEnhance", _probe_plugin("plugins.resemble_enhance_plugin", "get_resemble_enhance_plugin", "_model_loaded"))
@@ -268,4 +304,58 @@ def _register_all() -> None:
     register_ml_check("NVSR", _probe_plugin("plugins.nvsr_plugin", "get_nvsr_plugin", "_model_loaded"))
     register_ml_check("Matchering", _probe_plugin("plugins.matchering_plugin", "get_matchering_plugin", "_model_loaded"))
 
+
 _register_all()
+
+
+# ── §A1 Startup-Selbsttest: Validate all registered readiness checks ──
+
+def _validate_all_checks() -> None:
+    """Run every registered check once at import time and log failures.
+
+    A silent AttributeError here (e.g. probing '_model_loaded' on a plugin
+    that doesn't have it) is a critical bug — the check will always return
+    False and the model will never be used.  Catch and log at CRITICAL so
+    it is visible in every run, not just when a phase happens to call
+    check_ml_model_ready().
+    """
+    failed_attr: list[str] = []
+    failed_import: list[str] = []
+    passed: list[str] = []
+
+    for model_id, check_fn in sorted(_MODEL_CHECKS.items()):
+        try:
+            # Just probe — don't care about ready/not-ready, only about exceptions.
+            check_fn()
+            passed.append(model_id)
+        except AttributeError as exc:
+            failed_attr.append(f"{model_id} ({exc})")
+        except ImportError:
+            failed_import.append(model_id)
+        except Exception:
+            # Other runtime exceptions are expected (model not on disk, etc.)
+            passed.append(model_id)
+
+    if failed_attr:
+        logger.critical(
+            "ml_model_readiness SELBSTTEST: %d ML-Checks haben KEIN erwartetes Attribut — "
+            "diese Modelle werden NIEMALS als bereit erkannt: %s",
+            len(failed_attr),
+            ", ".join(failed_attr),
+        )
+    if failed_import:
+        logger.warning(
+            "ml_model_readiness SELBSTTEST: %d ML-Checks konnten Modul nicht importieren: %s",
+            len(failed_import),
+            ", ".join(failed_import),
+        )
+    logger.info(
+        "ml_model_readiness SELBSTTEST: %d/%d Checks validiert (%d Attribut-Fehler, %d Import-Fehler)",
+        len(passed),
+        len(_MODEL_CHECKS),
+        len(failed_attr),
+        len(failed_import),
+    )
+
+
+_validate_all_checks()

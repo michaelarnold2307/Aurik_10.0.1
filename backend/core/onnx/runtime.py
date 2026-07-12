@@ -16,6 +16,19 @@ from typing import Any
 import numpy as np
 import onnxruntime as ort
 
+# ── §D4 + D1: Suppress ONNX Runtime C-level warnings ────────────────
+# 1. Set ONNX logger severity to ERROR (suppresses harmless WARNINGs like
+#    MIOpen epsilon, 40+ lines per model load).
+ort.set_default_logger_severity(3)  # 0=VERBOSE 1=INFO 2=WARNING 3=ERROR 4=FATAL
+
+# 2. Install stderr deduplication wrapper for any remaining C-level output
+#    that bypasses ONNX's logger (CUDA, ROCm, system libraries).
+try:
+    from backend.core.stderr_dedup import install_stderr_dedup
+    install_stderr_dedup()
+except Exception:
+    pass  # Non-critical — dedup is a cosmetic improvement
+
 logger = logging.getLogger(__name__)
 
 

@@ -26,6 +26,8 @@ import logging
 import math
 import threading
 from pathlib import Path
+
+from backend.core.plugin_base import MLPluginBase  # §A2
 from typing import Any
 
 import numpy as np
@@ -106,7 +108,7 @@ _lock = threading.Lock()
 # ---------------------------------------------------------------------------
 
 
-class PANNsPlugin:
+class PANNsPlugin(MLPluginBase):  # §A2
     """PANNs CNN14 — Audio-Tagging via lokaler ONNX-Inferenz.
 
     Erkennt Instrumente, Gesang und Genre aus np.ndarray-Signalen.
@@ -134,6 +136,11 @@ class PANNsPlugin:
         self._device: str = "cpu"
         self._use_fp16: bool = False
         self._load_onnx()
+
+    @property
+    def _model_loaded(self) -> bool:
+        """Für ml_model_readiness-Kompatibilität (§2.47)."""
+        return self._session is not None
 
     # ------------------------------------------------------------------
     # GPU-Erkennung

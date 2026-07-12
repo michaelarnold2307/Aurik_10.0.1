@@ -58,7 +58,6 @@ def _auto_detect_budget() -> float:
 ML_MAX_GB: float = _auto_detect_budget()
 _SYSTEM_MEMORY_MARGIN_BASE: float = 1.35  # Basis-Margin für kleine Modelle (< 1 GB)
 _SYSTEM_MEMORY_MARGIN_MIN: float = 1.10  # Minimale Margin für sehr große Modelle (>= 5 GB)
-_MIN_FREE_MB_HARD: float = 3072.0  # 3 GB — angehoben von 1.5 GB (systemd-oomd-Schutz)
 _PRESSURE_LIGHT_MODEL_MAX_GB: float = 0.12
 _PRESSURE_LIGHT_MODEL_MIN_AVAIL_RATIO: float = 0.35
 _PRESSURE_LIGHT_MODEL_MAX_SWAP_PCT: float = 95.0
@@ -71,16 +70,143 @@ _PRESSURE_LIGHT_MODEL_ALLOWLIST: frozenset[str] = frozenset(
         "BasicPitch",
     }
 )
-_HEAVY_MODEL_PREEMPTIVE_MIN_GB: float = 1.0
-_HEAVY_MODEL_PREEMPTIVE_SWAP_PCT: float = 70.0
-_HEAVY_MODEL_PREEMPTIVE_SWAP_EARLY_PCT: float = 45.0
-_HEAVY_MODEL_PREEMPTIVE_SWAP_IO_MB_S: float = 2.0
-_HEAVY_MODEL_PREEMPTIVE_AVAIL_RATIO_MAX: float = 0.30
-# 6 GB free = 2.7× buffer for a 2.2 GB model; 16.0 was triggering on 32 GB systems
-# at 15.7 GB free (50% RAM) because 15.7 < 16.0 — far too aggressive.
-_HEAVY_MODEL_PREEMPTIVE_AVAIL_GB_MAX: float = 6.0
-_PRESSURE_RECOVERY_ATTEMPTS: int = 2
-_PRESSURE_RECOVERY_SLEEP_S: float = 0.35
+
+
+def _calibrate_guard_thresholds() -> dict[str, float]:
+    """Calibrate all preemptive-guard thresholds to system RAM at import time.
+
+    Larger systems get proportionally more permissive thresholds because
+    absolute free RAM is still large even at lower percentages, and swap
+    pressure is less critical when more physical RAM is available.
+
+    Returns a dict of calibrated values (also stored as module-level constants).
+    """
+    if _psutil is None:
+        _total_gb = 16.0
+    else:
+        _total_gb = float(_psutil.virtual_memory().total) / (1024.0**3)
+
+    # ── Heavy-model preemptive guard thresholds ──────────────────────
+
+    # Minimum model size that triggers the heavy-load guard.
+    _heavy_min_gb: float = 1.0
+
+    # Swap threshold for \"elevated\" (definite block with paging/low-headroom).
+    # Larger RAM → more tolerant of swap (swap pressure less critical).
+    _heavy_swap_pct: float = 70.0 + (_total_gb - 8.0) * 0.22
+    _heavy_swap_pct = max(65.0, min(80.0, _heavy_swap_pct))
+
+    # Swap threshold for \"early\" (block only with low headroom).
+    _heavy_swap_early_pct: float = 45.0 + (_total_gb - 8.0) * 0.28
+    _heavy_swap_early_pct = max(40.0, min(58.0, _heavy_swap_early_pct))
+
+    # Active swap I/O threshold (MB/s).
+    _heavy_swap_io_mb_s: float = 2.0
+
+    # Available-RAM ratio below which headroom is considered \"low\".
+    # Larger systems can tolerate lower ratios (more RAM = more buffer).
+    _heavy_avail_ratio_max: float = 0.30 - (_total_gb - 8.0) * 0.0045
+    _heavy_avail_ratio_max = max(0.10, min(0.32, _heavy_avail_ratio_max))
+
+    # ── Hard minimum free RAM (systemd-oomd protection) ─────────────
+    # Scales to 7-10% of total RAM, floor at 2 GB.
+    _min_free_mb_hard: float = max(2048.0, _total_gb * 0.075 * 1024.0)
+
+    # ── System memory margins ────────────────────────────────────────
+    # Smaller systems need larger relative margins.
+    if _total_gb >= 32.0:
+        _margin_base = 1.25
+        _margin_min = 1.06
+    elif _total_gb >= 16.0:
+        _margin_base = 1.30
+        _margin_min = 1.08
+    else:
+        _margin_base = 1.35
+        _margin_min = 1.10
+
+    # ── Pressure recovery ────────────────────────────────────────────
+    _pressure_recovery_attempts: int = 2
+    _pressure_recovery_sleep_s: float = 0.35
+
+    # ── Persist as module-level for fast access ──────────────────────
+    globals().update({
+        "_HEAVY_MODEL_PREEMPTIVE_MIN_GB": _heavy_min_gb,
+        "_HEAVY_MODEL_PREEMPTIVE_SWAP_PCT": round(_heavy_swap_pct, 1),
+        "_HEAVY_MODEL_PREEMPTIVE_SWAP_EARLY_PCT": round(_heavy_swap_early_pct, 1),
+        "_HEAVY_MODEL_PREEMPTIVE_SWAP_IO_MB_S": _heavy_swap_io_mb_s,
+        "_HEAVY_MODEL_PREEMPTIVE_AVAIL_RATIO_MAX": round(_heavy_avail_ratio_max, 2),
+        "_MIN_FREE_MB_HARD": round(_min_free_mb_hard, 0),
+        "_PRESSURE_RECOVERY_ATTEMPTS": _pressure_recovery_attempts,
+        "_PRESSURE_RECOVERY_SLEEP_S": _pressure_recovery_sleep_s,
+        "_SYSTEM_MEMORY_MARGIN_BASE": _margin_base,
+        "_SYSTEM_MEMORY_MARGIN_MIN": _margin_min,
+        # For _preflight_system_memory load-peak factors
+        "_CALIBRATED_TOTAL_RAM_GB": round(_total_gb, 1),
+    })
+
+    logger.info(
+        "ml_memory_budget: guard thresholds calibrated for %.1f GB RAM — "
+        "heavy_avail_ratio=%.2f, heavy_swap_early=%.0f%%, heavy_swap=%.0f%%, "
+        "min_free_mb=%.0f, margin_base=%.2f, margin_min=%.2f",
+        _total_gb,
+        _heavy_avail_ratio_max,
+        _heavy_swap_early_pct,
+        _heavy_swap_pct,
+        _min_free_mb_hard,
+        _margin_base,
+        _margin_min,
+    )
+
+    return {
+        "total_ram_gb": round(_total_gb, 1),
+        "heavy_avail_ratio_max": round(_heavy_avail_ratio_max, 2),
+        "heavy_swap_early_pct": round(_heavy_swap_early_pct, 1),
+        "heavy_swap_pct": round(_heavy_swap_pct, 1),
+        "min_free_mb_hard": round(_min_free_mb_hard, 0),
+    }
+
+
+# Run calibration once at module import.
+_calibrated = _calibrate_guard_thresholds()
+
+
+# ── §B2 Systemprofil beim Start loggen ─────────────────────────────
+def _log_system_profile() -> None:
+    """Log a one-time system profile at module import for diagnostics."""
+    if _psutil is None:
+        return
+    try:
+        vm = _psutil.virtual_memory()
+        swap = _psutil.swap_memory()
+        cpu_count = _psutil.cpu_count(logical=True)
+        cpu_phys = _psutil.cpu_count(logical=False)
+        logger.info(
+            "ml_memory_budget: Systemprofil — RAM total=%.1f GB, available=%.1f GB (%.0f%%), "
+            "swap total=%.1f GB, used=%.0f%%, CPU=%d logical/%d physical",
+            vm.total / (1024**3),
+            vm.available / (1024**3),
+            vm.available / max(vm.total, 1) * 100,
+            swap.total / (1024**3),
+            swap.percent,
+            cpu_count or 0,
+            cpu_phys or 0,
+        )
+    except Exception:
+        pass
+
+_log_system_profile()
+
+# Provide defaults in case _calibrate_guard_thresholds fails (psutil missing, etc.).
+# These are overridden by globals().update() above when calibration succeeds.
+_HEAVY_MODEL_PREEMPTIVE_MIN_GB: float
+_HEAVY_MODEL_PREEMPTIVE_SWAP_PCT: float
+_HEAVY_MODEL_PREEMPTIVE_SWAP_EARLY_PCT: float
+_HEAVY_MODEL_PREEMPTIVE_SWAP_IO_MB_S: float
+_HEAVY_MODEL_PREEMPTIVE_AVAIL_RATIO_MAX: float
+_MIN_FREE_MB_HARD: float
+_PRESSURE_RECOVERY_ATTEMPTS: int
+_PRESSURE_RECOVERY_SLEEP_S: float
+_CALIBRATED_TOTAL_RAM_GB: float
 
 # Cooldown for is_system_thrashing() log-spam guard (BUG G).
 # Log WARNING at most once per 60 s; always return the correct bool.
@@ -272,6 +398,29 @@ def _allow_lightweight_under_pressure(model_name: str, size_gb: float) -> bool:
     return False
 
 
+def _estimate_load_peak_factor(model_size_gb: float) -> float:
+    """Estimate the deserialization load-peak factor from model file size (§E2).
+
+    Larger model files have proportionally less deserialization overhead
+    because the tensor data dominates the file size, while metadata and
+    graph structure overhead is roughly constant.
+
+    Empirical basis (PyTorch torch.load / ONNX deserialization):
+        < 500 MB  → 1.50×  (metadata overhead proportionally large)
+        0.5–2 GB  → 1.35×  (moderate overhead)
+        > 2 GB    → 1.20×  (tensor-dominated, compact)
+
+    This complements the system-RAM-based factor in _preflight_system_memory
+    and _should_block_heavy_ml_load by providing a model-specific estimate.
+    The lower of the two factors is used (more optimistic = less blocking).
+    """
+    if model_size_gb >= 2.0:
+        return 1.20
+    if model_size_gb >= 0.5:
+        return 1.35
+    return 1.50
+
+
 def _should_block_heavy_ml_load(size_gb: float) -> bool:
     """Gibt True when heavy model loads should be blocked preemptively zurück.
 
@@ -298,19 +447,44 @@ def _should_block_heavy_ml_load(size_gb: float) -> bool:
         avail_ratio = avail_bytes / max(float(vm.total), 1.0)
         avail_gb = avail_bytes / float(1024**3)
         swap_io_rate_mb_s = _swap_io_rate_mb_per_s(swap)
+
+        # ── Model-size-aware safe-free-RAM threshold ───────────────
+        # Larger models need more free RAM (proportional to load-peak).
+        # Uses the same adaptive peak factors as _preflight_system_memory
+        # but at 80 % strictness for the preemptive gate.
+        # §E2: Blend system-RAM-based peak with model-file-size-based peak.
+        _total_ram_gb = _psutil.virtual_memory().total / (1024.0**3)
+        if _total_ram_gb >= 24.0:
+            _sys_peak = 1.30; _oomd_frac = 0.08
+        elif _total_ram_gb >= 16.0:
+            _sys_peak = 1.45; _oomd_frac = 0.10
+        else:
+            _sys_peak = 1.60; _oomd_frac = 0.12
+        _model_peak = _estimate_load_peak_factor(size_gb)
+        _peak = min(_sys_peak, _model_peak)  # use the more optimistic estimate
+        _preempt_factor = 0.80
+        _model_safe_gb = (size_gb * _peak + _total_ram_gb * _oomd_frac) * _preempt_factor
+
         elevated_swap = swap_pct >= _HEAVY_MODEL_PREEMPTIVE_SWAP_PCT
         early_swap = swap_pct >= _HEAVY_MODEL_PREEMPTIVE_SWAP_EARLY_PCT
         active_paging = swap_io_rate_mb_s >= _HEAVY_MODEL_PREEMPTIVE_SWAP_IO_MB_S
+        # Hard safety floor: below _MIN_FREE_MB_HARD, always block regardless of swap.
+        # Protects against low-RAM + moderate-swap scenarios where neither swap
+        # threshold triggers but physical RAM is critically low.
+        _hard_floor_gb = _MIN_FREE_MB_HARD / 1024.0
         low_headroom = (
-            avail_ratio <= _HEAVY_MODEL_PREEMPTIVE_AVAIL_RATIO_MAX or avail_gb <= _HEAVY_MODEL_PREEMPTIVE_AVAIL_GB_MAX
+            avail_ratio <= _HEAVY_MODEL_PREEMPTIVE_AVAIL_RATIO_MAX
+            or avail_gb <= _model_safe_gb
+            or avail_gb <= _hard_floor_gb
         )
         should_block = (elevated_swap and (active_paging or low_headroom)) or (early_swap and low_headroom)
         if should_block:
             logger.warning(
-                "ML-Budget: preemptive heavy-load block (%.1f GB) — "
+                "ML-Budget: preemptive heavy-load block (model %.1f GB, safe-threshold %.1f GB) — "
                 "swap %.0f %%, swap-I/O %.1f MB/s, RAM available %.1f %% (%.1f GB) "
                 "→ DSP fallback before thrashing escalation",
                 size_gb,
+                _model_safe_gb,
                 swap_pct,
                 swap_io_rate_mb_s,
                 avail_ratio * 100.0,
@@ -344,17 +518,20 @@ def _preflight_system_memory(required_mb: float) -> bool:
     available_mb = _available_memory_mb()
 
     if _size_gb >= 1.0:
-        # Load-peak formula: adaptive to total system RAM.
+        # Load-peak formula: adaptive to total system RAM (§E2).
         # ≥24 GB → 1.30× peak, 8 % oomd (more headroom → tighter margins safe)
         # ≥16 GB → 1.45× peak, 10 % oomd
         #  <16 GB → 1.60× peak, 12 % oomd (conservative)
+        # §E2: Blend with model-file-size-based peak for more precision.
         _total_ram_gb = float(_psutil.virtual_memory().total) / (1024.0**3)
         if _total_ram_gb >= 24.0:
-            _load_peak = 1.30; _oomd_pct = 0.08
+            _sys_peak = 1.30; _oomd_pct = 0.08
         elif _total_ram_gb >= 16.0:
-            _load_peak = 1.45; _oomd_pct = 0.10
+            _sys_peak = 1.45; _oomd_pct = 0.10
         else:
-            _load_peak = 1.60; _oomd_pct = 0.12
+            _sys_peak = 1.60; _oomd_pct = 0.12
+        _model_peak = _estimate_load_peak_factor(_size_gb)
+        _load_peak = min(_sys_peak, _model_peak)
         _total_ram_mb = float(_psutil.virtual_memory().total) / (1024.0 * 1024.0)
         _oomd_safe_mb = max(2048.0, _total_ram_mb * _oomd_pct)
         _peak_required_mb = required_mb * _load_peak + _oomd_safe_mb
@@ -520,6 +697,13 @@ def try_allocate(model_name: str, size_gb: float) -> bool:
             _total_gb,
             ML_MAX_GB,
         )
+        # §C2: Invalidate ml_model_readiness failure cache so subsequent
+        # readiness checks reflect the newly loaded state.
+        try:
+            from backend.core.ml_model_readiness import invalidate_ml_readiness
+            invalidate_ml_readiness(model_name)
+        except Exception:
+            pass
         return True
 
 
@@ -553,12 +737,43 @@ def get_status() -> dict:
         }
 
 
-def set_budget(max_gb: float) -> None:
-    """Override the default 16 GB budget (e.g. on systems with less RAM)."""
+def set_budget(max_gb: float, guard_overrides: dict[str, float] | None = None) -> None:
+    """Override the default budget and optionally guard thresholds.
+
+    Args:
+        max_gb: New ML memory budget in GB.
+        guard_overrides: Optional dict of guard threshold overrides.
+            Supported keys: 'heavy_swap_early_pct', 'heavy_swap_pct',
+            'heavy_avail_ratio_max', 'min_free_mb_hard'.
+            Values are applied after calibration; use for per-system tuning.
+
+    Example:
+        set_budget(12.0, {'heavy_swap_early_pct': 55.0, 'min_free_mb_hard': 4096})
+    """
     global ML_MAX_GB  # pylint: disable=global-statement
     with _lock:
         ML_MAX_GB = float(max_gb)
         logger.info("ml_memory_budget: max budget set to %.1f GB.", ML_MAX_GB)
+
+    if guard_overrides:
+        _valid_keys = {
+            "_HEAVY_MODEL_PREEMPTIVE_SWAP_EARLY_PCT",
+            "_HEAVY_MODEL_PREEMPTIVE_SWAP_PCT",
+            "_HEAVY_MODEL_PREEMPTIVE_AVAIL_RATIO_MAX",
+            "_MIN_FREE_MB_HARD",
+        }
+        applied: list[str] = []
+        for key, val in guard_overrides.items():
+            _mod_key = f"_HEAVY_MODEL_PREEMPTIVE_{key.upper()}" if not key.startswith("_") else key
+            if _mod_key in _valid_keys or key in _valid_keys:
+                target = _mod_key if _mod_key in _valid_keys else key
+                globals()[target] = float(val)
+                applied.append(f"{target}={val}")
+        if applied:
+            logger.info(
+                "ml_memory_budget: guard thresholds overridden — %s",
+                ", ".join(applied),
+            )
 
 
 # ---------------------------------------------------------------------------

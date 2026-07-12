@@ -106,6 +106,23 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+# ── §C3 Circuit-Breaker: Polyphonic consensus degradation ────────────
+# When polyphonic estimation fails with consensus=0 on N consecutive
+# chunks, skip the expensive polyphonic estimator for the remainder of
+# the run.  Cassette/tape material with insufficient polyphonic content
+# (T=1–14, no voiced voices) triggers identical pYIN fallback every time,
+# wasting CPU on a known-lost cause.
+_POLYPHONIC_CONSECUTIVE_ZERO_CONSENSUS: int = 0
+_POLYPHONIC_CB_MAX_FAILURES: int = 3  # Max consecutive zero-consensus chunks before skipping
+_POLYPHONIC_CB_ACTIVE: bool = False   # True = polyphonic estimator permanently skipped for this run
+
+
+def _reset_polyphonic_circuit_breaker() -> None:
+    """Reset circuit breaker state at the start of each restoration run."""
+    global _POLYPHONIC_CONSECUTIVE_ZERO_CONSENSUS, _POLYPHONIC_CB_ACTIVE
+    _POLYPHONIC_CONSECUTIVE_ZERO_CONSENSUS = 0
+    _POLYPHONIC_CB_ACTIVE = False
+
 
 class WowFlutterFix(PhaseInterface):
     """Professional Wow & Flutter Correction with YIN pitch detection and Phase Vocoder time-stretching."""
@@ -464,25 +481,35 @@ class WowFlutterFix(PhaseInterface):
         confidence: np.ndarray = np.zeros(1)
 
         if quality_mode in ["quality", "maximum"] and not use_lightweight:
-            try:
-                from backend.core.hybrid.hybrid_wow_flutter import (
-                    PolyphonicSpeedCurveEstimator,
-                )
-
-                _poly_est = PolyphonicSpeedCurveEstimator()
-                pitch_trajectory, confidence = _poly_est.estimate(mono, sample_rate)
-                _poly_applied = True
+            # §C3 Circuit-Breaker: skip polyphonic estimator after N consecutive
+            # zero-consensus failures (e.g. cassette with no polyphonic content).
+            global _POLYPHONIC_CB_ACTIVE, _POLYPHONIC_CONSECUTIVE_ZERO_CONSENSUS
+            if _POLYPHONIC_CB_ACTIVE:
                 logger.info(
-                    "Phase 12 polyphoner Konsensus: T=%d Frames, material=%s",
-                    len(pitch_trajectory),
-                    material.value,
+                    "Phase 12: Polyphoner Pfad per Circuit-Breaker deaktiviert "
+                    "(nach %d konsekutiven Zero-Consensus-Chunks) — pYIN direkt",
+                    _POLYPHONIC_CB_MAX_FAILURES,
                 )
-            except Exception as _poly_exc:
-                _poly_fallback = True
-                logger.warning(
-                    "PolyphonicSpeedCurveEstimator fehlgeschlagen (%s) — ML-Hybrid-Fallback",
-                    _poly_exc,
-                )
+            else:
+                try:
+                    from backend.core.hybrid.hybrid_wow_flutter import (
+                        PolyphonicSpeedCurveEstimator,
+                    )
+
+                    _poly_est = PolyphonicSpeedCurveEstimator()
+                    pitch_trajectory, confidence = _poly_est.estimate(mono, sample_rate)
+                    _poly_applied = True
+                    logger.info(
+                        "Phase 12 polyphoner Konsensus: T=%d Frames, material=%s",
+                        len(pitch_trajectory),
+                        material.value,
+                    )
+                except Exception as _poly_exc:
+                    _poly_fallback = True
+                    logger.warning(
+                        "PolyphonicSpeedCurveEstimator fehlgeschlagen (%s) — ML-Hybrid-Fallback",
+                        _poly_exc,
+                    )
 
         # ML-Hybrid only if polyphonic path did not succeed and resources permit
         use_ml_hybrid = (
@@ -555,6 +582,21 @@ class WowFlutterFix(PhaseInterface):
                 int(np.sum(np.asarray(pitch_trajectory) > 0.0)),
                 int(np.sum(np.asarray(confidence) > 0.15)),
             )
+            # §C3: Track consecutive zero-consensus — circuit-breaker.
+            _consensus_frames = int(np.sum(~np.isnan(
+                np.full(pitch_trajectory.size, np.nan)
+            ))) if pitch_trajectory.size > 0 else 0
+            if _consensus_frames == 0:
+                _POLYPHONIC_CONSECUTIVE_ZERO_CONSENSUS += 1
+                if _POLYPHONIC_CONSECUTIVE_ZERO_CONSENSUS >= _POLYPHONIC_CB_MAX_FAILURES:
+                    _POLYPHONIC_CB_ACTIVE = True
+                    logger.warning(
+                        "Phase 12 Circuit-Breaker: %d konsekutive Zero-Consensus-Chunks — "
+                        "polyphoner Pfad für diesen Lauf deaktiviert",
+                        _POLYPHONIC_CONSECUTIVE_ZERO_CONSENSUS,
+                    )
+            else:
+                _POLYPHONIC_CONSECUTIVE_ZERO_CONSENSUS = 0
             pitch_trajectory, confidence = self._estimate_pitch_yin(mono, sample_rate)
             _poly_applied = False
             _poly_fallback = True

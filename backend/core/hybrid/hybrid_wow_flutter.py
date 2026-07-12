@@ -131,10 +131,16 @@ class PolyphonicSpeedCurveEstimator:
             from plugins.basicpitch_plugin import get_basicpitch_plugin
 
             self._bp = get_basicpitch_plugin()  # type: ignore[assignment]
-            logger.info(
-                "PolyphonicSpeedCurveEstimator: BasicPitch geladen (model_loaded=%s)",
-                getattr(self._bp, "_model_loaded", False),
-            )
+            _was_loaded = getattr(self._bp, "_model_loaded", False)
+            if _was_loaded:
+                logger.debug(
+                    "PolyphonicSpeedCurveEstimator: BasicPitch bereits geladen (model_loaded=True)"
+                )
+            else:
+                logger.info(
+                    "PolyphonicSpeedCurveEstimator: BasicPitch geladen (model_loaded=%s)",
+                    _was_loaded,
+                )
         except Exception as exc:
             logger.warning("BasicPitch nicht verfügbar (%s) — pYIN-Fallback aktiv", exc)
             self._bp = None
