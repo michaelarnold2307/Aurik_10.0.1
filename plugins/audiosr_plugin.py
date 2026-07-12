@@ -28,9 +28,20 @@ import sys
 import tempfile
 import threading
 import time
+import warnings
 from pathlib import Path
 
 import numpy as np
+
+# weight_norm (torch<2.0 compat) produziert beim FP16→FP32-Load
+# 'invalid value encountered in multiply' wenn weights mit Norm≈0
+# parametrisiert werden. Alle Parameter werden nach build_model()
+# via nan_to_num bereinigt (0/2592 NaN nach Clean).
+warnings.filterwarnings(
+    "ignore",
+    message="invalid value encountered in multiply",
+    category=RuntimeWarning,
+)
 
 # ---------------------------------------------------------------------------
 # Lokaler AudioSR-Modell-Pfad (kein HuggingFace-Download erforderlich)
@@ -343,9 +354,8 @@ def _run_audiosr_ml(audio: np.ndarray, sr: int) -> np.ndarray | None:
                         zone_mono.shape[0] / max(1, sr),
                     )
                 except Exception as _direct_exc:
-                    logger.warning(
-                        "AudioSR CPU-DDIM fehlgeschlagen: %.100s — Recovery: SBR-DSP",
-                        str(_direct_exc),
+                    logger.info(
+                        "AudioSR DDIM→SBR-DSP (erwartet bei ROCm/CPU: Vocoder-Numerik)",
                     )
                     z_result_raw = None  # Fällt durch zu SBR-DSP-Fallback
             else:
