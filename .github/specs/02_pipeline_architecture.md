@@ -4906,3 +4906,46 @@ else:
 
 **Erwartetes Ergebnis**: Keine WARNING-Flut bei Cassette-Restaurierung. Echte
 LEVEL_COLLAPSE in anderen Phasen bleibt als WARNING erhalten.
+
+### v10-Amendment (2026-07-12)
+
+**Phase-Fazit-System** (v10.0.3):
+Jede Phase loggt ein menschenlesbares Fazit mit 0-10 Score:
+```
+┌─ Phase 03 (Entrauschen) ───────────────────────────────────┐
+│ ✅ Rauschen um 12.3 dB reduziert                            │
+│ 🏆 Score: 8.5 / 10.0  (SNR: 18→30 dB, ML: ja)              │
+└─────────────────────────────────────────────────────────────┘
+```
+- `backend/core/phase_fazit.py`: `log_phase_fazit()` + `log_restoration_summary()`
+- Integration in `create_phase_result()` via neue `phase_id`/`phase_name` Parameter
+- Score = `quality_estimate × 10`
+- Restaurations-Zusammenfassung mit Tonträgerkette als Geschichte in Klartext
+
+**Laienfreundliche Kommunikation** (v10.0.3):
+- `backend/core/phase_names.py`: Mapping phase_id → deutsche Anzeigenamen
+- Log-Meldungen: `▶ phase_03_denoise (Entrauschen) startet (2/42)`
+- Post-Restoration: Box mit Qualitäts-Label (🏆 Weltklasse/✅ Ausgezeichnet/👍 Sehr gut)
+- Qualitäts-Labels: 95%+ 🏆, 85%+ ✅, 70%+ 👍, 50%+ ⚡, 30%+ ⚠️
+
+**MediumDetector SOTA Knowledge Base** (v10.0.3):
+- `_MEDIUM_ORDER`: 20 Tonträger chronologisch (1877→2020)
+- `_KNOWN_CHAINS`: 76 Transfer-Ketten-Templates
+- `_GENRE_EARLIEST_ORDER`: 195 Genres × 14 Ära-Gruppen
+- `_MEDIUM_EXCLUDES_GENRES`: 8 Medien × ausgeschlossene Genres
+- `_MEDIUM_PREFERRED_GENRES`: 13 Medien × typische Genres
+- `_LANGUAGE_MEDIUM_BONUS`: 7 Sprachen × Medium-Präferenzen
+- `_STUDIO_FORMAT_INDICATORS`: 21 Studio-Charakteristiken
+- `_MEDIUM_DISPLAY_NAMES`: 22 deutsche GUI-Namen
+- `get_genre_constraints(chain)`: Bidirektionale API für Genre-Validierung
+
+**Chronologische Ketten-Sortierung** (v10.0.3):
+- `_MEDIUM_ORDER` korrigiert: reel_tape(6) vor vinyl(7)
+- Chronologische Sortierung im MediumDetector (line ~2530)
+- "No backward jumps"-Gate entfernt (blockierte sekundäre Träger)
+- Sortierung nach Deep-Transfer-Chain-Injection in pre_analysis
+
+**ML-Readiness Flood-Control** (v10.0.3):
+- `_FAILURE_CACHE`: WARNING nur einmal pro model+phase
+- `clear_readiness_cache()` für neuen Restoration-Run
+- ONNX MIOPEN-Warnungen unterdrückt (50+ Zeilen pro Load)
