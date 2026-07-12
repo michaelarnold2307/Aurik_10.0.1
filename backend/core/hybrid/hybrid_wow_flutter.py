@@ -188,6 +188,24 @@ class PolyphonicSpeedCurveEstimator:
             if len(voiced) >= 4:
                 ref_hz[k] = float(np.median(voiced))
 
+        # Step 2b: Octave-align reference pitches across voices.
+        # BasicPitch may track harmonics (2f, 3f) instead of fundamentals
+        # for some voices.  Cluster ref_hz in log space, find the modal
+        # octave, then shift outlier voices to the same octave band.
+        _valid_refs = ref_hz[ref_hz > self._MIN_HZ]
+        if len(_valid_refs) >= 2:
+            _log_refs = np.log2(_valid_refs)
+            # Compute the median fractional (within-octave) position
+            _fracs = _log_refs - np.floor(_log_refs)
+            _cluster = float(np.median(_fracs))
+            for k in range(K):
+                if ref_hz[k] < self._MIN_HZ:
+                    continue
+                _log_r = np.log2(ref_hz[k])
+                _oct_shift = round(_log_r - _cluster)
+                if abs(_oct_shift) >= 1:
+                    ref_hz[k] = float(ref_hz[k] / (2.0 ** _oct_shift))
+
         # Step 3: per-frame per-voice deviation in cents
         deviation_cents = np.zeros((T, K), dtype=np.float32)
         voiced_mask = np.zeros((T, K), dtype=bool)
@@ -202,21 +220,38 @@ class PolyphonicSpeedCurveEstimator:
                 ratio = np.clip(ratio, 1e-6, 1e6)
                 deviation_cents[:, k] = np.where(valid, 1200.0 * np.log2(ratio), 0.0)
 
-        # Step 3b: Octave-error correction before clamping.
-        # BasicPitch may detect harmonics (2f, 3f) as separate notes,
-        # producing deviation_cents near ±1200 (one octave).  Fold these
-        # back into [−600, +600] cents so they can participate in the
-        # consensus instead of all being clamped to ±500.
+        # Step 3b: Octave-error correction with inter-voice consistency.
+        # After ref_hz alignment, per-frame octave errors can still occur
+        # (transient harmonics, noise).  For each frame with ≥2 voices:
+        # fold large deviations only if folding brings the voice closer
+        # to the consensus of the other voices.  Otherwise exclude it.
         _octave_mask = np.abs(deviation_cents) > 600.0
-        deviation_cents[_octave_mask] = (
-            (deviation_cents[_octave_mask] + 600.0) % 1200.0
-        ) - 600.0
+        for t in range(T):
+            _active = np.where(voiced_mask[t])[0]
+            if len(_active) < 2:
+                continue
+            for k in _active:
+                if not _octave_mask[t, k]:
+                    continue
+                _folded = ((deviation_cents[t, k] + 600.0) % 1200.0) - 600.0
+                _others = [j for j in _active if j != k]
+                if len(_others) == 0:
+                    deviation_cents[t, k] = _folded
+                    continue
+                _other_median = float(np.median(deviation_cents[t, _others]))
+                _dist_orig = abs(deviation_cents[t, k] - _other_median)
+                _dist_folded = abs(_folded - _other_median)
+                if _dist_folded < _dist_orig and abs(_folded) < 300.0:
+                    deviation_cents[t, k] = _folded
+                elif _dist_folded < _dist_orig:
+                    # Fold helps but still far off → outlier
+                    voiced_mask[t, k] = False
+                else:
+                    # Fold doesn't help → tracker failure, exclude
+                    voiced_mask[t, k] = False
 
         # Step 3c: Clamp per-voice deviations to ±500 cents before consensus.
-        # Values beyond ±500 cents (5 semitones) are physically implausible for
-        # wow/flutter and indicate pitch-tracker failure on specific frames.
-        # Clamping here prevents individual outlier frames from inflating the
-        # smoothed curve past the ±200 cents plausibility guard in Step 6b.
+        # Values beyond ±500 cents are physically implausible for wow/flutter.
         deviation_cents = np.clip(deviation_cents, -500.0, 500.0)
 
         # Step 4: confidence-weighted median per frame
