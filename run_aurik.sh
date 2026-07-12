@@ -26,7 +26,7 @@ LOG_FILE="$SCRIPT_DIR/logs/aurik_frontend.out"
 export MIOPEN_LOG_LEVEL="${MIOPEN_LOG_LEVEL:-1}"
 
 check_rocm_torchaudio_abi() {
-    "$VENV_GPU" - <<'PY'
+    "$VENV_PYTHON" - <<'PY'
 import sys
 
 try:
@@ -64,7 +64,7 @@ repair_rocm_torchaudio() {
     fi
 
     local torch_version rocm_tag
-    torch_version="$($VENV_GPU - <<'PY'
+    torch_version="$($VENV_PYTHON - <<'PY'
 import torch
 print(getattr(torch, "__version__", ""))
 PY
@@ -89,6 +89,7 @@ if [[ ! -x "$_GPU_PYTHON" ]]; then
 fi
 if [[ "${AURIK_FORCE_CPU:-0}" != "1" && -x "$_GPU_PYTHON" && -e "/dev/kfd" ]]; then
     VENV_PYTHON="$_GPU_PYTHON"
+    PIP_GPU="$(dirname "$VENV_PYTHON")/pip"
     _GPU_MODE="ROCm (AMD GPU)"
     # ORT's libonnxruntime_providers_rocm.so benötigt libhipblas.so.2, libhipfft.so etc.
     # Diese liegen im PyTorch-lib-Verzeichnis des ROCm-venv (ext4).
