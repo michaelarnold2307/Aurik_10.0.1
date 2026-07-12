@@ -287,63 +287,169 @@ class MediumDetector:
 
     # Zeitliche Ordnung für Kettensortierung (niedrig = früher)
     _MEDIUM_ORDER: dict[str, int] = {
-        # Disc-era (pre-1940s → 1950s)
-        "wax_cylinder": 0,
-        "lacquer_disc": 1,
-        "shellac": 2,
-        "wire_recording": 3,
-        # Vinyl-era (1950s → 1980s)
-        "vinyl": 4,
-        # Tape-era — reel_tape (recording) BEFORE cassette (consumer copy)
-        "reel_tape": 5,
-        "tape": 5,
-        "cassette": 6,
-        # Digital-era
-        "dat": 7,
-        "cd_digital": 8,
-        "minidisc": 9,
-        # Lossy-era
-        "mp3_low": 10,
-        "mp3_high": 10,
-        "aac": 10,
-        "streaming": 10,
+        # Pre-1900
+        "tinfoil_cylinder": 0,   # Edison 1877, experimentell
+        "wax_cylinder": 1,       # Edison 1888–1929, 2–4 min
+        # 1900–1950: Schellack-Ara
+        "lacquer_disc": 2,       # Acetat-Mitschnitt, 1930er+, Unikat
+        "shellac": 3,            # 78 rpm, 1898–1950er, 3–5 min/Seite
+        "shellac_vertical": 4,   # Pathe/Edison Diamond Disc, vertikaler Schnitt
+        "wire_recording": 5,     # Stahldraht, 1898–1950er
+        # 1950–1980: Vinyl- + Tape-Ara
+        "vinyl": 6,              # LP 1948, 45 rpm 1949
+        "reel_tape": 7,          # Studio-Master, 1935+ (ab 1950 marktbeherrschend)
+        "tape": 7,               # Alias
+        "cartridge_4track": 8,   # Fidelipac 1956, Radio
+        "cartridge_8track": 9,   # Lear 1964–1982, Consumer/Auto
+        "cassette": 10,          # Philips 1963, Compact Cassette
+        "elcaset": 11,           # Sony 1976–1980, Grosscassette
+        "playtape": 11,          # 1966–1970, Miniatur-Kassette
+        # 1980–2000: Digital-Ara
+        "cd_digital": 12,        # Compact Disc 1982
+        "dat": 13,               # Digital Audio Tape 1987
+        "dcc": 14,               # Digital Compact Cassette 1992–1996
+        "minidisc": 15,          # Sony MD 1992–2013, ATRAC
+        # 2000+: Lossy/Streaming
+        "mp3_high": 16,          # >=192 kbps
+        "mp3_low": 17,           # <192 kbps
+        "aac": 18,               # 1997+
+        "streaming": 19,         # Spotify/Apple Music/YouTube
+    }
+
+    # Genre -> fruehestes moegliches Aufnahmemedium (Order-Nummer).
+    # Ein Genre kann nicht auf einem Traeger erscheinen, der aelter
+    # ist als das Genre selbst.
+    _GENRE_EARLIEST_ORDER: dict[str, int] = {
+        "classical": 1,          # wax_cylinder (1900)
+        "opera": 1,
+        "ragtime": 1,
+        "jazz": 3,               # shellac (1920s)
+        "blues": 3,
+        "country": 3,
+        "folk": 3,
+        "gospel": 3,
+        "swing": 3,
+        "big_band": 3,
+        "latin": 3,
+        "samba": 3,
+        "bossa_nova": 4,
+        "rock": 6,               # vinyl (1950s)
+        "rock_n_roll": 6,
+        "schlager": 6,           # Deutscher Schlager
+        "german_schlager": 6,
+        "pop": 6,
+        "rnb": 6,
+        "soul": 6,
+        "funk": 6,
+        "disco": 6,
+        "reggae": 6,
+        "punk": 8,               # cassette (1970s)
+        "hip_hop": 9,            # cartridge_8track/cassette (1980s)
+        "rap": 9,
+        "electronic": 9,
+        "dance": 9,
+        "house": 9,
+        "techno": 10,            # cassette (late 1980s)
+        "metal": 8,
+        "heavy_metal": 8,
+        "thrash_metal": 9,
+        "grunge": 10,
+        "alternative": 10,
+        "indie": 10,
+        "ambient": 10,
+        "new_age": 10,
+        "trip_hop": 12,          # cd_digital (1990s)
+        "drum_and_bass": 12,
+        "dubstep": 16,           # mp3_high (2000s)
+        "edm": 16,
+        "trap": 16,
     }
 
     # ── Transfer chain knowledge base ────────────────────────────────
     # Known plausible chains.  The detector matches detected sources
     # against these templates and prefers chains that match known patterns.
     _KNOWN_CHAINS: list[list[str]] = [
-        # Studio → Release → Consumer → Digital
+        # ═══ Studio → Veroeffentlichung → Kopie → Digital ═══
         ["reel_tape", "vinyl", "cassette", "mp3_low"],
         ["reel_tape", "vinyl", "cassette", "mp3_high"],
+        ["reel_tape", "vinyl", "cartridge_8track", "mp3_low"],
         ["reel_tape", "vinyl", "mp3_low"],
         ["reel_tape", "vinyl", "mp3_high"],
         ["reel_tape", "vinyl", "cd_digital"],
+        ["reel_tape", "vinyl", "cd_digital", "mp3_high"],
         ["reel_tape", "cassette", "mp3_low"],
         ["reel_tape", "cassette", "mp3_high"],
-        # Vinyl → Consumer → Digital
+        ["reel_tape", "cassette", "cd_digital"],
+        ["reel_tape", "dat", "cd_digital"],
+        # ═══ Vinyl → Consumer → Digital ═══
         ["vinyl", "cassette", "mp3_low"],
         ["vinyl", "cassette", "mp3_high"],
+        ["vinyl", "cartridge_8track", "mp3_low"],
+        ["vinyl", "cartridge_8track", "cassette", "mp3_low"],
         ["vinyl", "mp3_low"],
         ["vinyl", "mp3_high"],
         ["vinyl", "cd_digital"],
-        # Shellac-era → Modern
-        ["shellac", "vinyl", "cassette", "mp3_low"],
-        ["shellac", "vinyl", "mp3_low"],
-        ["shellac", "vinyl", "cd_digital"],
+        ["vinyl", "cd_digital", "mp3_high"],
+        ["vinyl", "cassette", "cd_digital"],
+        ["vinyl", "dat"],
+        ["vinyl", "minidisc"],
+        # ═══ Schellack-Ara → Modern ═══
+        ["wax_cylinder", "shellac", "vinyl", "cassette", "mp3_low"],
         ["wax_cylinder", "shellac", "vinyl", "mp3_low"],
+        ["wax_cylinder", "shellac", "vinyl", "cd_digital"],
+        ["wax_cylinder", "lacquer_disc", "vinyl", "mp3_low"],
+        ["shellac", "vinyl", "cassette", "mp3_low"],
+        ["shellac", "vinyl", "cassette", "mp3_high"],
+        ["shellac", "vinyl", "mp3_low"],
+        ["shellac", "vinyl", "mp3_high"],
+        ["shellac", "vinyl", "cd_digital"],
+        ["shellac", "vinyl", "reel_tape", "mp3_low"],
         ["lacquer_disc", "vinyl", "cassette", "mp3_low"],
-        # Pure digital chains
+        ["lacquer_disc", "vinyl", "mp3_low"],
+        ["shellac_vertical", "shellac", "vinyl", "mp3_low"],
+        # ═══ Wire Recording → Modern ═══
+        ["wire_recording", "reel_tape", "vinyl", "mp3_low"],
+        ["wire_recording", "vinyl", "cassette", "mp3_low"],
+        ["wire_recording", "reel_tape", "cd_digital"],
+        # ═══ Live/Radio ═══
+        ["lacquer_disc", "reel_tape", "vinyl", "mp3_low"],
+        ["reel_tape", "cassette", "cartridge_4track", "mp3_low"],
+        ["vinyl", "cartridge_4track", "reel_tape", "mp3_low"],
+        # ═══ Digitale Ketten ═══
         ["cd_digital", "mp3_high"],
         ["cd_digital", "mp3_low"],
         ["cd_digital", "aac"],
+        ["cd_digital", "streaming"],
+        ["dat", "cd_digital", "mp3_high"],
+        ["dat", "mp3_high"],
+        ["dcc", "mp3_high"],
+        ["dcc", "cd_digital"],
+        ["minidisc", "mp3_high"],
+        ["minidisc", "cd_digital"],
         ["streaming", "mp3_low"],
-        # Simple chains
+        # ═══ Exotische/Historische Ketten ═══
+        ["tinfoil_cylinder", "wax_cylinder", "shellac", "vinyl", "mp3_low"],
+        ["shellac_vertical", "vinyl", "mp3_low"],
+        ["cartridge_8track", "cassette", "mp3_low"],
+        ["elcaset", "cassette", "cd_digital"],
+        ["playtape", "cassette", "mp3_low"],
+        # ═══ Einfache Ketten ═══
         ["vinyl"],
         ["cassette"],
         ["cd_digital"],
         ["reel_tape"],
         ["shellac"],
+        ["wax_cylinder"],
+        ["lacquer_disc"],
+        ["wire_recording"],
+        ["cartridge_8track"],
+        ["dat"],
+        ["dcc"],
+        ["minidisc"],
+        ["mp3_low"],
+        ["mp3_high"],
+        ["aac"],
+        ["streaming"],
     ]
 
     # ── Bayesian Material-Modelle (Gaussian μ, σ) ────────────────────
@@ -569,23 +675,43 @@ class MediumDetector:
     ]
 
     
-    def _best_matching_chain(self, detected: list[str]) -> list[str] | None:
+    def _best_matching_chain(
+        self, detected: list[str], genre: str | None = None
+    ) -> list[str] | None:
         """Find the best-matching known chain for a set of detected materials.
 
         Returns the known chain that maximally overlaps with detected materials,
-        respecting chronological order.  Used to correct detection-order chains
-        into technologically plausible ones (e.g. reel_tape→vinyl→cassette
-        instead of vinyl→cassette→reel_tape).
+        respecting chronological order and genre-era compatibility.
+        Used to correct detection-order chains into technologically plausible ones
+        (e.g. reel_tape→vinyl→cassette instead of vinyl→cassette→reel_tape).
+
+        Genre-awareness: a genre cannot appear on media that predate its existence
+        (e.g. Hip-Hop on shellac → penalty, Hip-Hop on cassette → valid).
         """
         if not detected or len(detected) <= 1:
             return None
         detected_set = set(detected)
         best_match = None
         best_score = 0
+
+        # Genre-era validation
+        _genre_earliest = self._GENRE_EARLIEST_ORDER.get(
+            (genre or "").lower().replace(" ", "_").replace("-", "_"), 0
+        )
+
         for chain in self._KNOWN_CHAINS:
             chain_set = set(chain)
             overlap = len(detected_set & chain_set)
-            # Prefer chains where detected materials appear in the correct order
+
+            # Genre-era penalty: media too early for the genre lose points
+            genre_penalty = 0
+            if genre and _genre_earliest > 0:
+                for m in detected:
+                    medium_order = self._MEDIUM_ORDER.get(m, 0)
+                    if medium_order < _genre_earliest:
+                        genre_penalty += 1
+
+            # Prefer chains where detected materials appear in correct order
             order_score = 0
             last_idx = -1
             for m in detected:
@@ -594,12 +720,12 @@ class MediumDetector:
                     if idx > last_idx:
                         order_score += 1
                     last_idx = idx
-            total = overlap * 2 + order_score
+
+            total = overlap * 2 + order_score + (1 if genre_penalty == 0 else -genre_penalty)
             if total > best_score:
                 best_score = total
                 best_match = chain
         return best_match
-
     def _infer_analog_source_from_fingerprint(self, fp: SpectralFingerprint) -> list[tuple[str, float]]:
         """Infer analog source materials from physical fingerprint features.
 
