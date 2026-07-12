@@ -12,7 +12,13 @@ model is fully loaded and ready for inference.
 from __future__ import annotations
 
 import logging
+import os
+import warnings
 from typing import Callable
+
+# Suppress ONNX Runtime MIOPEN batch-norm epsilon warnings (harmless, ~50 lines per load).
+os.environ.setdefault("ORT_DISABLE_MIOPEN_BN_EPSILON_WARNINGS", "1")
+warnings.filterwarnings("ignore", message="ClampMiopenBatchNormEpsilon")
 
 logger = logging.getLogger(__name__)
 
@@ -25,11 +31,15 @@ def register_ml_check(model_id: str, check_fn: Callable[[], bool]) -> None:
     _MODEL_CHECKS[model_id] = check_fn
 
 
+# Flood control: after first failed check, cache result to avoid log spam
+_FAILURE_CACHE: dict[str, bool] = {}
+
 def check_ml_model_ready(model_id: str, phase_name: str = "") -> bool:
     """Return True if the named ML model loaded successfully.
 
     If the check fails (model unavailable / not loaded), a WARNING is
-    emitted with the model name and the calling phase.
+    emitted ONCE per model+phase combination.  Subsequent calls return
+    the cached result silently.
 
     Args:
         model_id:  Stable id registered via register_ml_check().
@@ -38,9 +48,14 @@ def check_ml_model_ready(model_id: str, phase_name: str = "") -> bool:
     Returns:
         True if the model is ready, False otherwise.
     """
+    cache_key = f"{model_id}:{phase_name}" if phase_name else model_id
+    
+    # Return cached result silently
+    if cache_key in _FAILURE_CACHE:
+        return _FAILURE_CACHE[cache_key]
+
     check_fn = _MODEL_CHECKS.get(model_id)
     if check_fn is None:
-        # Unregistered model — assume OK but warn about missing registration
         logger.debug("ML model '%s' has no registered readiness check", model_id)
         return True
 
@@ -53,6 +68,7 @@ def check_ml_model_ready(model_id: str, phase_name: str = "") -> bool:
             exc,
             f" — Phase {phase_name}" if phase_name else "",
         )
+        _FAILURE_CACHE[cache_key] = False
         return False
 
     if not ready:
@@ -61,13 +77,15 @@ def check_ml_model_ready(model_id: str, phase_name: str = "") -> bool:
             model_id,
             f" — Phase {phase_name}" if phase_name else "",
         )
+        _FAILURE_CACHE[cache_key] = False
         return False
 
     return True
 
 
-# ── Generic plugin probe helpers ──────────────────────────────────────
-
+def clear_readiness_cache() -> None:
+    """Clear the failure cache (call at start of each restoration run)."""
+    _FAILURE_CACHE.clear()
 def _probe_plugin(module_path: str, getter_name: str, attr: str | None = None) -> Callable[[], bool]:
     """Return a check function that probes a plugin's getter + optional attr."""
     def _check() -> bool:
