@@ -247,29 +247,77 @@ MUSICAL_GOALS = {
 # Material-adaptive Floor-Toleranzen (fragile Materialien haben niedrigere Erwartungen)
 MATERIAL_GOAL_FLOOR: dict[str, dict[str, float]] = {
     # Wachswalze (1877-1929): Frequenzbereich 200-5000 Hz, SNR ~20dB
-    "wax_cylinder":  {"authentizitaet": 0.55, "natuerlichkeit": 0.55, "brillanz": 0.40,
-                      "timbre": 0.50, "groove": 0.45, "artikulation": 0.55,
-                      "waerme": 0.60, "transparenz": 0.45, "kohaerenz": 0.50},
+    "wax_cylinder": {
+        "authentizitaet": 0.55,
+        "natuerlichkeit": 0.55,
+        "brillanz": 0.40,
+        "timbre": 0.50,
+        "groove": 0.45,
+        "artikulation": 0.55,
+        "waerme": 0.60,
+        "transparenz": 0.45,
+        "kohaerenz": 0.50,
+    },
     # Schellack (1895-1958): 100-8000 Hz, SNR ~30dB, RIAA-EQ fehlt
-    "shellac":       {"authentizitaet": 0.60, "natuerlichkeit": 0.60, "brillanz": 0.50,
-                      "timbre": 0.55, "groove": 0.55, "artikulation": 0.60,
-                      "waerme": 0.65, "transparenz": 0.50, "kohaerenz": 0.55},
+    "shellac": {
+        "authentizitaet": 0.60,
+        "natuerlichkeit": 0.60,
+        "brillanz": 0.50,
+        "timbre": 0.55,
+        "groove": 0.55,
+        "artikulation": 0.60,
+        "waerme": 0.65,
+        "transparenz": 0.50,
+        "kohaerenz": 0.55,
+    },
     # Vinyl (1948-): 20-20000 Hz, SNR ~60dB, RIAA-EQ
-    "vinyl":         {"authentizitaet": 0.65, "natuerlichkeit": 0.65, "brillanz": 0.60,
-                      "timbre": 0.65, "groove": 0.65, "artikulation": 0.65,
-                      "waerme": 0.70, "transparenz": 0.60, "kohaerenz": 0.65},
+    "vinyl": {
+        "authentizitaet": 0.65,
+        "natuerlichkeit": 0.65,
+        "brillanz": 0.60,
+        "timbre": 0.65,
+        "groove": 0.65,
+        "artikulation": 0.65,
+        "waerme": 0.70,
+        "transparenz": 0.60,
+        "kohaerenz": 0.65,
+    },
     # Tonband (1930-): 30-18000 Hz, SNR ~55dB, Bandsättigung
-    "tape":          {"authentizitaet": 0.65, "natuerlichkeit": 0.65, "brillanz": 0.60,
-                      "timbre": 0.65, "groove": 0.65, "artikulation": 0.65,
-                      "waerme": 0.70, "transparenz": 0.60, "kohaerenz": 0.65},
+    "tape": {
+        "authentizitaet": 0.65,
+        "natuerlichkeit": 0.65,
+        "brillanz": 0.60,
+        "timbre": 0.65,
+        "groove": 0.65,
+        "artikulation": 0.65,
+        "waerme": 0.70,
+        "transparenz": 0.60,
+        "kohaerenz": 0.65,
+    },
     # Kassette (1963-): 30-16000 Hz, SNR ~50dB, Dolby B/C/S
-    "cassette":      {"authentizitaet": 0.60, "natuerlichkeit": 0.60, "brillanz": 0.55,
-                      "timbre": 0.60, "groove": 0.60, "artikulation": 0.60,
-                      "waerme": 0.65, "transparenz": 0.55, "kohaerenz": 0.60},
+    "cassette": {
+        "authentizitaet": 0.60,
+        "natuerlichkeit": 0.60,
+        "brillanz": 0.55,
+        "timbre": 0.60,
+        "groove": 0.60,
+        "artikulation": 0.60,
+        "waerme": 0.65,
+        "transparenz": 0.55,
+        "kohaerenz": 0.60,
+    },
     # CD/DAT/High-Quality Digital (1982-): 20-20000 Hz, SNR >90dB
-    "cd_digital":    {"authentizitaet": 0.75, "natuerlichkeit": 0.75, "brillanz": 0.70,
-                      "timbre": 0.75, "groove": 0.75, "artikulation": 0.75,
-                      "waerme": 0.70, "transparenz": 0.75, "kohaerenz": 0.75},
+    "cd_digital": {
+        "authentizitaet": 0.75,
+        "natuerlichkeit": 0.75,
+        "brillanz": 0.70,
+        "timbre": 0.75,
+        "groove": 0.75,
+        "artikulation": 0.75,
+        "waerme": 0.70,
+        "transparenz": 0.75,
+        "kohaerenz": 0.75,
+    },
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -420,6 +468,114 @@ class SpecConstitution:
             # Der Schwellwert ist der Floor-Wert (niedriger als Default bei fragilen Trägern).
             thresholds[goal] = floor_val
         return thresholds
+
+    def compute_adaptive_thresholds(
+        self,
+        material: str = "unknown",
+        *,
+        effective_bandwidth_hz: float = 20000.0,
+        effective_snr_db: float = 60.0,
+        era_decade: int = 2000,
+    ) -> dict[str, float]:
+        """Berechnet Goal-Schwellwerte DYNAMISCH aus physikalischen Materialeigenschaften.
+
+        Statt statischer Hardcoded-Werte werden die Schwellwerte aus den
+        fundamentalen physikalischen Limits des Tonträgers abgeleitet:
+
+        - brillanz ∝ log(bandwidth): Wachswalze 5kHz→0.40, CD 20kHz→0.85
+        - transparenz ∝ SNR: Shellac 30dB→0.50, Digital 90dB→0.75
+        - authentizitaet: höher für ältere Aufnahmen (Era-Bonus)
+        - natuerlichkeit ∝ sqrt(bandwidth × SNR / reference)
+
+        Wissenschaftliche Basis:
+          - Nyquist-Shannon: maximale Frequenzauflösung = bandwidth/2
+          - Fletcher-Munson: Hörschwelle steigt unter 200Hz und über 8kHz
+          - Zwicker/Fastl: Psychoakustische Schärfe ∝ Bandbreite
+          - ITU-R BS.1770: Loudness-Wahrnehmung frequenzabhängig
+
+        Args:
+            material: Material-Typ (z.B. "wax_cylinder", "vinyl")
+            effective_bandwidth_hz: Effektive Bandbreite in Hz (-3dB Punkt)
+            effective_snr_db: Effektives SNR in dB
+            era_decade: Aufnahmedekade (z.B. 1920, 1965, 2000)
+
+        Returns:
+            dict von Goal-Name → physikalisch berechneter Schwellwert [0,1]
+        """
+        import math
+
+        # Normalisiere Bandbreite auf [200, 20000] Hz
+        bw_norm = max(0.0, min(1.0, (math.log10(max(effective_bandwidth_hz, 200.0)) - math.log10(200.0))
+                                  / (math.log10(20000.0) - math.log10(200.0))))
+
+        # Normalisiere SNR auf [15, 90] dB
+        snr_norm = max(0.0, min(1.0, (effective_snr_db - 15.0) / 75.0))
+
+        # Era-Faktor: ältere Aufnahmen haben inhärent weniger Bandbreite/SNR,
+        # daher sind die Schwellwerte niedriger (Authentizität wird höher gewichtet)
+        era_age = max(0, 2026 - era_decade) / 100.0  # 0.0 (heute) bis 1.26 (1877)
+        era_factor = max(0.0, min(1.0, 1.0 - era_age * 0.5))
+
+        # ── Physikalisch berechnete Schwellwerte ──
+        computed: dict[str, float] = {}
+
+        # brillanz: direkt proportional zur effektiven Bandbreite
+        # Wachswalze 5kHz→0.40, Schellack 8kHz→0.50, Vinyl 20kHz→0.85
+        computed["brillanz"] = round(0.40 + bw_norm * 0.45, 3)
+
+        # transparenz: proportional zu SNR (Rauschabstand bestimmt Durchsichtigkeit)
+        computed["transparenz"] = round(0.45 + snr_norm * 0.35, 3)
+
+        # authentizitaet: höher für historische Aufnahmen (Era-Bonus)
+        base_auth = 0.65 + snr_norm * 0.15
+        era_bonus = (1.0 - era_factor) * 0.15
+        computed["authentizitaet"] = round(min(0.85, base_auth + era_bonus), 3)
+
+        # natuerlichkeit: kombiniert Bandbreite + SNR
+        nat_base = 0.60 + (bw_norm * 0.5 + snr_norm * 0.5) * 0.20
+        computed["natuerlichkeit"] = round(min(0.85, nat_base), 3)
+
+        # waerme: inverse zu Bandbreite (schmalbandig = wärmer)
+        computed["waerme"] = round(0.75 - bw_norm * 0.15, 3)
+
+        # timbre: proportional zu Bandbreite (mehr Obertöne = reichere Klangfarbe)
+        computed["timbre"] = round(0.55 + bw_norm * 0.25, 3)
+
+        # artikulation: SNR-abhängig (höheres SNR = bessere Verständlichkeit)
+        computed["artikulation"] = round(0.55 + snr_norm * 0.25, 3)
+
+        # groove: leicht SNR-abhängig (Rauschen maskiert rhythmische Details)
+        computed["groove"] = round(0.55 + snr_norm * 0.15, 3)
+
+        # micro_dynamics: SNR-abhängig (Rauschen maskiert leise Details)
+        computed["micro_dynamics"] = round(0.50 + snr_norm * 0.25, 3)
+
+        # kohaerenz: Bandbreite-abhängig (mehr Frequenzen = mehr Kohärenz-Risiko)
+        computed["kohaerenz"] = round(0.60 + (1.0 - bw_norm) * 0.10, 3)
+
+        # tiefe: leicht Bandbreite-abhängig (mehr Höhen = mehr räumliche Tiefe)
+        computed["tiefe"] = round(0.55 + bw_norm * 0.15, 3)
+
+        # durchsetzung: SNR-abhängig
+        computed["durchsetzung"] = round(0.55 + snr_norm * 0.20, 3)
+
+        # fokus: SNR-abhängig (Rauschen verschmiert Fokus)
+        computed["fokus"] = round(0.55 + snr_norm * 0.15, 3)
+
+        # balance: relativ konstant, leicht SNR-abhängig
+        computed["balance"] = round(0.60 + snr_norm * 0.10, 3)
+
+        # stimmung: Era-abhängig (ältere Aufnahmen haben inhärent mehr "Stimmung")
+        computed["stimmung"] = round(0.55 + (1.0 - era_factor) * 0.15, 3)
+
+        # Physikalisches Limit: Floor = maximal erreichbarer Wert für dieses Material.
+        # Das dynamische Modell darf den Floor NICHT überschreiten.
+        floor = self._material_floors.get(material, {})
+        for goal in computed:
+            if goal in floor:
+                computed[goal] = min(computed[goal], floor[goal])
+
+        return computed
 
     def get_goal_weights(self) -> dict[str, float]:
         """Gibt Goal-Gewichte für Composite-Score zurück."""
