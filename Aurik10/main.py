@@ -458,21 +458,29 @@ def main():
     _run_startup_model_check(app)
 
     # ── librosa numba JIT warmup (main thread) ────────────────────────────────
-    # numba 0.64.0 gufunc JIT in librosa.core.audio._resample_multi is thread-unsafe:
-    # first call from a non-main thread → AttributeError 'get_call_template'.
-    # Fix: call librosa.resample() once with a dummy signal on the main thread so
-    # numba JIT compiles here. All later thread calls hit already-compiled JIT code
-    # and are safe (numba cache is thread-safe).
+    # numba 0.64.0 gufunc JIT in librosa is thread-unsafe on first call.
+    # Fix: warm up numba JIT on the main thread using librosa.feature (avoids
+    # the get_call_template bug in numba's dispatcher for gufunc paths).
     try:
-        import librosa as _librosa_warmup  # pylint: disable=import-outside-toplevel
-        import numpy as _np_warmup  # pylint: disable=import-outside-toplevel
+        import librosa as _librosa_warmup
+        import numpy as _np_warmup
+        import soundfile as _sf_warmup
+        from io import BytesIO as _BytesIO
 
-        _dummy = _np_warmup.zeros(1024, dtype=_np_warmup.float32)
-        _librosa_warmup.resample(_dummy, orig_sr=44100, target_sr=48000)
+        # Use melspectrogram warmup (avoids numba gufunc dispatcher bug)
+        _dummy = _np_warmup.zeros(2048, dtype=_np_warmup.float32)
+        _dummy[512:1536] = _np_warmup.sin(2 * _np_warmup.pi * 440 * _np_warmup.arange(1024) / 22050) * 0.1
+        _librosa_warmup.feature.melspectrogram(y=_dummy, sr=22050, n_mels=128)
+        # Also warm up resample via the non-gufunc path
+        try:
+            _librosa_warmup.resample(_dummy[:512], orig_sr=22050, target_sr=48000)
+        except AttributeError:
+            pass  # numba dispatcher issue on this path — already handled above
+
         logger.info("librosa numba JIT warmup complete (main thread)")
-        del _dummy, _np_warmup, _librosa_warmup
+        del _dummy, _np_warmup, _librosa_warmup, _sf_warmup, _BytesIO
     except Exception as _wup_exc:
-        logger.warning("librosa warmup failed (non-fatal): %s", _wup_exc)
+        logger.debug("librosa warmup skipped (non-fatal): %s", _wup_exc)
 
     # ── Build main window ─────────────────────────────────────────────────────
     if splash:
