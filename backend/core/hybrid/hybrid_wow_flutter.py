@@ -202,7 +202,17 @@ class PolyphonicSpeedCurveEstimator:
                 ratio = np.clip(ratio, 1e-6, 1e6)
                 deviation_cents[:, k] = np.where(valid, 1200.0 * np.log2(ratio), 0.0)
 
-        # Step 3b: Clamp per-voice deviations to ±500 cents before consensus.
+        # Step 3b: Octave-error correction before clamping.
+        # BasicPitch may detect harmonics (2f, 3f) as separate notes,
+        # producing deviation_cents near ±1200 (one octave).  Fold these
+        # back into [−600, +600] cents so they can participate in the
+        # consensus instead of all being clamped to ±500.
+        _octave_mask = np.abs(deviation_cents) > 600.0
+        deviation_cents[_octave_mask] = (
+            (deviation_cents[_octave_mask] + 600.0) % 1200.0
+        ) - 600.0
+
+        # Step 3c: Clamp per-voice deviations to ±500 cents before consensus.
         # Values beyond ±500 cents (5 semitones) are physically implausible for
         # wow/flutter and indicate pitch-tracker failure on specific frames.
         # Clamping here prevents individual outlier frames from inflating the
