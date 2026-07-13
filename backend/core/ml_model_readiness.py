@@ -220,7 +220,7 @@ def _register_all() -> None:
     # --- Voice Activity / Speech ---
     register_ml_check(
         "SileroVAD",
-        _probe_plugin("plugins.silero_vad_plugin", "get_silero_vad_plugin", "_model_loaded"),
+        _probe_plugin("plugins.silero_plugin", "get_silero_plugin", "_model_loaded"),
     )
     register_ml_check(
         "Whisper",
