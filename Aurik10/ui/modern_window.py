@@ -9826,6 +9826,121 @@ class DefectStoryWidget(QFrame):
         html = f"{summary}<br><table cellspacing='1' cellpadding='1' width='100%'>{header}{''.join(rows)}</table>"
         self._body.setText(html)
 
+class SlidePanel(QtWidgets.QWidget):
+    """Innovatives Auszieh-Panel für Player, Export und Dialoge.
+
+    Ersetzt aufpoppende Dialogfenster durch ein einheitliches,
+    von rechts einschiebendes Panel mit transparenter Glas-Optik.
+    """
+
+    PANEL_WIDTH = 420
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._visible = False
+        self._animation = None
+
+        self.setFixedWidth(0)
+        self.setStyleSheet("""
+            SlidePanel {
+                background: rgba(10,10,30,0.92);
+                border-left: 1px solid rgba(102,126,234,0.4);
+            }
+            QLabel {
+                color: #d0d8ff;
+                font-family: 'Segoe UI', sans-serif;
+                background: transparent;
+            }
+            QPushButton {
+                background: rgba(102,126,234,0.25);
+                color: #fff;
+                border: 1px solid rgba(102,126,234,0.6);
+                border-radius: 6px;
+                padding: 8px 20px;
+                font-size: 10pt;
+            }
+            QPushButton:hover {
+                background: rgba(102,126,234,0.50);
+            }
+        """)
+
+        self._layout = QtWidgets.QVBoxLayout(self)
+        self._layout.setContentsMargins(20, 16, 20, 16)
+        self._layout.setSpacing(12)
+
+        # Close button
+        close_btn = QtWidgets.QPushButton("✕ Schließen")
+        close_btn.setFixedHeight(32)
+        close_btn.clicked.connect(self.hide_panel)
+        self._layout.addWidget(close_btn, alignment=QtCore.Qt.AlignmentFlag.AlignRight)
+
+        # Stack for different panel contents
+        self._stack = QtWidgets.QStackedWidget()
+        self._stack.setStyleSheet("background: transparent;")
+        self._layout.addWidget(self._stack, 1)
+
+        # Pre-build panels
+        self._build_player_panel()
+        self._build_info_panel()
+
+    def _build_player_panel(self):
+        page = QtWidgets.QWidget()
+        layout = QtWidgets.QVBoxLayout(page)
+        layout.setSpacing(10)
+
+        title = QtWidgets.QLabel("<b style='font-size:13pt; color:#C8D8FF;'>🎧 Audio-Player</b>")
+        layout.addWidget(title)
+
+        # Transport buttons
+        btn_row = QtWidgets.QHBoxLayout()
+        for icon, label in [("▶", "Original"), ("⏸", "Pause"), ("🔊", "Lauter"), ("🔉", "Leiser")]:
+            btn = QtWidgets.QPushButton(f"{icon} {label}")
+            btn.setMinimumHeight(40)
+            btn_row.addWidget(btn)
+        layout.addLayout(btn_row)
+
+        layout.addStretch()
+        self._stack.addWidget(page)
+
+    def _build_info_panel(self):
+        page = QtWidgets.QWidget()
+        layout = QtWidgets.QVBoxLayout(page)
+        layout.setSpacing(10)
+
+        title = QtWidgets.QLabel("<b style='font-size:13pt; color:#C8D8FF;'>ℹ Informationen</b>")
+        layout.addWidget(title)
+
+        self._info_label = QtWidgets.QLabel(
+            "<span style='font-size:9pt; color:#8899bb;'>"
+            "Ziehe eine Audiodatei hierher oder klicke auf Öffnen.<br><br>"
+            "🎵 <b>Restaurierung</b> — Authentizität bewahren<br>"
+            "🎛 <b>Studio 2026</b> — Moderner Sound</span>"
+        )
+        self._info_label.setWordWrap(True)
+        layout.addWidget(self._info_label)
+
+        layout.addStretch()
+        self._stack.addWidget(page)
+
+    def show_panel(self, panel_index=0):
+        self._stack.setCurrentIndex(panel_index)
+        self._visible = True
+        self.setFixedWidth(self.PANEL_WIDTH)
+        if self.parent():
+            self.parent().update()
+
+    def hide_panel(self):
+        self._visible = False
+        self.setFixedWidth(0)
+        if self.parent():
+            self.parent().update()
+
+    def toggle(self):
+        if self._visible:
+            self.hide_panel()
+        else:
+            self.show_panel()
+
 
 class ModernTitleBar(QWidget):
     """Custom Title Bar mit Drag-Support und Window Controls"""
@@ -17222,7 +17337,7 @@ class ModernMainWindow(QMainWindow):
                         "⚠ Wiedergabe nicht möglich: Die Audiodatei enthält keine abspielbaren Samples."
                     )
                 if hasattr(self, "title_bar"):
-                    self.title_bar.set_status("Wiedergabe-Fehler", "#B87A7A")
+                    self.title_bar.set_status(t("status.playback_error"), "#B87A7A")
                 return
 
             # Persist source for click-to-seek (raw ref — stable id())
@@ -17260,7 +17375,7 @@ class ModernMainWindow(QMainWindow):
                     "⚠ Wiedergabe nicht möglich: Die Audiodatei enthält keine abspielbaren Samples."
                 )
             if hasattr(self, "title_bar"):
-                self.title_bar.set_status("Wiedergabe-Fehler", "#B87A7A")
+                self.title_bar.set_status(t("status.playback_error"), "#B87A7A")
             return
 
         # Persist source so click-to-seek can restart from the same content.
@@ -17358,7 +17473,7 @@ class ModernMainWindow(QMainWindow):
                             f"⚠ Wiedergabe fehlgeschlagen: {err}. Hinweis: Audio-Ausgabegerät prüfen."
                         )
                     if hasattr(self, "title_bar"):
-                        self.title_bar.set_status("Wiedergabe-Fehler", "#B87A7A")
+                        self.title_bar.set_status(t("status.playback_error"), "#B87A7A")
 
                 self._dispatch_to_gui(_notify_playback_error)
             finally:
@@ -18490,8 +18605,8 @@ class ModernMainWindow(QMainWindow):
             logger.debug("UV3 graceful stop Signalisierung fehlgeschlagen (non-critical): %s", _gs_exc)
 
         # 2. Status-Anzeige: Recovery läuft, kein Fehler
-        self.title_bar.set_status("Zeitlimit — bestes Ergebnis wird gespeichert …", "#B8A068")
-        self.status_text.setText("⏳ Bestes bisher erreichtes Ergebnis wird exportiert …")
+        self.title_bar.set_status("⏳ Zeitlimit — bestes Ergebnis wird gesichert …", "#B8A068")
+        self.status_text.setText("⏳ Das beste Ergebnis wird gesichert — gleich geschafft …")
 
         # 3. Batch-Thread 60 s Zeit geben, graceful zu enden (FlashSR-Timeout ≤ 180 s,
         #    aber nach graceful_stop_event bricht die Phase-Loop sofort nach FlashSR-Return ab).
@@ -18544,8 +18659,8 @@ class ModernMainWindow(QMainWindow):
 
         self._offtrack_guard_consumed_token = token
         logger.warning("OffTrack-Guard: Graceful stop angefordert (token=%s)", token)
-        self.title_bar.set_status("Off-Track erkannt — sichere Zwischenkorrektur …", "#B86B6B")
-        self.status_text.setText("⚠ Off-Track erkannt — Lauf wird sicher gestoppt und korrigiert …")
+        self.title_bar.set_status("⚠ Off-Track — sichere Korrektur läuft …", "#B86B6B")
+        self.status_text.setText("⚠ Eine Unregelmäßigkeit wurde erkannt — Aurik korrigiert den Kurs …")
         self._request_processing_stop("offtrack_guard", timeout_s=60.0)
 
     def _apply_heartbeat_progress_forecast(self, phase_state: dict[str, Any]) -> None:
