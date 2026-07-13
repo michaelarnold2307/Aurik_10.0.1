@@ -1425,6 +1425,7 @@ class WowFlutterFix(PhaseInterface):
 
         # Preventive timing safety: re-align stereo channels before loudness math.
         # This avoids false loudness-drop detection from L/R anti-phase drift.
+        _stcg_applied = False
         if proc.ndim == 2:
             try:
                 from backend.core.stereo_temporal_coherence_guard import get_stereo_temporal_coherence_guard
@@ -1435,16 +1436,15 @@ class WowFlutterFix(PhaseInterface):
                     phase_id="phase_12_wow_flutter_fix",
                 )
                 proc = np.asarray(proc_aligned, dtype=np.float64)
+                _stcg_applied = True
             except Exception as exc:
                 logger.debug("Phase 12 loudness-preservation: STCG skipped (%s)", exc)
 
-        # §2.51 Stereo-lag xcorr fallback — GCC-PHAT (used by STCG) fails for narrow-band
-        # (near-sinusoidal) audio: the PHAT cross-correlation is periodic and argmax()
-        # lands on a spurious alias near lag=0 instead of the actual delay.
-        # Strategy: detect the delayed channel via onset-energy comparison, then measure
-        # the silence-prefix length directly as the lag estimate. This avoids xcorr
-        # periodicity entirely and works for any signal including pure sines.
-        if proc.ndim == 2 and proc.shape[0] >= 1024:
+        # §2.51 Stereo-lag xcorr fallback — NUR wenn STCG fehlgeschlagen ist.
+        # GCC-PHAT (used by STCG) fails for narrow-band (near-sinusoidal) audio.
+        # Der Fallback wird NUR als Notlösung verwendet, NICHT als konkurrierende
+        # Zweitkorrektur nach erfolgreichem STCG-Lauf.
+        if proc.ndim == 2 and proc.shape[0] >= 1024 and not _stcg_applied:
             try:
                 _n_onset = min(proc.shape[0], 4096)
                 _cl = proc[:_n_onset, 0].astype(np.float64)
