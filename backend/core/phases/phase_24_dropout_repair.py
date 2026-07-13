@@ -1387,30 +1387,41 @@ class DropoutRepairPhase(PhaseInterface):
         if original_audio.shape[1] != 2 or processed_audio.shape[1] != 2:
             return processed_audio, stats
 
-        max_lag_samples = int(min(960, max(48, sample_rate // 50)))
-        lag_in = self._estimate_stereo_lag_samples(original_audio, max_lag_samples=max_lag_samples)
-        lag_out = self._estimate_stereo_lag_samples(processed_audio, max_lag_samples=max_lag_samples)
+        # STCG-basierte Lag-Erkennung (GCC-PHAT, Multi-Point, ±200ms)
+        # Ersetzt die alte signal.correlate-Methode (max 960 samples, ganzzahlig)
+        try:
+            from backend.core.stereo_temporal_coherence_guard import get_stereo_temporal_coherence_guard
+            _stcg = get_stereo_temporal_coherence_guard()
+            _lag_in_result = _stcg._verify_lag_multi_point(
+                original_audio[:, 0], original_audio[:, 1], sample_rate, num_points=3
+            )
+            lag_in = _lag_in_result["median_lag"] if _lag_in_result.get("num_points", 0) >= 2 else 0.0
+            _lag_out_result = _stcg._verify_lag_multi_point(
+                processed_audio[:, 0], processed_audio[:, 1], sample_rate, num_points=3
+            )
+            lag_out = _lag_out_result["median_lag"] if _lag_out_result.get("num_points", 0) >= 2 else 0.0
+        except Exception:
+            return processed_audio, stats
+
         stats["lag_input_samples"] = int(lag_in)
         stats["lag_output_samples"] = int(lag_out)
 
-        # Allow up to 1 ms introduced lag; beyond that align output back to input lag.
-        max_introduced = int(max(1, round(sample_rate * 0.001)))
-        lag_delta = int(lag_out - lag_in)
-        if abs(lag_delta) <= max_introduced:
+        lag_delta = lag_out - lag_in
+        if abs(lag_delta) <= 1:  # < 1 sample delta
             stats["lag_output_corrected_samples"] = int(lag_out)
             return processed_audio, stats
 
-        corrected = np.asarray(processed_audio, dtype=np.float32).copy()
-        corrected[:, 1] = self._shift_channel_no_wrap(corrected[:, 1], -int(lag_delta))
-        lag_corr = self._estimate_stereo_lag_samples(corrected, max_lag_samples=max_lag_samples)
+        # STCG sub-sample correction (scipy.ndimage.shift, cubic spline)
+        corrected = get_stereo_temporal_coherence_guard().correct_interchannel_delay(
+            processed_audio.astype(np.float32),
+            sample_rate,
+            phase_id="phase_24_lag_safety",
+        )
         stats["lag_corrected"] = True
-        stats["lag_output_corrected_samples"] = int(lag_corr)
+        stats["lag_output_corrected_samples"] = int(lag_delta)
         logger.info(
-            "Phase 24 stereo-lag safety: corrected introduced lag delta=%d samples (in=%d out=%d corrected=%d)",
-            lag_delta,
-            lag_in,
-            lag_out,
-            lag_corr,
+            "Phase 24 stereo-lag safety (STCG): corrected delta=%.1f samples (in=%d out=%d)",
+            lag_delta, int(lag_in), int(lag_out),
         )
         return np.clip(corrected, -1.0, 1.0), stats
 
