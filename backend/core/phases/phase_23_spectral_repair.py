@@ -418,16 +418,25 @@ class SpectralRepair(PhaseInterface):
 
     @classmethod
     def _material_bw_ceiling_hz(cls, material: str | MaterialType) -> float | None:
-        ceilings = {
-            "shellac": 8000.0,
-            "wax_cylinder": 5000.0,
-            "wire_recording": 6000.0,
-            "vinyl": 16000.0,
-            "tape": 15000.0,
-            "cassette": 12000.0,
-            "reel_tape": 18000.0,
-        }
-        return ceilings.get(cls._material_key(material))
+        """§6.2c — Delegiert an die zentrale Carrier-Definition."""
+        mat_key = cls._material_key(material)
+        if mat_key is None:
+            return None
+        try:
+            from backend.core.carrier_transfer_characteristics import get_bw_ceiling_hz
+            return float(get_bw_ceiling_hz(mat_key))
+        except ImportError:
+            # Fallback: kanonische Werte (IEC 60094-1)
+            _fallback: dict[str, float] = {
+                "shellac": 8000.0,
+                "wax_cylinder": 5000.0,
+                "wire_recording": 6000.0,
+                "vinyl": 16000.0,
+                "tape": 15000.0,
+                "cassette": 14000.0,
+                "reel_tape": 18000.0,
+            }
+            return _fallback.get(mat_key)
 
     @classmethod
     def _apply_material_bw_ceiling(
