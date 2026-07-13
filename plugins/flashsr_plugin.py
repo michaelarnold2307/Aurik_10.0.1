@@ -436,13 +436,19 @@ class FlashSRPlugin:
             logger.error("soundfile nicht installiert – process_files nicht verfügbar")
             return
 
+        try:
+            from backend.file_import import load_audio_file
+        except ImportError:
+            logger.error("backend.file_import nicht verfügbar – process_files nicht verfügbar")
+            return
+
         _os.makedirs(output_dir, exist_ok=True)
         wav_files = sorted(f for f in _os.listdir(input_dir) if f.lower().endswith(".wav"))
         for wav_file in wav_files:
             in_path = _os.path.join(input_dir, wav_file)
             out_path = _os.path.join(output_dir, wav_file)
             try:
-                audio, file_sr = sf.read(in_path)
+                audio, file_sr = load_audio_file(in_path)
                 result = self.process(audio.T if audio.ndim == 2 else audio, file_sr, target_sr)
                 sf.write(out_path, result if result.ndim == 1 else result.T, target_sr)
                 logger.info("FlashSR: %s → %s verarbeitet", wav_file, out_path)
