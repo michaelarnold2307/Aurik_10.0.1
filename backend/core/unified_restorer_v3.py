@@ -36477,14 +36477,22 @@ class UnifiedRestorerV3:
                         logger.warning("§G14 Lag-Correction: lag %d ≥ audio length %d — skipping",
                                       _lag_abs, _orig_len)
                         break
+                    # §v10.0.4 Crossfade-Padding: verhindert "Ghost-Echo" durch harte Schnittkante
+                    _xfade_len = min(_lag_abs // 4, 4800)  # max 100ms Crossfade @ 48kHz
                     if _lp2a_lag < 0:
-                        # Negativer Lag: R-Kanal ist VORAUS → R verzögern (trimme Anfang, padde Ende)
+                        # Negativer Lag: R-Kanal ist VORAUS → R verzögern (trimme Anfang, crossfade-padde Ende)
                         current_audio[1, :-_lag_abs] = current_audio[1, _lag_abs:].copy()
-                        current_audio[1, -_lag_abs:] = 0.0
+                        if _xfade_len > 0:
+                            _fade_in = np.linspace(0, 1, _xfade_len, dtype=np.float32)
+                            current_audio[1, -_lag_abs:-_lag_abs+_xfade_len] *= _fade_in
+                        current_audio[1, -_lag_abs+_xfade_len:] = 0.0
                     else:
                         # Positiver Lag: L-Kanal ist VORAUS → L verzögern
                         current_audio[0, :-_lag_abs] = current_audio[0, _lag_abs:].copy()
-                        current_audio[0, -_lag_abs:] = 0.0
+                        if _xfade_len > 0:
+                            _fade_in = np.linspace(0, 1, _xfade_len, dtype=np.float32)
+                            current_audio[0, -_lag_abs:-_lag_abs+_xfade_len] *= _fade_in
+                        current_audio[0, -_lag_abs+_xfade_len:] = 0.0
                     # §Verifikation: Nach Korrektur erneut messen
                     _lp2a_lag_verify = _gcc_lag(current_audio, sample_rate)
                     logger.info(
