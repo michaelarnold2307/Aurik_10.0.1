@@ -1,4 +1,82 @@
-# Changelog — Aurik 10.0.2
+# Changelog — Aurik 10.0.8
+
+## 10.0.8 (2026-07-13) — Blindtest-Readiness + Preservation-Metriken
+
+### 📊 Preservation & Qualitätssicherung
+- **Preservation-Metriken (§G46–§G48):** HNR-basierte Harmonik, Crest-Faktor-Transienten, Cepstrale Formanten
+- **Micro-Dynamics Score (§G52):** Crest-Faktor-Verteilung in 200ms-Fenstern
+- **Emotional Arc Score (§G54):** Lautheitskontur + Sektionskontrast + Spektralbewegung
+- **Artifact Detector (§G53):** Clicks, Spectral Holes, Pre-Echo, Stereo-Anomalien
+- **Blind Reference-Free Quality (§G55):** 6 Single-Ended-Features, kein Originalvergleich nötig
+- **MUSHRA Proxy (§G50):** 6-Dimensionen-Ensemble 0–100 Skala
+- **ABX Test Harness (§G49):** Double-Blind A/B/X mit Binomial-Signifikanztest
+- **Quality Report (§G59):** Alle Metriken in einem Aufruf gebündelt
+- **Quality Gate Integration (§G61):** Preservation-Scores steuern Veto/Recovery
+
+### 💿 CD-Rauschprofil
+- **ERB-Band-Masking (§G44):** Zwicker & Fastl Spreading-Funktion (25/10 dB/ERB)
+- **Noise Floor Continuity (§G56):** −20 dB Minimum-Floor, kein Noise-Gate-Artefakt
+- **Sliding ERB Gain (§G57):** Multi-Segment-Maske adaptiert an spektrale Änderungen
+- **CD-Wandler-Modell:** POW-r-Type-3-Shaping + Clock-Bleed + 1/f-Flicker
+- **24-bit Fix (§G43):** −120→−114 dBFS (19-bit ENOB)
+- **Dither-Determinismus (§V5, §V15):** SHA256-Seed, CD-aktive Pegel-Reduktion
+- **Preview/Export-Gap (§G63):** Vorschau klingt jetzt wie Export
+
+### 🎤 Gesang
+- **Vocal Repair (§G58):** Bandbreiten-Erweiterung + Verzerrungs-Reparatur vor Phase 42
+- **Phase 42 Integration:** Repair läuft automatisch vor Enhancement
+
+### 🔧 Infrastruktur
+- **Phase Icons (§G60):** 68 Phasen mit intuitiven Unicode-Icons in Logs
+- **Deutsche Logs:** Alle neuen Module durchgängig deutsch
+- **Streaming Processor (§G62):** ~90 % Memory-Reduktion für lange Dateien
+- **Phase Parallelizer (§G60):** Framework für parallele Phasen-Ausführung
+- **GEBOTE/VERBOTE Katalog:** 59 GEBOTE, 26 VERBOTE in Specs dokumentiert
+- **Pre-Commit Hook:** 18 Akzeptanztests vor jedem Commit
+- **GUI-Version:** 10.0.1 → 10.0.8 synchronisiert
+
+## 10.0.7 (2026-07-13) — Preservation-Metriken & Blindtest-Framework
+
+### 📊 Preservation
+- **Harmonic Preservation Score (§G46):** HNR-basiert, F0-Autokorrelation
+- **Transient Preservation Score (§G47):** Crest-Faktor + Onset-Matching
+- **Formant Preservation Score (§G48):** Cepstrale Distanz + Zentroid-Shift
+- **Micro-Dynamics Score (§G52):** Crest-Faktor-Verteilung
+- **Emotional Arc Score (§G54):** Lautheitskontur + Sektionskontrast
+
+### 🧪 Blindtest
+- **ABX Harness (§G49):** Double-Blind mit Binomial-Test
+- **MUSHRA Proxy (§G50):** 6-Dimensionen 0–100
+- **Artifact Detector (§G53):** 4 Detektoren
+- **Blind Reference-Free Quality (§G55):** Ohne Originalvergleich
+
+## 10.0.6 (2026-07-13) — CD-Rauschprofil SOTA
+
+### 💿 CD-Rauschprofil
+- **ERB-Band-Masking:** Zwicker & Fastl Spreading
+- **Noise Floor Continuity (§G56):** 204 dB → 20 dB Sprung
+- **Sliding ERB Gain (§G57):** Multi-Segment
+- **CD-Wandler-Modell:** POW-r-3 + Clock + 1/f
+- **Dither-Determinismus (§V5, §V15)**
+- **Onset-Auto-Korrektur (§G41)**
+
+### 📋 Spezifikation
+- **GEBOTE.md:** 59 GEBOTE in 6 Kategorien
+- **VERBOTE.md:** 26 VERBOTE in 4 Kategorien
+- **copilot-instructions.md:** Normativer Regelsatz
+
+## 10.0.5 (2026-07-13) — CD-Noise-Grundstein
+
+- **CD-Rauschprofil-Generator:** RMS-Maskierung, −96/−114 dBFS
+- **Export-Pipeline-Integration:** Vor Dithering
+- **Processing-Modes:** enable_cd_noise_profile in beiden Modi
+
+## 10.0.4 (2026-07-13) — GCC-PHAT & Circuit-Breaker
+
+- **GCC-PHAT High-Band-Filter:** Eliminiert Periodenambiguität
+- **Phase-12 CB Song-Reset:** Kein Zustands-Leck zwischen Songs
+
+---
 
 ## 10.0.3 (2026-07-11) — BW Harmonic Exciter
 

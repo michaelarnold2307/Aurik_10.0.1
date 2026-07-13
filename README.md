@@ -1,6 +1,6 @@
 # 🎵 Aurik 10 — Intelligentes Musik-Restaurierungs- und Rekonstruktionssystem
 
-**Version:** 10.0.8 | **Status:** ✅ Produktionsbereit | **Stand:** 6. Juli 2026
+**Version:** 10.0.8 | **Status:** ✅ Produktionsbereit | **Stand:** 13. Juli 2026
 
 > Normativer Ist-Stand: `.github/specs/`, `.github/copilot-instructions.md`, `CHANGELOG.md`, `denker/README.md`.
 
