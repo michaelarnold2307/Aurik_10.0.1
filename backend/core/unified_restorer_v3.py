@@ -8454,12 +8454,29 @@ class UnifiedRestorerV3:
                     "brillanz_target": _genre_profile.get("brillanz_target"),
                     "waerme_target": _genre_profile.get("waerme_target"),
                     "groove_dtw_max_ms": _genre_profile.get("groove_dtw_max_ms"),
-                    "soft_saturation_preserve": _genre_profile.get("soft_saturation_preserve", False),
                     "deessing_strength_cap": _genre_profile.get("deessing_strength_cap"),
                     "compression_ratio_cap": _genre_profile.get("compression_ratio_cap"),
                     "transient_preservation_strength": _genre_profile.get("transient_preservation_strength"),
                 }
             )
+            # §2.59.15a: Genre soft_saturation_preserve nur bei flacher Kette übernehmen
+            _genre_sat = _genre_profile.get("soft_saturation_preserve", False)
+            if _genre_sat:
+                _chain_check = self._restoration_context.get("effective_transfer_chain", [])
+                _analog_stages_g = sum(1 for m in _chain_check if m in (
+                    "shellac", "wax_cylinder", "lacquer_disc", "wire_recording",
+                    "vinyl", "tape", "reel_tape", "cassette"
+                ))
+                _digital_terminal_g = _chain_check[-1] in ("mp3_low", "mp3_high", "aac") if _chain_check else False
+                if _analog_stages_g >= 3 or _digital_terminal_g:
+                    logger.info(
+                        "§2.59.15a Genre-Saturation-Override: chain too deep "
+                        "(%d analog + digital=%s) → soft_saturation_preserve DISABLED "
+                        "despite genre profile (Schlager etc.)",
+                        _analog_stages_g, _digital_terminal_g,
+                    )
+                else:
+                    self._restoration_context["soft_saturation_preserve"] = True
         # §2.59.15: Fallback — ClippingDetector fand soft_saturation?
         # Dann preserve auch ohne Genre-Profil (Aufnahmecharakter bewahren).
         # ABER: Bei tiefen Transfer-Ketten (>=3 analoge Stufen) oder digitalem
