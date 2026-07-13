@@ -139,7 +139,29 @@ audio = _apply_cd_noise_profile(audio, sr, mask=erb_mask)
 - Kategorie III (§G20–§G29): Architektur-Invarianten
 - Kategorie IV (§G30–§G39): CD-Rauschprofil & Export
 - Kategorie V (§G40–§G45): Rauschprofil-Zeitpunkt & Übergänge
+- Kategorie VI (§G46–§G59): Metriken & Qualitätssicherung
 - VERBOTE (§V1–§V26): Absolute Verbote, gelten immer und überall
+
+---
+
+## Kategorie VI — Metriken & Qualitätssicherung (§G46–§G59)
+
+| ID | Regel | Beschreibung |
+|----|-------|-------------|
+| §G46 | **Harmonic Preservation Score** | HNR-basierte Metrik. Detektiert Obertonschäden durch Überglättung. |
+| §G47 | **Transient Preservation Score** | Crest-Faktor + Onset-Positionsabgleich. Detektiert Transienten-Verschleifung. |
+| §G48 | **Formant Preservation Score** | Cepstrale Hüllkurvendistanz. Detektiert Vokalcharakter-Änderungen. |
+| §G49 | **ABX Test Harness** | Double-Blind A/B/X mit Binomial-Signifikanztest. |
+| §G50 | **MUSHRA Proxy Scorer** | 6-Dimensionen-Ensemble 0–100 Skala. |
+| §G51 | **Statistical Report** | Binomialtest für Listening-Panel-Signifikanz. |
+| §G52 | **Micro-Dynamics Score** | Crest-Faktor-Verteilung in 200ms-Fenstern. |
+| §G53 | **Artifact Detector** | Clicks, Spectral Holes, Pre-Echo, Stereo-Anomalien. |
+| §G54 | **Emotional Arc Score** | Lautheitskontur + Sektionskontrast + Spektralbewegung + Stille. |
+| §G55 | **Blind Reference-Free Quality** | 6 Single-Ended-Features. Bewertet ohne Originalvergleich. |
+| §G56 | **Noise Floor Continuity** | −20 dB Minimum-Floor. Verhindert Noise-Gate-Artefakte. |
+| §G57 | **Sliding ERB Gain** | Multi-Segment-ERB-Maske. Adaptiert an spektrale Änderungen. |
+| §G58 | **Vocal Repair Module** | Bandbreiten-Erweiterung + Verzerrungs-Reparatur vor Phase 42. |
+| §G59 | **Restoration Quality Report** | Integriert alle Metriken in einen Aufruf. Blindtest-Readiness-Verdikt. |
 
 ---
 
@@ -147,6 +169,7 @@ audio = _apply_cd_noise_profile(audio, sr, mask=erb_mask)
 
 | Version | Datum | Änderung |
 |---------|-------|----------|
+| 10.0.7 | 2026-07-13 | §G46–§G59 (Metriken & Qualitätssicherung). Kategorie VI. |
 | 10.0.6 | 2026-07-13 | §G40–§G45 (Zeitpunkt, Übergänge, CD-Kohärenz, Maskierungs-Wissenschaft). §V25–§V26. Kategorie V. |
 | 10.0.5 | 2026-07-13 | §G30–§G39 (CD-Rauschprofil & Export, ML-Device, Test-Assertion). §V16–§V24. |
 | 10.0.4 | 2026-07-13 | Initiale Formalisierung. CD-Rauschprofil (§G8, §G15–§G19, §V5, §V11–§V15). Kategorie I–III strukturiert. |
