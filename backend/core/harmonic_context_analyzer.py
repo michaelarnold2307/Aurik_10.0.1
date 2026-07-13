@@ -255,7 +255,9 @@ class HarmonicContextAnalyzer:
         n_fft = min(4096, max(64, int(mono.shape[0])))
         hop = self.HOP_LENGTH
         noverlap = min(max(0, n_fft - hop), n_fft - 1)
-        _, _, Zxx = stft(mono, sr, nperseg=n_fft, noverlap=noverlap, boundary="even")
+        if len(mono) < n_fft:
+        return
+    _, _, Zxx = stft(mono, sr, nperseg=n_fft, noverlap=noverlap, boundary="even")
         mag = np.abs(Zxx).astype(np.float32)  # (F, T)
         n_freqs, n_frames = mag.shape
 

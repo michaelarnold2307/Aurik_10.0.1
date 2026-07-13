@@ -779,6 +779,10 @@ class UnifiedAudioRestorer:
         """Wiener filtering for hiss reduction."""
         from scipy import signal
 
+        # Guard: STFT erfordert mindestens nperseg Samples
+        if len(audio) < 2048:
+            return audio
+
         # STFT
         _f, _t, Zxx = signal.stft(audio, self.sr, nperseg=2048, boundary="even")
         magnitude = np.abs(Zxx)
