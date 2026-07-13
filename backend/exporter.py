@@ -48,7 +48,7 @@ def _transfer_metadata(source_path: str, target_path: str, *, transfer_chain: li
             transfer_chain=transfer_chain,
         )
     except Exception as exc:
-        logger.debug("Metadaten-Transfer übersprungen: %s", exc)
+        logger.debug("Metadaten-Übertragung übersprungen: %s", exc)
 
 
 # ── Transferkette / Carrier-Chain Metadata (§2.46a) ─────────────────────
@@ -214,10 +214,10 @@ def apply_dither(audio: np.ndarray, bit_depth: int = 16, *, seed: int | None = N
         return audio
 
     if _SCIPY_AVAILABLE:
-        logger.debug("💿 Dithering: POW-r Type 3 applied (bit_depth=%d)", bit_depth)
+        logger.debug("💿 Dithering: POW-r Type 3 angewendet (Bittiefe=%d)", bit_depth)
         return _apply_powr3_dither(audio, bit_depth, seed=seed, cd_active=cd_active)
 
-    logger.warning("Dithering: scipy nicht verfügbar — TPDF fallback applied (bit_depth=%d).", bit_depth)
+    logger.warning("Dithering: scipy nicht verfügbar — TPDF-Ersatz angewendet (Bittiefe=%d).", bit_depth)
     return _apply_tpdf_dither(audio, bit_depth, seed=seed, cd_active=cd_active)
 
 
@@ -289,7 +289,7 @@ def _export_nuance_guard(audio: np.ndarray, sr: int) -> np.ndarray:
                 g_r = float(np.clip((l_rms * max_ratio) / (r_rms + 1e-12), 0.80, 1.0))
             a[:, 0] = np.clip(a[:, 0] * g_l, -1.0, 1.0)
             a[:, 1] = np.clip(a[:, 1] * g_r, -1.0, 1.0)
-            logger.info("Export-NuanceGuard: Stereo-Balance korrigiert (%.2f dB, gL=%.3f gR=%.3f)", bal_db, g_l, g_r)
+            logger.info("Export-NuanceGuard: Stereobalance korrigiert (%.2f dB, gL=%.3f gR=%.3f)", bal_db, g_l, g_r)
 
     # 3) Gentle HF-harshness guard (only on clear excess treble energy).
     if _SCIPY_AVAILABLE and _scipy_signal is not None:
@@ -315,7 +315,7 @@ def _export_nuance_guard(audio: np.ndarray, sr: int) -> np.ndarray:
                         high = a[:, ch].astype(np.float64) - low
                         out[:, ch] = np.clip((low + high * att).astype(np.float32), -1.0, 1.0)
                     a = out
-                logger.info("Export-NuanceGuard: sanfte HF-Glättung aktiv (ratio=%.3f, att=%.3f)", ratio, att)
+                logger.info("Export-NuanceGuard: sanfte Höhenglättung aktiv (ratio=%.3f, att=%.3f)", ratio, att)
 
     guarded = np.asarray(np.clip(np.nan_to_num(a, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0), dtype=np.float32)
     return cast(np.ndarray, guarded)
@@ -563,7 +563,7 @@ def validate_export_quality(result: Any) -> tuple[bool, list[str]]:
         )
 
     for w in warnings:
-        logger.warning("Export-Quality-Gate: %s", w)
+        logger.warning("Export-Qualitätsprüfung: %s", w)
 
     return passed, warnings
 
@@ -695,7 +695,7 @@ def export_audio(
             try:
                 os.remove(tmp_path)
             except OSError as _exc:
-                logger.debug("Operation fehlgeschlagen (nicht-kritisch): %s", _exc)
+                logger.debug("Vorgang fehlgeschlagen (nicht-kritisch): %s", _exc)
             raise RuntimeError(f"Fehler beim Export als {export_format}: {e}") from e
     # MP3, AAC, M4A, OPUS nur mit ffmpeg
     elif export_format.lower() in ["mp3", "aac", "m4a", "opus"]:
@@ -734,7 +734,7 @@ def export_audio(
                 try:
                     os.remove(_p)
                 except OSError as _exc:
-                    logger.debug("Operation fehlgeschlagen (nicht-kritisch): %s", _exc)
+                    logger.debug("Vorgang fehlgeschlagen (nicht-kritisch): %s", _exc)
             raise RuntimeError(f"Fehler beim {export_format.upper()}-Export: {e}") from e
         finally:
             # Always clean up the intermediate WAV temp file
@@ -742,6 +742,6 @@ def export_audio(
                 try:
                     os.remove(tmp_wav)
                 except OSError as _exc:
-                    logger.debug("Operation fehlgeschlagen (nicht-kritisch): %s", _exc)
+                    logger.debug("Vorgang fehlgeschlagen (nicht-kritisch): %s", _exc)
     else:
         raise ValueError(f"Nicht unterstütztes Exportformat: {export_format}")

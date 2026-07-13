@@ -66,7 +66,7 @@ class ParallelPhaseExecutor:
         import os
 
         self.max_workers = max_workers or max(1, os.cpu_count() - 1 if os.cpu_count() else 2)
-        logger.info("ParallelPhaseExecutor: max_workers=%d (parallele Worker)", self.max_workers)
+        logger.info("ParallelPhaseExecutor: max_workers=%d (parallele Arbeiter)", self.max_workers)
 
     def execute_groups(
         self,
