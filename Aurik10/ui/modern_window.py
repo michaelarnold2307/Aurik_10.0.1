@@ -9997,13 +9997,23 @@ class ModernTitleBar(QWidget):
             event.accept()
 
     def set_status(self, text, color="#7B93B8"):
-        """Aktualisiert status indicator."""
+        """Setzt eine emotional ansprechende Statusmeldung.
+
+        Unterstützt Transparenz via rgba()-Farben für Glassmorphism-Effekt.
+        """
         safe_color = str(color).strip()
-        if not QColor(safe_color).isValid():
+        if not QColor(safe_color).isValid() and not safe_color.startswith("rgba"):
             logger.debug("Ungültige Statusfarbe verworfen: %r", color)
-            safe_color = "#7B93B8"
+            safe_color = "rgba(123,147,184,0.85)"
         self.status_label.setText(text)
-        self.status_label.setStyleSheet(_sanitize_qss_colors(f"color: {safe_color}; padding: 5px 15px;"))
+        # Transparenter Glassmorphism-Hintergrund
+        self.status_label.setStyleSheet(
+            f"color: {safe_color};"
+            "padding: 6px 18px;"
+            "background: rgba(102,126,234,0.08);"
+            "border-radius: 8px;"
+            "font-size: 9.5pt;"
+        )
 
 
 class ModernButton(QPushButton):
