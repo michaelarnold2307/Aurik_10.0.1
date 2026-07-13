@@ -8459,24 +8459,31 @@ class UnifiedRestorerV3:
                     "transient_preservation_strength": _genre_profile.get("transient_preservation_strength"),
                 }
             )
-            # §2.59.15a: Genre soft_saturation_preserve nur bei flacher Kette übernehmen
+            # §2.59.15d: SaturationDiscriminator — zentrale, signal-basierte Entscheidung
+            # Ersetzt die Chain-Depth-Heuristik durch präzise H2/H3/H5-Analyse.
             _genre_sat = _genre_profile.get("soft_saturation_preserve", False)
             if _genre_sat:
-                _chain_check = self._restoration_context.get("effective_transfer_chain", [])
-                _analog_stages_g = sum(1 for m in _chain_check if m in (
-                    "shellac", "wax_cylinder", "lacquer_disc", "wire_recording",
-                    "vinyl", "tape", "reel_tape", "cassette"
-                ))
-                _digital_terminal_g = _chain_check[-1] in ("mp3_low", "mp3_high", "aac") if _chain_check else False
-                if _analog_stages_g >= 3 or _digital_terminal_g:
-                    logger.info(
-                        "§2.59.15a Genre-Saturation-Override: chain too deep "
-                        "(%d analog + digital=%s) → soft_saturation_preserve DISABLED "
-                        "despite genre profile (Schlager etc.)",
-                        _analog_stages_g, _digital_terminal_g,
-                    )
-                else:
-                    self._restoration_context["soft_saturation_preserve"] = True
+                try:
+                    from backend.core.saturation_discriminator import get_saturation_discriminator
+                    _sat_disc = get_saturation_discriminator()
+                    _sat_result = _sat_disc.classify(audio, sample_rate,
+                        transfer_chain=self._restoration_context.get("effective_transfer_chain", []),
+                        era_decade=self._restoration_context.get("era_decade"))
+                    if _sat_result.preservation_ratio > 0.5:
+                        self._restoration_context["soft_saturation_preserve"] = True
+                        self._restoration_context["saturation_discrimination"] = _sat_result.as_dict()
+                        logger.info(
+                            "§6.5d SaturationDiscriminator: %.0f%% good (H2/H4), %.0f%% bad (H3/H5) → %s",
+                            _sat_result.good_ratio * 100, _sat_result.bad_ratio * 100,
+                            "PRESERVE" if _sat_result.preservation_ratio > 0.5 else "REPAIR",
+                        )
+                    else:
+                        logger.info(
+                            "§6.5d SaturationDiscriminator: %.0f%% good, %.0f%% bad → PRESERVE DISABLED",
+                            _sat_result.good_ratio * 100, _sat_result.bad_ratio * 100,
+                        )
+                except Exception as _sat_exc:
+                    logger.debug("§6.5d SaturationDiscriminator: %s", _sat_exc)
         # §2.59.15: Fallback — ClippingDetector fand soft_saturation?
         # Dann preserve auch ohne Genre-Profil (Aufnahmecharakter bewahren).
         # ABER: Bei tiefen Transfer-Ketten (>=3 analoge Stufen) oder digitalem
@@ -8491,30 +8498,28 @@ class UnifiedRestorerV3:
                     _sat_sev_fb = float(_ds.severity)
                     break
         if _sat_sev_fb > 0.1 and not self._restoration_context.get("soft_saturation_preserve"):
-            # §2.59.15a: Chain-Depth-Guard — nur bei flachen analogen Ketten auto-preserven
-            _chain = self._restoration_context.get("effective_transfer_chain", [])
-            _analog_stages = sum(1 for m in _chain if m in (
-                "shellac", "wax_cylinder", "lacquer_disc", "wire_recording",
-                "vinyl", "tape", "reel_tape", "cassette"
-            ))
-            _digital_terminal = _chain[-1] in ("mp3_low", "mp3_high", "aac") if _chain else False
-            _auto_preserve = (_analog_stages <= 2 and not _digital_terminal)
-            if _auto_preserve:
-                self._restoration_context["soft_saturation_preserve"] = True
-                self._restoration_context["soft_saturation_severity"] = _sat_sev_fb
-                logger.info(
-                    "§2.59.15 Soft-Saturation-Preserve: ClippingDetector fand "
-                    "soft_saturation (sev=%.2f, chain_depth=%d, digital=%s) → Phasen auf Erhalt geschaltet",
-                    _sat_sev_fb, _analog_stages, _digital_terminal,
-                )
-            else:
-                logger.info(
-                    "§2.59.15a Soft-Saturation-Guard: chain too deep (%d analog stages%s) "
-                    "→ soft_saturation NICHT auto-preserved (likely generation loss). "
-                    "Phases may repair saturation artifacts.",
-                    _analog_stages,
-                    " + digital terminal" if _digital_terminal else "",
-                )
+            # §6.5d: Signal-basierte Entscheidung via SaturationDiscriminator
+            try:
+                from backend.core.saturation_discriminator import get_saturation_discriminator
+                _sat_disc_fb = get_saturation_discriminator()
+                _sat_result_fb = _sat_disc_fb.classify(audio, sample_rate,
+                    transfer_chain=self._restoration_context.get("effective_transfer_chain", []),
+                    era_decade=self._restoration_context.get("era_decade"))
+                if _sat_result_fb.preservation_ratio > 0.5:
+                    self._restoration_context["soft_saturation_preserve"] = True
+                    self._restoration_context["soft_saturation_severity"] = _sat_sev_fb
+                    self._restoration_context["saturation_discrimination"] = _sat_result_fb.as_dict()
+                    logger.info(
+                        "§6.5d SaturationDiscriminator Fallback: %.0f%% good → PRESERVE (sev=%.2f)",
+                        _sat_result_fb.good_ratio * 100, _sat_sev_fb,
+                    )
+                else:
+                    logger.info(
+                        "§6.5d SaturationDiscriminator Fallback: %.0f%% bad → PRESERVE DISABLED (sev=%.2f)",
+                        _sat_result_fb.bad_ratio * 100, _sat_sev_fb,
+                    )
+            except Exception as _sat_exc_fb:
+                logger.debug("§6.5d SaturationDiscriminator fallback: %s", _sat_exc_fb)
         # §6.2a Transfer-Chain-Injection: Ketten-Liste für phase-locale Skip-Guards.
         # Phasen wie phase_29 überspringen bei digitalem primary_material. Wenn aber
         # die Kette analoge Stufen enthält (z.B. vinyl→tape→mp3_low), muss die Phase
