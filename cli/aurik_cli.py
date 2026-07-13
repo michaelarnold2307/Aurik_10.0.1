@@ -564,6 +564,13 @@ def process_audio(
             result.goals_passed,
             len(result.phases_executed),
         )
+        # §G63: CD-Rauschprofil für Vorschau — Preview klingt jetzt wie Export
+        try:
+            from backend.core.cd_noise_profile import inject_cd_noise_profile
+            result.audio = inject_cd_noise_profile(result.audio, _TARGET_SR, bit_depth=bit_depth)
+            logger.info("💿 CD-Rauschprofil für Vorschau angewendet — Vorschau = Export")
+        except Exception:
+            logger.debug("CD-Rauschprofil für Vorschau übersprungen")
 
     # ── 4. Export-Quality-Gate (§8.1 + §0c RELEASE_MUST) ───────────────────────
     # §0c: Bei fehlgeschlagenem End-Gate MUSS Aurik das bestmögliche sichere Ergebnis

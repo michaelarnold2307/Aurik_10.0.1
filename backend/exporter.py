@@ -643,10 +643,15 @@ def export_audio(
 
     # 2c. §G8 CD-Rauschprofil-Pflicht: Psychoakustisch maskiert injizieren
     #     §G15, §G30–§G39, §V11, §V14–§V17
+    #     §G63: Idempotent — überspringen wenn CD-Rauschen bereits aktiv
     try:
         from backend.core.cd_noise_profile import inject_cd_noise_profile
 
-        audio = inject_cd_noise_profile(audio, sr, bit_depth=bit_depth, seed=dither_seed)
+        _nf = float(np.percentile(np.abs(audio), 10))
+        if 20.0 * math.log10(max(_nf, 1e-15)) > -100.0:
+            logger.debug("💿 CD-Rauschprofil bereits aktiv — übersprungen")
+        else:
+            audio = inject_cd_noise_profile(audio, sr, bit_depth=bit_depth, seed=dither_seed)
     except Exception:
         logger.debug("CD-Rauschprofil-Injektion übersprungen (non-blocking)")
 
