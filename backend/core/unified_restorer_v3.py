@@ -36405,20 +36405,29 @@ class UnifiedRestorerV3:
                 )
                 # §G14-G15: Stereo-Lag-Korrektur mit Verifikation und Nachsteuerung.
                 # Lag > 50 samples (1ms) wird iterativ korrigiert und verifiziert.
+                # Verwendet LINEARE Verschiebung (kein np.roll — circular shift ändert
+                # Kreuzkorrelation nicht und führt zu Schein-Residuals).
                 _MIN_CORRECTABLE_LAG = 50
                 _MAX_LAG_CORRECTION_ATTEMPTS = 3
                 _lag_correction_applied = False
+                _orig_len = current_audio.shape[1]
                 for _lag_attempt in range(_MAX_LAG_CORRECTION_ATTEMPTS):
                     if abs(_lp2a_lag) <= _MIN_CORRECTABLE_LAG:
                         break
                     _lag_correction_applied = True
                     _lag_abs = abs(_lp2a_lag)
+                    if _lag_abs >= _orig_len:
+                        logger.warning("§G14 Lag-Correction: lag %d ≥ audio length %d — skipping",
+                                      _lag_abs, _orig_len)
+                        break
                     if _lp2a_lag < 0:
-                        # Negativer Lag: R-Kanal hängt hinter L → R nach vorne schieben
-                        current_audio[:, 1] = np.roll(current_audio[:, 1], -_lag_abs)
+                        # Negativer Lag: R-Kanal ist VORAUS → R verzögern (trimme Anfang, padde Ende)
+                        current_audio[1, :-_lag_abs] = current_audio[1, _lag_abs:].copy()
+                        current_audio[1, -_lag_abs:] = 0.0
                     else:
-                        # Positiver Lag: L-Kanal hängt hinter R → L nach vorne schieben
-                        current_audio[:, 0] = np.roll(current_audio[:, 0], -_lag_abs)
+                        # Positiver Lag: L-Kanal ist VORAUS → L verzögern
+                        current_audio[0, :-_lag_abs] = current_audio[0, _lag_abs:].copy()
+                        current_audio[0, -_lag_abs:] = 0.0
                     # §Verifikation: Nach Korrektur erneut messen
                     _lp2a_lag_verify = _gcc_lag(current_audio, sample_rate)
                     logger.info(
