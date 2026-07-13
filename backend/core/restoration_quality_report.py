@@ -124,7 +124,7 @@ def compute_quality_report(
             compute_emotional_arc_score(original, restored, sr) * 100.0
         )
     except Exception as e:
-        logger.debug("Preservation metrics unavailable: %s", e)
+        logger.debug("Preservation-Metriken nicht verfügbar: %s", e)
         warnings.append(f"Preservation metrics: {e}")
 
     # ── Artifact Detection (§G53) ──
@@ -136,7 +136,7 @@ def compute_quality_report(
         report.artifact_score = art_report.overall_score * 100.0
         report.artifact_details = dict(art_report.details)
     except Exception as e:
-        logger.debug("Artifact detection unavailable: %s", e)
+        logger.debug("Artifact-Detektion nicht verfügbar: %s", e)
         warnings.append(f"Artifact detection: {e}")
 
     # ── MUSHRA Proxy (§G50) ──
@@ -148,7 +148,7 @@ def compute_quality_report(
         report.mushra_overall = mushr_a.overall
         report.mushra_grade = mushr_a.grade
     except Exception as e:
-        logger.debug("MUSHRA scorer unavailable: %s", e)
+        logger.debug("MUSHRA-Scorer nicht verfügbar: %s", e)
         warnings.append(f"MUSHRA: {e}")
 
     # ── Blind Reference-Free Quality (§G55) ──
@@ -160,7 +160,7 @@ def compute_quality_report(
         report.blind_quality = blind.overall
         report.blind_grade = blind.grade
     except Exception as e:
-        logger.debug("Blind quality estimator unavailable: %s", e)
+        logger.debug("Blind-Quality-Estimator nicht verfügbar: %s", e)
         warnings.append(f"Blind quality: {e}")
 
     # ── Aggregate ──

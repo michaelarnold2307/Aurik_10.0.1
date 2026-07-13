@@ -378,7 +378,7 @@ def inject_cd_noise_profile(
     onset = _compute_onset_strength(result.ravel(), sr)
     if onset > 0.1:
         logger.info(
-            "CD-Noise SOTA: onset=%.3f exceeds 0.1 — widening crossfade (§G41, §V26).",
+            "CD-Rauschprofil SOTA: Onset=%.3f überschreitet 0.1 — widening crossfade (§G41, §V26).",
             onset,
         )
         # Widen crossfade and recompute with longer fades
@@ -402,7 +402,7 @@ def inject_cd_noise_profile(
             result = np.clip(result, -1.0, 1.0)
             onset = _compute_onset_strength(result.ravel(), sr)
             logger.info(
-                "CD-Noise SOTA: corrected onset=%.3f (target <0.1).",
+                "CD-Rauschprofil SOTA: korrigierter Onset=%.3f (target <0.1).",
                 onset,
             )
         finally:

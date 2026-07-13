@@ -48,7 +48,7 @@ def _transfer_metadata(source_path: str, target_path: str, *, transfer_chain: li
             transfer_chain=transfer_chain,
         )
     except Exception as exc:
-        logger.debug("metadata transfer skipped: %s", exc)
+        logger.debug("Metadaten-Transfer übersprungen: %s", exc)
 
 
 # ── Transferkette / Carrier-Chain Metadata (§2.46a) ─────────────────────
@@ -217,7 +217,7 @@ def apply_dither(audio: np.ndarray, bit_depth: int = 16, *, seed: int | None = N
         logger.debug("💿 Dithering: POW-r Type 3 applied (bit_depth=%d)", bit_depth)
         return _apply_powr3_dither(audio, bit_depth, seed=seed, cd_active=cd_active)
 
-    logger.warning("Dithering: scipy unavailable — TPDF fallback applied (bit_depth=%d).", bit_depth)
+    logger.warning("Dithering: scipy nicht verfügbar — TPDF fallback applied (bit_depth=%d).", bit_depth)
     return _apply_tpdf_dither(audio, bit_depth, seed=seed, cd_active=cd_active)
 
 
@@ -648,7 +648,7 @@ def export_audio(
 
         audio = inject_cd_noise_profile(audio, sr, bit_depth=bit_depth, seed=dither_seed)
     except Exception:
-        logger.debug("CD noise profile inject skipped (non-blocking)")
+        logger.debug("CD-Rauschprofil-Injektion übersprungen (non-blocking)")
 
     # 3. Dithering before integer quantisation (spec §DSP-Spezialregeln)
     if bit_depth < 32 and export_format.lower() not in ("mp3", "aac", "m4a", "opus"):
@@ -683,7 +683,7 @@ def export_audio(
                         export_path, description=f"Aurik {_AURIK_VERSION} Restauration", originator="Aurik"
                     )
                 except Exception as _bwf_exc:
-                    logger.debug("BWF-metadata write skipped: %s", _bwf_exc)
+                    logger.debug("BWF-Metadaten-Schreiben übersprungen: %s", _bwf_exc)
             _size_mb = os.path.getsize(export_path) / (1024 * 1024)
             logger.info(
                 "Export abgeschlossen: %s (%.1f MB, %s %d-bit)", export_path, _size_mb, export_format.upper(), bit_depth
@@ -695,7 +695,7 @@ def export_audio(
             try:
                 os.remove(tmp_path)
             except OSError as _exc:
-                logger.debug("Operation failed (non-critical): %s", _exc)
+                logger.debug("Operation fehlgeschlagen (nicht-kritisch): %s", _exc)
             raise RuntimeError(f"Fehler beim Export als {export_format}: {e}") from e
     # MP3, AAC, M4A, OPUS nur mit ffmpeg
     elif export_format.lower() in ["mp3", "aac", "m4a", "opus"]:
@@ -734,7 +734,7 @@ def export_audio(
                 try:
                     os.remove(_p)
                 except OSError as _exc:
-                    logger.debug("Operation failed (non-critical): %s", _exc)
+                    logger.debug("Operation fehlgeschlagen (nicht-kritisch): %s", _exc)
             raise RuntimeError(f"Fehler beim {export_format.upper()}-Export: {e}") from e
         finally:
             # Always clean up the intermediate WAV temp file
@@ -742,6 +742,6 @@ def export_audio(
                 try:
                     os.remove(tmp_wav)
                 except OSError as _exc:
-                    logger.debug("Operation failed (non-critical): %s", _exc)
+                    logger.debug("Operation fehlgeschlagen (nicht-kritisch): %s", _exc)
     else:
         raise ValueError(f"Nicht unterstütztes Exportformat: {export_format}")
