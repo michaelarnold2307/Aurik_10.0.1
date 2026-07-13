@@ -568,6 +568,166 @@ def compute_micro_dynamics_score(
     return float(np.clip(0.6 * mean_ratio + 0.4 * std_ratio, 0.0, 1.0))
 
 
+# ── §G54 Emotional Arc Preservation ────────────────────────────────────
+
+
+def compute_emotional_arc_score(
+    original: np.ndarray,
+    processed: np.ndarray,
+    sr: int,
+    *,
+    window_s: float = 3.0,
+) -> float:
+    """§G54: Emotional Arc preservation via loudness contour + contrast.
+
+    Measures how well the musical narrative (tension/release structure)
+    is preserved. Processing that flattens dynamics, removes section
+    contrast, or fills silence gaps damages the emotional arc.
+
+    Physikalische Grenzen (Kendall & Carterette, 1996):
+      - Loudness contour: short-term LUFS correlation (40% weight)
+      - Section contrast: inter-section LUFS ratio preservation (30%)
+      - Spectral movement: centroid trajectory correlation (20%)
+      - Silence preservation: gap count + duration matching (10%)
+
+    Returns: float [0,1] — 1.0 = identical emotional arc.
+    """
+    orig = _to_mono(original)
+    proc = _to_mono(processed)
+    n = min(len(orig), len(proc))
+    if n < int(10.0 * sr):
+        return 1.0  # Too short for arc analysis
+    orig = orig[:n].astype(np.float64)
+    proc = proc[:n].astype(np.float64)
+
+    # ── 1. Loudness contour (40%) ──
+    win_s = int(window_s * sr)
+    hop_s = win_s // 2
+    n_frames = (n - win_s) // hop_s + 1
+    if n_frames < 5:
+        return 1.0
+
+    lufs_o = np.zeros(n_frames, dtype=np.float64)
+    lufs_p = np.zeros(n_frames, dtype=np.float64)
+    for i in range(n_frames):
+        s = i * hop_s
+        fo = orig[s : s + win_s]
+        fp = proc[s : s + win_s]
+        rms_o = float(np.sqrt(np.mean(fo**2)))
+        rms_p = float(np.sqrt(np.mean(fp**2)))
+        lufs_o[i] = 20.0 * np.log10(max(rms_o, 1e-15))
+        lufs_p[i] = 20.0 * np.log10(max(rms_p, 1e-15))
+
+    # Pearson correlation of loudness contour
+    so = float(np.std(lufs_o))
+    sp = float(np.std(lufs_p))
+    if so < 1e-6 or sp < 1e-6:
+        loudness_corr = 1.0
+    else:
+        loudness_corr = float(
+            np.dot(lufs_o - np.mean(lufs_o), lufs_p - np.mean(lufs_p))
+            / (len(lufs_o) * so * sp + 1e-12)
+        )
+        loudness_corr = max(0.0, min(1.0, (loudness_corr + 1.0) / 2.0))
+    loudness_score = float(loudness_corr)
+
+    # ── 2. Section contrast (30%) ──
+    # Divide into ~10-second sections and compare dynamic range
+    section_s = int(10.0 * sr)
+    n_sections = max(1, n // section_s)
+    contrast_ratios = []
+    for i in range(n_sections):
+        s_start = i * section_s
+        s_end = min(s_start + section_s, n)
+        if s_end - s_start < win_s:
+            continue
+        # Dynamic range per section (P95 - P5 of RMS)
+        frames_in_section = max(1, (s_end - s_start - win_s) // hop_s + 1)
+        rms_vals_o = np.zeros(frames_in_section, dtype=np.float64)
+        rms_vals_p = np.zeros(frames_in_section, dtype=np.float64)
+        for j in range(frames_in_section):
+            s = s_start + j * hop_s
+            rms_vals_o[j] = float(np.sqrt(np.mean(orig[s : s + win_s] ** 2)))
+            rms_vals_p[j] = float(np.sqrt(np.mean(proc[s : s + win_s] ** 2)))
+        if len(rms_vals_o) < 3:
+            continue
+        dr_o = np.percentile(rms_vals_o, 95) / max(np.percentile(rms_vals_o, 5), 1e-15)
+        dr_p = np.percentile(rms_vals_p, 95) / max(np.percentile(rms_vals_p, 5), 1e-15)
+        ratio = min(dr_o, dr_p) / max(dr_o, dr_p)
+        contrast_ratios.append(ratio)
+    contrast_score = float(np.mean(contrast_ratios)) if contrast_ratios else 1.0
+
+    # ── 3. Spectral movement (20%) ──
+    n_fft = 2048
+    spec_hop = n_fft // 2
+    n_spec_frames = (n - n_fft) // spec_hop + 1
+    if n_spec_frames >= 3:
+        win = np.hanning(n_fft)
+        freqs = np.fft.rfftfreq(n_fft, d=1.0 / sr)
+        centroids_o = np.zeros(n_spec_frames, dtype=np.float64)
+        centroids_p = np.zeros(n_spec_frames, dtype=np.float64)
+        for i in range(n_spec_frames):
+            s = i * spec_hop
+            so_spec = np.abs(np.fft.rfft(orig[s : s + n_fft] * win))
+            sp_spec = np.abs(np.fft.rfft(proc[s : s + n_fft] * win))
+            centroids_o[i] = float(np.sum(freqs * so_spec) / max(np.sum(so_spec), 1e-10))
+            centroids_p[i] = float(np.sum(freqs * sp_spec) / max(np.sum(sp_spec), 1e-10))
+        sco = float(np.std(centroids_o))
+        scp = float(np.std(centroids_p))
+        if sco > 1e-6 and scp > 1e-6:
+            centroid_corr = float(
+                np.dot(
+                    centroids_o - np.mean(centroids_o),
+                    centroids_p - np.mean(centroids_p),
+                )
+                / (len(centroids_o) * sco * scp + 1e-12)
+            )
+            spectral_score = max(0.0, (centroid_corr + 1.0) / 2.0)
+        else:
+            spectral_score = 1.0
+    else:
+        spectral_score = 1.0
+
+    # ── 4. Silence/gap preservation (10%) ──
+    silence_thresh = -60.0  # dBFS
+    lufs_o_db = 20.0 * np.log10(
+        np.array(
+            [max(float(np.sqrt(np.mean(orig[i * hop_s : i * hop_s + win_s] ** 2))), 1e-15)
+             for i in range(n_frames)],
+            dtype=np.float64,
+        )
+        + 1e-15
+    )
+    lufs_p_db = 20.0 * np.log10(
+        np.array(
+            [max(float(np.sqrt(np.mean(proc[i * hop_s : i * hop_s + win_s] ** 2))), 1e-15)
+             for i in range(n_frames)],
+            dtype=np.float64,
+        )
+        + 1e-15
+    )
+    gaps_o = int(np.sum(lufs_o_db < silence_thresh))
+    gaps_p = int(np.sum(lufs_p_db < silence_thresh))
+    if gaps_o == 0 and gaps_p == 0:
+        silence_score = 1.0
+    elif gaps_o == 0 or gaps_p == 0:
+        silence_score = 0.5
+    else:
+        silence_score = min(gaps_o, gaps_p) / max(gaps_o, gaps_p)
+
+    # ── Aggregate ──
+    return float(
+        np.clip(
+            0.40 * loudness_score
+            + 0.30 * contrast_score
+            + 0.20 * spectral_score
+            + 0.10 * silence_score,
+            0.0,
+            1.0,
+        )
+    )
+
+
 # ── Helpers ──────────────────────────────────────────────────────────────
 
 
