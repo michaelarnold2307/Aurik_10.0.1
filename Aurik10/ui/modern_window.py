@@ -9826,117 +9826,207 @@ class DefectStoryWidget(QFrame):
         html = f"{summary}<br><table cellspacing='1' cellpadding='1' width='100%'>{header}{''.join(rows)}</table>"
         self._body.setText(html)
 
-class SlidePanel(QtWidgets.QWidget):
-    """Innovatives Auszieh-Panel für Player, Export und Dialoge.
+class RecordSleeveWidget(QtWidgets.QFrame):
+    """3D-Schallplatten-Cover — liegt auf dem Monitor.
 
-    Ersetzt aufpoppende Dialogfenster durch ein einheitliches,
-    von rechts einschiebendes Panel mit transparenter Glas-Optik.
+    Eine stilisierte Schallplattenhülle in 3D-Perspektive.
+    Aus der seitlichen Öffnung schieben sich Dialoge und Buttons
+    wie eine Schallplatte aus der Hülle.
     """
 
-    PANEL_WIDTH = 420
+    PANEL_WIDTH = 440
+    SLEEVE_HEIGHT = 520
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._visible = False
-        self._animation = None
+        self._panel_visible = False
 
-        self.setFixedWidth(0)
-        self.setStyleSheet("""
-            SlidePanel {
-                background: rgba(10,10,30,0.92);
-                border-left: 1px solid rgba(102,126,234,0.4);
+        self.setFixedSize(self.PANEL_WIDTH + 60, self.SLEEVE_HEIGHT + 40)
+        self.setStyleSheet("background: transparent;")
+
+        # ── Haupt-Layout ──
+        main_layout = QtWidgets.QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        # ── Sleeve + Panel Container ──
+        container = QtWidgets.QWidget()
+        container.setStyleSheet("background: transparent;")
+        container_layout = QtWidgets.QHBoxLayout(container)
+        container_layout.setContentsMargins(0, 0, 0, 0)
+        container_layout.setSpacing(0)
+
+        # ── Die Schallplattenhülle (linker Teil) ──
+        self._sleeve = QtWidgets.QFrame()
+        self._sleeve.setFixedSize(280, self.SLEEVE_HEIGHT)
+        self._sleeve.setStyleSheet("""
+            QFrame {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #1a1040, stop:0.3 #0d0d28, stop:0.7 #0a0a20,
+                    stop:1 #060618);
+                border: 2px solid rgba(180,160,220,0.4);
+                border-right: none;
+                border-radius: 8px 0 0 8px;
             }
-            QLabel {
-                color: #d0d8ff;
-                font-family: 'Segoe UI', sans-serif;
-                background: transparent;
+        """)
+
+        # Schallplatten-Artwork auf der Hülle
+        sleeve_inner = QtWidgets.QVBoxLayout(self._sleeve)
+        sleeve_inner.setContentsMargins(20, 30, 0, 30)
+        sleeve_inner.setSpacing(8)
+
+        # Vinyl-Label (stilisiert)
+        label_circle = QtWidgets.QLabel("●")
+        label_circle.setStyleSheet("color: #0a0a0a; font-size: 80px; background: transparent;")
+        label_circle.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+
+        title_lbl = QtWidgets.QLabel(
+            "<span style='font-size:11pt; color:#C8B8E8; font-weight:bold;'>"
+            "AURIK<br><span style='font-size:7pt; color:#8878A8;'>Professional</span></span>"
+        )
+        title_lbl.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+
+        sleeve_inner.addStretch()
+        sleeve_inner.addWidget(label_circle)
+        sleeve_inner.addWidget(title_lbl)
+        sleeve_inner.addStretch()
+
+        container_layout.addWidget(self._sleeve)
+
+        # ── Auszieh-Panel (rechter Teil — die „Schallplatte") ──
+        self._panel = QtWidgets.QFrame()
+        self._panel.setFixedSize(0, self.SLEEVE_HEIGHT)
+        self._panel.setStyleSheet("""
+            QFrame {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 rgba(15,12,35,0.95), stop:1 rgba(10,8,25,0.92));
+                border: 2px solid rgba(102,126,234,0.4);
+                border-left: 1px solid rgba(180,160,220,0.2);
+                border-radius: 0 8px 8px 0;
             }
+            QLabel { color: #d0d8ff; background: transparent; font-family: 'Segoe UI', sans-serif; }
             QPushButton {
                 background: rgba(102,126,234,0.25);
                 color: #fff;
                 border: 1px solid rgba(102,126,234,0.6);
                 border-radius: 6px;
-                padding: 8px 20px;
-                font-size: 10pt;
+                padding: 8px 16px;
+                font-size: 9.5pt;
             }
-            QPushButton:hover {
-                background: rgba(102,126,234,0.50);
-            }
+            QPushButton:hover { background: rgba(102,126,234,0.50); }
         """)
 
-        self._layout = QtWidgets.QVBoxLayout(self)
-        self._layout.setContentsMargins(20, 16, 20, 16)
-        self._layout.setSpacing(12)
+        panel_layout = QtWidgets.QVBoxLayout(self._panel)
+        panel_layout.setContentsMargins(18, 16, 18, 16)
+        panel_layout.setSpacing(8)
 
-        # Close button
-        close_btn = QtWidgets.QPushButton("✕ Schließen")
-        close_btn.setFixedHeight(32)
+        # Schließen-Button (schiebt Platte zurück)
+        close_btn = QtWidgets.QPushButton("▶✕ Zurückschieben")
+        close_btn.setFixedHeight(30)
         close_btn.clicked.connect(self.hide_panel)
-        self._layout.addWidget(close_btn, alignment=QtCore.Qt.AlignmentFlag.AlignRight)
+        panel_layout.addWidget(close_btn, alignment=QtCore.Qt.AlignmentFlag.AlignRight)
 
-        # Stack for different panel contents
+        # Panel-Inhalt (Stack)
         self._stack = QtWidgets.QStackedWidget()
         self._stack.setStyleSheet("background: transparent;")
-        self._layout.addWidget(self._stack, 1)
+        panel_layout.addWidget(self._stack, 1)
 
-        # Pre-build panels
+        # Panel-Seiten vorbereiten
         self._build_player_panel()
         self._build_info_panel()
+        self._build_export_panel()
+
+        container_layout.addWidget(self._panel)
+        main_layout.addWidget(container)
+
+        # ── Trigger-Button unter der Hülle ──
+        self._trigger = QtWidgets.QPushButton("📀 Platte aus der Hülle ziehen")
+        self._trigger.setFixedHeight(34)
+        self._trigger.setStyleSheet("""
+            QPushButton {
+                background: rgba(102,126,234,0.20);
+                color: #C8B8E8;
+                border: 1px solid rgba(180,160,220,0.3);
+                border-radius: 6px;
+                font-size: 9.5pt;
+            }
+            QPushButton:hover {
+                background: rgba(102,126,234,0.40);
+                color: #fff;
+            }
+        """)
+        self._trigger.clicked.connect(self.toggle)
+        main_layout.addWidget(self._trigger)
+
+        # ── Schatten-Effekt ──
+        shadow = QtWidgets.QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(30)
+        shadow.setXOffset(8)
+        shadow.setYOffset(12)
+        shadow.setColor(QtGui.QColor(0, 0, 0, 120))
+        container.setGraphicsEffect(shadow)
 
     def _build_player_panel(self):
         page = QtWidgets.QWidget()
         layout = QtWidgets.QVBoxLayout(page)
-        layout.setSpacing(10)
-
-        title = QtWidgets.QLabel("<b style='font-size:13pt; color:#C8D8FF;'>🎧 Audio-Player</b>")
-        layout.addWidget(title)
-
-        # Transport buttons
-        btn_row = QtWidgets.QHBoxLayout()
-        for icon, label in [("▶", "Original"), ("⏸", "Pause"), ("🔊", "Lauter"), ("🔉", "Leiser")]:
-            btn = QtWidgets.QPushButton(f"{icon} {label}")
-            btn.setMinimumHeight(40)
-            btn_row.addWidget(btn)
-        layout.addLayout(btn_row)
-
+        layout.setSpacing(8)
+        layout.addWidget(QtWidgets.QLabel("<b style='font-size:11pt; color:#C8D8FF;'>🎧 Player</b>"))
+        row = QtWidgets.QHBoxLayout()
+        for icon, tip in [("▶","Original"), ("⏸","Pause"), ("⏮","Anfang"), ("⏭","Ende")]:
+            btn = QtWidgets.QPushButton(icon)
+            btn.setToolTip(tip)
+            btn.setFixedSize(42, 36)
+            row.addWidget(btn)
+        row.addStretch()
+        layout.addLayout(row)
         layout.addStretch()
         self._stack.addWidget(page)
 
     def _build_info_panel(self):
         page = QtWidgets.QWidget()
         layout = QtWidgets.QVBoxLayout(page)
-        layout.setSpacing(10)
-
-        title = QtWidgets.QLabel("<b style='font-size:13pt; color:#C8D8FF;'>ℹ Informationen</b>")
-        layout.addWidget(title)
-
-        self._info_label = QtWidgets.QLabel(
+        layout.setSpacing(8)
+        layout.addWidget(QtWidgets.QLabel("<b style='font-size:11pt; color:#C8D8FF;'>ℹ Aurik</b>"))
+        info = QtWidgets.QLabel(
             "<span style='font-size:9pt; color:#8899bb;'>"
-            "Ziehe eine Audiodatei hierher oder klicke auf Öffnen.<br><br>"
-            "🎵 <b>Restaurierung</b> — Authentizität bewahren<br>"
-            "🎛 <b>Studio 2026</b> — Moderner Sound</span>"
+            "🎵 <b>Restaurierung</b> — behutsam & originalgetreu<br>"
+            "🎛 <b>Studio 2026</b> — modern & brillant<br><br>"
+            "💿 CD-Rauschprofil aktiv<br>"
+            "🔍 62 Defekttypen erkannt<br>"
+            "📊 14 Qualitätsmetriken</span>"
         )
-        self._info_label.setWordWrap(True)
-        layout.addWidget(self._info_label)
+        info.setWordWrap(True)
+        layout.addWidget(info)
+        layout.addStretch()
+        self._stack.addWidget(page)
 
+    def _build_export_panel(self):
+        page = QtWidgets.QWidget()
+        layout = QtWidgets.QVBoxLayout(page)
+        layout.setSpacing(8)
+        layout.addWidget(QtWidgets.QLabel("<b style='font-size:11pt; color:#C8D8FF;'>💿 Export</b>"))
+        info = QtWidgets.QLabel(
+            "<span style='font-size:9pt; color:#8899bb;'>"
+            "WAV · FLAC · 16/24 Bit · 48 kHz<br>"
+            "CD-Rauschprofil · POW-r-Dithering</span>"
+        )
+        layout.addWidget(info)
         layout.addStretch()
         self._stack.addWidget(page)
 
     def show_panel(self, panel_index=0):
         self._stack.setCurrentIndex(panel_index)
-        self._visible = True
-        self.setFixedWidth(self.PANEL_WIDTH)
-        if self.parent():
-            self.parent().update()
+        self._panel_visible = True
+        self._panel.setFixedWidth(self.PANEL_WIDTH)
+        self._trigger.setText("▶✕ Platte zurückschieben")
 
     def hide_panel(self):
-        self._visible = False
-        self.setFixedWidth(0)
-        if self.parent():
-            self.parent().update()
+        self._panel_visible = False
+        self._panel.setFixedWidth(0)
+        self._trigger.setText("📀 Platte aus der Hülle ziehen")
 
     def toggle(self):
-        if self._visible:
+        if self._panel_visible:
             self.hide_panel()
         else:
             self.show_panel()
