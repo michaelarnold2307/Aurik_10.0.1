@@ -246,3 +246,18 @@
 | Budget-Formel ohne reale Messwerte | 1200+2250=3450 war 4s zu knapp für gemessene 3454s | `overhead=1800, per_sec=15` |
 | Stereo-Lag nur detektieren, nicht korrigieren | LAG_PROBE zeigt -8900 samples → 183ms bleiben | Iterative Korrektur (3 Versuche) mit Verifikation |
 | Keine Post-Pipeline-Plausibilitätsprüfung | NaN/Clipping/Stille/Kanal-Drift erst beim Abhören bemerkt | Automatische Prüfung auf 6 Fehlerkategorien |
+
+## Erfahrungsbasierte Verbote [NEU 2026-07-13]
+
+> **Quelle**: Konkrete Fehler, gefunden während Audit & Optimierung.
+
+| Verbot | Begründung | Korrektur |
+|--------|-----------|-----------|
+| ML-Fallback als INFO loggen | AudioSR → SBR-DSP 20× pro Run, nur INFO sichtbar → Nutzer merkt nicht, dass ML defekt ist | WARNING beim ersten Fallback, ERROR nach 3 konsekutiven |
+| Parameter an Plugin übergeben, die das Plugin selbst berechnet | Phase-06 −6dB + NVSR −6dB = −12dB → unhörbare HF-Extension | Eine Quelle entfernen (§GEBOT-G43) |
+| Statischer Zahlenwert ohne Herkunfts-Kommentar | `linspace(1.0, 0.25)` — niemand wusste warum | (a) Herkunft (b) Kalibrierungsmessung (c) Validierungsdatum (§GEBOT-G44) |
+| Signalverarbeitung ohne Source-Band-Energy-Guard | SBR synthetisierte aus leerem Quellband → Artefakte | `if energy < 1e-8: passthrough` (§GEBOT-G45) |
+| Budget-Überschreitung nur im Log | 5 Phasen übersprungen, Output-Metadata zeigt nichts | `skipped_due_to_budget` im Phase-Result (§GEBOT-G46) |
+| Korrektur ohne Verifikation | Lag wurde detektiert (−8777) aber nie korrigiert oder verifiziert | Korrektur → Messung → Nachkorrektur (§GEBOT-G48) |
+| Chunk-Zustand nicht persistent | Jeder Chunk begann bei lag=0 → 183ms akkumuliert über 45 Chunks | Persistentes State-Objekt pro Phase (§GEBOT-G49) |
+| ERROR/WARNING für erwartete Fallbacks | False-Positives in Log-Analyse, echte Fehler gehen unter | ERROR nur für Pipeline-Crash, WARNING nur für Qualitätsverlust |
