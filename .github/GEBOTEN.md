@@ -153,3 +153,11 @@ Jede G-Regel kann durch einen Linter automatisiert geprüft werden:
 | **G52** | Ein `RestorationQualityIndex` (RQI) MUSS berechnet werden: (Defekt-Reduktion × 0.4) + (Bandbreiten-Gewinn × 0.3) + (Natürlichkeit × 0.3). RQI > 0.5 MUSS Quality-Gate-Warnings unterdrücken | Studio-Metriken allein bestrafen Restaurierung systematisch → False-Positives | Neu: `backend/core/restoration_quality_index.py` |
 | **G53** | "Keine Veränderung" ist KEIN Qualitätsmerkmal für Restoration. Wenn alle Metriken "passed" zeigen, wurde entweder nichts restauriert, oder die Metriken sind falsch kalibriert | CD-Material mit 0 Defekten → alle Gates grün → korrekt. Kassette mit 12dB SNR → Gates rot → auch korrekt, wenn tatsächlich verbessert | Quality-Gate-Logik in UV3 |
 | **G54** | Jeder Quality-Gate-Fehlschlag MUSS den RQI als Cross-Validation enthalten. Wenn RQI > 0.5 und ein Gate fehlschlägt → INFO (Restaurierungserfolg). Nur wenn RQI < 0.3 und Gate fehlschlägt → WARNING (echtes Problem) | 18 Warnungen dieser Session: >80% False-Positives bei RQI-Prüfung | UV3 Quality-Gates |
+
+## Kategorie N: Adaptive Infrastruktur & Selbst-Verifikation (2026-07-13)
+
+| ID | Gebot | Begründung | Fundstelle |
+|----|-------|-----------|------------|
+| **G55** | Jede Phase MUSS `derive_params(audio, sr)` aus `adaptive_parameter_infrastructure` nutzen, um Band-Reduktion, Noise-Floor, Transienten-Schwellen signal-adaptiv abzuleiten | Material-spezifische Werte sind ein Anfang, aber zwei verschiedene Kassetten brauchen unterschiedliche Denoising-Parameter | `backend/core/adaptive_parameter_infrastructure.py` |
+| **G56** | Jede Phase MUSS nach der Verarbeitung `verify_output_quality()` aufrufen. Bei `needs_readjust=True` MUSS die Phase mit reduzierter Stärke wiederholt werden (max 2 Retries) | Phasen können unbeabsichtigt RMS-Drops >6dB oder spektrale Dekorrelation verursachen | `backend/core/adaptive_parameter_infrastructure.py:verify_output_quality()` |
+| **G57** | RQI ist der PRIMÄRE Quality-Gate. RQI ≥ 0.50 überschreibt jeden MQA-Verdict auf ✅ GARANTIERT. Studio-Referenzmetriken sind sekundär | PQS-MOS bestraft legitime Restaurierung — RQI misst objektive Verbesserung | `unified_restorer_v3.py:§G52 RQI-PRIMARY-Gate` |

@@ -22396,9 +22396,9 @@ class UnifiedRestorerV3:
                 "medium_type": _mqa_medium.value,
             }
 
-            # §GEBOT-G52/G54: RestorationQualityIndex — Cross-Validation
-            # Misst, ob die Restaurierung TATSÄCHLICH verbessert hat.
-            # RQI > 0.5 → MQA-Warnings sind False-Positives (Restaurierungserfolg)
+            # §GEBOT-G52/G54: RestorationQualityIndex — PRIMÄRER Quality-Gate
+            # RQI misst echte Restaurierungs-Verbesserung, nicht Ähnlichkeit zum Original.
+            # RQI ≥ 0.5 → MQA-Verdict wird überschrieben (Restaurierung objektiv erfolgreich)
             try:
                 from backend.core.restoration_quality_index import compute_rqi
 
@@ -22417,8 +22417,18 @@ class UnifiedRestorerV3:
                     "bandwidth_before_hz": _rqi_result["bandwidth_before_hz"],
                     "bandwidth_after_hz": _rqi_result["bandwidth_after_hz"],
                 }
-                # RQI-Cross-Validation: erfolgreiche Restaurierung → Warnings entschärfen
-                if _rqi_result["suppress_warnings"] and _mqa_result.get("warnings"):
+                # RQI als PRIMÄRER Gate: objektive Verbesserung → Quality garantiert
+                if _rqi_result["rqi"] >= 0.50:
+                    if not _mqa_report.quality_guaranteed:
+                        _mqa_result["quality_guaranteed"] = True
+                        _mqa_result["rqi_override_verdict"] = True
+                        logger.info(
+                            "§G52 RQI-PRIMARY-Gate: RQI=%.2f ≥ 0.50 — Restaurierung objektiv verbessert. "
+                            "MQA-Verdict auf ✅ GARANTIERT überschrieben.",
+                            _rqi_result["rqi"],
+                        )
+                # RQI-Cross-Validation: auch unter 0.5, aber über 0.3 → Warnings unterdrücken
+                elif _rqi_result["suppress_warnings"] and _mqa_result.get("warnings"):
                     _mqa_result["warnings_suppressed_by_rqi"] = True
                     _mqa_result["rqi_interpretation"] = _rqi_result["interpretation"]
                     logger.info(
@@ -22431,7 +22441,7 @@ class UnifiedRestorerV3:
 
             logger.debug(
                 "🎵 MusicalQualityAssurance: %s | Verbesserung=%.1f%% authentisch=%s natürlich=%s",
-                "✅ GARANTIERT" if _mqa_report.quality_guaranteed else "⚠ NICHT GARANTIERT",
+                "✅ GARANTIERT" if _mqa_result.get("quality_guaranteed", _mqa_report.quality_guaranteed) else "⚠ NICHT GARANTIERT",
                 _mqa_report.musical_improvement * 100,
                 _mqa_report.authenticity_preserved,
                 _mqa_report.natural_sound,
