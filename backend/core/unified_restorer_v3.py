@@ -17062,8 +17062,15 @@ class UnifiedRestorerV3:
                                 "singmos": _singmos_val,
                             }
                         )
-                elif _singmos_val < 2.5:
-                    logger.warning("§G4 SingMOS=%.2f < 2.5 → phase_65-Recovery (Naturalness niedrig)", _singmos_val)
+                # §v10.0.4 Restorability-adaptives Log-Level (Recovery läuft immer bei <2.5)
+                if _singmos_val < 2.5:
+                    _smo_rest = float(getattr(self, "_last_restorability_score", 70.0))
+                    if _smo_rest >= 70.0:
+                        logger.warning("§G4 SingMOS=%.2f < 2.5 → phase_65-Recovery (Naturalness niedrig)",
+                                      _singmos_val)
+                    else:
+                        logger.info("§G4 SingMOS=%.2f < 2.5 → phase_65-Recovery (erwartet für restorability=%.0f)",
+                                   _singmos_val, _smo_rest)
                     _fail_reasons.append(
                         {
                             "component": "SingMOSGate",
