@@ -52,6 +52,29 @@ def _hz_to_erb(hz):
     return 21.4 * np.log10(0.00437 * np.asarray(hz, dtype=np.float64) + 1.0)
 
 
+def _compute_sliding_erb_gain(audio_mono, sr, noise_db=-96.0, segment_s=10.0):
+    """§G57: Multi-segment ERB gain averaging for spectral adaptation.
+
+    Instead of a single 2-second window, computes ERB gain from
+    multiple 10-second segments and averages with Hanning weights.
+    This adapts to songs that change spectral character over time.
+    """
+    n=len(audio_mono)
+    seg_samples=int(segment_s*sr)
+    if n<seg_samples*2:
+        return _compute_erb_band_gain(audio_mono,sr,noise_db)
+    # Slide 10s windows with 50% overlap
+    hop=seg_samples//2
+    n_segments=max(1,(n-seg_samples)//hop+1)
+    gains=[]
+    for i in range(n_segments):
+        start=i*hop
+        seg=audio_mono[start:start+seg_samples]
+        g=_compute_erb_band_gain(seg,sr,noise_db)
+        gains.append(g)
+    # Average all gains (equal weight per segment)
+    return np.mean(gains,axis=0)
+
 def _compute_erb_band_gain(audio_mono, sr, noise_db=-96.0):
     n_fft, n_bins = 2048, 1025
     freqs = np.fft.rfftfreq(n_fft, d=1.0/sr)
@@ -326,7 +349,7 @@ def inject_cd_noise_profile(
     noise_db = _CD_NOISE_FLOOR_DBFS_16BIT if bit_depth <= 16 else _CD_NOISE_FLOOR_DBFS_24BIT
     try:
         if bit_depth <= 16:
-            erb_gain = _compute_erb_band_gain(mono, sr, noise_db)
+            erb_gain = _compute_sliding_erb_gain(mono, sr, noise_db)  # §G57
         else:
             # 24-bit: uniform noise floor — authentic converter behavior
             erb_gain = np.ones(1025, dtype=np.float64)
