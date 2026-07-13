@@ -633,6 +633,15 @@ def export_audio(
     # 2b. Subtle perceptual polish for listening comfort (non-destructive).
     audio = _export_nuance_guard(audio, sr)
 
+    # 2c. §G8 CD-Rauschprofil-Pflicht: Psychoakustisch maskiert injizieren
+    #     §G15, §G30–§G39, §V11, §V14–§V17
+    try:
+        from backend.core.cd_noise_profile import inject_cd_noise_profile
+
+        audio = inject_cd_noise_profile(audio, sr, bit_depth=bit_depth)
+    except Exception:
+        logger.debug("CD noise profile inject skipped (non-blocking)")
+
     # 3. Dithering before integer quantisation (spec §DSP-Spezialregeln)
     if bit_depth < 32 and export_format.lower() not in ("mp3", "aac", "m4a", "opus"):
         audio = apply_dither(audio, bit_depth=bit_depth)
