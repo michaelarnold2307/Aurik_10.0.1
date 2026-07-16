@@ -2248,17 +2248,20 @@ class GrooveMetric:
                 )
                 return self.measure(audio, sr, reference=None)
             if _dtw_score < 0.05:
-                # §2.14 Onset-Preservation-Guard (v9.20.3): Wenn ≥90% der Onsets
-                # erhalten sind, ist der DTW-Score von 0.000 ein Messartefakt.
-                # Onset-Erhalt ≥90% → Score ≥0.85.
+                # §2.14 Onset-Preservation-Guard (v10.17): Nur feuern wenn sowohl
+                # ≥95% der Onsets erhalten UND DTW-Timing plausibel (<15ms).
+                # Ohne Timing-Check maskiert der Guard echte Groove-Degradation
+                # (z.B. DTW-rms=106ms bei 102% onset count → score 1.0 — falsch).
                 _onset_preservation = result.n_onsets_restored / max(result.n_onsets_original, 1)
-                if _onset_preservation >= 0.90:
-                    _onset_score = float(np.clip(0.85 + 0.15 * (_onset_preservation - 0.90) / 0.10, 0.85, 1.0))
+                _dtw_rms_ok = getattr(result, 'dtw_rms_ms', 999.0) < 15.0
+                if _onset_preservation >= 0.95 and _dtw_rms_ok:
+                    _onset_score = float(np.clip(0.60 + 0.15 * (_onset_preservation - 0.95) / 0.05, 0.60, 0.75))
                     logger.info(
-                        "GrooveMetric Onset-Guard: %d/%d onsets (%.0f%%) → score %.3f→%.3f",
+                        "GrooveMetric Onset-Guard: %d/%d onsets (%.0f%%), dtw_rms=%.1fms → score %.3f→%.3f",
                         result.n_onsets_restored,
                         result.n_onsets_original,
                         _onset_preservation * 100,
+                        getattr(result, 'dtw_rms_ms', 0.0),
                         _dtw_score,
                         _onset_score,
                     )

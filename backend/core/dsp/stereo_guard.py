@@ -95,7 +95,7 @@ def check_mono_compatibility(
 
         if not ok:
             logger.info(
-                "§V23 Mono-Kompatibilität: Phasenlöschung=%.1f dB > 3.0 dB (300–5000 Hz) → WARNING",
+                "§V23 Mono-Kompatibilität: Phasenlöschung=%.2f dB > 3.0 dB (300–5000 Hz) → WARNING",
                 cancellation_db,
             )
 

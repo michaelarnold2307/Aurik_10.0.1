@@ -234,7 +234,10 @@ def _attenuate_peak_overshoot(
     if not bool(np.any(needs)):
         return candidate, 0, float(np.max(overshoot_db))
 
-    envelope_margin_db = 1.25
+    # §2.54 v10.17: envelope_margin_db 1.25→2.50. 1.25dB liess ~1.75dB Rest-Overshoot
+    # nach Attenuierung — bei peaksensiblem Material hard-clipped das gegen 0dBFS.
+    # 2.50dB lässt max 0.50dB Rest, innerhalb Soft-Clip-Marge.
+    envelope_margin_db = 2.50
     gain_db_frames = np.zeros(n_frames, dtype=np.float32)
     gain_db_frames[needs] = np.asarray(
         max_peak_overshoot_db - envelope_margin_db - overshoot_db[needs],

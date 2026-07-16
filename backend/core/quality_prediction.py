@@ -172,7 +172,7 @@ class QualityAnalyzer:
         clarity = self._measure_clarity(audio, sample_rate)
         warmth = self._measure_warmth(audio, sample_rate)
         brightness = self._measure_brightness(audio, sample_rate)
-        naturalness = self._measure_naturalness(audio, sample_rate)
+        naturalness = self._measure_naturalness(audio, sample_rate, reference)
         authenticity = self._measure_authenticity(audio, sample_rate)
 
         # Bandwidth
@@ -373,30 +373,50 @@ class QualityAnalyzer:
 
         return float(np.clip(brightness, 0, 1))
 
-    def _measure_naturalness(self, audio: np.ndarray, sr: int) -> float:
+    def _measure_naturalness(self, audio: np.ndarray, sr: int, reference: np.ndarray | None = None) -> float:
         """
-        Misst naturalness via spectral smoothness.
+        Misst naturalness via octave-band spectral smoothness.
 
-        Natural audio has a smooth spectral envelope (no sharp notches or peaks
-        from overprocessing).  The old formula measured "spectral flatness" which
-        penalised the natural 1/f slope of real music — yielding 0.10 for
-        virtually all audio.
+        Self-calibrating: when a reference (original/unprocessed) audio is
+        provided, the threshold is derived from the reference's own residual
+        variance.  This prevents false-zero scores for inherently bandlimited
+        or noisy sources (cassette, shellac) that legitimately deviate from
+        the 1/f model.
 
-        New approach: Compute the log-power spectrum in octave bands, fit a
-        linear tilt (expected 1/f roll-off), then measure the smoothness of
-        the *residual* (deviations from the tilt).  Low residual variance =
-        natural, high = overprocessed / artifact-laden.
+        Without reference: uses absolute threshold 0.80 (reasonable default).
+        With reference:   threshold = max(0.80, ref_residual_var × 1.5).
+                          "No worse than 50% above the source's natural state."
+
+        Returns 0.0–1.0 (1.0 = envelope smoothness matches/exceeds reference).
         """
+        residual_var = self._compute_octave_residual_var(audio)
+        if residual_var is None:
+            return 0.75
+
+        # Calibrate threshold from reference if available
+        if reference is not None:
+            ref_rv = self._compute_octave_residual_var(reference)
+            if ref_rv is not None and ref_rv > 0:
+                threshold = max(0.80, ref_rv * 1.5)
+            else:
+                threshold = 0.80
+        else:
+            threshold = 0.80
+
+        naturalness = max(0.0, 1.0 - min(residual_var / threshold, 1.0))
+        return float(np.clip(naturalness, 0, 1))
+
+    def _compute_octave_residual_var(self, audio: np.ndarray) -> float | None:
+        """Compute octave-band residual variance (1/f-tilt removed)."""
         rms = float(np.sqrt(np.mean(np.asarray(audio, dtype=np.float32) ** 2))) if len(audio) > 0 else 0.0
         if len(audio) < 256 or rms < 1e-5:
-            return 0.75
+            return None
 
         fft = np.fft.rfft(audio)
         power = np.abs(fft) ** 2
 
-        # Divide spectrum into octave bands
         n_bands = 8
-        band_powers = []
+        band_powers: list[float] = []
         for i in range(n_bands):
             start = len(power) // (2 ** (n_bands - i))
             end = len(power) // (2 ** (n_bands - i - 1))
@@ -405,44 +425,16 @@ class QualityAnalyzer:
             else:
                 band_powers.append(0.0)
 
-        _band_powers_arr = np.array(band_powers)
-        if np.sum(_band_powers_arr) <= 0:
-            return 0.75
+        _bp = np.array(band_powers, dtype=np.float64)
+        if np.sum(_bp) <= 0:
+            return None
 
-        # Log-domain (safe): natural spectra are roughly linear in log-power
-        log_powers = np.log10(_band_powers_arr + 1e-20)
-
-        # Linear fit (1/f tilt removal): residual = deviations from expected slope
+        log_powers = np.log10(_bp + 1e-20)
         x = np.arange(n_bands, dtype=np.float64)
-        coeffs = np.polyfit(x, log_powers, 1)  # slope + intercept
+        coeffs = np.polyfit(x, log_powers, 1)
         tilt_line = np.polyval(coeffs, x)
         residual = log_powers - tilt_line
-
-        # Smoothness: low residual variance = natural spectral envelope
-        # Typical values: natural music residual_var ≈ 0.01–0.08,
-        # heavily processed/artifact-laden ≈ 0.15–0.50
-        # Threshold 0.35 (was 0.15) prevents false-zero scores for AudioSR output:
-        # AudioSR synthesises HF harmonics whose spectral envelope deviates from the
-        # 1/f tilt, pushing residual_var above 0.15.  The old threshold yielded
-        # naturalness=0.00 for all audios touched by AudioSR — a false positive that
-        # blocked quality gates and caused misleading "Unnatural sound" warnings.
-        # With 0.35, residual_var=0.20 → naturalness=0.43 (reasonable), 0.35 → 0.0.
-        residual_var = float(np.var(residual))
-        naturalness = max(0.0, 1.0 - min(residual_var / 0.35, 1.0))
-
-        # Additionally penalise sharp spectral notches (overprocessing indicator):
-        # Large consecutive jumps in residual indicate processing artifacts.
-        # Max 15% penalty (was 20%) — further guards against false-zero stacking.
-        if n_bands > 1:
-            jumps = np.abs(np.diff(residual))
-            max_jump = float(np.max(jumps))
-            jump_penalty = min(max_jump / 1.0, 0.15)  # max 15% penalty
-            naturalness = max(0.0, naturalness - jump_penalty)
-
-        if not np.isfinite(naturalness):
-            naturalness = 0.75
-
-        return float(np.clip(naturalness, 0, 1))
+        return float(np.var(residual))
 
     def _measure_authenticity(self, audio: np.ndarray, sr: int) -> float:
         """

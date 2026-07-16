@@ -842,7 +842,7 @@ class MusicalQualityAssurance:
         """
         # Analyze both
         original_quality = self.analyzer.analyze_quality(original_audio, sample_rate)
-        processed_quality = self.analyzer.analyze_quality(processed_audio, sample_rate)
+        processed_quality = self.analyzer.analyze_quality(processed_audio, sample_rate, reference=original_audio)
 
         violations = []
         violation_details = {}
@@ -1138,7 +1138,7 @@ class MusicalQualityAssurance:
 
         # Analyze qualities
         input_quality = self.analyzer.analyze_quality(original_audio, sample_rate)
-        output_quality = self.analyzer.analyze_quality(processed_audio, sample_rate)
+        output_quality = self.analyzer.analyze_quality(processed_audio, sample_rate, reference=original_audio)
 
         # Check gates
         gate_passed, gate_reason = self.check_quality_gate(
@@ -1184,7 +1184,13 @@ class MusicalQualityAssurance:
 
         overprocessed = processing_intensity > _max_processing_intensity
 
-        # Determine if quality is guaranteed
+        # Determine if quality is guaranteed.
+        # §2.54 Minimum improvement: processing must yield measurable improvement.
+        # For severely degraded sources (restorability < 40) a 0% improvement
+        # with gates-all-passing means the pipeline ran but added nothing — never
+        # "excellence".  Require at least 1% absolute improvement.
+        _minimal_improvement = (output_quality.overall_score - input_quality.overall_score) >= 1.0
+
         quality_guaranteed = (
             gate_passed
             and integrity_result.passed
@@ -1192,6 +1198,7 @@ class MusicalQualityAssurance:
             and character_preserved
             and natural_sound
             and not overprocessed
+            and _minimal_improvement
         )
 
         # Generate verdict
@@ -1207,6 +1214,11 @@ class MusicalQualityAssurance:
             )
         elif not authenticity_preserved:
             verdict = f"❌ AUTHENTICITY LOST - {medium_type.value} character destroyed"
+        elif not _minimal_improvement:
+            verdict = (
+                f"❌ NO IMPROVEMENT - Processing did not enhance quality "
+                f"({input_quality.overall_score:.0f}→{output_quality.overall_score:.0f})"
+            )
         else:
             verdict = "❌ QUALITY NOT GUARANTEED - Unknown issue"
 
