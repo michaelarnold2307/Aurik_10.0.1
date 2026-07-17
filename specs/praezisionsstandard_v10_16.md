@@ -17,6 +17,7 @@
 | Abbruch | Intervallbreite < 0.5% ODER 12 Iterationen |
 
 **Gilt für:**
+
 - PMGG Phasen-Retry-Stärke (alle 64 Phasen)
 - PostGate Komponenten-Stärke (5 Post-Processing-Komponenten)
 - OneTakeExport LUFS-Gain-Korrektur (±0.1 dB)
@@ -30,6 +31,7 @@
 | Ausgabe-Präzision | ±2% des Stärke-Bereichs |
 
 **Gilt für:**
+
 - HumanizationPass.calibrate_strength()
 - Excellence-Presence-Blend (aus Restorability abgeleitet)
 - ListeningEQ Band-Korrekturen (10 Bänder, ±0.5 dB Mindestkorrektur)
@@ -73,6 +75,7 @@
 ## Ausnahmen
 
 Folgende Systeme verwenden KEINE binäre Suche, weil:
+
 - **Detection-basierte Reparaturen** (VocalScratchRepair, TapeHeadArtifact, SibilanceMax, DirectDefect): binär — sie reparieren oder nicht
 - **Deterministische Transformationen** (DC-Offset, Resampling, Silence-Maske): mathematisch exakt
 - **ML-Inferenz** (FlashSR, Demucs, BS-RoFormer): Stärke nicht kontinuierlich kalibrierbar (Modell-Output ist diskret)

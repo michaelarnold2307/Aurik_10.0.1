@@ -109,7 +109,8 @@ except ImportError:  # pragma: no cover
 # Konstruiere den Pfad relativ zu dieser Datei für robusten Import.
 import os as _os19
 import sys as _sys19
-from backend.core.ml_model_readiness import check_ml_model_ready  # noqa: E402
+
+from backend.core.ml_model_readiness import check_ml_model_ready
 
 _project_root_19 = _os19.path.dirname(
     _os19.path.dirname(_os19.path.dirname(_os19.path.dirname(_os19.path.abspath(__file__))))

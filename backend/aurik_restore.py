@@ -576,6 +576,7 @@ def auto_detect(audio: np.ndarray, sr: int = 48000) -> dict:
     wenn keine Pre-Analysis (MediumDetector/EraClassifier) verfügbar ist.
     """
     from backend.core.phantom_mode import detect_phantom_config
+
     config = detect_phantom_config(audio, sr)
     return {
         "material": config.material,

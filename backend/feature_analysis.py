@@ -3,6 +3,7 @@ from typing import Any
 
 try:
     import librosa
+
     _HAS_LIBROSA = True
 except ImportError:
     librosa = None  # type: ignore[assignment]

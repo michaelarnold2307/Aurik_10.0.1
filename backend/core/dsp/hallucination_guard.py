@@ -147,7 +147,7 @@ def check_hallucination(
     # Fallback: estimate from pre audio if meta doesn't have bandwidth
     if _pre_bw >= 20000.0 and pre_arr.size > 0:
         try:
-            _pre_fft = np.abs(np.fft.rfft(pre_arr[:min(len(pre_arr), sr)]))
+            _pre_fft = np.abs(np.fft.rfft(pre_arr[: min(len(pre_arr), sr)]))
             _cumsum = np.cumsum(_pre_fft)
             _total = _cumsum[-1] + 1e-12
             _bw_idx = int(np.searchsorted(_cumsum, 0.95 * _total))

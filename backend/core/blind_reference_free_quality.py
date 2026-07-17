@@ -46,9 +46,12 @@ class BlindQualityScore:
 
     @property
     def grade(self) -> str:
-        if self.overall >= 90: return "Excellent"
-        if self.overall >= 80: return "Good"
-        if self.overall >= 60: return "Fair"
+        if self.overall >= 90:
+            return "Excellent"
+        if self.overall >= 80:
+            return "Good"
+        if self.overall >= 60:
+            return "Fair"
         return "Poor"
 
 

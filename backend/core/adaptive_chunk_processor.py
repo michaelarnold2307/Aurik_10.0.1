@@ -331,11 +331,12 @@ def process_in_adaptive_chunks(
                 if _ch_n >= 1024:
                     # Normalized cross-correlation via scipy (FFT-accelerated)
                     from scipy.signal import correlate as _sp_corr
+
                     _l_ms = _ch_l - float(np.mean(_ch_l))
                     _r_ms = _ch_r - float(np.mean(_ch_r))
                     _l_std = float(np.std(_l_ms)) + 1e-12
                     _r_std = float(np.std(_r_ms)) + 1e-12
-                    _corr = _sp_corr(_l_ms / (_l_std * _ch_n), _r_ms / _r_std, method='fft')
+                    _corr = _sp_corr(_l_ms / (_l_std * _ch_n), _r_ms / _r_std, method="fft")
                     _center = _ch_n - 1
                     _max_lag = min(int(sr * 0.2), _center)  # ±200 ms search
                     _lo = max(0, _center - _max_lag)
@@ -346,10 +347,13 @@ def process_in_adaptive_chunks(
                         _lag = int(np.argmax(np.abs(_search))) - _max_lag
                         if abs(_lag) > 1:  # ≥1 sample correction threshold
                             from scipy.ndimage import shift as _nd_shift
-                            _r_corrected = _nd_shift(_ch_r.astype(np.float64),
-                                                      float(_lag), mode='constant', cval=0.0, order=3)
-                            processed = np.vstack([_ch_l[np.newaxis, :],
-                                                   _r_corrected[np.newaxis, :]]).astype(np.float32)
+
+                            _r_corrected = _nd_shift(
+                                _ch_r.astype(np.float64), float(_lag), mode="constant", cval=0.0, order=3
+                            )
+                            processed = np.vstack([_ch_l[np.newaxis, :], _r_corrected[np.newaxis, :]]).astype(
+                                np.float32
+                            )
             except Exception:
                 pass
 

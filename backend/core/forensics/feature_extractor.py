@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 
 try:
     import librosa
+
     _HAS_LIBROSA = True
 except ImportError:
     librosa = None  # type: ignore[assignment]

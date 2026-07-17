@@ -67,10 +67,13 @@ class GlobalGainBudget:
 
             if approved < requested:
                 logger.info(
-                    "§GGB-1: %s requested %.2f dB → approved %.2f dB "
-                    "(cap: total %.2f/%.2f dB, remaining %.2f dB)",
-                    phase_id, requested_db, approved,
-                    self._cumulative_db, self._TOTAL_BUDGET_DB, remaining - approved,
+                    "§GGB-1: %s requested %.2f dB → approved %.2f dB (cap: total %.2f/%.2f dB, remaining %.2f dB)",
+                    phase_id,
+                    requested_db,
+                    approved,
+                    self._cumulative_db,
+                    self._TOTAL_BUDGET_DB,
+                    remaining - approved,
                 )
 
             return approved

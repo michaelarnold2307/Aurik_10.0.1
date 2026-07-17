@@ -16,11 +16,12 @@ def phase_human_name(phase_id: str) -> str:
     # Strip common prefixes
     for prefix in ("backend/core/phases/", "phases/"):
         if phase_id.startswith(prefix):
-            phase_id = phase_id[len(prefix):]
+            phase_id = phase_id[len(prefix) :]
     if phase_id.endswith(".py"):
         phase_id = phase_id[:-3]
     try:
         from backend.core.phase_icons import phase_name_de
+
         return phase_name_de(phase_id)
     except ImportError:
         return phase_id
@@ -30,6 +31,7 @@ def phase_human_name_with_icon(phase_id: str) -> str:
     """Return icon + human-readable name, e.g. '🔍 Knackser-Entfernung'."""
     try:
         from backend.core.phase_icons import phase_display
+
         return phase_display(phase_id)
     except ImportError:
         return phase_human_name(phase_id)

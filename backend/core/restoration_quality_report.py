@@ -108,21 +108,11 @@ def compute_quality_report(
             compute_transient_preservation_score,
         )
 
-        report.harmonic_preservation = (
-            compute_harmonic_preservation_score(original, restored, sr) * 100.0
-        )
-        report.transient_preservation = (
-            compute_transient_preservation_score(original, restored, sr) * 100.0
-        )
-        report.formant_preservation = (
-            compute_formant_preservation_score(original, restored, sr) * 100.0
-        )
-        report.micro_dynamics = (
-            compute_micro_dynamics_score(original, restored, sr) * 100.0
-        )
-        report.emotional_arc = (
-            compute_emotional_arc_score(original, restored, sr) * 100.0
-        )
+        report.harmonic_preservation = compute_harmonic_preservation_score(original, restored, sr) * 100.0
+        report.transient_preservation = compute_transient_preservation_score(original, restored, sr) * 100.0
+        report.formant_preservation = compute_formant_preservation_score(original, restored, sr) * 100.0
+        report.micro_dynamics = compute_micro_dynamics_score(original, restored, sr) * 100.0
+        report.emotional_arc = compute_emotional_arc_score(original, restored, sr) * 100.0
     except Exception as e:
         logger.debug("Preservation-Metriken nicht verfügbar: %s", e)
         warnings.append(f"Preservation metrics: {e}")

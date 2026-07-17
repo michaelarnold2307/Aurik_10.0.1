@@ -557,6 +557,7 @@ class AudioExporter:
         if ext == ".wav":
             try:
                 from backend.core.bwf_writer import write_bwf_chunks
+
                 write_bwf_chunks(
                     str(output_path),
                     description=f"Aurik v10 Bit-Perfect Archive (sha256={chk[:16]})",

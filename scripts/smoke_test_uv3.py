@@ -1,7 +1,3 @@
-import sys
-
-sys.path.insert(0, ".")
-#!/usr/bin/env python3
 """
 §2.59 UV3 Pre-Flight Smoke Test (2026-07-09)
 
@@ -12,6 +8,12 @@ echten Pipeline-Run ab.
 Usage: python scripts/smoke_test_uv3.py
 Exit 0 = OK, Exit 1 = Fehler gefunden
 """
+
+import sys
+
+sys.path.insert(0, ".")
+#!/usr/bin/env python3
+
 
 import sys
 import time

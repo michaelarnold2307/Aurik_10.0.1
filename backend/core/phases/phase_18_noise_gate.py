@@ -98,8 +98,9 @@ try:
 except ImportError:  # pragma: no cover
     _get_silero_plugin_18 = None  # type: ignore[assignment]
 
+from backend.core.ml_model_readiness import check_ml_model_ready
+
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult
-from backend.core.ml_model_readiness import check_ml_model_ready  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -428,12 +429,12 @@ class NoiseGate(PhaseInterface):
             # Adaptiere Schwellen: +6dB über Noise-Floor, aber innerhalb [-55, -25] dB
             _base_threshold = float(np.clip(_nf18["noise_floor_db"] + 8.0, -55.0, -25.0))
             _n_bands = len(config["thresholds_db"])
-            config["thresholds_db"] = [
-                _base_threshold + i * 3.0 for i in range(_n_bands)
-            ]
-            logger.debug("Phase 18 adaptive: noise_floor=%.1fdB → gate_thresholds=%s",
-                        _nf18["noise_floor_db"],
-                        [f"{t:.0f}" for t in config["thresholds_db"]])
+            config["thresholds_db"] = [_base_threshold + i * 3.0 for i in range(_n_bands)]
+            logger.debug(
+                "Phase 18 adaptive: noise_floor=%.1fdB → gate_thresholds=%s",
+                _nf18["noise_floor_db"],
+                [f"{t:.0f}" for t in config["thresholds_db"]],
+            )
         except Exception:
             pass
 
@@ -644,7 +645,9 @@ class NoiseGate(PhaseInterface):
                     gated_audio = (_wet_ratio * gated_audio + _dry_ratio * audio).astype(np.float32)
                     logger.info(
                         "§V19 phase_18: noise_texture_dist=%.3f → %.0f/%.0f wet/dry-blend",
-                        _nt18_d, _wet_ratio * 100, _dry_ratio * 100,
+                        _nt18_d,
+                        _wet_ratio * 100,
+                        _dry_ratio * 100,
                     )
         except Exception as _nt18_exc:
             logger.debug("§V19 phase_18 noise_texture non-blocking: %s", _nt18_exc)

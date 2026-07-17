@@ -344,13 +344,15 @@ class TransientPreservationPhase(PhaseInterface):
 
             _ts = derive_transient_sensitivity(audio, sample_rate)
             params = dict(params)
-            params["detection_sensitivity"] = float(np.clip(
-                params.get("detection_sensitivity", 0.65) * _ts["onset_threshold"] / 3.5,
-                0.35, 0.90
-            ))
-            logger.debug("Phase 08 adaptive: sensitivity=%.2f (crest=%.1f onsets=%.1f)",
-                        params["detection_sensitivity"],
-                        _ts["crest_factor"], _ts["onset_threshold"])
+            params["detection_sensitivity"] = float(
+                np.clip(params.get("detection_sensitivity", 0.65) * _ts["onset_threshold"] / 3.5, 0.35, 0.90)
+            )
+            logger.debug(
+                "Phase 08 adaptive: sensitivity=%.2f (crest=%.1f onsets=%.1f)",
+                params["detection_sensitivity"],
+                _ts["crest_factor"],
+                _ts["onset_threshold"],
+            )
         except Exception:
             pass
 

@@ -94,9 +94,7 @@ class SaturationDiscriminationResult:
 # ── Core DSP ──────────────────────────────────────────────────────────────
 
 
-def _detect_fundamental_hz(
-    audio: np.ndarray, sr: int, f_min: float = 40.0, f_max: float = 800.0
-) -> float | None:
+def _detect_fundamental_hz(audio: np.ndarray, sr: int, f_min: float = 40.0, f_max: float = 800.0) -> float | None:
     """Detektiert dominante Grundfrequenz via Autokorrelation."""
     n = min(len(audio), 8192)
     if n < 512:
@@ -127,13 +125,20 @@ def _harmonic_energy_at_order(
     return float(np.sum(fft_mag[lo:hi] ** 2))
 
 
-def _analyze_saturation_segment(
-    audio: np.ndarray, sr: int, start_s: float, end_s: float
-) -> SaturationSegment:
+def _analyze_saturation_segment(audio: np.ndarray, sr: int, start_s: float, end_s: float) -> SaturationSegment:
     """Analysiert die Sättigungscharakteristik eines 1s-Audiosegments."""
     seg = audio[int(start_s * sr) : int(end_s * sr)]
     if len(seg) < 1024:
-        return SaturationSegment(start_s=start_s, end_s=end_s, h2_energy=0, h3_energy=0, h4_energy=0, h5_energy=0, even_odd_ratio=1.0, onset_slope=0.5)
+        return SaturationSegment(
+            start_s=start_s,
+            end_s=end_s,
+            h2_energy=0,
+            h3_energy=0,
+            h4_energy=0,
+            h5_energy=0,
+            even_odd_ratio=1.0,
+            onset_slope=0.5,
+        )
 
     mono = seg if seg.ndim == 1 else seg.mean(axis=1)
     mono = mono.astype(np.float64)
@@ -327,9 +332,7 @@ def should_preserve_saturation(result: SaturationDiscriminationResult) -> bool:
     return result.global_classification == "preserve"
 
 
-def get_saturation_strength_cap(
-    result: SaturationDiscriminationResult, segment_start_s: float = 0.0
-) -> float:
+def get_saturation_strength_cap(result: SaturationDiscriminationResult, segment_start_s: float = 0.0) -> float:
     """Gibt den Strength-Cap für einen Zeitpunkt zurück (0.0 = voll reparieren, 1.0 = erhalten)."""
     for seg in result.segments:
         if seg.start_s <= segment_start_s < seg.end_s:

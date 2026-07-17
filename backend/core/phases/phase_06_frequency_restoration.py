@@ -1114,8 +1114,16 @@ class FrequencyRestorationPhase(PhaseInterface):
                     panns_singing=_panns,
                 )
                 # §v10.15 Safe access: NVSR result may be namedtuple not dict
-                _nv_target = _nvsr_result.get("target_hz", 16_000.0) if hasattr(_nvsr_result, 'get') else getattr(_nvsr_result, 'target_hz', 16_000.0)
-                _nv_hf = _nvsr_result.get("hf_energy_added_db", 0.0) if hasattr(_nvsr_result, 'get') else getattr(_nvsr_result, 'hf_energy_added_db', 0.0)
+                _nv_target = (
+                    _nvsr_result.get("target_hz", 16_000.0)
+                    if hasattr(_nvsr_result, "get")
+                    else getattr(_nvsr_result, "target_hz", 16_000.0)
+                )
+                _nv_hf = (
+                    _nvsr_result.get("hf_energy_added_db", 0.0)
+                    if hasattr(_nvsr_result, "get")
+                    else getattr(_nvsr_result, "hf_energy_added_db", 0.0)
+                )
                 logger.info(
                     "Phase 06: NVSR-SBR aktiv (rolloff=%.0f Hz → %.0f Hz, strength=%.2f, hf_added=%.1f dB)",
                     _rolloff_hz_routing,
@@ -1130,7 +1138,7 @@ class FrequencyRestorationPhase(PhaseInterface):
                 except (TypeError, KeyError):
                     # SegResult namedtuple → extract by index/attr
                     try:
-                        _nvsr_audio = _nvsr_result[0] if hasattr(_nvsr_result, '__getitem__') else _nvsr_result.audio
+                        _nvsr_audio = _nvsr_result[0] if hasattr(_nvsr_result, "__getitem__") else _nvsr_result.audio
                     except Exception:
                         _nvsr_audio = dsp_restored  # fallback to DSP
                 if not isinstance(_nvsr_audio, np.ndarray):
@@ -1140,9 +1148,15 @@ class FrequencyRestorationPhase(PhaseInterface):
                     "nvsr_available": True,
                     "quality_mode": quality_mode,
                     "strategy_used": "nvsr_sbr",
-                    "nvsr_target_hz": _nvsr_result.get("target_hz") if hasattr(_nvsr_result, 'get') else getattr(_nvsr_result, 'target_hz', 16000),
-                    "nvsr_ceiling_hz": _nvsr_result.get("ceiling_hz") if hasattr(_nvsr_result, 'get') else getattr(_nvsr_result, 'ceiling_hz', 20000),
-                    "nvsr_hf_added_db": _nvsr_result.get("hf_energy_added_db") if hasattr(_nvsr_result, 'get') else getattr(_nvsr_result, 'hf_energy_added_db', 0.0),
+                    "nvsr_target_hz": _nvsr_result.get("target_hz")
+                    if hasattr(_nvsr_result, "get")
+                    else getattr(_nvsr_result, "target_hz", 16000),
+                    "nvsr_ceiling_hz": _nvsr_result.get("ceiling_hz")
+                    if hasattr(_nvsr_result, "get")
+                    else getattr(_nvsr_result, "ceiling_hz", 20000),
+                    "nvsr_hf_added_db": _nvsr_result.get("hf_energy_added_db")
+                    if hasattr(_nvsr_result, "get")
+                    else getattr(_nvsr_result, "hf_energy_added_db", 0.0),
                 }
             except Exception as _nvsr_exc:
                 logger.warning("Phase 06: NVSR-Fehler → FlashSR-Fallback: %s", _nvsr_exc)

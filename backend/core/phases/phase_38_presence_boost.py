@@ -43,9 +43,9 @@ from scipy import signal
 
 from backend.core.audio_utils import audio_sample_count, stereo_channel_view, stereo_like
 from backend.core.defect_scanner import MaterialType
+from backend.core.ml_model_readiness import check_ml_model_ready
 
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult
-from backend.core.ml_model_readiness import check_ml_model_ready  # noqa: E402
 
 try:
     from backend.core.dsp.hallucination_guard import check_hallucination as _check_hg_38_fn

@@ -43,8 +43,9 @@ def check_file(filepath: str) -> list[str]:
             continue
 
         fmt = args[0].value
-        # Count %s, %d, %f, %g placeholders
-        placeholders = len(re.findall(r"%[.\\d]*[sdfg]", fmt))
+        # Count printf-style placeholders, skipping %% (literal percent).
+        all_matches = re.findall(r"%%|%[#0+\- ]?[0-9]*\.?[0-9]*[sdfgeEoxXr]", fmt)
+        placeholders = sum(1 for m in all_matches if m != "%%")
         nargs = len(args) - 1
         if placeholders != nargs:
             # Check for keyword arguments (e.g., exc_info=True)

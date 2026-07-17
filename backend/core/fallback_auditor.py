@@ -18,10 +18,10 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class FallbackEvent:
-    component: str       # "SingMOS", "UV3", "HPE", etc.
-    gold_standard: str   # "versa_singmos_pro", "unified_restorer_v3", etc.
-    fallback_used: str   # "pqs_dsp", "passthrough", etc.
-    reason: str          # "device_mismatch", "syntax_error", "timeout", etc.
+    component: str  # "SingMOS", "UV3", "HPE", etc.
+    gold_standard: str  # "versa_singmos_pro", "unified_restorer_v3", etc.
+    fallback_used: str  # "pqs_dsp", "passthrough", etc.
+    reason: str  # "device_mismatch", "syntax_error", "timeout", etc.
     severity: str = "warning"  # "info", "warning", "error"
 
 
@@ -36,37 +36,44 @@ class FallbackAuditor:
 
     def record(self, component: str, gold: str, fallback: str, reason: str, severity: str = "warning"):
         with self._lock:
-            self._events.append(FallbackEvent(
-                component=component, gold_standard=gold,
-                fallback_used=fallback, reason=reason, severity=severity,
-            ))
+            self._events.append(
+                FallbackEvent(
+                    component=component,
+                    gold_standard=gold,
+                    fallback_used=fallback,
+                    reason=reason,
+                    severity=severity,
+                )
+            )
         # Handler-based auto-detect catches this — don't double-log
         pass
 
     @property
     def degraded(self) -> bool:
         return len(self._events) > 0
-    
+
     @property
     def should_block_pipeline(self) -> bool:
         """True wenn die Pipeline wegen zu vieler Fallbacks blockiert werden sollte."""
-        return self.cascade_exceeded or any(e.severity == "error" for e in self._events if "fatal" in str(e.reason).lower())
+        return self.cascade_exceeded or any(
+            e.severity == "error" for e in self._events if "fatal" in str(e.reason).lower()
+        )
 
     @property
     def has_critical_degradation(self) -> bool:
         return any(e.severity == "error" for e in self._events)
 
     # ── Cascade Management (§v10.17) ────────────────────────────────
-    
-    _MAX_CASCADE_DEPTH: int = 5       # Max 5 Fallbacks pro Komponente
-    _ESCALATE_AFTER: int = 3          # Ab 3. Fallback → severity="error"
-    _BLOCK_AFTER: int = 8             # Ab 8 Fallbacks gesamt → Pipeline blockieren
-    
+
+    _MAX_CASCADE_DEPTH: int = 5  # Max 5 Fallbacks pro Komponente
+    _ESCALATE_AFTER: int = 3  # Ab 3. Fallback → severity="error"
+    _BLOCK_AFTER: int = 8  # Ab 8 Fallbacks gesamt → Pipeline blockieren
+
     @property
     def cascade_exceeded(self) -> bool:
         """True wenn die Fallback-Tiefe überschritten wurde."""
         return len(self._events) >= self._BLOCK_AFTER
-    
+
     def record(self, component: str, gold: str, fallback: str, reason: str, severity: str = "warning"):
         with self._lock:
             # Cascade depth check per component
@@ -76,16 +83,23 @@ class FallbackAuditor:
                 severity = "error"
             elif same_component >= self._ESCALATE_AFTER:
                 severity = "error"
-            
-            self._events.append(FallbackEvent(
-                component=component, gold_standard=gold,
-                fallback_used=fallback, reason=reason, severity=severity,
-            ))
+
+            self._events.append(
+                FallbackEvent(
+                    component=component,
+                    gold_standard=gold,
+                    fallback_used=fallback,
+                    reason=reason,
+                    severity=severity,
+                )
+            )
             if self.cascade_exceeded:
-                logger.critical("FallbackAuditor BLOCK: %d Fallbacks gesamt — Pipeline-Qualität gefährdet", len(self._events))
+                logger.critical(
+                    "FallbackAuditor BLOCK: %d Fallbacks gesamt — Pipeline-Qualität gefährdet", len(self._events)
+                )
         # Handler-based auto-detect catches this — don't double-log
         pass
-    
+
     def summary(self) -> dict[str, Any]:
         with self._lock:
             return {
@@ -93,8 +107,7 @@ class FallbackAuditor:
                 "critical": self.has_critical_degradation,
                 "total_fallbacks": len(self._events),
                 "events": [
-                    {"component": e.component, "gold": e.gold_standard,
-                     "fallback": e.fallback_used, "reason": e.reason}
+                    {"component": e.component, "gold": e.gold_standard, "fallback": e.fallback_used, "reason": e.reason}
                     for e in self._events
                 ],
             }
@@ -127,22 +140,20 @@ class FallbackAuditor:
         ("eviction", "PluginLifecycle", "FullPlugin", "Evicted"),
     ]
 
-
-    
     @classmethod
     def enable_auto_detect(cls):
         if cls._auto_detect_installed:
             return  # Already installed — no double-registration
         """Installiert einen Logging-Filter der Fallback-Muster automatisch erkennt.
-        
+
         Nach dem Aufruf werden ALLE Logger automatisch auf Fallback-Patterns
         geprüft — kein manuelles Instrumentieren mehr nötig.
         """
         import logging
-        
+
         _auditor = get_fallback_auditor()
         _patterns = cls._fallback_patterns
-        
+
         class FallbackDetectHandler(logging.Handler):
             def emit(self, record):
                 try:
@@ -153,8 +164,7 @@ class FallbackAuditor:
                             break  # one match per message
                 except Exception:
                     pass
-                
-        
+
         # An Root-Logger hängen — fängt ALLE Logs ab
         root = logging.getLogger()
         handler = FallbackDetectHandler()

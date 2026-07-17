@@ -32,6 +32,7 @@ from typing import Any, cast
 
 try:
     import librosa
+
     _LIBROSA_AVAILABLE = True
 except ImportError:
     librosa = None  # type: ignore[assignment]

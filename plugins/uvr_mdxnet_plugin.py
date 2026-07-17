@@ -191,7 +191,8 @@ class UVRMDXNetPlugin:
                         mask_out[:, s:e] = 0.5
                 masks_sum += mask_out
 
-            mask = np.clip(masks_sum / float(len(sessions)), 0, 1)
+            # §G-DIV0: max(len,1) prevents divide-by-zero when PLM evicts sessions
+            mask = np.clip(masks_sum / float(max(len(sessions), 1)), 0, 1)
             inst_spec = mask * np.abs(cplx) * np.exp(1j * np.angle(cplx))
             inst = self._istft(inst_spec, n)
             # Zurück auf Eingangs-SR

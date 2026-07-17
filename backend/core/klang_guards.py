@@ -529,8 +529,8 @@ class HumanizationPass:
     """
 
     # §v10.15: Kalibrierungs-Konstanten
-    _STRENGTH_MIN: float = 0.05   # Sehr lebendiges Material
-    _STRENGTH_MAX: float = 0.25   # Sehr steriles Material
+    _STRENGTH_MIN: float = 0.05  # Sehr lebendiges Material
+    _STRENGTH_MAX: float = 0.25  # Sehr steriles Material
     _STRENGTH_DEFAULT: float = 0.15  # Fallback wenn Kalibrierung fehlschlägt
 
     @staticmethod
@@ -558,10 +558,12 @@ class HumanizationPass:
             # Block-RMS über 50 ms Fenster → Perzentil-Spread (p95−p5)
             block_s = max(1, int(sr * 0.05))  # 50 ms
             n_blocks = max(1, len(arr) // block_s)
-            rms_env = np.array([
-                float(np.sqrt(np.mean(arr[i * block_s:(i + 1) * block_s] ** 2) + 1e-12))
-                for i in range(min(n_blocks, 200))  # max 10 s
-            ])
+            rms_env = np.array(
+                [
+                    float(np.sqrt(np.mean(arr[i * block_s : (i + 1) * block_s] ** 2) + 1e-12))
+                    for i in range(min(n_blocks, 200))  # max 10 s
+                ]
+            )
             if len(rms_env) < 4:
                 return HumanizationPass._STRENGTH_DEFAULT
             p5 = float(np.percentile(rms_env, 5))
@@ -578,15 +580,14 @@ class HumanizationPass:
             hop = fft_n // 4
             n_frames = min(40, max(4, (len(arr) - fft_n) // hop))
             if n_frames >= 4:
-                frames = np.array([
-                    np.abs(np.fft.rfft(arr[i * hop:i * hop + fft_n] * np.hamming(fft_n)))
-                    for i in range(n_frames)
-                ])
+                frames = np.array(
+                    [np.abs(np.fft.rfft(arr[i * hop : i * hop + fft_n] * np.hamming(fft_n))) for i in range(n_frames)]
+                )
                 # Frame-zu-Frame Kosinus-Distanz der Spektral-Hüllkurve
                 spectral_var = 0.0
                 for i in range(1, n_frames):
                     a, b = frames[i - 1], frames[i]
-                    denom = np.sqrt(np.sum(a ** 2) * np.sum(b ** 2)) + 1e-12
+                    denom = np.sqrt(np.sum(a**2) * np.sum(b**2)) + 1e-12
                     cos_sim = float(np.dot(a, b) / denom)
                     spectral_var += 1.0 - cos_sim
                 spectral_var /= max(1, n_frames - 1)
@@ -616,7 +617,10 @@ class HumanizationPass:
 
             logger.debug(
                 "HumanizationPass.calibrate_strength: dyn=%.3f spec=%.3f sterility=%.3f → strength=%.3f",
-                micro_dyn, spectral_var, sterility, strength,
+                micro_dyn,
+                spectral_var,
+                sterility,
+                strength,
             )
             return strength
 

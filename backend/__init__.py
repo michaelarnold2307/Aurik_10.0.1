@@ -7,16 +7,28 @@
 # Aurik-DSP erzeugt in 2-Sample-Subbändern korrekte Kurz-Arrays; die Warnung
 # ist harmlos aber flutet das Log. Statt 62+ Einzel-Guards patchen wir
 # scipy.signal.stft einmalig mit einem transparenten Längen-Guard.
+import warnings as _warnings
+
 import numpy as _np
 import scipy.signal as _scipy_signal
-import warnings as _warnings
 
 _original_stft = _scipy_signal.stft
 
 
-def _safe_stft(x, fs=1.0, window="hann", nperseg=256, noverlap=None,  # type: ignore[no-untyped-def]
-               nfft=None, detrend=False, return_onesided=True, scaling="spectrum",
-               axis=-1, boundary=None, padded=True):
+def _safe_stft(
+    x,
+    fs=1.0,
+    window="hann",
+    nperseg=256,
+    noverlap=None,  # type: ignore[no-untyped-def]
+    nfft=None,
+    detrend=False,
+    return_onesided=True,
+    scaling="spectrum",
+    axis=-1,
+    boundary=None,
+    padded=True,
+):
     """scipy.signal.stft mit transparentem Längen-Guard.
 
     Bei input_length < nperseg gibt scipy eine UserWarning aus und
@@ -30,13 +42,34 @@ def _safe_stft(x, fs=1.0, window="hann", nperseg=256, noverlap=None,  # type: ig
     if arr.size < nperseg:
         with _warnings.catch_warnings():
             _warnings.simplefilter("ignore")
-            return _original_stft(x, fs=fs, window=window, nperseg=arr.size,
-                                  noverlap=max(0, min(noverlap or arr.size // 2, arr.size - 1)),
-                                  nfft=nfft, detrend=detrend, return_onesided=return_onesided,
-                                  scaling=scaling, axis=axis, boundary=boundary, padded=padded)
-    return _original_stft(x, fs=fs, window=window, nperseg=nperseg, noverlap=noverlap,
-                          nfft=nfft, detrend=detrend, return_onesided=return_onesided,
-                          scaling=scaling, axis=axis, boundary=boundary, padded=padded)
+            return _original_stft(
+                x,
+                fs=fs,
+                window=window,
+                nperseg=arr.size,
+                noverlap=max(0, min(noverlap or arr.size // 2, arr.size - 1)),
+                nfft=nfft,
+                detrend=detrend,
+                return_onesided=return_onesided,
+                scaling=scaling,
+                axis=axis,
+                boundary=boundary,
+                padded=padded,
+            )
+    return _original_stft(
+        x,
+        fs=fs,
+        window=window,
+        nperseg=nperseg,
+        noverlap=noverlap,
+        nfft=nfft,
+        detrend=detrend,
+        return_onesided=return_onesided,
+        scaling=scaling,
+        axis=axis,
+        boundary=boundary,
+        padded=padded,
+    )
 
 
 _scipy_signal.stft = _safe_stft

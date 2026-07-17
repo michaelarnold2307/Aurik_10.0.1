@@ -22,14 +22,18 @@
 ## §15.1 Competitive Benchmarks reparieren
 
 ### Ist-Stand
+
 Die Benchmark-Suite (`benchmarks/competitive/benchmark_suite.py`) enthält nur einen Mock:
+
 ```python
 logger.warning("iZotope RX 11 benchmarking not implemented (requires license)")
 ```
+
 Kein einziger Vergleichslauf gegen iZotope RX oder CEDAR ist je in CI gelaufen.
 Die letzten Daten sind vom Februar 2026 — 5 Monate alt, RX 12 fehlt komplett.
 
 ### Wurzelursache
+
 Die Suite setzt eine kostenpflichtige Lizenz voraus (`benchmark_izotope()`), die nicht
 automatisiert verfügbar ist. Open-Source-Alternativen werden nicht genutzt.
 
@@ -45,6 +49,7 @@ automatisiert verfügbar ist. Open-Source-Alternativen werden nicht genutzt.
 | 1.6 | Legacy-Mock entfernen: `benchmark_izotope()` in `benchmarks/competitive/benchmark_suite.py` auf `NotImplementedError` umstellen, der klar dokumentiert, dass RX-Lizenz manuell bereitgestellt werden muss. | 0.5 h | — |
 
 ### Erfolgskriterien
+
 - `pytest -m competitive_oss` läuft in CI ohne Skip und vergleicht Aurik gegen ≥3 Open-Source-Tools
 - Monatlicher Trend-Report detektiert Regressionen automatisch
 - OQS-Delta ≥ 0 für ≥80% der Szenarien (wie Spec 04 §4.4a fordert)
@@ -54,14 +59,17 @@ automatisiert verfügbar ist. Open-Source-Alternativen werden nicht genutzt.
 ## §15.2 Echt-Audio-Corpus aufbauen
 
 ### Ist-Stand
+
 ```bash
 $ ls corpus/
 ls: cannot access 'corpus/': No such file or directory
 ```
+
 Kein einziges der 15.000+ Tests verwendet eine echte Musikaufnahme.
 Alle Tests operieren auf synthetischen Sinus-Signalen, Rauschen und Butterworth-Filtern.
 
 ### Wurzelursache
+
 Rechtliche Unsicherheit (Urheberrecht) + fehlende Corpus-Infrastruktur.
 
 ### Implementierungsschritte
@@ -77,6 +85,7 @@ Rechtliche Unsicherheit (Urheberrecht) + fehlende Corpus-Infrastruktur.
 | 2.7 | Optional: Lizenz für kleine kommerzielle Test-Corpora evaluieren (z.B. fraunhofer_idmt, MUSDB18). Nicht Pflicht für Gate. | Recherche | — |
 
 ### Erfolgskriterien
+
 - Mindestens 20 Public-Domain-Aufnahmen in ≥4 Material-Kategorien
 - `test_corpus_integrity` grün
 - `test_corpus_pipeline_smoke` grün (kein Crash über alle Corpus-Dateien)
@@ -86,12 +95,14 @@ Rechtliche Unsicherheit (Urheberrecht) + fehlende Corpus-Infrastruktur.
 ## §15.3 ABX/Wahrnehmungsvalidierung
 
 ### Ist-Stand
+
 `tests/unit/test_perceptual_metrics_regression.py` (v10.0.0-Phantom) heißt "ABX", implementiert aber **keine Blindhörvergleiche** —
 es misst SNR und RMS nach butterworth-Filtern. Irreführender Dateiname.
 Die Backend-Module `mushra_evaluator.py` (636 Zeilen) und `mushra_session.py` (318 Zeilen) existieren,
 sind aber rein algorithmische Approximationen ohne menschliche Hörer-Integration.
 
 ### Wurzelursache
+
 Keine Infrastruktur für echte Hörertests. Unklare Trennung zwischen "objektiver MUSHRA-Approximation"
 und tatsächlicher subjektiver Validierung.
 
@@ -107,6 +118,7 @@ und tatsächlicher subjektiver Validierung.
 | 3.6 | `docs/listening_study_protocol.md` — Protokoll für formale Hörtests: Rekrutierung, Training, Kontrollbedingungen, statistische Auswertung (95%-CI, ANOVA, Post-hoc). | 3 h | — |
 
 ### Erfolgskriterien
+
 - `test_abx_regression.py` → `test_perceptual_metrics_regression.py` umbenannt
 - ABX-HTTP-Endpoint serviert A/B/X-Triplets korrekt
 - MUSHRA-HTTP-Endpoint implementiert ITU-R BS.1534 Hidden-Reference-Protokoll
@@ -117,11 +129,13 @@ und tatsächlicher subjektiver Validierung.
 ## §15.4 Cross-Platform CI
 
 ### Ist-Stand
+
 Drei GitHub-Actions-Workflows — alle ausschließlich `runs-on: ubuntu-22.04`.
 Kein Windows, kein macOS. Aurik beansprucht Cross-Plattform-Fähigkeit, testet sie aber
 nie automatisiert.
 
 ### Wurzelursache
+
 Keine Windows/macOS-Runner konfiguriert. Möglicherweise Kostenbedenken (GitHub-hosted
 macOS-Runner sind teurer).
 
@@ -135,6 +149,7 @@ macOS-Runner sind teurer).
 | 4.4 | `.github/workflows/ci-cross-platform.yml` um `macos-15` (Intel via Rosetta?) und `windows-2025` ergänzen, sobald verfügbar. | 1 h | 4.1 |
 
 ### Erfolgskriterien
+
 - `ci-cross-platform.yml` läuft auf Ubuntu, Windows, macOS und ist grün
 - `platform_compat_check.py` detektiert Plattform-Inkompatibilitäten vor Merge
 
@@ -143,10 +158,12 @@ macOS-Runner sind teurer).
 ## §15.5 GPU-Strategie öffnen
 
 ### Ist-Stand
+
 Aurik deklariert: "CPU + optionale AMD-GPU (ROCm/DirectML)". Kein CUDA, kein Apple Silicon.
 Im professionellen Audio-Markt dominieren macOS (Apple Silicon) und NVIDIA (CUDA).
 
 ### Wurzelursache
+
 Entwickler-Hardware-Präferenz (AMD-GPU im Entwicklungsrechner). Strategische Entscheidung
 ohne dokumentierte Begründung.
 
@@ -161,6 +178,7 @@ ohne dokumentierte Begründung.
 | 5.5 | `.github/workflows/ci-cross-platform.yml` um GPU-Erkennung erweitern: `detect_gpu_capabilities.py` auf allen Plattformen laufen lassen (auch wenn keine GPU, dann CPU-Fallback bestätigen). | 1 h | 5.2, 4.1 |
 
 ### Erfolgskriterien
+
 - `detect_gpu_capabilities.py` erkennt CUDA, MPS, ROCm, DirectML korrekt
 - `MLEngineConfig` steuert ONNX-Provider pro Plattform
 - Kein harter ROCm/DirectML-Ausschluss mehr — alle Backends sind "best effort"
@@ -170,10 +188,12 @@ ohne dokumentierte Begründung.
 ## §15.6 Plugin-SDK und Developer-Ökosystem
 
 ### Ist-Stand
+
 58 Dateien in `plugins/` — aber kein SDK, keine API-Stabilitätsgarantie, kein Developer Guide.
 Das Bridge-Bypass-Verbot isoliert Plugins von `backend/core/`.
 
 ### Wurzelursache
+
 Plugins wurden organisch als interne Erweiterungen entwickelt, nicht als externes Ökosystem
 konzipiert.
 
@@ -189,6 +209,7 @@ konzipiert.
 | 6.6 | API-Stabilitätsgarantie: `backend/api/bridge.py`-Changelog mit SemVer. `@deprecated`-Decorator für alte Funktionen. 2-Major-Versionen-Deprecation-Window. | 2 h | — |
 
 ### Erfolgskriterien
+
 - Developer kann `cp -r plugins/sdk/example_plugin plugins/my_plugin` ausführen und `test_example.py` wird grün
 - `validate_plugin.py` prüft ≥5 Qualitätskriterien
 - `SDK.md` deckt Plugin-Lebenszyklus vollständig ab
@@ -198,11 +219,13 @@ konzipiert.
 ## §15.7 Dokumentations-Nutzerpfade
 
 ### Ist-Stand
+
 98 Docs-Dateien, aber: Kein "Getting Started", kein Tutorial, kein Architekturdiagramm,
 keine maschinenlesbare API-Referenz. `docs/api/PYTHON_API.md` existiert, ist aber nicht
 strukturiert (kein OpenAPI, keine Swagger-UI).
 
 ### Wurzelursache
+
 Dokumentation wuchs organisch als Entwickler-Notizen statt als Nutzer-Pfade.
 
 ### Implementierungsschritte
@@ -216,6 +239,7 @@ Dokumentation wuchs organisch als Entwickler-Notizen statt als Nutzer-Pfade.
 | 7.5 | `scripts/generate_api_docs.py` [ROADMAP] — Extrahiert Docstrings aus `backend/api/bridge.py` und generiert Markdown. Integration in `docs/api/`. | 3 h | — |
 
 ### Erfolgskriterien
+
 - `docs/getting_started.md` führt neuen Nutzer in ≤15 Minuten zu erfolgreicher Restaurierung
 - `docs/architecture.md` enthält C4-Diagramme mit Mermaid.js
 - `docs/api/openapi.yaml` ist valide und beschreibt alle REST-Endpunkte
@@ -225,11 +249,13 @@ Dokumentation wuchs organisch als Entwickler-Notizen statt als Nutzer-Pfade.
 ## §15.8 ErrorGuard-Flächendeckung
 
 ### Ist-Stand
+
 - NaN/Inf-Check in 67/68 Phasen (98%) — gut
 - ErrorGuard (strukturierte Fehlerwiederherstellung) nur in einem Bruchteil der Phasen
 - Ein Crash in Phase X killt die gesamte Pipeline
 
 ### Wurzelursache
+
 ErrorGuard wurde spät eingeführt und nicht systematisch auf alle Phasen angewendet.
 
 ### Implementierungsschritte
@@ -243,6 +269,7 @@ ErrorGuard wurde spät eingeführt und nicht systematisch auf alle Phasen angewe
 | 8.5 | `tests/unit/test_phase_error_guard.py` [ROADMAP] — Injiziert Fehler in Phasen und prüft, ob `DegradedOutput` korrekt zurückgegeben wird. | 3 h | 8.3 |
 
 ### Erfolgskriterien
+
 - `audit_error_guard_coverage.py` läuft und identifiziert alle ungeschützten Phasen
 - ≥50% aller Phasen haben ErrorGuard (von geschätzt ~10% derzeit)
 - `test_phase_error_guard.py` [ROADMAP] validiert Graceful-Degradation für ≥5 Phasen
@@ -252,11 +279,13 @@ ErrorGuard wurde spät eingeführt und nicht systematisch auf alle Phasen angewe
 ## §15.9 Zentraler Memory-Lifecycle
 
 ### Ist-Stand
+
 ONNX-Sessions werden in `lyrics_guided_enhancement.py` und `bridge.py` ad-hoc geladen.
 Kein zentraler Lifecycle-Manager. `conftest.py` nutzt `_release_heavy_singletons()` und
 `gc.collect()` als Test-Workaround — kein Produktions-Pattern.
 
 ### Wurzelursache
+
 Gewachsenes Design — jede Komponente managed ihre eigenen Ressourcen ohne Koordination.
 
 ### Implementierungsschritte
@@ -270,6 +299,7 @@ Gewachsenes Design — jede Komponente managed ihre eigenen Ressourcen ohne Koor
 | 9.5 | `tests/unit/test_session_manager.py` [ROADMAP] — Testet: Acquire/Release, LRU-Eviction, Memory-Limit, Concurrent-Access, Batch-Recycling. | 3 h | 9.1 |
 
 ### Erfolgskriterien
+
 - `InferenceSessionManager` ist einziger ONNX-Session-Erzeuger im Codebase
 - `get_total_memory_mb()` zeigt <2GB für 4 Modelle unter Last
 - Batch-Verarbeitung von 100 Tracks ohne Memory-Leak (stabile `get_total_memory_mb()` über Zeit)
@@ -279,12 +309,14 @@ Gewachsenes Design — jede Komponente managed ihre eigenen Ressourcen ohne Koor
 ## §15.10 Perceptual-Validation-Studie
 
 ### Ist-Stand
+
 Auriks zentraler Anspruch — "optimiert fürs menschliche Ohr, nicht für technische Metriken" —
 ist durch keine einzige externe Validierung belegt. 38 Dateien referenzieren MUSHRA, aber
 nur als algorithmische Approximation. Null menschliche Hörer, null Blindstudien, null
 Peer-Review.
 
 ### Wurzelursache
+
 Keine Ressourcen/Infrastruktur für formale Hörtests. Trennung zwischen "objektiver MUSHRA-Schätzung"
 und tatsächlicher subjektiver Validierung wurde nie vollzogen (vgl. §15.3).
 
@@ -300,6 +332,7 @@ und tatsächlicher subjektiver Validierung wurde nie vollzogen (vgl. §15.3).
 | 10.6 | Externe Validierung initiieren: Kontaktaufnahme mit Tonstudio/Hochschule für unabhängige Hörtests (≥12 Teilnehmer, doppelblind). Ergebnis publizieren (ArXiv, AES-Preprint). | Langfristig | 10.2–10.5 |
 
 ### Erfolgskriterien
+
 - `objective_mushra_estimator.py` markiert jeden Score als "estimated" (kein Score wird als echter MUSHRA ausgegeben)
 - `prepare_listening_study.py` generiert ITU-konforme Stimulus-Sets
 - `analyze_listening_study.py` berechnet 95%-CI und ANOVA
@@ -333,6 +366,7 @@ und tatsächlicher subjektiver Validierung wurde nie vollzogen (vgl. §15.3).
 - [ ] Recht-Review: Corpus-Lizenzen geprüft, kein urheberrechtlich geschütztes Material
 
 ---
+
 ## Status-Update v10.0.0-Phantom (11. Juli 2026)
 
 17 der 18 spezifizierten Gaps wurden implementiert (siehe §16 Phantom-Rollout).

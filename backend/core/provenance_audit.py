@@ -34,6 +34,7 @@ import numpy as np
 
 # Software-Version dieses Moduls
 from backend.core.version import AURIK_VERSION
+
 AUDIT_SCHEMA_VERSION = "1.0"
 
 

@@ -1,12 +1,13 @@
-
 """§v10.17 WatchdogCorrectness — prüft nicht nur Liveness, sondern auch Output-Qualität."""
 
 from __future__ import annotations
+
 import numpy as np
+
 
 class WatchdogCorrectness:
     """Ergänzt den Liveness-Watchdog um Output-Validierung."""
-    
+
     @staticmethod
     def check_audio_valid(audio: np.ndarray, label: str = "") -> tuple[bool, str]:
         """Prüft ob Audio nach einer Phase noch valide ist."""
@@ -21,13 +22,13 @@ class WatchdogCorrectness:
             if np.max(np.abs(arr)) > 2.0:
                 return False, f"{label}: amplitude {np.max(np.abs(arr)):.2f} > 2.0"
             # Check for all-zeros (phase produced silence)
-            rms = float(np.sqrt(np.mean(arr ** 2)))
+            rms = float(np.sqrt(np.mean(arr**2)))
             if rms < 1e-10:
                 return False, f"{label}: total silence (RMS={rms:.2e})"
             return True, "ok"
         except Exception as e:
             return False, f"{label}: validation error: {e}"
-    
+
     @staticmethod
     def check_not_identical(original: np.ndarray, processed: np.ndarray, label: str = "") -> tuple[bool, str]:
         """Prüft dass eine Phase das Audio tatsächlich verändert hat (nicht Passthrough)."""

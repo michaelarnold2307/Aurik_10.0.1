@@ -36,6 +36,7 @@ menschliche Gehör. Das bedeutet:
 **§13.2.1 Aktivierung (§2.17-ACTIVE):** Die Envelope-Infrastruktur existiert und wird
 zentral in `_profiled_phase_call()` injiziert. Alle Phasen, die im Frequenzbereich
 2–8 kHz (Präsenz, max. Ohrempfindlichkeit) arbeiten, MÜSSEN die Envelope lesen:
+
 - Phase 19 (De-Esser) — `strength × envelope[frame]`
 - Phase 38 (Presence Boost) — `strength × envelope[frame]`
 - Phase 18 (Noise Gate) — `strength × envelope[frame]`
@@ -48,6 +49,7 @@ zentral in `_profiled_phase_call()` injiziert. Alle Phasen, die im Frequenzberei
 
 **Konzept:** „Wie gut KÖNNTE dieser Song klingen?" — absolute Qualitätsschätzung
 ohne Vergleich zum degradierten Original. MERT-Embedding-basiert. Ermöglicht:
+
 - Qualitätsprognose VOR der Restaurierung
 - Abbruchkriterium: „Besser geht's nicht"
 - Kein Over-Processing für bereits optimales Material
@@ -55,6 +57,7 @@ ohne Vergleich zum degradierten Original. MERT-Embedding-basiert. Ermöglicht:
 ## §13.4 Human-Panel-kalibrierter MUSHRA (§13.9 ROADMAP)
 
 **Konzept:** Ridge-Regression auf echten Hörtest-Daten kalibriert den MUSHRA-Proxy.
+
 - Stufe 1 (heute): Literatur-Korrelationen
 - Stufe 2 (implementiert, unkalibriert): Ridge-Regression via `calibrate_from_panel()`
 - Stufe 3 (Ziel): Echte Panel-Daten → Gewichte rückprojiziert → CI-Proxy
@@ -62,15 +65,19 @@ ohne Vergleich zum degradierten Original. MERT-Embedding-basiert. Ermöglicht:
 ## §13.5 Hörermüdungs-Prävention
 
 ### §13.5.1 Over-Processing vermeiden
+
 Zu viele Phasen erzeugen ein „zu perfektes", künstlich klingendes Signal.
 
 ### §13.5.2 Fragile-Material-Guard (§2.15)
+
 bw_loss ≥ 0.90 ∧ SNR < 16 dB → global_scalar ≤ 0.70.
 
 ### §13.5.3 GrooveMetric Onset-Guard (§2.14)
+
 ≥90% Onsets erhalten → Score ≥ 0.85 trotz DTW-Fehlschlag.
 
 ### §13.5.4 Cross-Phase Naturalness Consensus (§13.10 ROADMAP)
+
 Phasen im gleichen Frequenzbereich addieren ihre Effekte unabhängig.
 → **Naturalness-Guard** prüft kumulative Wirkung und reduziert bei Bedarf.
 → Musical-Noise-, Metallic-Ringing- und Roughness-Regression-Detektion.
@@ -89,6 +96,7 @@ Phase 40: ±8 dB Cap, uniformer Gain, keine Gate-Sprünge.
 
 **Konzept:** Elke-Best-Stimmenmodell persistieren, beim nächsten Song wiederverwenden.
 BatchSessionLearner existiert bereits — Transfer-Learning für Künstler-Fingerprints:
+
 - Stimm-Modell (Formanten, Vibrato-Rate, HNR, spektrale Hüllkurve)
 - Track-Modell (Genre, Era, Aufnahmekette, typische Defekte)
 - Wiederverwendung beschleunigt wiederholte Restaurierungen desselben Künstlers

@@ -8,6 +8,11 @@ Corrects pitch and speed instability caused by mechanical variations in analog p
 SCIENTIFIC FOUNDATION (Über-SOTA):
 - **Mauch & Dixon (2014)**: pYIN — probabilistischer Multi-Threshold-Pitch-Estimator
   → Primärer Algorithmus (ersetzt simples YIN als primäre Methode)
+
+# §G-PYIN-CACHE: Prevent redundant ML pitch detection when phase_12 is called
+# per-channel (stereo) or per-chunk (surgical). Cached by audio hash.
+_PYIN_CACHE: dict[int, Any] = {}
+_PYIN_CACHE_MAX = 8
 - De Cheveigné & Kawahara (2002): YIN — nur noch als Legacy-Fallback referenziert
 - Laroche & Dolson (1999): Improved Phase Vocoder Time-Scale Modification of Audio
 - Driedger & Müller (2016): TSM Toolbox
@@ -122,6 +127,7 @@ def _reset_polyphonic_circuit_breaker() -> None:
     global _POLYPHONIC_CONSECUTIVE_ZERO_CONSENSUS, _POLYPHONIC_CB_ACTIVE
     _POLYPHONIC_CONSECUTIVE_ZERO_CONSENSUS = 0
     _POLYPHONIC_CB_ACTIVE = False
+    _PYIN_CACHE.clear()  # §G-PYIN-CACHE: reset per-run
 
 
 class WowFlutterFix(PhaseInterface):
@@ -438,12 +444,12 @@ class WowFlutterFix(PhaseInterface):
                     if _original_audio.ndim == 2:
                         _fade_in = _fade_in[:, np.newaxis]
                         _fade_out = _fade_out[:, np.newaxis]
-                    _overlap_region = _tail_use[:_crossfade_len] * _fade_out.astype(np.float32) + \
-                                      _original_audio[:_crossfade_len] * _fade_in.astype(np.float32)
+                    _overlap_region = _tail_use[:_crossfade_len] * _fade_out.astype(np.float32) + _original_audio[
+                        :_crossfade_len
+                    ] * _fade_in.astype(np.float32)
                     _original_audio[:_crossfade_len] = _overlap_region
                     _chunk_has_overlap = True
-                    logger.debug("Phase 12 chunk-overlap: crossfaded %d samples from previous chunk",
-                                 _crossfade_len)
+                    logger.debug("Phase 12 chunk-overlap: crossfaded %d samples from previous chunk", _crossfade_len)
             self._chunk_overlap_tail = None  # consumed
 
         # §2.60/§2.51 STCG pre-phase: L/R-Alignment VOR Chunk-Verarbeitung.
@@ -463,6 +469,7 @@ class WowFlutterFix(PhaseInterface):
                 from backend.core.stereo_temporal_coherence_guard import (
                     get_stereo_temporal_coherence_guard,
                 )
+
                 audio = get_stereo_temporal_coherence_guard().correct_interchannel_delay(
                     audio, sample_rate, phase_id="phase_12_pre_chunking"
                 )
@@ -582,24 +589,35 @@ class WowFlutterFix(PhaseInterface):
 
         if use_ml_hybrid:
             try:
-                logger.info("Phase 12 ML-Hybrid: mode=%s, material=%s", quality_mode, material.value)
-
-                # Configure ML pitch detector strategy
-                if quality_mode in ["quality", "maximum"]:
-                    strategy = PitchDetectionStrategy.HYBRID  # Full YIN + CREPE (polyphonic failed)
-                else:  # balanced
-                    strategy = PitchDetectionStrategy.ADAPTIVE  # Smart: YIN only if confident
-
-                detector = HybridWowFlutter(
-                    config=WowFlutterConfig(
-                        strategy=strategy,
-                        crepe_model="full" if quality_mode in ["quality", "maximum"] else "medium",
-                        confidence_threshold=0.7,
-                        enable_preprocessing=True,
+                # §G-PYIN-CACHE: Avoid re-running ML detection for same audio (per-channel calls)
+                _audio_hash = hash(mono.tobytes())
+                if _audio_hash in _PYIN_CACHE:
+                    ml_result = _PYIN_CACHE[_audio_hash]
+                    logger.debug(
+                        "Phase 12 ML-Hybrid: cached pitch result reused (confidence=%.3f)", ml_result.mean_confidence
                     )
-                )
+                else:
+                    logger.info("Phase 12 ML-Hybrid: mode=%s, material=%s", quality_mode, material.value)
 
-                ml_result = detector.detect_pitch(mono, sample_rate=sample_rate)
+                    # Configure ML pitch detector strategy
+                    if quality_mode in ["quality", "maximum"]:
+                        strategy = PitchDetectionStrategy.HYBRID
+                    else:
+                        strategy = PitchDetectionStrategy.ADAPTIVE
+
+                    detector = HybridWowFlutter(
+                        config=WowFlutterConfig(
+                            strategy=strategy,
+                            crepe_model="full" if quality_mode in ["quality", "maximum"] else "medium",
+                            confidence_threshold=0.7,
+                            enable_preprocessing=True,
+                        )
+                    )
+
+                    ml_result = detector.detect_pitch(mono, sample_rate=sample_rate)
+                    if len(_PYIN_CACHE) >= _PYIN_CACHE_MAX:
+                        _PYIN_CACHE.pop(next(iter(_PYIN_CACHE)))
+                    _PYIN_CACHE[_audio_hash] = ml_result
 
                 logger.info(
                     "ML-Hybrid Pitch-Detektion abgeschlossen: pYIN=%s, CREPE=%s, confidence=%.3f",
@@ -1336,9 +1354,8 @@ class WowFlutterFix(PhaseInterface):
         if _makeup_db > 0.0:
             try:
                 from backend.core.global_gain_budget import get_global_gain_budget
-                _approved = get_global_gain_budget().request(
-                    "phase_12_wow_flutter_fix", _makeup_db, priority="normal"
-                )
+
+                _approved = get_global_gain_budget().request("phase_12_wow_flutter_fix", _makeup_db, priority="normal")
                 if _approved < _makeup_db:
                     _scale = float(10.0 ** ((_approved - _makeup_db) / 20.0))
                     restored = restored * _scale + _original_audio * (1.0 - _scale)
@@ -3251,8 +3268,11 @@ class WowFlutterFix(PhaseInterface):
 
         try:
             from backend.core.dsp.phase_vocoder import phase_vocoder_timestretch
+
             return phase_vocoder_timestretch(
-                audio, stretch_factors, _sample_rate,
+                audio,
+                stretch_factors,
+                _sample_rate,
                 n_fft=self.STFT_WINDOW_SIZE,
                 hop_ratio=self.PITCH_HOP_FACTOR,
             )
@@ -3260,9 +3280,7 @@ class WowFlutterFix(PhaseInterface):
             logger.debug("§PV1 phase vocoder unavailable (%s) — fallback to WSOLA", _pv_exc)
             return self._phase_vocoder_wsola_fallback(audio, stretch_factors)
 
-    def _phase_vocoder_wsola_fallback(
-        self, audio: np.ndarray, stretch_factors: np.ndarray
-    ) -> np.ndarray:
+    def _phase_vocoder_wsola_fallback(self, audio: np.ndarray, stretch_factors: np.ndarray) -> np.ndarray:
         """WSOLA-style fallback via np.interp — used when STFT phase vocoder is unavailable."""
         audio_f = np.nan_to_num(np.asarray(audio, dtype=np.float32), nan=0.0, posinf=0.0, neginf=0.0)
         n_samples = len(audio_f)
@@ -3278,6 +3296,7 @@ class WowFlutterFix(PhaseInterface):
 
         try:
             from scipy.signal import savgol_filter
+
             win = max(5, (n_samples // 400) | 1)
             win = min(win, n_samples if n_samples % 2 == 1 else n_samples - 1)
             if win >= 5:

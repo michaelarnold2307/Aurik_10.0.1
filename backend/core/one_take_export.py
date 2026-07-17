@@ -74,9 +74,7 @@ class OneTakeExport:
         current = np.asarray(audio, dtype=np.float64)
 
         for attempt in range(_MAX_RETRIES + 1):
-            check = ExportQualityGate.check(
-                current.astype(np.float32), sr, is_studio_2026=is_studio_2026
-            )
+            check = ExportQualityGate.check(current.astype(np.float32), sr, is_studio_2026=is_studio_2026)
             result.quality_report = {
                 "true_peak_dbtp": check.true_peak_dbtp,
                 "integrated_lufs": check.integrated_lufs,
@@ -88,17 +86,17 @@ class OneTakeExport:
             }
 
             # Keine Fehler UND keine Warnungen → fertig
-            needs_fix = (check.errors 
-                         or (not check.lufs_in_range) 
-                         or (not check.fatigue_ok)
-                         or (not check.stereo_ok))
+            needs_fix = check.errors or (not check.lufs_in_range) or (not check.fatigue_ok) or (not check.stereo_ok)
             if check.passed and not needs_fix:
                 result.passed = True
                 result.retries = attempt
                 result.audio = current.astype(np.float32)
                 logger.info(
                     "OneTakeExport: PASS (attempt=%d, TP=%.1f, LUFS=%.1f, fatigue=%.2f)",
-                    attempt, check.true_peak_dbtp, check.integrated_lufs, check.fatigue_score,
+                    attempt,
+                    check.true_peak_dbtp,
+                    check.integrated_lufs,
+                    check.fatigue_score,
                 )
                 return result
 
@@ -109,7 +107,8 @@ class OneTakeExport:
                 result.audio = current.astype(np.float32)
                 logger.warning(
                     "OneTakeExport: FAIL nach %d Retries — %s",
-                    attempt, "; ".join(check.errors[:3]),
+                    attempt,
+                    "; ".join(check.errors[:3]),
                 )
                 return result
 
@@ -138,9 +137,12 @@ class OneTakeExport:
             if check.fatigue_score > 0.4:
                 try:
                     from scipy.signal import butter, sosfilt
+
                     sos = butter(
-                        2, _FATIGUE_HF_CUT_FREQ / (sr / 2),
-                        btype='highshelf', output='sos',
+                        2,
+                        _FATIGUE_HF_CUT_FREQ / (sr / 2),
+                        btype="highshelf",
+                        output="sos",
                     )
                     sos[:, :3] *= 10.0 ** (_FATIGUE_HF_CUT_DB / 40.0)
                     if current.ndim == 2:
@@ -164,12 +166,14 @@ class OneTakeExport:
                 result.audio = current.astype(np.float32)
                 logger.info(
                     "OneTakeExport: BEST-EFFORT (attempt=%d, no corrections possible) — %s",
-                    attempt, ", ".join(check.warnings[:2]) if check.warnings else "export",
+                    attempt,
+                    ", ".join(check.warnings[:2]) if check.warnings else "export",
                 )
                 return result
             logger.info(
                 "OneTakeExport: auto-correct (attempt=%d): %s",
-                attempt, ", ".join(corrections_this_round),
+                attempt,
+                ", ".join(corrections_this_round),
             )
 
         # Sollte nie erreicht werden
@@ -190,20 +194,19 @@ class OneTakeExport:
             envelope = 1.0
             if arr.ndim == 2:
                 for ch in range(min(arr.shape[0], 2)):
-                    arr[ch] = OneTakeExport._limit_channel(
-                        arr[ch], ceiling_linear, lookahead, release_coeff
-                    )
+                    arr[ch] = OneTakeExport._limit_channel(arr[ch], ceiling_linear, lookahead, release_coeff)
             else:
-                arr = OneTakeExport._limit_channel(
-                    arr, ceiling_linear, lookahead, release_coeff
-                )
+                arr = OneTakeExport._limit_channel(arr, ceiling_linear, lookahead, release_coeff)
             return np.clip(arr, -ceiling_linear, ceiling_linear)
         except Exception:
             return np.clip(audio, -0.966, 0.966)  # −0.3 dB hard clip fallback
 
     @staticmethod
     def _limit_channel(
-        ch: np.ndarray, ceiling: float, lookahead: int, release_coeff: float,
+        ch: np.ndarray,
+        ceiling: float,
+        lookahead: int,
+        release_coeff: float,
     ) -> np.ndarray:
         """Pro-Kanal Brickwall-Limiter."""
         n = len(ch)

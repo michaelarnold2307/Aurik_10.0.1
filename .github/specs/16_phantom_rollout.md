@@ -7,6 +7,7 @@
 ## §16.0 Vision
 
 Aurik soll der Rolls-Royce Phantom der automatischen Musik-Restaurierung mit Gesang sein:
+
 - **Effortless**: Eine Datei rein — perfektes Ergebnis raus. Keine Parameter.
 - **Invisible Engineering**: Der Nutzer spürt die 68 Phasen nicht. Er hört nur das Ergebnis.
 - **Vocal First**: Jede Verarbeitungsentscheidung wird an der Frage gemessen: „Klingt die Stimme natürlicher?"
@@ -18,10 +19,12 @@ Aurik soll der Rolls-Royce Phantom der automatischen Musik-Restaurierung mit Ges
 **Datei**: `backend/core/phantom_mode.py` (261 Zeilen)
 
 ### §16.1.1 Zweck
+
 Der PhantomDetector ersetzt ALLE Nutzer-Parameter durch automatische Erkennung.
 Kein `--material`, kein `--defects`, kein `--era`, kein `--quality`.
 
 ### §16.1.2 Erkennungs-Pipeline
+
 ```
 Audio → PhantomDetector.detect()
   ├─ Material (Bandbreite + Rauschboden) → shellac/vinyl/tape/cassette/digital
@@ -34,6 +37,7 @@ Audio → PhantomDetector.detect()
 ```
 
 ### §16.1.3 Material-Profile
+
 | Material | BW max | Rauschboden | Typische Ära |
 |----------|--------|-------------|-------------|
 | shellac | 5.5 kHz | −35 dB | 1920–1955 |
@@ -43,6 +47,7 @@ Audio → PhantomDetector.detect()
 | digital | 22 kHz | −80 dB | 1985–2026 |
 
 ### §16.1.4 API
+
 ```python
 from backend.core.phantom_mode import detect_phantom_config
 
@@ -58,22 +63,26 @@ print(f"{config.material}, {config.era}: {config.defects} → {config.recommende
 **Datei**: `backend/core/comfort_guard.py` (201 Zeilen)
 
 ### §16.2.1 Zweck
+
 Verhindert AKTIV Hörmüdung durch automatische Korrektur des 2–5 kHz-Bereichs.
 Basiert auf ISO 532-B Zwicker Sharpness (vereinfacht).
 
 ### §16.2.2 Algorithmus
+
 1. Berechne gewichtete Energie-Ratio im 2–5 kHz-Bereich (Bark-Gewichtung)
 2. Wenn Sharpness > 12%: Berechne proportionale Dämpfung (max −3 dB)
 3. Wende sanften High-Shelf-Filter an (fc=2,5 kHz, Q=0,5)
 4. Validiere: Neue Sharpness < 9%
 
 ### §16.2.3 Invarianten
+
 - Maximal −3,0 dB Dämpfung (konservativ — unhörbar aber wirksam)
 - Keine Anhebung (nur Dämpfung)
 - Keine Phasenverschiebung durch lineare Biquad-Kaskade
 - Deaktiviert sich automatisch wenn Sharpness bereits komfortabel
 
 ### §16.2.4 API
+
 ```python
 from backend.core.comfort_guard import apply_comfort_guard, check_comfort
 
@@ -85,6 +94,7 @@ result = check_comfort(audio, sr=48000)
 ```
 
 ### §16.2.5 Pipeline-Integration
+
 ComfortGuard ist in `PhaseInterface._safe_process()` eingehängt.
 JEDE Phase (1–68) wird automatisch nach der Verarbeitung komfort-geprüft.
 Kein Performance-Overhead: Prüfung <1 ms, Korrektur <5 ms pro Phase.
@@ -94,23 +104,28 @@ Kein Performance-Overhead: Prüfung <1 ms, Korrektur <5 ms pro Phase.
 **Datei**: `backend/core/breath_preserver.py` (237 Zeilen)
 
 ### §16.3.1 Zweck
+
 Atemgeräusche (4–8 kHz) sind Teil der Stimme, kein Rauschen.
 Noise-Reduction-Phasen behandeln diesen Bereich als Rauschen und entfernen ihn.
 Der BreathPreserver schützt den Atembereich durch spektrale Maskierung.
 
 ### §16.3.2 Algorithmus
+
 **Pre-NR** (`protect_breath`):
+
 1. Detektiere Atem-Energie im 4–8 kHz-Bereich
 2. Wenn Energie < 0,05%: Kein Schutz nötig (kein Atem)
 3. Baue Soft-Maske: Boost um +50% im Atembereich
 4. NR-Algorithmen behandeln geboosteten Bereich NICHT als Rauschen
 
 **Post-NR** (`restore_breath`):
+
 1. Extrahiere Atem-Energie aus Post-NR-Signal
 2. Blende 30% der Original-Atem-Energie zurück
 3. Begrenze Blend auf max +50% des Originals
 
 ### §16.3.3 API
+
 ```python
 from backend.core.breath_preserver import protect_breath, restore_breath
 
@@ -129,11 +144,13 @@ audio = restore_breath(cleaned, breath_mask, original_audio)
 **Datei**: `backend/core/vocal_quality_gate.py` (551 Zeilen)
 
 ### §16.4.1 Zweck
+
 Zentrales Qualitätssicherungssystem für Gesangs-Restaurierung.
 Misst JEDE Pipeline-Entscheidung an der Frage:
 „Klingt die Stimme natürlicher fürs menschliche Ohr?"
 
 ### §16.4.2 Die 6 Dimensionen
+
 | Dimension | Gewicht | Messbereich | Ziel |
 |-----------|---------|-------------|------|
 | Formant-Integrität | 25% | 300–3400 Hz | Spektrale Glätte |
@@ -144,6 +161,7 @@ Misst JEDE Pipeline-Entscheidung an der Frage:
 | Stimmwärme | 10% | 100–500 Hz | 20–40% Energie-Ratio |
 
 ### §16.4.3 Delta-Entscheidungslogik
+
 ```
 VocalPresence erkannt?
   ├─ Nein → Gate passiv, immer accept
@@ -154,12 +172,14 @@ VocalPresence erkannt?
 ```
 
 ### §16.4.4 Rollback-Kriterien
+
 - Formant-Integrität >5 Punkte gesunken
 - Sibilanz-Erhalt <95%
 - Hörkomfort <40/100
 - Atem-Natürlichkeit <30/100 (über-entrauscht)
 
 ### §16.4.5 Pipeline-Integration
+
 In `PhaseInterface._safe_process()` für vokalrelevante Phasen (42, 65, deess) eingehängt.
 
 ## §16.5 Speaker Embedding Guard — 72-Dimensionale Sänger-Identität
@@ -167,6 +187,7 @@ In `PhaseInterface._safe_process()` für vokalrelevante Phasen (42, 65, deess) e
 **Datei**: `backend/ml/speaker_embedding_guard.py` (255 Zeilen)
 
 ### §16.5.1 Verbesserungen gegenüber speaker_identity_guard.py
+
 | Feature | speaker_identity_guard | speaker_embedding_guard |
 |---------|----------------------|------------------------|
 | Dimensionen | 60-dim MFCC | 72-dim Multi-Window |
@@ -177,6 +198,7 @@ In `PhaseInterface._safe_process()` für vokalrelevante Phasen (42, 65, deess) e
 | Confidence | Keine | RMS-basiert (0–1) |
 
 ### §16.5.2 Architektur
+
 ```
 Audio → RMS-Norm (0.3) → Multi-Window MFCC (24×3=72 dim)
   ├─ Window 1024: Hohe Zeitauflösung (Transienten)
@@ -186,6 +208,7 @@ Audio → RMS-Norm (0.3) → Multi-Window MFCC (24×3=72 dim)
 ```
 
 ### §16.5.3 Entscheidungsmatrix
+
 | Cosine-Sim | Status | Aktion |
 |-----------|--------|--------|
 | ≥ 0.92 | Identisch | Keine Aktion |
@@ -198,6 +221,7 @@ Audio → RMS-Norm (0.3) → Multi-Window MFCC (24×3=72 dim)
 **Datei**: `backend/core/progress_monitor.py` (340 Zeilen)
 
 ### §16.6.1 Event-Typen
+
 | Event | Trigger | Payload |
 |-------|---------|---------|
 | `pipeline_start` | Pipeline beginnt | total_phases, audio_duration_s, material |
@@ -208,6 +232,7 @@ Audio → RMS-Norm (0.3) → Multi-Window MFCC (24×3=72 dim)
 | `pipeline_error` | Pipeline abgebrochen | error |
 
 ### §16.6.2 GUI-Integration
+
 ```python
 monitor = get_progress_monitor()
 monitor.subscribe(websocket.send)  # SSE/WebSocket
@@ -220,6 +245,7 @@ monitor.on_pipeline_start(68)
 **Datei**: `backend/core/spectrogram_provider.py` (241 Zeilen)
 
 ### §16.7.1 API
+
 ```python
 from backend.core.spectrogram_provider import compute_before_after_spectrograms
 
@@ -230,6 +256,7 @@ data = compute_before_after_spectrograms(original, restored, sr=48000)
 ```
 
 ### §16.7.2 Performance
+
 - Default: 2048 FFT, 512 Hop, 80 dB Range
 - GUI-Downsampling: Faktor 2–8 für flüssiges Rendering
 - Typische Laufzeit: <10 ms für 3s Audio bei 48 kHz
@@ -239,6 +266,7 @@ data = compute_before_after_spectrograms(original, restored, sr=48000)
 **Dateien**: `backend/core/bwf_writer.py` (267 Zeilen), Änderungen in `backend/exporter.py`
 
 ### §16.8.1 Neue Formate
+
 | Format | Subtype | bit_depth | Verwendung |
 |--------|---------|-----------|------------|
 | WAV 32-bit Float | FLOAT | 32 | Wissenschaftliche Analyse |
@@ -247,6 +275,7 @@ data = compute_before_after_spectrograms(original, restored, sr=48000)
 | WAV + BWF | bext+iXML | 16/24 | Broadcast-Archiv |
 
 ### §16.8.2 BWF Metadaten
+
 - **bext-Chunk** (EBU Tech 3285): Originator, Description, TimeReference, UMID, Loudness
 - **iXML-Chunk** (AES31-3): Aurik-Version, Timestamp, Verarbeitungshistorie
 - Automatisch bei jedem WAV/RF64-Export geschrieben
@@ -256,6 +285,7 @@ data = compute_before_after_spectrograms(original, restored, sr=48000)
 **Dateien**: `backend/core/abx_listener.py` (353 Zeilen), `backend/core/mushra_listener.py` (254 Zeilen)
 
 ### §16.9.1 ABX Endpoints
+
 | Method | Path | Zweck |
 |--------|------|-------|
 | POST | /abx/session/create | Session mit A/B-Stimuli |
@@ -264,6 +294,7 @@ data = compute_before_after_spectrograms(original, restored, sr=48000)
 | GET | /abx/session/{id}/results | Binomialtest-Ergebnisse |
 
 ### §16.9.2 MUSHRA Endpoints
+
 | Method | Path | Zweck |
 |--------|------|-------|
 | POST | /mushra/session/create | Session mit Hidden Reference |
@@ -276,6 +307,7 @@ data = compute_before_after_spectrograms(original, restored, sr=48000)
 **Datei**: `docs/api/openapi.yaml` (14.303 Bytes)
 
 Vollständige REST-API-Spezifikation mit:
+
 - Health, Restoration, Analysis, MUSHRA, ABX Tags
 - Request/Response Schemas für alle Endpoints
 - `_is_approximation: true` auf allen OQS-Ergebnissen
@@ -284,6 +316,7 @@ Vollständige REST-API-Spezifikation mit:
 ## §16.11 Integration aller Phantom-Module
 
 ### §16.11.1 Pipeline-Flow
+
 ```
 Nutzer: aurik restore mein_song.wav
          ↓
@@ -308,6 +341,7 @@ BWF Export:
 ### §16.11.2 Deep-Transfer-Chain (§2.46a) Integration
 
 Die Tonträgerketten-Erkennung nutzt drei Quellen:
+
 1. **EraClassifier**: Inhaltsbasiertes Original-Medium
 2. **DefectScanner**: Physikalische Defekte → Material
 3. **MediumDetector**: Spectral fingerprint + physical_analog_sources
@@ -316,6 +350,7 @@ Bei MP3-Dateien ohne direkte analoge Evidenz: Vinyl-Inference (reel_tape+cassett
 Implementiert in `backend/core/pre_analysis.py` (§2.46a Deep-Transfer-Chain-Injection).
 
 ### §16.11.3 Cross-References zu bestehenden Specs
+
 | Bestehende Spec | Phantom-Ergänzung |
 |----------------|-------------------|
 | §13 Human Ear Quality | §16.2 ComfortGuard, §16.4 VocalQualityGate |

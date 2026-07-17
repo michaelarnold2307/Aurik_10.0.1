@@ -1,11 +1,14 @@
-
 """§v10.17 CrossRunHealth — persistiert Health-Daten über mehrere Pipeline-Läufe.
 
 Erkennt Performance-Regressionen und warnt bei Verschlechterung.
 """
 
 from __future__ import annotations
-import json, logging, os, time
+
+import json
+import logging
+import os
+import time
 from pathlib import Path
 from typing import Any
 
@@ -22,7 +25,7 @@ def save_run_health(run_id: str, summary: dict[str, Any]) -> None:
         summary["timestamp"] = time.time()
         summary["run_id"] = run_id
         path = _HEALTH_DIR / f"{run_id[:12]}_{int(time.time())}.json"
-        with open(path, 'w') as f:
+        with open(path, "w") as f:
             json.dump(summary, f, indent=2, default=str)
         # Cleanup old files
         files = sorted(_HEALTH_DIR.glob("*.json"), key=os.path.getmtime)

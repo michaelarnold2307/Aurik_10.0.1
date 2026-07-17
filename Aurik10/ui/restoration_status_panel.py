@@ -7,7 +7,7 @@ Usage in modern_window.py:
     from Aurik10.ui.restoration_status_panel import RestorationStatusPanel
     self._status_panel = RestorationStatusPanel(parent)
     layout.addWidget(self._status_panel)
-    
+
     # Update from bridge signals:
     self._status_panel.set_phase("phase_03_denoise", 3, 43)
     self._status_panel.set_material("cassette", 1970, "Deutscher Schlager")
@@ -55,13 +55,13 @@ class RestorationStatusPanel(QFrame):
         _phase_name_row.addWidget(self._phase_name)
         _phase_name_row.addStretch()
         _phase_col.addLayout(_phase_name_row)
-        
+
         _info_row = QHBoxLayout()
         _info_row.setSpacing(8)
         _info_row.addWidget(self._phase_counter)
         _info_row.addStretch()
         _phase_col.addLayout(_info_row)
-        
+
         layout.addLayout(_phase_col, 3)
 
         # Right: Material badge + era + genre
@@ -72,13 +72,11 @@ class RestorationStatusPanel(QFrame):
         )
         self._era_badge = QLabel("")
         self._era_badge.setStyleSheet(
-            "background: #2a2a35; color: #6890b8; padding: 3px 10px; "
-            "border-radius: 4px; font-size: 11px;"
+            "background: #2a2a35; color: #6890b8; padding: 3px 10px; border-radius: 4px; font-size: 11px;"
         )
         self._genre_badge = QLabel("")
         self._genre_badge.setStyleSheet(
-            "background: #2a2a35; color: #68a068; padding: 3px 10px; "
-            "border-radius: 4px; font-size: 11px;"
+            "background: #2a2a35; color: #68a068; padding: 3px 10px; border-radius: 4px; font-size: 11px;"
         )
 
         _badge_row = QHBoxLayout()

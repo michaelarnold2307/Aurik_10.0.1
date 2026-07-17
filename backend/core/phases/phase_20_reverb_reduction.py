@@ -75,10 +75,10 @@ from scipy.signal import lfilter as _lfilter_p20  # vectorised IIR smoothing
 from backend.core.audio_utils import compute_gated_rms_linear as _gated_rms_20
 from backend.core.audio_utils import to_channels_last
 from backend.core.defect_scanner import MaterialType
+from backend.core.ml_model_readiness import check_ml_model_ready
 from backend.core.restoration_policy import get_effective_song_goal_weights
 
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult
-from backend.core.ml_model_readiness import check_ml_model_ready  # noqa: E402
 
 # Resource Management for fallback to lightweight algorithms
 try:

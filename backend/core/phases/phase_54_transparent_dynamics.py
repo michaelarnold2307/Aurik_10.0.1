@@ -65,10 +65,10 @@ from scipy import signal
 from backend.core.audio_utils import to_channels_last
 from backend.core.defect_scanner import MaterialType
 from backend.core.dsp.psychoacoustics import apply_psychoacoustic_masking_clamp
+from backend.core.ml_model_readiness import check_ml_model_ready
 from backend.core.natural_performance_detector import get_natural_performance_detector
 
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult
-from backend.core.ml_model_readiness import check_ml_model_ready  # noqa: E402
 
 logger = logging.getLogger(__name__)
 

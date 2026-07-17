@@ -72,8 +72,9 @@ try:
 except ImportError:  # pragma: no cover
     _get_mp_senet_plugin_43 = None  # type: ignore[assignment]
 
+from backend.core.ml_model_readiness import check_ml_model_ready
+
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult
-from backend.core.ml_model_readiness import check_ml_model_ready  # noqa: E402
 
 logger = logging.getLogger(__name__)
 

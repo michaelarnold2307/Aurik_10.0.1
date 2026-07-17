@@ -45,11 +45,31 @@ class NarrativeEngine:
         },
         {
             "name": "erzählerisch",
-            "intro_style": ["Die Aufnahme erzählt", "Man hört bereits", "Es wird deutlich", "Schon beim ersten Hinhören"],
-            "action_style": ["mit der Ruhe eines Archivars", "so wie ein Töpfer den Ton", "in der Tradition alter Meister", "ganz im Sinne des Originals"],
+            "intro_style": [
+                "Die Aufnahme erzählt",
+                "Man hört bereits",
+                "Es wird deutlich",
+                "Schon beim ersten Hinhören",
+            ],
+            "action_style": [
+                "mit der Ruhe eines Archivars",
+                "so wie ein Töpfer den Ton",
+                "in der Tradition alter Meister",
+                "ganz im Sinne des Originals",
+            ],
             "discovery": ["dass hier", "wie sehr", "in welchem Maß", "auf welche Weise"],
-            "repair": ["darf ich korrigieren", "kann ich heilen", "sollte behutsam eingegriffen werden", "möchte ich nachbessern"],
-            "admire": ["Das klingt schon viel besser.", "Der Charakter bleibt erhalten.", "Die Seele des Songs atmet auf.", "Man spürt den Unterschied."],
+            "repair": [
+                "darf ich korrigieren",
+                "kann ich heilen",
+                "sollte behutsam eingegriffen werden",
+                "möchte ich nachbessern",
+            ],
+            "admire": [
+                "Das klingt schon viel besser.",
+                "Der Charakter bleibt erhalten.",
+                "Die Seele des Songs atmet auf.",
+                "Man spürt den Unterschied.",
+            ],
         },
     ]
 
@@ -396,6 +416,7 @@ class NarrativeEngine:
 
         # Remove any remaining unreplaced template vars
         import re
+
         result = re.sub(r"\{[^}]*\}", "", result).strip()
 
         # Clean double spaces

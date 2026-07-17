@@ -60,9 +60,9 @@ from backend.core.audio_utils import apply_musical_gain_envelope as _amge_17
 from backend.core.audio_utils import compute_gated_rms_linear as _gated_rms_17
 from backend.core.audio_utils import to_channels_last
 from backend.core.defect_scanner import MaterialType
+from backend.core.ml_model_readiness import check_ml_model_ready
 
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult
-from backend.core.ml_model_readiness import check_ml_model_ready  # noqa: E402
 
 
 def _rms_dbfs_gated(sig: np.ndarray) -> float:

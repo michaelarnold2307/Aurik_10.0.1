@@ -61,9 +61,9 @@ from scipy import signal
 
 from backend.core.audio_utils import audio_sample_count, stereo_channel_view, stereo_like
 from backend.core.defect_scanner import MaterialType
+from backend.core.ml_model_readiness import check_ml_model_ready
 
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult
-from backend.core.ml_model_readiness import check_ml_model_ready  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -463,10 +463,14 @@ class PhaseCorrection(PhaseInterface):
         if "mp3" in _terminal_codec_p14:
             try:
                 from backend.core.dsp.phase_rotator import apply_phase_rotator
+
                 corrected_audio = apply_phase_rotator(
-                    corrected_audio, sample_rate,
-                    low_freq=20.0, high_freq=200.0,
-                    max_rotation_deg=30.0, strength=0.15,
+                    corrected_audio,
+                    sample_rate,
+                    low_freq=20.0,
+                    high_freq=200.0,
+                    max_rotation_deg=30.0,
+                    strength=0.15,
                 )
                 logger.debug("§PHROT-1: Phase-Rotator applied (mp3, 20-200Hz, ≤30°)")
             except Exception as _prot_exc:

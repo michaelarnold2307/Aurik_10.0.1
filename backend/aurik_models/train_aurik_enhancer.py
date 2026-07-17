@@ -1,5 +1,3 @@
-import logging
-
 """
 Trainingspipeline für AurikEnhancerNet
 ======================================
@@ -13,8 +11,11 @@ Trainingspipeline für AurikEnhancerNet
 Author: Aurik KI-Team 2026
 """
 
+import logging
+
 try:
     import torch
+
     _HAS_TORCH = True
 except ImportError:
     torch = None  # type: ignore[assignment]

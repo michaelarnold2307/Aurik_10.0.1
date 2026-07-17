@@ -250,13 +250,21 @@ class MetadataPreserver:
             # Still write provenance even without original tags
             if aurik_version:
                 orig_hash = self._file_hash(source_path)
-                result = self.apply(target_path, AudioMetadata(), aurik_version=aurik_version, original_hash=orig_hash, transfer_chain=transfer_chain)
+                result = self.apply(
+                    target_path,
+                    AudioMetadata(),
+                    aurik_version=aurik_version,
+                    original_hash=orig_hash,
+                    transfer_chain=transfer_chain,
+                )
                 self._last_metadata = {"aurik_version": aurik_version, "original_hash": orig_hash}
                 return result
             return False
 
         orig_hash = self._file_hash(source_path) if aurik_version else ""
-        result = self.apply(target_path, meta, aurik_version=aurik_version, original_hash=orig_hash, transfer_chain=transfer_chain)
+        result = self.apply(
+            target_path, meta, aurik_version=aurik_version, original_hash=orig_hash, transfer_chain=transfer_chain
+        )
         # Store for downstream access (e.g. chain metadata injection)
         self._last_metadata: dict[str, object] = {
             "title": meta.title,
@@ -270,7 +278,9 @@ class MetadataPreserver:
 
     # ── Private: format-specific writers ──────────────────────────────────
 
-    def _provenance_comment(self, aurik_version: str, original_hash: str, transfer_chain: list[str] | None = None) -> str:
+    def _provenance_comment(
+        self, aurik_version: str, original_hash: str, transfer_chain: list[str] | None = None
+    ) -> str:
         """Erstellt provenance string for embedding in tags."""
         ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         parts = [f"Restored by Aurik {aurik_version}" if aurik_version else "Restored by Aurik"]
@@ -281,7 +291,9 @@ class MetadataPreserver:
             parts.append(f"Chain: {' → '.join(transfer_chain)}")
         return " | ".join(parts)
 
-    def _apply_id3(self, path: Path, meta: AudioMetadata, version: str, orig_hash: str, transfer_chain: list[str] | None = None) -> bool:
+    def _apply_id3(
+        self, path: Path, meta: AudioMetadata, version: str, orig_hash: str, transfer_chain: list[str] | None = None
+    ) -> bool:
         try:
             tags = ID3(str(path))
         except ID3NoHeaderError:
@@ -304,7 +316,10 @@ class MetadataPreserver:
         if version:
             tags.add(
                 COMM(
-                    encoding=3, lang="eng", desc="Aurik Provenance", text=[self._provenance_comment(version, orig_hash, transfer_chain)]
+                    encoding=3,
+                    lang="eng",
+                    desc="Aurik Provenance",
+                    text=[self._provenance_comment(version, orig_hash, transfer_chain)],
                 )
             )
 
@@ -312,7 +327,9 @@ class MetadataPreserver:
         logger.info("metadata applied (ID3): %s", path.name)
         return True
 
-    def _apply_flac(self, path: Path, meta: AudioMetadata, version: str, orig_hash: str, transfer_chain: list[str] | None = None) -> bool:
+    def _apply_flac(
+        self, path: Path, meta: AudioMetadata, version: str, orig_hash: str, transfer_chain: list[str] | None = None
+    ) -> bool:
         mf = FLAC(str(path))
         for internal_key, (_id3_frame, vorbis_key) in _TAG_MAP.items():
             val = getattr(meta, internal_key, "")
@@ -330,7 +347,9 @@ class MetadataPreserver:
         logger.info("metadata applied (FLAC): %s", path.name)
         return True
 
-    def _apply_vorbis(self, path: Path, meta: AudioMetadata, version: str, orig_hash: str, transfer_chain: list[str] | None = None) -> bool:
+    def _apply_vorbis(
+        self, path: Path, meta: AudioMetadata, version: str, orig_hash: str, transfer_chain: list[str] | None = None
+    ) -> bool:
         mf = OggVorbis(str(path))
         for internal_key, (_id3_frame, vorbis_key) in _TAG_MAP.items():
             val = getattr(meta, internal_key, "")
@@ -342,7 +361,9 @@ class MetadataPreserver:
         logger.info("metadata applied (Vorbis): %s", path.name)
         return True
 
-    def _apply_aiff(self, path: Path, meta: AudioMetadata, version: str, orig_hash: str, transfer_chain: list[str] | None = None) -> bool:
+    def _apply_aiff(
+        self, path: Path, meta: AudioMetadata, version: str, orig_hash: str, transfer_chain: list[str] | None = None
+    ) -> bool:
         mf = AIFF(str(path))
         if mf.tags is None:
             mf.add_tags()
@@ -367,7 +388,10 @@ class MetadataPreserver:
         if version:
             tags.add(
                 COMM(
-                    encoding=3, lang="eng", desc="Aurik Provenance", text=[self._provenance_comment(version, orig_hash, transfer_chain)]
+                    encoding=3,
+                    lang="eng",
+                    desc="Aurik Provenance",
+                    text=[self._provenance_comment(version, orig_hash, transfer_chain)],
                 )
             )
         mf.save()

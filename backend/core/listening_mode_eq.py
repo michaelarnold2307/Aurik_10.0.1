@@ -36,36 +36,76 @@ _TARGET_CURVES: dict[str, list[tuple[float, float]]] = {
     # Kopfhörer: leichte Höhenabsenkung (Nahfeld-Kompensation),
     # sanfte Bassanhebung (fehlende Körperresonanz).
     "headphones": [
-        (20, 1.5), (60, 1.0), (150, 0.0), (400, -0.5),
-        (1000, 0.0), (2500, -0.5), (5000, -1.0), (8000, -1.5),
-        (12000, -2.0), (16000, -1.0), (20000, -3.0),
+        (20, 1.5),
+        (60, 1.0),
+        (150, 0.0),
+        (400, -0.5),
+        (1000, 0.0),
+        (2500, -0.5),
+        (5000, -1.0),
+        (8000, -1.5),
+        (12000, -2.0),
+        (16000, -1.0),
+        (20000, -3.0),
     ],
     # Fernfeld/Nahfeldmonitore: neutral mit leichter Bassabsenkung
     # (Raummoden-Kompensation).
     "farfield": [
-        (20, -1.0), (60, -0.5), (150, 0.0), (400, 0.0),
-        (1000, 0.0), (2500, 0.0), (5000, 0.0), (8000, 0.5),
-        (12000, 1.0), (16000, 0.0), (20000, -2.0),
+        (20, -1.0),
+        (60, -0.5),
+        (150, 0.0),
+        (400, 0.0),
+        (1000, 0.0),
+        (2500, 0.0),
+        (5000, 0.0),
+        (8000, 0.5),
+        (12000, 1.0),
+        (16000, 0.0),
+        (20000, -2.0),
     ],
     # Auto: starke Bassanhebung (Fahrgeräusch-Maskierung),
     # moderate Höhenanhebung (Dämpfung durch Sitze/Innenraum).
     "car": [
-        (20, 3.0), (60, 2.5), (150, 2.0), (400, 0.5),
-        (1000, 0.0), (2500, 0.5), (5000, 1.0), (8000, 2.0),
-        (12000, 3.0), (16000, 2.0), (20000, 0.0),
+        (20, 3.0),
+        (60, 2.5),
+        (150, 2.0),
+        (400, 0.5),
+        (1000, 0.0),
+        (2500, 0.5),
+        (5000, 1.0),
+        (8000, 2.0),
+        (12000, 3.0),
+        (16000, 2.0),
+        (20000, 0.0),
     ],
 }
 
 # Frequenz-Bänder für die Analyse (1/3-Oktave-ähnlich)
 _ANALYSIS_BANDS: list[tuple[float, float]] = [
-    (20, 60), (60, 150), (150, 400), (400, 1000),
-    (1000, 2500), (2500, 5000), (5000, 8000), (8000, 12000),
-    (12000, 16000), (16000, 20000),
+    (20, 60),
+    (60, 150),
+    (150, 400),
+    (400, 1000),
+    (1000, 2500),
+    (2500, 5000),
+    (5000, 8000),
+    (8000, 12000),
+    (12000, 16000),
+    (16000, 20000),
 ]
 
 # Band-Mitten für die Zielkurven-Interpolation
 _BAND_CENTERS: list[float] = [
-    40, 105, 275, 700, 1750, 3750, 6500, 10000, 14000, 18000,
+    40,
+    105,
+    275,
+    700,
+    1750,
+    3750,
+    6500,
+    10000,
+    14000,
+    18000,
 ]
 
 # Maximal erlaubte Korrektur pro Band (dB)
@@ -117,6 +157,7 @@ class AdaptiveListeningEQ:
             AdaptiveEQResult mit verarbeitetem Audio.
         """
         import time
+
         t0 = time.time()
 
         if mode not in _TARGET_CURVES:
@@ -137,24 +178,20 @@ class AdaptiveListeningEQ:
             # Verwende 60 s aus der Mitte für robuste Langzeit-Messung
             n_analyze = min(len(mono), sr * 60)
             start = max(0, (len(mono) - n_analyze) // 2)
-            segment = mono[start:start + n_analyze]
+            segment = mono[start : start + n_analyze]
 
             # Band-Energie via FFT (Welch-Methode vereinfacht)
             measured_db = AdaptiveListeningEQ._measure_bands(segment, sr)
 
             # ── 2. Zielkurve interpolieren ──────────────────────────
-            target_db = AdaptiveListeningEQ._interpolate_target(
-                target_curve, _BAND_CENTERS
-            )
+            target_db = AdaptiveListeningEQ._interpolate_target(target_curve, _BAND_CENTERS)
 
             # ── 3. Differenz berechnen + clippen ───────────────────
             corrections: list[tuple[float, float, float]] = []
             bands_skipped = 0
             sos_list = []
 
-            for i, (center, meas, targ) in enumerate(
-                zip(_BAND_CENTERS, measured_db, target_db)
-            ):
+            for i, (center, meas, targ) in enumerate(zip(_BAND_CENTERS, measured_db, target_db)):
                 delta = targ - meas  # positiv = zu leise → anheben
 
                 # Clipping
@@ -183,11 +220,11 @@ class AdaptiveListeningEQ:
                 else:
                     result_audio = sosfilt(sos, result_audio)
 
-            result_audio = np.clip(np.nan_to_num(
-                result_audio, nan=0.0, posinf=0.0, neginf=0.0
-            ), -1.0, 1.0).astype(np.float32)
+            result_audio = np.clip(np.nan_to_num(result_audio, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0).astype(
+                np.float32
+            )
 
-                        # §v10.15: Restoration-Mode → Korrektur sanfter (×0.7)
+            # §v10.15: Restoration-Mode → Korrektur sanfter (×0.7)
             if not is_studio_2026:
                 for i, sos in enumerate(sos_list):
                     sos_list[i][:, :3] *= 0.70
@@ -195,9 +232,12 @@ class AdaptiveListeningEQ:
             dur_ms = (time.time() - t0) * 1000.0
 
             logger.info(
-                "AdaptiveEQ [%s]: %d Bänder korrigiert, %d übersprungen, "
-                "Σ|corr|=%.1f dB (%.0f ms)",
-                mode, len(corrections), bands_skipped, total_corr, dur_ms,
+                "AdaptiveEQ [%s]: %d Bänder korrigiert, %d übersprungen, Σ|corr|=%.1f dB (%.0f ms)",
+                mode,
+                len(corrections),
+                bands_skipped,
+                total_corr,
+                dur_ms,
             )
 
             return AdaptiveEQResult(
@@ -226,7 +266,7 @@ class AdaptiveListeningEQ:
         power_acc = np.zeros(len(freqs), dtype=np.float64)
 
         for i in range(min(n_frames, 120)):  # max ~60s bei 8192/2 hop
-            frame = mono[i * hop:i * hop + n_fft]
+            frame = mono[i * hop : i * hop + n_fft]
             if len(frame) < n_fft:
                 break
             windowed = frame * np.hanning(n_fft)
@@ -250,9 +290,7 @@ class AdaptiveListeningEQ:
         return [e - max_energy for e in band_energy]
 
     @staticmethod
-    def _interpolate_target(
-        curve: list[tuple[float, float]], centers: list[float]
-    ) -> list[float]:
+    def _interpolate_target(curve: list[tuple[float, float]], centers: list[float]) -> list[float]:
         """Lineare Interpolation der Zielkurve auf die Analyse-Band-Mitten."""
         cf, cg = zip(*curve)  # curve frequencies, curve gains
         result = []
@@ -272,9 +310,7 @@ class AdaptiveListeningEQ:
         return result
 
     @staticmethod
-    def _make_band_eq(
-        sr: int, lo: float, hi: float, gain_db: float
-    ) -> np.ndarray | None:
+    def _make_band_eq(sr: int, lo: float, hi: float, gain_db: float) -> np.ndarray | None:
         """Erzeugt einen Band-Pass/Peak-Filter als SOS für die gegebene
         Frequenz und Gain.
 

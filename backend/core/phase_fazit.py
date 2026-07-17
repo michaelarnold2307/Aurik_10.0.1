@@ -162,10 +162,12 @@ def log_restoration_summary(
 
     # Stats
     lines.append("│" + " " * (W - 2) + "│")
-    lines.append(_center(
-        f"⏱ {total_time_s:.0f}s  ⋂  {rt_factor:.1f}× Echtzeit  ⋂  {phases_count} Phasen",
-        W,
-    ))
+    lines.append(
+        _center(
+            f"⏱ {total_time_s:.0f}s  ⋂  {rt_factor:.1f}× Echtzeit  ⋂  {phases_count} Phasen",
+            W,
+        )
+    )
     if mushra_score > 0:
         lines.append(_center(f"🎯 MUSHRA: {mushra_score:.0f}/100", W))
 
@@ -177,12 +179,18 @@ def log_restoration_summary(
 
 
 def _quality_label_de(pct: float) -> str:
-    if pct >= 95:   return "🏆 Weltklasse — wie Studio-Aufnahme"
-    elif pct >= 85: return "✅ Ausgezeichnet — kaum vom Original zu unterscheiden"
-    elif pct >= 70: return "👍 Sehr gut — deutliche Verbesserung"
-    elif pct >= 50: return "⚡ Gut — hörbare Verbesserung, leichte Restdefekte"
-    elif pct >= 30: return "⚠️  Ausreichend — das Material limitiert die Qualität"
-    else:           return "❌ Schwieriges Material — starke Degradation"
+    if pct >= 95:
+        return "🏆 Weltklasse — wie Studio-Aufnahme"
+    elif pct >= 85:
+        return "✅ Ausgezeichnet — kaum vom Original zu unterscheiden"
+    elif pct >= 70:
+        return "👍 Sehr gut — deutliche Verbesserung"
+    elif pct >= 50:
+        return "⚡ Gut — hörbare Verbesserung, leichte Restdefekte"
+    elif pct >= 30:
+        return "⚠️  Ausreichend — das Material limitiert die Qualität"
+    else:
+        return "❌ Schwieriges Material — starke Degradation"
 
 
 def _chain_story_de(chain: list[str]) -> str:
@@ -222,7 +230,7 @@ def _center(text: str, width: int) -> str:
     visible = len(text)
     pad = width - 2 - visible
     if pad < 0:
-        return "│ " + text[:width - 4] + " │"
+        return "│ " + text[: width - 4] + " │"
     left = pad // 2
     right = pad - left
     return "│" + " " * left + text + " " * right + "│"

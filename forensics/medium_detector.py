@@ -288,32 +288,32 @@ class MediumDetector:
     # Zeitliche Ordnung für Kettensortierung (niedrig = früher)
     _MEDIUM_ORDER: dict[str, int] = {
         # Pre-1900
-        "tinfoil_cylinder": 0,   # Edison 1877, experimentell
-        "wax_cylinder": 1,       # Edison 1888–1929, 2–4 min
+        "tinfoil_cylinder": 0,  # Edison 1877, experimentell
+        "wax_cylinder": 1,  # Edison 1888–1929, 2–4 min
         # 1900–1950: Schellack-Ara
-        "lacquer_disc": 2,       # Acetat-Mitschnitt, 1930er+, Unikat
-        "shellac": 3,            # 78 rpm, 1898–1950er, 3–5 min/Seite
-        "shellac_vertical": 4,   # Pathe/Edison Diamond Disc, vertikaler Schnitt
-        "wire_recording": 5,     # Stahldraht, 1898–1950er
+        "lacquer_disc": 2,  # Acetat-Mitschnitt, 1930er+, Unikat
+        "shellac": 3,  # 78 rpm, 1898–1950er, 3–5 min/Seite
+        "shellac_vertical": 4,  # Pathe/Edison Diamond Disc, vertikaler Schnitt
+        "wire_recording": 5,  # Stahldraht, 1898–1950er
         # 1950–1980: Vinyl- + Tape-Ara
-        "reel_tape": 6,          # Studio-Master, 1935+ (Recording → Pressing)
-        "vinyl": 7,              # LP 1948, 45 rpm 1949
-        "tape": 7,               # Alias
-        "cartridge_4track": 8,   # Fidelipac 1956, Radio
-        "cartridge_8track": 9,   # Lear 1964–1982, Consumer/Auto
-        "cassette": 10,          # Philips 1963, Compact Cassette
-        "elcaset": 11,           # Sony 1976–1980, Grosscassette
-        "playtape": 11,          # 1966–1970, Miniatur-Kassette
+        "reel_tape": 6,  # Studio-Master, 1935+ (Recording → Pressing)
+        "vinyl": 7,  # LP 1948, 45 rpm 1949
+        "tape": 7,  # Alias
+        "cartridge_4track": 8,  # Fidelipac 1956, Radio
+        "cartridge_8track": 9,  # Lear 1964–1982, Consumer/Auto
+        "cassette": 10,  # Philips 1963, Compact Cassette
+        "elcaset": 11,  # Sony 1976–1980, Grosscassette
+        "playtape": 11,  # 1966–1970, Miniatur-Kassette
         # 1980–2000: Digital-Ara
-        "cd_digital": 12,        # Compact Disc 1982
-        "dat": 13,               # Digital Audio Tape 1987
-        "dcc": 14,               # Digital Compact Cassette 1992–1996
-        "minidisc": 15,          # Sony MD 1992–2013, ATRAC
+        "cd_digital": 12,  # Compact Disc 1982
+        "dat": 13,  # Digital Audio Tape 1987
+        "dcc": 14,  # Digital Compact Cassette 1992–1996
+        "minidisc": 15,  # Sony MD 1992–2013, ATRAC
         # 2000+: Lossy/Streaming
-        "mp3_high": 16,          # >=192 kbps
-        "mp3_low": 17,           # <192 kbps
-        "aac": 18,               # 1997+
-        "streaming": 19,         # Spotify/Apple Music/YouTube
+        "mp3_high": 16,  # >=192 kbps
+        "mp3_low": 17,  # <192 kbps
+        "aac": 18,  # 1997+
+        "streaming": 19,  # Spotify/Apple Music/YouTube
     }
 
     # Genre -> fruehestes moegliches Aufnahmemedium (Order-Nummer).
@@ -331,7 +331,6 @@ class MediumDetector:
         "parlour_music": 1,
         "ragtime": 1,
         "vaudeville": 1,
-
         # 1900-1920: Fruehe Schellack-Aera
         "blasmusik": 3,
         "bluegrass": 3,
@@ -354,7 +353,6 @@ class MediumDetector:
         "spiritual": 3,
         "tango": 3,
         "zydeco": 3,
-
         # 1930-1950: Swing/Big-Band
         "bebop": 4,
         "big_band": 4,
@@ -365,7 +363,6 @@ class MediumDetector:
         "rhythm_and_blues": 4,
         "swing": 4,
         "western_swing": 4,
-
         # 1940-1955: Wire/Late-Schellack
         "afro_cuban": 5,
         "bossa_nova": 5,
@@ -375,7 +372,6 @@ class MediumDetector:
         "mambo": 5,
         "samba": 5,
         "volkstuemliche_musik": 5,
-
         # 1950-1965: Vinyl-Aera
         "beat": 6,
         "blues_rock": 6,
@@ -409,10 +405,8 @@ class MediumDetector:
         "surf_rock": 6,
         "traditional_pop": 6,
         "volksmusik": 6,
-
         # 1970: Dub
         "dub": 7,
-
         # 1965-1980: Cassette-Aera
         "arena_rock": 8,
         "deutschrock": 8,
@@ -433,7 +427,6 @@ class MediumDetector:
         "southern_rock": 8,
         "synth_pop": 8,
         "yacht_rock": 8,
-
         # 1980-1985: Fruehe Cassette
         "black_metal": 9,
         "boogie": 9,
@@ -449,16 +442,13 @@ class MediumDetector:
         "smooth_jazz": 9,
         "speed_metal": 9,
         "thrash_metal": 9,
-
         # 1985-1990: Spaete Cassette
         "crossover_thrash": 10,
         "death_metal": 10,
         "golden_age_hip_hop": 10,
         "grindcore": 10,
-
         # 1988-1992: Gangsta-Rap
         "gangsta_rap": 11,
-
         # 1985-2000: CD-Aera
         "acid_house": 12,
         "acid_jazz": 12,
@@ -511,11 +501,9 @@ class MediumDetector:
         "two_step": 12,
         "uk_garage": 12,
         "video_game_music": 12,
-
         # 1995-2005: Spaete CD
         "german_gangsta_rap": 13,
         "k_pop": 13,
-
         # 2000+: Digital-born
         "bedroom_pop": 16,
         "brostep": 16,
@@ -537,12 +525,10 @@ class MediumDetector:
         "trap": 16,
         "vaporwave": 16,
         "witch_house": 16,
-
         # 2020+: Streaming-Aera
         "drift_phonk": 17,
         "hyperpop": 17,
         "phonk": 17,
-
     }
 
     _MEDIUM_DISPLAY_NAMES: dict[str, str] = {
@@ -740,7 +726,6 @@ class MediumDetector:
         ],
     }
 
-
     _LANGUAGE_MEDIUM_BONUS: dict[str, dict[str, float]] = {
         "de": {"shellac": 0.15, "vinyl": 0.10, "cassette": 0.05, "cd_digital": 0.05, "mp3_low": -0.10},
         "en": {"vinyl": 0.05, "cd_digital": 0.05, "mp3_low": 0.05, "streaming": 0.05},
@@ -752,11 +737,91 @@ class MediumDetector:
     }
 
     _MEDIUM_EXCLUDES_GENRES: dict[str, list[str]] = {
-        "wax_cylinder": ["rock", "pop", "jazz", "blues", "hip_hop", "electronic", "metal", "punk", "disco", "funk", "reggae", "soul", "rnb", "rap", "techno", "house", "trance", "dubstep", "trap", "edm"],
-        "shellac": ["rock", "hip_hop", "electronic", "metal", "punk", "disco", "funk", "reggae", "techno", "house", "trance", "dubstep", "trap", "edm", "rap", "grunge", "synth_pop", "drum_and_bass"],
-        "wire_recording": ["rock", "hip_hop", "electronic", "metal", "punk", "disco", "funk", "reggae", "techno", "house", "trance", "dubstep", "trap", "edm", "rap", "synth_pop"],
-        "cartridge_8track": ["hip_hop", "electronic", "techno", "house", "trance", "dubstep", "trap", "edm", "grunge", "drum_and_bass", "vaporwave"],
-        "elcaset": ["hip_hop", "techno", "house", "trance", "dubstep", "trap", "edm", "grunge", "drum_and_bass", "vaporwave"],
+        "wax_cylinder": [
+            "rock",
+            "pop",
+            "jazz",
+            "blues",
+            "hip_hop",
+            "electronic",
+            "metal",
+            "punk",
+            "disco",
+            "funk",
+            "reggae",
+            "soul",
+            "rnb",
+            "rap",
+            "techno",
+            "house",
+            "trance",
+            "dubstep",
+            "trap",
+            "edm",
+        ],
+        "shellac": [
+            "rock",
+            "hip_hop",
+            "electronic",
+            "metal",
+            "punk",
+            "disco",
+            "funk",
+            "reggae",
+            "techno",
+            "house",
+            "trance",
+            "dubstep",
+            "trap",
+            "edm",
+            "rap",
+            "grunge",
+            "synth_pop",
+            "drum_and_bass",
+        ],
+        "wire_recording": [
+            "rock",
+            "hip_hop",
+            "electronic",
+            "metal",
+            "punk",
+            "disco",
+            "funk",
+            "reggae",
+            "techno",
+            "house",
+            "trance",
+            "dubstep",
+            "trap",
+            "edm",
+            "rap",
+            "synth_pop",
+        ],
+        "cartridge_8track": [
+            "hip_hop",
+            "electronic",
+            "techno",
+            "house",
+            "trance",
+            "dubstep",
+            "trap",
+            "edm",
+            "grunge",
+            "drum_and_bass",
+            "vaporwave",
+        ],
+        "elcaset": [
+            "hip_hop",
+            "techno",
+            "house",
+            "trance",
+            "dubstep",
+            "trap",
+            "edm",
+            "grunge",
+            "drum_and_bass",
+            "vaporwave",
+        ],
         "dcc": ["vaporwave", "trap", "dubstep", "edm", "phonk"],
         "minidisc": ["vaporwave", "trap", "dubstep", "phonk"],
         "dat": ["vaporwave"],
@@ -769,7 +834,18 @@ class MediumDetector:
         "reel_tape": ["classical", "jazz", "rock", "pop", "soul", "progressive_rock"],
         "cassette": ["rock", "pop", "metal", "punk", "hip_hop", "electronic", "synth_pop", "new_wave", "schlager"],
         "cartridge_8track": ["rock", "soul", "country", "funk", "disco", "pop"],
-        "cd_digital": ["rock", "pop", "electronic", "hip_hop", "techno", "house", "classical", "metal", "grunge", "trip_hop"],
+        "cd_digital": [
+            "rock",
+            "pop",
+            "electronic",
+            "hip_hop",
+            "techno",
+            "house",
+            "classical",
+            "metal",
+            "grunge",
+            "trip_hop",
+        ],
         "dat": ["classical", "jazz", "electronic", "ambient"],
         "minidisc": ["pop", "rock", "electronic", "j_pop", "anime_music"],
         "mp3_high": ["electronic", "hip_hop", "rock", "pop", "metal", "indie"],
@@ -791,31 +867,29 @@ class MediumDetector:
     }
     # German display names for GUI
     _MEDIUM_DISPLAY_NAMES: dict[str, str] = {
-        "tinfoil_cylinder":   "Zinnfolien-Walze (Edison 1877)",
-        "wax_cylinder":       "Wachswalze (Edison 1888-1929)",
-        "lacquer_disc":       "Lackplatte / Acetat-Mitschnitt",
-        "shellac":            "Schellackplatte (78 rpm)",
-        "shellac_vertical":   "Schellackplatte, vertikaler Schnitt (Pathe/Edison Diamond Disc)",
-        "wire_recording":     "Stahldraht-Aufnahme (Webster-Chicago)",
-        "vinyl":              "Vinyl-Schallplatte (LP/45rpm)",
-        "reel_tape":          "Tonband (Studio-Master)",
-        "tape":               "Tonband (allgemein)",
-        "cartridge_4track":   "4-Spur-Cartridge (Fidelipac)",
-        "cartridge_8track":   "8-Spur-Cartridge (Lear Jet)",
-        "cassette":           "Compact Cassette (Philips 1963)",
-        "elcaset":            "Elcaset (Sony 1976-1980)",
-        "playtape":           "PlayTape (Miniatur-Kassette)",
-        "cd_digital":         "Compact Disc (CD, 44.1 kHz/16 bit)",
-        "dat":                "Digital Audio Tape (R-DAT)",
-        "dcc":                "Digital Compact Cassette (Philips 1992)",
-        "minidisc":           "MiniDisc (Sony, ATRAC)",
-        "mp3_high":           "MP3 (hohe Bitrate, >=192 kbps)",
-        "mp3_low":            "MP3 (niedrige Bitrate, <192 kbps)",
-        "aac":                "AAC / M4A (Advanced Audio Codec)",
-        "streaming":          "Streaming (Spotify/Apple Music/YouTube)",
+        "tinfoil_cylinder": "Zinnfolien-Walze (Edison 1877)",
+        "wax_cylinder": "Wachswalze (Edison 1888-1929)",
+        "lacquer_disc": "Lackplatte / Acetat-Mitschnitt",
+        "shellac": "Schellackplatte (78 rpm)",
+        "shellac_vertical": "Schellackplatte, vertikaler Schnitt (Pathe/Edison Diamond Disc)",
+        "wire_recording": "Stahldraht-Aufnahme (Webster-Chicago)",
+        "vinyl": "Vinyl-Schallplatte (LP/45rpm)",
+        "reel_tape": "Tonband (Studio-Master)",
+        "tape": "Tonband (allgemein)",
+        "cartridge_4track": "4-Spur-Cartridge (Fidelipac)",
+        "cartridge_8track": "8-Spur-Cartridge (Lear Jet)",
+        "cassette": "Compact Cassette (Philips 1963)",
+        "elcaset": "Elcaset (Sony 1976-1980)",
+        "playtape": "PlayTape (Miniatur-Kassette)",
+        "cd_digital": "Compact Disc (CD, 44.1 kHz/16 bit)",
+        "dat": "Digital Audio Tape (R-DAT)",
+        "dcc": "Digital Compact Cassette (Philips 1992)",
+        "minidisc": "MiniDisc (Sony, ATRAC)",
+        "mp3_high": "MP3 (hohe Bitrate, >=192 kbps)",
+        "mp3_low": "MP3 (niedrige Bitrate, <192 kbps)",
+        "aac": "AAC / M4A (Advanced Audio Codec)",
+        "streaming": "Streaming (Spotify/Apple Music/YouTube)",
     }
-
-
 
     # ── Transfer chain knowledge base ────────────────────────────────
     # Known plausible chains.  The detector matches detected sources
@@ -1126,7 +1200,6 @@ class MediumDetector:
         "codec_type_code",
     ]
 
-    
     def _best_matching_chain(
         self, detected: list[str], genre: str | None = None, language: str | None = None
     ) -> list[str] | None:
@@ -1147,12 +1220,8 @@ class MediumDetector:
         best_score = 0
 
         # Genre-era validation
-        _genre_earliest = self._GENRE_EARLIEST_ORDER.get(
-            (genre or "").lower().replace(" ", "_").replace("-", "_"), 0
-        )
-        _lang_bonuses = self._LANGUAGE_MEDIUM_BONUS.get(
-            (language or "").lower()[:2], {}
-        )
+        _genre_earliest = self._GENRE_EARLIEST_ORDER.get((genre or "").lower().replace(" ", "_").replace("-", "_"), 0)
+        _lang_bonuses = self._LANGUAGE_MEDIUM_BONUS.get((language or "").lower()[:2], {})
 
         for chain in self._KNOWN_CHAINS:
             chain_set = set(chain)
@@ -1176,7 +1245,6 @@ class MediumDetector:
                         order_score += 1
                     last_idx = idx
 
-
     def get_genre_constraints(self, chain: list[str]) -> dict[str, list[str]]:
         """Bidirectional medium->genre validation.
 
@@ -1192,6 +1260,7 @@ class MediumDetector:
             for g in self._MEDIUM_PREFERRED_GENRES.get(medium, []):
                 preferred.add(g)
         return {"excluded": sorted(excluded), "preferred": sorted(preferred)}
+
     def _infer_analog_source_from_fingerprint(self, fp: SpectralFingerprint) -> list[tuple[str, float]]:
         """Infer analog source materials from physical fingerprint features.
 
@@ -2053,8 +2122,13 @@ class MediumDetector:
             # §2.46b: Adaptive Penalty — codec-abhängig, nicht pauschal.
             # Verlustbehaftete Codecs zerstören analoge Signaturen unterschiedlich stark.
             _CODEC_PENALTY_MAP = {
-                ".mp3": 0.50, ".mpc": 0.45, ".wma": 0.55,
-                ".aac": 0.55, ".m4a": 0.55, ".ogg": 0.40, ".oga": 0.40,
+                ".mp3": 0.50,
+                ".mpc": 0.45,
+                ".wma": 0.55,
+                ".aac": 0.55,
+                ".m4a": 0.55,
+                ".ogg": 0.40,
+                ".oga": 0.40,
                 ".opus": 0.60,  # sehr destruktiv bei niedrigen Bitraten
             }
             _ANALOG_PENALTY = _CODEC_PENALTY_MAP.get(_ext_lower, 0.50)
@@ -2205,7 +2279,9 @@ class MediumDetector:
                         if _via_rotation_gate:
                             _detection_method = f"Vinyl-Rotation-Gate (rotation={fp.rotation_strength:.3f}≥0.30, infrasonic={fp.infrasonic_rms:.4f}≥0.008)"
                         elif _cand_analog == "cassette":
-                            _detection_method = f"Cassette wow/flutter+bandwidth (wow={fp.wow_flutter_index:.3f}, conf≥0.35)"
+                            _detection_method = (
+                                f"Cassette wow/flutter+bandwidth (wow={fp.wow_flutter_index:.3f}, conf≥0.35)"
+                            )
                         elif _cand_analog == "vinyl":
                             _detection_method = f"Vinyl crackle+infrasonic (crackle={fp.crackle_density:.4f}, infrasonic={fp.infrasonic_rms:.4f})"
                         else:
@@ -2365,13 +2441,15 @@ class MediumDetector:
                 )
                 # Filter to keep only candidates that match known chain patterns
                 _candidate_materials = [m for m, _ in _candidate_items]
-                _best_chain = self._best_matching_chain(
-                    _candidate_materials + [best_analog]
-                )
+                _best_chain = self._best_matching_chain(_candidate_materials + [best_analog])
                 if _best_chain:
                     # Reorder candidates to match best known chain
                     _ordered = [m for m in _best_chain if m in _candidate_materials or m == best_analog]
-                    _candidate_items = [(m, _candidate_scores.get(m, 0.0)) for m in _ordered if m in _candidate_scores or m == best_analog]
+                    _candidate_items = [
+                        (m, _candidate_scores.get(m, 0.0))
+                        for m in _ordered
+                        if m in _candidate_scores or m == best_analog
+                    ]
 
                 _analog_depth = 1
                 _last_order = self._MEDIUM_ORDER.get(best_analog, 0)
@@ -2525,9 +2603,7 @@ class MediumDetector:
         # Ensure chain respects technology timeline, not detection order.
         # reel_tape (1930s) → vinyl (1950s) → cassette (1960s) → mp3 (1990s)
         if len(chain) > 1:
-            _sorted_chain = sorted(
-                chain, key=lambda m: self._MEDIUM_ORDER.get(m, 99)
-            )
+            _sorted_chain = sorted(chain, key=lambda m: self._MEDIUM_ORDER.get(m, 99))
             if _sorted_chain != chain:
                 logger.debug(
                     "MediumDetector: chain reordered chronologically: %s → %s",

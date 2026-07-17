@@ -127,6 +127,7 @@ audio = _apply_cd_noise_profile(audio, sr, mask=erb_mask)
 ```
 
 **ID-Konventionen:**
+
 - `§G1`–`§G99`: GEBOTE (positiv, was getan werden MUSS)
 - `§V1`–`§V99`: VERBOTE (negativ, was NIEMALS getan werden DARF)
 - `§C1`–`§C99`: Circuit-Breaker / Schutzschaltungen
@@ -134,6 +135,7 @@ audio = _apply_cd_noise_profile(audio, sr, mask=erb_mask)
 - `§D1`–`§D99`: DSP-Regeln
 
 **Prioritäten:**
+
 - Kategorie I (§G1–§G9): Höchste Priorität — Song-Individualität
 - Kategorie II (§G10–§G19): Zweithöchste — Psychoakustik
 - Kategorie III (§G20–§G29): Architektur-Invarianten

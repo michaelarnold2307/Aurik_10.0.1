@@ -71,9 +71,9 @@ import scipy.signal as signal
 
 from backend.core.audio_utils import compute_gated_rms_dbfs as _gated_rms_dbfs_02
 from backend.core.audio_utils import to_channels_last
+from backend.core.ml_model_readiness import check_ml_model_ready
 
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult, create_phase_result
-from backend.core.ml_model_readiness import check_ml_model_ready  # noqa: E402
 
 # ML-Hybrid Support
 try:

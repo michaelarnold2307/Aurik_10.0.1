@@ -443,7 +443,7 @@ class AutoReprocessingEngine:
 
         params = {"rollback_mode": "partial", "blend_ratio": 0.8}
 
-        logger.info("Partial rollback: 80% processed + 20% original")
+        logger.info("Partial rollback: 80%% processed + 20%% original")
 
         return partial, params
 

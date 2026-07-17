@@ -136,6 +136,7 @@ except ImportError as _p58_err:
 # Phase 59: Modulation Noise Reduction — Tape modulation artifact removal (§6.7)
 try:
     from .phase_59_modulation_noise_reduction import ModulationNoiseReductionPhase
+
     _PHASE59_OK = True
 except ImportError as _p59_err:
     _logger.debug("Phase 59 nicht verfügbar: %s", _p59_err)
@@ -145,6 +146,7 @@ except ImportError as _p59_err:
 # Phase 60: Inner Groove Distortion Repair — Vinyl-specific (§6.8)
 try:
     from .phase_60_inner_groove_distortion_repair import InnerGrooveDistortionRepairPhase
+
     _PHASE60_OK = True
 except ImportError as _p60_err:
     _logger.debug("Phase 60 nicht verfügbar: %s", _p60_err)
@@ -154,6 +156,7 @@ except ImportError as _p60_err:
 # Phase 61: Groove Echo Cancellation — Pre/post-echo removal (§6.9)
 try:
     from .phase_61_groove_echo_cancellation import GrooveEchoCancellationPhase
+
     _PHASE61_OK = True
 except ImportError as _p61_err:
     _logger.debug("Phase 61 nicht verfügbar: %s", _p61_err)
@@ -163,6 +166,7 @@ except ImportError as _p61_err:
 # Phase 62: Crosstalk Cancellation — Stereo bleed removal (§6.10)
 try:
     from .phase_62_crosstalk_cancellation import CrosstalkCancellationPhase
+
     _PHASE62_OK = True
 except ImportError as _p62_err:
     _logger.debug("Phase 62 nicht verfügbar: %s", _p62_err)
@@ -172,6 +176,7 @@ except ImportError as _p62_err:
 # Phase 63: Intermodulation Reduction — IMD artifact cleanup (§6.11)
 try:
     from .phase_63_intermodulation_reduction import IntermodulationReductionPhase
+
     _PHASE63_OK = True
 except ImportError as _p63_err:
     _logger.debug("Phase 63 nicht verfügbar: %s", _p63_err)
@@ -181,6 +186,7 @@ except ImportError as _p63_err:
 # Phase 64: Tape Splice Repair — Physical tape splice artifact removal (§6.12)
 try:
     from .phase_64_tape_splice_repair import TapeSpliceRepairPhase
+
     _PHASE64_OK = True
 except ImportError as _p64_err:
     _logger.debug("Phase 64 nicht verfügbar: %s", _p64_err)
@@ -190,6 +196,7 @@ except ImportError as _p64_err:
 # Phase 65: Vocal Naturalness Restoration — Formant/Vibrato preservation (§6.13)
 try:
     from .phase_65_vocal_naturalness_restoration import VocalNaturalnessRestorationPhase
+
     _PHASE65_OK = True
 except ImportError as _p65_err:
     _logger.debug("Phase 65 nicht verfügbar: %s", _p65_err)
@@ -199,6 +206,7 @@ except ImportError as _p65_err:
 # Phase 66: Stem-Targeted Noise Reduction — Source-separation NR (§6.14)
 try:
     from .phase_66_stem_targeted_nr import StemTargetedNRPhase
+
     _PHASE66_OK = True
 except ImportError as _p66_err:
     _logger.debug("Phase 66 nicht verfügbar: %s", _p66_err)
@@ -292,5 +300,6 @@ __all__ = [
 
 # Version info
 from backend.core.version import __version__
+
 __author__ = "Aurik 10.0 Development Team"
 __date__ = "2026-07-11"

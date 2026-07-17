@@ -273,12 +273,7 @@ class MUSHRAScorer:
 
         # Weighted combination (MUSHRA calibration)
         overall = (
-            0.25 * h_mushra
-            + 0.15 * t_mushra
-            + 0.15 * f_mushra
-            + 0.20 * s_mushra
-            + 0.15 * n_mushra
-            + 0.10 * st_mushra
+            0.25 * h_mushra + 0.15 * t_mushra + 0.15 * f_mushra + 0.20 * s_mushra + 0.15 * n_mushra + 0.10 * st_mushra
         )
 
         return MUSHRAScore(
@@ -312,9 +307,7 @@ class MUSHRAScorer:
         freqs = np.fft.rfftfreq(n_fft, d=1.0 / self.sr)
 
         # ERB bands
-        centers = np.array(
-            [100, 200, 300, 500, 700, 1000, 1500, 2000, 3000, 5000, 8000, 12000]
-        )
+        centers = np.array([100, 200, 300, 500, 700, 1000, 1500, 2000, 3000, 5000, 8000, 12000])
         bw = 24.7 * (4.37 * centers / 1000.0 + 1.0)
         dists = []
         for cf, b in zip(centers, bw):

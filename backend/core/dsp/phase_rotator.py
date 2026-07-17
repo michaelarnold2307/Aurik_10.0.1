@@ -17,7 +17,7 @@ Non-blocking: import errors are silently caught by the caller.
 from __future__ import annotations
 
 import numpy as np
-from scipy.signal import sosfilt, butter
+from scipy.signal import butter, sosfilt
 
 
 def _design_allpass_2nd_order(freq_hz: float, sr: int, rotation_deg: float) -> np.ndarray:
@@ -105,8 +105,8 @@ def apply_phase_rotator(
 
     # Blend with dry
     strength_clamped = float(np.clip(abs(strength), 0.0, 1.0))
-    out_l = ch_l + strength_clamped * (wet_l[:len(ch_l)] - ch_l)
-    out_r = ch_r + strength_clamped * (wet_r[:len(ch_r)] - ch_r)
+    out_l = ch_l + strength_clamped * (wet_l[: len(ch_l)] - ch_l)
+    out_r = ch_r + strength_clamped * (wet_r[: len(ch_r)] - ch_r)
 
     # Rebuild stereo array
     if ch_first:

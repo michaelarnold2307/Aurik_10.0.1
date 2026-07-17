@@ -51,14 +51,16 @@ def enrich_quality_gate(
         h_score = compute_harmonic_preservation_score(original, restored, sr)
         enriched["preservation_scores"]["harmonic"] = float(h_score)
         if h_score < 0.70:
-            enriched.setdefault("events", []).append({
-                "id": "harmonic_degradation",
-                "klasse": "B_RECOVERY_TRIGGER",
-                "focus": "harmonic_preservation",
-                "value": float(h_score),
-                "threshold": 0.70,
-                "action": "harmonic_recovery_cascade",
-            })
+            enriched.setdefault("events", []).append(
+                {
+                    "id": "harmonic_degradation",
+                    "klasse": "B_RECOVERY_TRIGGER",
+                    "focus": "harmonic_preservation",
+                    "value": float(h_score),
+                    "threshold": 0.70,
+                    "action": "harmonic_recovery_cascade",
+                }
+            )
     except Exception as e:
         logger.debug("Harmonic-Score nicht verfügbar: %s", e)
 
@@ -69,14 +71,16 @@ def enrich_quality_gate(
         t_score = compute_transient_preservation_score(original, restored, sr)
         enriched["preservation_scores"]["transient"] = float(t_score)
         if t_score < 0.65:
-            enriched.setdefault("events", []).append({
-                "id": "transient_degradation",
-                "klasse": "B_RECOVERY_TRIGGER",
-                "focus": "transient_preservation",
-                "value": float(t_score),
-                "threshold": 0.65,
-                "action": "transient_recovery_cascade",
-            })
+            enriched.setdefault("events", []).append(
+                {
+                    "id": "transient_degradation",
+                    "klasse": "B_RECOVERY_TRIGGER",
+                    "focus": "transient_preservation",
+                    "value": float(t_score),
+                    "threshold": 0.65,
+                    "action": "transient_recovery_cascade",
+                }
+            )
     except Exception as e:
         logger.debug("Transient-Score nicht verfügbar: %s", e)
 
@@ -87,14 +91,16 @@ def enrich_quality_gate(
         f_score = compute_formant_preservation_score(original, restored, sr)
         enriched["preservation_scores"]["formant"] = float(f_score)
         if f_score < 0.60:
-            enriched.setdefault("events", []).append({
-                "id": "formant_degradation",
-                "klasse": "A_HARD_VETO",
-                "focus": "formant_preservation",
-                "value": float(f_score),
-                "threshold": 0.60,
-                "action": "rollback_checkpoint",
-            })
+            enriched.setdefault("events", []).append(
+                {
+                    "id": "formant_degradation",
+                    "klasse": "A_HARD_VETO",
+                    "focus": "formant_preservation",
+                    "value": float(f_score),
+                    "threshold": 0.60,
+                    "action": "rollback_checkpoint",
+                }
+            )
     except Exception as e:
         logger.debug("Formant-Score nicht verfügbar: %s", e)
 
@@ -105,14 +111,16 @@ def enrich_quality_gate(
         a_score = compute_artifact_freedom_score(restored, sr)
         enriched["preservation_scores"]["artifact_freedom"] = float(a_score)
         if a_score < 0.80:
-            enriched.setdefault("events", []).append({
-                "id": "artifact_detected",
-                "klasse": "A_HARD_VETO",
-                "focus": "artifact_freedom",
-                "value": float(a_score),
-                "threshold": 0.80,
-                "action": "rollback_checkpoint",
-            })
+            enriched.setdefault("events", []).append(
+                {
+                    "id": "artifact_detected",
+                    "klasse": "A_HARD_VETO",
+                    "focus": "artifact_freedom",
+                    "value": float(a_score),
+                    "threshold": 0.80,
+                    "action": "rollback_checkpoint",
+                }
+            )
     except Exception as e:
         logger.debug("Artifact-Score nicht verfügbar: %s", e)
 
@@ -123,14 +131,16 @@ def enrich_quality_gate(
         m_score = compute_micro_dynamics_score(original, restored, sr)
         enriched["preservation_scores"]["micro_dynamics"] = float(m_score)
         if m_score < 0.55:
-            enriched.setdefault("events", []).append({
-                "id": "micro_dynamics_degradation",
-                "klasse": "B_RECOVERY_TRIGGER",
-                "focus": "micro_dynamics",
-                "value": float(m_score),
-                "threshold": 0.55,
-                "action": "dynamics_recovery_cascade",
-            })
+            enriched.setdefault("events", []).append(
+                {
+                    "id": "micro_dynamics_degradation",
+                    "klasse": "B_RECOVERY_TRIGGER",
+                    "focus": "micro_dynamics",
+                    "value": float(m_score),
+                    "threshold": 0.55,
+                    "action": "dynamics_recovery_cascade",
+                }
+            )
     except Exception as e:
         logger.debug("Micro-Dynamics-Score nicht verfügbar: %s", e)
 

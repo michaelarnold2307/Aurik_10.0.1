@@ -72,8 +72,9 @@ from typing import Any
 import numpy as np
 import scipy.signal as signal
 
+from backend.core.ml_model_readiness import check_ml_model_ready
+
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult, create_phase_result
-from backend.core.ml_model_readiness import check_ml_model_ready  # noqa: E402
 
 # Resource Management for fallback to lightweight algorithms
 try:
@@ -481,16 +482,15 @@ class DenoisePhase(PhaseInterface):
                 if _bname in _bands_adaptive:
                     # Adaptive Skalierung: mehr Reduktion wo Noise-Floor nah am Signal
                     _orig = _bands_adaptive[_bname]["reduction"]
-                    _bands_adaptive[_bname]["reduction"] = float(np.clip(
-                        _orig * (0.7 + 0.3 * _bfactors), 0.05, 0.95
-                    ))
+                    _bands_adaptive[_bname]["reduction"] = float(np.clip(_orig * (0.7 + 0.3 * _bfactors), 0.05, 0.95))
             params = dict(params)
             params["bands"] = _bands_adaptive
             params["_noise_floor_db"] = _nf["noise_floor_db"]
             params["_estimated_snr_db"] = _nf["estimated_snr_db"]
             logger.debug(
                 "Phase 03 adaptive: noise_floor=%.1f dB snr=%.1f dB → band_reduction scaled",
-                _nf["noise_floor_db"], _nf["estimated_snr_db"],
+                _nf["noise_floor_db"],
+                _nf["estimated_snr_db"],
             )
         except Exception as _nf_exc:
             logger.debug("Phase 03 adaptive noise floor non-blocking: %s", _nf_exc)
@@ -1100,7 +1100,9 @@ class DenoisePhase(PhaseInterface):
 
                 _hpg = _get_hpg()
                 _audio_for_hpg = audio if audio.ndim == 1 else audio
-                _protected_mask, _h_ref = _hpg.extract_harmonic_mask(_audio_for_hpg.astype(np.float32), int(sample_rate))
+                _protected_mask, _h_ref = _hpg.extract_harmonic_mask(
+                    _audio_for_hpg.astype(np.float32), int(sample_rate)
+                )
                 params = dict(params)
                 params["_hpg_protected_mask"] = _protected_mask
                 params["_hpg_h_ref"] = _h_ref
@@ -2444,8 +2446,11 @@ class DenoisePhase(PhaseInterface):
 
             _vfy03 = verify_output_quality(audio, _p03_out(result_audio), sample_rate)
             if _vfy03["needs_readjust"]:
-                logger.info("Phase 03: verify_output_quality needs readjust (rms=%.1fdB corr=%.3f) — reducing strength",
-                           _vfy03["rms_change_db"], _vfy03["spectral_correlation"])
+                logger.info(
+                    "Phase 03: verify_output_quality needs readjust (rms=%.1fdB corr=%.3f) — reducing strength",
+                    _vfy03["rms_change_db"],
+                    _vfy03["spectral_correlation"],
+                )
                 warnings.append(f"Auto-readjust: RMS change {_vfy03['rms_change_db']:.1f} dB")
         except Exception:
             pass

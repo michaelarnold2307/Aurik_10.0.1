@@ -4,6 +4,7 @@
 Abdeckung: 15 von 26 regex-detectable Regeln (AST/Runtime-Regeln separat).
 Referenz: .github/VERBOTEN.md — Linter-Referenz-Tabelle.
 """
+
 from __future__ import annotations
 
 import json
@@ -22,21 +23,59 @@ RULES: dict[str, dict] = {
     "V01": {
         "p": r"\bprint\s*\(",
         "d": "print() statt logger — Produktionscode",
-        "skip": {"test_", "conftest", "__init__", "scripts/", "setup.py", "examples/", "audit/", "Aurik10/", "benchmarks/", "cli/", "golden_samples/", "usability/", "policy/", "tests/"},
+        "skip": {
+            "test_",
+            "conftest",
+            "__init__",
+            "scripts/",
+            "setup.py",
+            "examples/",
+            "audit/",
+            "Aurik10/",
+            "benchmarks/",
+            "cli/",
+            "golden_samples/",
+            "usability/",
+            "policy/",
+            "tests/",
+        },
         "sev": "ERROR",
     },
     # ── V-BRIDGE (Bridge-Bypass): from backend.core import ─────────────
     "V-BRIDGE": {
         "p": r"from backend\.core import|import backend\.core\.",
         "d": "Bridge-Bypass-Verbot",
-        "skip": {"bridge", "__init__", "conftest", "denker/", "api/", "policy/", "Aurik10/", "tests/", "plugins/", "scripts/"},
+        "skip": {
+            "bridge",
+            "__init__",
+            "conftest",
+            "denker/",
+            "api/",
+            "policy/",
+            "Aurik10/",
+            "tests/",
+            "plugins/",
+            "scripts/",
+        },
         "sev": "ERROR",
     },
     # ── V02: sf.read() / librosa.load() statt load_audio_file() ────────
     "V02": {
         "p": r"\b(sf\.read\s*\(|librosa\.load\s*\()",
         "d": "sf.read/librosa.load statt load_audio_file()",
-        "skip": {"test_", "exporter.py", "audio_exporter.py", "generate_dummy", "conftest", "audit/", "benchmarks/", "scripts/", "Aurik10/", "golden_samples", "tests/"},
+        "skip": {
+            "test_",
+            "exporter.py",
+            "audio_exporter.py",
+            "generate_dummy",
+            "conftest",
+            "audit/",
+            "benchmarks/",
+            "scripts/",
+            "Aurik10/",
+            "golden_samples",
+            "tests/",
+        },
         "sev": "ERROR",
     },
     # ── V03: map_location="cuda" ohne ml_device_manager ────────────────
@@ -57,7 +96,27 @@ RULES: dict[str, dict] = {
     "V08": {
         "p": r"np\.max\s*\(\s*np\.abs\s*\(\s*audio\s*\)\s*\)",
         "d": "np.max(abs(audio)) — np.percentile(99.9) verwenden",
-        "skip": {"test_", "exporter.py", "export_guard", "audio_exporter.py", "peak_guard", "dsp/", "forensics/", "safety_wrappers/", "golden_samples", "scripts/", "metrics", "classifier", "detector", "monitor", "generator", "persistence/", "quality_prediction", "naturalness", "emotional_resonance"},
+        "skip": {
+            "test_",
+            "exporter.py",
+            "export_guard",
+            "audio_exporter.py",
+            "peak_guard",
+            "dsp/",
+            "forensics/",
+            "safety_wrappers/",
+            "golden_samples",
+            "scripts/",
+            "metrics",
+            "classifier",
+            "detector",
+            "monitor",
+            "generator",
+            "persistence/",
+            "quality_prediction",
+            "naturalness",
+            "emotional_resonance",
+        },
         "sev": "WARNING",
     },
     # ── V09: consecutive_rollbacks += in Carrier-Repair ────────────────
@@ -72,14 +131,66 @@ RULES: dict[str, dict] = {
         "p": r"\bsosfilt\s*\(",
         "negate": r"\bsosfiltfilt\s*\(",
         "d": "sosfilt ohne sosfiltfilt — destruktive Interferenz möglich",
-        "skip": {"test_", "exporter.py", "_export_nuance", "dsp/", "forensics/", "safety_wrappers/", "denker/", "metrics", "classifier", "detector", "feature_", "genre_", "mushra", "bark_", "allpass", "psychoacoustics", "benchmarks", "processing/", "adaptive_plugins", "consonant_enhancement", "defect_analysis", "defect_scanner", "emergency_restoration", "ki_hearing_model", "perceptual_export_optimizer", "perceptual_intensity", "production_enhancements", "sub_stem_processor", "phase_03_denoise", "phase_09_crackle", "phase_34_mid_side", "phase_40_loudness", "run_amrb", "scripts/", "verify_all"},
+        "skip": {
+            "test_",
+            "exporter.py",
+            "_export_nuance",
+            "dsp/",
+            "forensics/",
+            "safety_wrappers/",
+            "denker/",
+            "metrics",
+            "classifier",
+            "detector",
+            "feature_",
+            "genre_",
+            "mushra",
+            "bark_",
+            "allpass",
+            "psychoacoustics",
+            "benchmarks",
+            "processing/",
+            "adaptive_plugins",
+            "consonant_enhancement",
+            "defect_analysis",
+            "defect_scanner",
+            "emergency_restoration",
+            "ki_hearing_model",
+            "perceptual_export_optimizer",
+            "perceptual_intensity",
+            "production_enhancements",
+            "sub_stem_processor",
+            "phase_03_denoise",
+            "phase_09_crackle",
+            "phase_34_mid_side",
+            "phase_40_loudness",
+            "run_amrb",
+            "scripts/",
+            "verify_all",
+        },
         "sev": "WARNING",
     },
     # ── V14: Speech-Metrik (PESQ/STOI/DNSMOS/NISQA) ───────────────────
     "V14": {
         "p": r"(?:^|\s)(?:PESQ|pesq|SI[.-]SDR|si_sdr|STOI|stoi|DNSMOS|NISQA|VISQOL.*Speech)\b",
         "d": "Speech-Metrik — PQS-MOS/VERSA verwenden",
-        "skip": {"test_", "VERBOTEN", "forbidden", "benchmark", "sota_eval", "spec", "docs", "quality_", "dsp/", "config/", "policy/", "audit/", "multi_pass", "musical_goals", "hyperparameter"},
+        "skip": {
+            "test_",
+            "VERBOTEN",
+            "forbidden",
+            "benchmark",
+            "sota_eval",
+            "spec",
+            "docs",
+            "quality_",
+            "dsp/",
+            "config/",
+            "policy/",
+            "audit/",
+            "multi_pass",
+            "musical_goals",
+            "hyperparameter",
+        },
         "sev": "ERROR",
     },
     # ── V21: Truncation ohne Dither ────────────────────────────────────
@@ -119,7 +230,7 @@ RULES: dict[str, dict] = {
     },
     # ── V39: §0a-forbidden Phasen für Restoration ─────────────────────
     "V39": {
-        "p": r'Restoration.*(?:phase_21_exciter|phase_35_multiband|phase_42_vocal)',
+        "p": r"Restoration.*(?:phase_21_exciter|phase_35_multiband|phase_42_vocal)",
         "d": "§0a-verbotene Phase für Restoration-Cause",
         "skip": {"test_", "VERBOTEN", "docs", "causal_defect_reasoner", "scripts/", "cumulative_interaction_guard"},
         "sev": "ERROR",
@@ -151,6 +262,7 @@ GLOBAL_FILE_SKIP: dict[str, set[str]] = {
     # Skip for plugins/sdk abstract base classes
     "sdk": {"plugins/sdk/"},
 }
+
 
 def _should_skip_rule(fp: Path, rid: str) -> bool:
     """Check if file should be skipped for a given rule."""
@@ -206,6 +318,7 @@ def scan(fp: Path) -> list[str]:
 
 def main() -> int:
     import argparse
+
     parser = argparse.ArgumentParser(description="VERBOTEN-Linter v4")
     parser.add_argument("--ci", action="store_true", help="CI mode: exit 1 on issues")
     parser.add_argument("--json", action="store_true", help="JSON output")
@@ -224,14 +337,18 @@ def main() -> int:
     if args.json:
         errors = sum(1 for v in all_issues.values() for i in v if "ERROR" in i)
         warnings = total - errors
-        print(json.dumps({
-            "clean": total == 0,
-            "issues": total,
-            "errors": errors,
-            "warnings": warnings,
-            "files_scanned": len(py_files),
-            "rules_active": len(RULES),
-        }))
+        print(
+            json.dumps(
+                {
+                    "clean": total == 0,
+                    "issues": total,
+                    "errors": errors,
+                    "warnings": warnings,
+                    "files_scanned": len(py_files),
+                    "rules_active": len(RULES),
+                }
+            )
+        )
         return 0
 
     if total:

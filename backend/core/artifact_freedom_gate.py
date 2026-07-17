@@ -615,9 +615,19 @@ class ArtifactFreedomGate:
 
         # §v10.17: Material-abhängiger Veto-Schwellwert.
         # Kassette/Vinyl/Schellack DÜRFEN Transport-Bumps und Knistern haben.
-        _MATERIAL_VETO = {"cd_digital":0.95,"digital":0.95,"mp3_high":0.90,"aac":0.90,
-                          "mp3_low":0.85,"vinyl":0.80,"cassette":0.75,"tape":0.80,
-                          "reel_tape":0.80,"shellac":0.65,"wax_cylinder":0.60}
+        _MATERIAL_VETO = {
+            "cd_digital": 0.95,
+            "digital": 0.95,
+            "mp3_high": 0.90,
+            "aac": 0.90,
+            "mp3_low": 0.85,
+            "vinyl": 0.80,
+            "cassette": 0.75,
+            "tape": 0.80,
+            "reel_tape": 0.80,
+            "shellac": 0.65,
+            "wax_cylinder": 0.60,
+        }
         _veto = float(_MATERIAL_VETO.get(mat_key, 0.90))
         _afg_fr = None
         if artifact_freedom < _veto:

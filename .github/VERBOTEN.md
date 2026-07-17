@@ -206,7 +206,6 @@
 | Plugin-Basisklasse nicht verwendet [NEU 2026-07-12] | Neues ML-Plugin erbt von `object` statt `MLPluginBase` → `_model_loaded`-Attribut kann fehlen → Readiness-Check schlägt permanent fehl → monatelanger unbemerkter DSP-Fallback. | `class MeinPlugin(MLPluginBase):` Pflicht. Linter: Klassen in `plugins/` ohne `(MLPluginBase)`-Vererbung → WARNING. |
 | Globaler Interchannel-Lag nicht vor Phase 1 korrigiert [NEU 2026-07-12] | `LAG_PROBE 0B: lag=-8900 samples (-185.4 ms)` wird erkannt aber nicht als VORVERARBEITUNG korrigiert. Phasen arbeiten auf zeitlich dekorrelierten Kanälen → alle Stereo-Metriken (IACC, spatial_depth, separation_fidelity) liefern falsche Werte. | Globaler Lag MUSS als Pre-Processing-Schritt vor `_execute_pipeline()` korrigiert werden. `np.roll()` oder fractional-delay FIR je nach Lag-Größe. Ergebnis in `_restoration_context["stereo_lag_corrected"]` speichern. |
 
-
 > Vollständige Linter-Implementierung: `scripts/aurik_verboten_linter.py`
 
 ## Statische Annahmen ohne Signalbezug [NEU 2026-07-13]

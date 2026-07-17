@@ -208,7 +208,6 @@ Misst die perzeptuelle Distanz zum ORIGINAL (Pre-Pipeline-Anker).
 - STCG 20ms-Guard gilt universell — kein Widerspruch zwischen Pre/Post/Intra-Phase
 - Fatigue-Metrik invers zu PMGG-Goals (0=schlecht→1=optimal via `fatigue_as_pmgg_goal`)
 
-
 ## 11. Stereo-Lag-Prävention (garantiert)
 
 ### 11.1 Prinzip

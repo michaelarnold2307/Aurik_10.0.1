@@ -424,6 +424,7 @@ class SpectralRepair(PhaseInterface):
             return None
         try:
             from backend.core.carrier_transfer_characteristics import get_bw_ceiling_hz
+
             return float(get_bw_ceiling_hz(mat_key))
         except ImportError:
             # Fallback: kanonische Werte (IEC 60094-1)
@@ -696,8 +697,11 @@ class SpectralRepair(PhaseInterface):
             _energy_floor_adaptive = float(np.clip(_nf23["noise_floor_db"] + 6.0, -70.0, -35.0))
             thresholds = dict(thresholds)
             thresholds["energy_floor_db"] = _energy_floor_adaptive
-            logger.debug("Phase 23 adaptive: energy_floor=%.1f dB (noise_floor=%.1f)",
-                        _energy_floor_adaptive, _nf23["noise_floor_db"])
+            logger.debug(
+                "Phase 23 adaptive: energy_floor=%.1f dB (noise_floor=%.1f)",
+                _energy_floor_adaptive,
+                _nf23["noise_floor_db"],
+            )
         except Exception:
             pass
         repair_strength = self.REPAIR_STRENGTH.get(material, 0.75)

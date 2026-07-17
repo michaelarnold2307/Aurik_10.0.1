@@ -40,9 +40,9 @@ import scipy.signal as sig
 from backend.core.audio_utils import safe_to_mono
 from backend.core.ml_memory_budget import release as _release_ml_budget
 from backend.core.ml_memory_budget import try_allocate as _try_allocate_ml_budget
+from backend.core.ml_model_readiness import check_ml_model_ready
 
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult
-from backend.core.ml_model_readiness import check_ml_model_ready  # noqa: E402
 
 _clap_factory_impl: Any = None
 try:

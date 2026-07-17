@@ -364,8 +364,12 @@ class SignalFlowTracer:
                 if _rms_mid_db < _LEVEL_COLLAPSE_DBFS:
                     flags.append(f"LEVEL_COLLAPSE (rms={rms_post:.1f} dBFS, mid={_rms_mid_db:.1f} dBFS)")
                 else:
-                    logger.debug("§SFT %s: LEVEL_COLLAPSE false-positive (full=%.1f mid=%.1f dBFS)",
-                                phase_id, rms_post, _rms_mid_db)
+                    logger.debug(
+                        "§SFT %s: LEVEL_COLLAPSE false-positive (full=%.1f mid=%.1f dBFS)",
+                        phase_id,
+                        rms_post,
+                        _rms_mid_db,
+                    )
 
             # ── Phase-Record erstellen ────────────────────────────────────────
             elapsed = time.monotonic() - self._session_start
@@ -403,7 +407,9 @@ class SignalFlowTracer:
                 _pc_collapse = (
                     "LEVEL_COLLAPSE" in " | ".join(flags)
                     and phase_id
-                    and any(p in str(phase_id) for p in ("phase_14", "phase_16", "phase_25", "azimuth", "phase_correction"))
+                    and any(
+                        p in str(phase_id) for p in ("phase_14", "phase_16", "phase_25", "azimuth", "phase_correction")
+                    )
                 )
                 if _pc_collapse:
                     logger.info("§SFT %s FLAGS: %s", phase_id, " | ".join(flags))

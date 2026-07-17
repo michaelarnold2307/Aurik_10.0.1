@@ -107,7 +107,6 @@ phase_65_vocal_naturalness_restoration.py  DSP-Vocal-Naturalness-Restaurierung
 
 ---
 
-
 ### v10-Amendment (2026-07-12)
 
 **Phase 24 stereo-lag safety: WARNING→INFO** (v10, 2026-07-12):
@@ -121,6 +120,7 @@ Die Stereo-Lag-Safety in `phase_24_dropout_repair.py` korrigiert erfolgreich ein
 Die Meldung »`structural_silence_zones nicht in context`« in `structural_silence_isolation.py` feuerte einmal pro Dropout-Region (~70× pro Phase-24-Durchlauf). Der Fallback-Pfad ist der erwartete Normalpfad (der Context enthält diese Zonen nur in Ausnahmefällen).
 
 `logger.info` → `logger.debug`.
+
 ## §7.1d [RELEASE_MUST] 64-Phasen-SOTA-Bindung und Strength-Oracle-Matrix (v9.12.9)
 
 Die folgende Matrix ist die bindende Vorgabe fuer Phase 01-64. Sie definiert pro Phase:

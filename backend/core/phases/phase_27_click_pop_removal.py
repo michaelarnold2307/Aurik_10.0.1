@@ -40,6 +40,7 @@ from typing import Any
 
 try:
     import librosa
+
     _HAS_LIBROSA = True
 except ImportError:
     librosa = None  # type: ignore[assignment]
@@ -51,10 +52,10 @@ from scipy.signal import lfilter
 from backend.core.audio_utils import audio_sample_count, stereo_channel_view, stereo_like
 from backend.core.defect_scanner import MaterialType
 from backend.core.lyrics_guided_enhancement import get_lyrics_guided_enhancement
+from backend.core.ml_model_readiness import check_ml_model_ready
 from backend.core.natural_performance_detector import get_natural_performance_detector
 
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult
-from backend.core.ml_model_readiness import check_ml_model_ready  # noqa: E402
 
 logger = logging.getLogger(__name__)
 

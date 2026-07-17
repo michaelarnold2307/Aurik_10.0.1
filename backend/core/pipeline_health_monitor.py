@@ -1,17 +1,19 @@
-
 """§v10.17 PipelineHealthMonitor — Error-Budget + Circuit-Breaker.
 
 Verhindert pathologische Pipeline-Läufe durch globales Retry- und Zeit-Limit.
 """
 
 from __future__ import annotations
-import logging, time, threading
+
+import logging
+import threading
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
 logger = logging.getLogger(__name__)
 
-_MAX_TOTAL_RETRIES: int = 60       # Global: max 60 retries across all phases
+_MAX_TOTAL_RETRIES: int = 60  # Global: max 60 retries across all phases
 _MAX_PHASE_DURATION_S: float = 300.0  # 5 min per phase max
 _MAX_PIPELINE_DURATION_S: float = 7200.0  # 2 hours total max
 _CIRCUIT_BREAKER_FAILURES: int = 8  # >8 hard failures → abort pipeline
@@ -51,9 +53,9 @@ class PipelineHealthMonitor:
                 self._health.total_failures += 1
                 if error_type:
                     self._health.total_hard_failures += int(error_type == "hard")
-                self._health.error_log.append({
-                    "phase": phase_id, "retries": retries, "error": error_type, "duration_s": round(dur, 2)
-                })
+                self._health.error_log.append(
+                    {"phase": phase_id, "retries": retries, "error": error_type, "duration_s": round(dur, 2)}
+                )
             if dur > _MAX_PHASE_DURATION_S:
                 logger.warning("HealthMonitor: %s exceeded phase time limit (%.0fs)", phase_id, dur)
 
@@ -66,7 +68,11 @@ class PipelineHealthMonitor:
                 return False
             if self._health.total_hard_failures > _CIRCUIT_BREAKER_FAILURES:
                 self._health.circuit_breaker_triggered = True
-                logger.error("CIRCUIT BREAKER: %d hard failures > %d limit", self._health.total_hard_failures, _CIRCUIT_BREAKER_FAILURES)
+                logger.error(
+                    "CIRCUIT BREAKER: %d hard failures > %d limit",
+                    self._health.total_hard_failures,
+                    _CIRCUIT_BREAKER_FAILURES,
+                )
                 return False
             if time.time() - self._health.pipeline_start_time > _MAX_PIPELINE_DURATION_S:
                 self._health.circuit_breaker_triggered = True

@@ -47,9 +47,9 @@ from backend.core.musical_goals.adaptive_goal_resolver import (
     resolve_adaptive_goal_thresholds as _resolve_adaptive_goal_thresholds_fn,
 )
 from backend.core.performance_guard import DeploymentMode, PerformanceGuard, QualityMode
+from backend.core.phase_contract_guard import guard_phase_input, guard_phase_output
 from backend.core.phase_skipping import PhaseSkipper
 from backend.core.phases.phase_interface import PhaseInterface
-from backend.core.phase_contract_guard import guard_phase_input, guard_phase_output
 from backend.core.restoration_policy import (
     blend_denker_policy_goal_weights,
     get_effective_song_goal_weights,
@@ -7114,12 +7114,37 @@ class UnifiedRestorerV3:
             _denker_policy_input = {}
 
         def _cb(pct: float, phase: str) -> None:
-            """Sendet Progress-Update mit Phasen-Icon, falls Callback registriert."""
+            """Sendet song-individuelle, kontext-sensitive Fortschrittsmeldung."""
             try:
-                from backend.core.phase_icons import phase_display as _pdisplay
-                _display = _pdisplay(phase)
+                from backend.core.phase_progress_narrator import get_narrator as _get_narrator
+
+                _narrator = _get_narrator()
+                # §KONTEXT: Song-spezifische Personalisierung aus restoration_context
+                _rc = getattr(self, "_restoration_context", None) or {}
+                _mat = str(_rc.get("primary_material", "") or self.config.material_type or "")
+                _chain = list(_rc.get("transfer_chain", []) or [])
+                _era = _rc.get("era_decade")
+                _defs_raw = _rc.get("defects", []) or _rc.get("defect_scores", {}) or {}
+                if isinstance(_defs_raw, dict):
+                    _defs = [k for k, v in _defs_raw.items() if isinstance(v, (int, float)) and float(v) > 0.3]
+                else:
+                    _defs = list(_defs_raw) if isinstance(_defs_raw, list) else []
+                _rest = _rc.get("restorability_score")
+                _narrator.set_context(
+                    material=str(_mat),
+                    era_decade=int(_era) if _era is not None else None,
+                    transfer_chain=_chain,
+                    defects=_defs[:8],
+                    restorability=float(_rest) if _rest is not None else None,
+                )
+                _display = _narrator.message_for(phase, progress_pct=int(pct))
             except Exception:
-                _display = f"🎵 {phase}"
+                try:
+                    from backend.core.phase_icons import phase_display as _pdisplay2
+
+                    _display = _pdisplay2(phase)
+                except Exception:
+                    _display = f"🎵 {phase}"
             if progress_callback is not None:
                 try:
                     progress_callback(pct, _display, time.time() - start_time)
@@ -8468,22 +8493,28 @@ class UnifiedRestorerV3:
             if _genre_sat:
                 try:
                     from backend.core.saturation_discriminator import get_saturation_discriminator
+
                     _sat_disc = get_saturation_discriminator()
-                    _sat_result = _sat_disc.classify(audio, sample_rate,
+                    _sat_result = _sat_disc.classify(
+                        audio,
+                        sample_rate,
                         transfer_chain=self._restoration_context.get("effective_transfer_chain", []),
-                        era_decade=self._restoration_context.get("era_decade"))
+                        era_decade=self._restoration_context.get("era_decade"),
+                    )
                     if _sat_result.preservation_ratio > 0.5:
                         self._restoration_context["soft_saturation_preserve"] = True
                         self._restoration_context["saturation_discrimination"] = _sat_result.as_dict()
                         logger.info(
                             "§6.5d SaturationDiscriminator: %.0f%% good (H2/H4), %.0f%% bad (H3/H5) → %s",
-                            _sat_result.good_ratio * 100, _sat_result.bad_ratio * 100,
+                            _sat_result.good_ratio * 100,
+                            _sat_result.bad_ratio * 100,
                             "PRESERVE" if _sat_result.preservation_ratio > 0.5 else "REPAIR",
                         )
                     else:
                         logger.info(
                             "§6.5d SaturationDiscriminator: %.0f%% good, %.0f%% bad → PRESERVE DISABLED",
-                            _sat_result.good_ratio * 100, _sat_result.bad_ratio * 100,
+                            _sat_result.good_ratio * 100,
+                            _sat_result.bad_ratio * 100,
                         )
                 except Exception as _sat_exc:
                     logger.debug("§6.5d SaturationDiscriminator: %s", _sat_exc)
@@ -8504,22 +8535,28 @@ class UnifiedRestorerV3:
             # §6.5d: Signal-basierte Entscheidung via SaturationDiscriminator
             try:
                 from backend.core.saturation_discriminator import get_saturation_discriminator
+
                 _sat_disc_fb = get_saturation_discriminator()
-                _sat_result_fb = _sat_disc_fb.classify(audio, sample_rate,
+                _sat_result_fb = _sat_disc_fb.classify(
+                    audio,
+                    sample_rate,
                     transfer_chain=self._restoration_context.get("effective_transfer_chain", []),
-                    era_decade=self._restoration_context.get("era_decade"))
+                    era_decade=self._restoration_context.get("era_decade"),
+                )
                 if _sat_result_fb.preservation_ratio > 0.5:
                     self._restoration_context["soft_saturation_preserve"] = True
                     self._restoration_context["soft_saturation_severity"] = _sat_sev_fb
                     self._restoration_context["saturation_discrimination"] = _sat_result_fb.as_dict()
                     logger.info(
                         "§6.5d SaturationDiscriminator Fallback: %.0f%% good → PRESERVE (sev=%.2f)",
-                        _sat_result_fb.good_ratio * 100, _sat_sev_fb,
+                        _sat_result_fb.good_ratio * 100,
+                        _sat_sev_fb,
                     )
                 else:
                     logger.info(
                         "§6.5d SaturationDiscriminator Fallback: %.0f%% bad → PRESERVE DISABLED (sev=%.2f)",
-                        _sat_result_fb.bad_ratio * 100, _sat_sev_fb,
+                        _sat_result_fb.bad_ratio * 100,
+                        _sat_sev_fb,
                     )
             except Exception as _sat_exc_fb:
                 logger.debug("§6.5d SaturationDiscriminator fallback: %s", _sat_exc_fb)
@@ -9099,6 +9136,7 @@ class UnifiedRestorerV3:
                             from backend.core.stereo_temporal_coherence_guard import (
                                 get_stereo_temporal_coherence_guard as _get_stcg_lagfix,
                             )
+
                             audio = _get_stcg_lagfix().correct_interchannel_delay(
                                 audio, sample_rate, phase_id="lag_probe_0b"
                             )
@@ -12210,7 +12248,9 @@ class UnifiedRestorerV3:
 
             _amp_result = get_post_processing_gate().apply(
                 lambda a, sr, strength=None: AntiMufflingPass().process(a, sr),
-                restored_audio, sample_rate, label="AntiMufflingPass",
+                restored_audio,
+                sample_rate,
+                label="AntiMufflingPass",
             )
             if _amp_result.adopted:
                 restored_audio = _amp_result.audio
@@ -12261,12 +12301,14 @@ class UnifiedRestorerV3:
         # §AH VocalClarityMax — Gesangs-Klarheit
         # §v10.15: PostGate-verifiziert
         try:
-            from backend.core.vocal_clarity_max import VocalClarityMax
             from backend.core.post_processing_gate import PostProcessingGate, get_post_processing_gate
+            from backend.core.vocal_clarity_max import VocalClarityMax
 
             _vcm_result = get_post_processing_gate().apply(
                 lambda a, sr, strength=None: VocalClarityMax().process(a, sr),
-                restored_audio, sample_rate, label="VocalClarityMax",
+                restored_audio,
+                sample_rate,
+                label="VocalClarityMax",
             )
             if _vcm_result.adopted:
                 restored_audio = _vcm_result.audio
@@ -12288,9 +12330,8 @@ class UnifiedRestorerV3:
         # §v10.17 OneTakeExport: Export-Qualität garantieren
         try:
             from backend.core.one_take_export import OneTakeExport
-            _ote = OneTakeExport.prepare(
-                restored_audio, sample_rate, is_studio_2026=self.is_studio_mode()
-            )
+
+            _ote = OneTakeExport.prepare(restored_audio, sample_rate, is_studio_2026=self.is_studio_mode())
             if _ote.passed or _ote.retries < 3:
                 restored_audio = _ote.audio
                 logger.info("OneTakeExport: %d retries, corrections=%s", _ote.retries, _ote.corrections)
@@ -12306,7 +12347,9 @@ class UnifiedRestorerV3:
             # §v10.15: Adaptive Stärke statt hartcodiertem 0.15.
             # calibrate_strength() analysiert Mikrodynamik und spektrale Varianz
             # und wählt Stärke ∈ [0.05, 0.25] passend zum Material.
-            restored_audio = HumanizationPass.apply(restored_audio, sample_rate, strength=None, is_studio_2026=self.is_studio_mode())
+            restored_audio = HumanizationPass.apply(
+                restored_audio, sample_rate, strength=None, is_studio_2026=self.is_studio_mode()
+            )
         except Exception:
             logger.debug("restore: silent except suppressed", exc_info=True)
 
@@ -12319,8 +12362,12 @@ class UnifiedRestorerV3:
             _lm = str(kwargs.get("listening_mode", "headphones")).lower()
             _mat = str(getattr(self, "_restoration_context", {}).get("primary_material", "unknown"))
             _peo_result = get_post_processing_gate().apply(
-                lambda a, sr, strength=None: PerceptualExportOptimizer().optimize(a, sr, material=_mat, listening_mode=_lm),
-                restored_audio, sample_rate, label="PerceptualExportOptimizer",
+                lambda a, sr, strength=None: PerceptualExportOptimizer().optimize(
+                    a, sr, material=_mat, listening_mode=_lm
+                ),
+                restored_audio,
+                sample_rate,
+                label="PerceptualExportOptimizer",
             )
             if _peo_result.adopted:
                 restored_audio = _peo_result.audio
@@ -12347,7 +12394,9 @@ class UnifiedRestorerV3:
 
                 _eq_result = get_post_processing_gate().apply(
                     lambda a, sr: apply_adaptive_eq(a, sr, mode=_lm),
-                    restored_audio, sample_rate, label=f"ListeningEQ_{_lm}",
+                    restored_audio,
+                    sample_rate,
+                    label=f"ListeningEQ_{_lm}",
                 )
                 if _eq_result.adopted:
                     restored_audio = _eq_result.audio
@@ -12470,14 +12519,17 @@ class UnifiedRestorerV3:
                     if abs(_lag_pre) <= _RESIDUAL_THRESHOLD_SAMPLES:
                         logger.debug(
                             "§G14 Post-Pipeline STCG: residual lag=%d samples (%.1f ms) — below threshold, skip",
-                            _lag_pre, _lag_pre / sample_rate * 1000,
+                            _lag_pre,
+                            _lag_pre / sample_rate * 1000,
                         )
                         break
 
                     logger.info(
                         "§G14 Post-Pipeline STCG retry %d/%d: pre-lag=%d samples (%.1f ms, spread=%d) — correcting",
-                        _retry_g14 + 1, _MAX_RETRIES_G14,
-                        _lag_pre, _lag_pre / sample_rate * 1000,
+                        _retry_g14 + 1,
+                        _MAX_RETRIES_G14,
+                        _lag_pre,
+                        _lag_pre / sample_rate * 1000,
                         _lag_profile_pre.get("max_spread", 0),
                     )
 
@@ -12492,7 +12544,8 @@ class UnifiedRestorerV3:
 
                     logger.info(
                         "§G14 Post-Pipeline STCG: post-lag=%d samples (%.1f ms, spread=%d)",
-                        _lag_post, _lag_post / sample_rate * 1000,
+                        _lag_post,
+                        _lag_post / sample_rate * 1000,
                         _lag_profile_post.get("max_spread", 0),
                     )
 
@@ -12502,7 +12555,9 @@ class UnifiedRestorerV3:
                     if _retry_g14 == _MAX_RETRIES_G14 - 1:
                         logger.warning(
                             "§G14 Post-Pipeline STCG: %d retries exhausted — residual lag=%d samples (%.1f ms)",
-                            _MAX_RETRIES_G14, _lag_post, _lag_post / sample_rate * 1000,
+                            _MAX_RETRIES_G14,
+                            _lag_post,
+                            _lag_post / sample_rate * 1000,
                         )
 
             except Exception as _stcg_post_exc:
@@ -12516,7 +12571,8 @@ class UnifiedRestorerV3:
                 _lp3_lag = _sota_xcorr(restored_audio[0], restored_audio[1], sample_rate)
                 logger.info(
                     "LAG_PROBE 3/after_stcg_post: lag=%d samples (%.1f ms)",
-                    int(round(_lp3_lag)), _lp3_lag / sample_rate * 1000
+                    int(round(_lp3_lag)),
+                    _lp3_lag / sample_rate * 1000,
                 )
         except Exception as _lp3_exc:
             logger.debug("LAG_PROBE_3 fehlgeschlagen: %s", _lp3_exc)
@@ -12531,17 +12587,22 @@ class UnifiedRestorerV3:
                 )
                 if _air_bw_hz < 18000:
                     from scipy.signal import butter, sosfilt
-                    _sos_air = butter(2, 12000, btype='high', fs=sample_rate, output='sos')
+
+                    _sos_air = butter(2, 12000, btype="high", fs=sample_rate, output="sos")
                     _air_gain_db = 1.5  # subtle, natural
                     _air_gain_lin = float(10.0 ** (_air_gain_db / 20.0))
                     if restored_audio.shape[0] == 2 and restored_audio.shape[1] > 2:
                         for _ch in range(restored_audio.shape[0]):
                             _wet = sosfilt(_sos_air, restored_audio[_ch].astype(np.float64))
-                            restored_audio[_ch] = restored_audio[_ch] + (_air_gain_lin - 1.0) * (_wet - restored_audio[_ch])
+                            restored_audio[_ch] = restored_audio[_ch] + (_air_gain_lin - 1.0) * (
+                                _wet - restored_audio[_ch]
+                            )
                     elif restored_audio.shape[1] == 2 and restored_audio.shape[0] > 2:
                         for _ch in range(restored_audio.shape[1]):
                             _wet = sosfilt(_sos_air, restored_audio[:, _ch].astype(np.float64))
-                            restored_audio[:, _ch] = restored_audio[:, _ch] + (_air_gain_lin - 1.0) * (_wet - restored_audio[:, _ch])
+                            restored_audio[:, _ch] = restored_audio[:, _ch] + (_air_gain_lin - 1.0) * (
+                                _wet - restored_audio[:, _ch]
+                            )
                     restored_audio = np.clip(restored_audio, -1.0, 1.0)
                     logger.debug("§AIR-BAND: +%.1f dB high-shelf at 12 kHz (bw=%.0f Hz)", _air_gain_db, _air_bw_hz)
         except Exception as _air_exc:
@@ -13854,11 +13915,19 @@ class UnifiedRestorerV3:
                 from backend.core.post_processing_gate import PostProcessingGate, get_post_processing_gate
 
                 _hpg_result = get_post_processing_gate().apply(
-                    lambda a, sr: np.clip(np.nan_to_num(
-                        _hpg.apply_correction(a, _hpg_href, _hpg_mask, sr),
-                        nan=0.0, posinf=0.0, neginf=0.0,
-                    ), -1.0, 1.0),
-                    restored_audio, sample_rate, label="HarmonicPreservationGuard",
+                    lambda a, sr: np.clip(
+                        np.nan_to_num(
+                            _hpg.apply_correction(a, _hpg_href, _hpg_mask, sr),
+                            nan=0.0,
+                            posinf=0.0,
+                            neginf=0.0,
+                        ),
+                        -1.0,
+                        1.0,
+                    ),
+                    restored_audio,
+                    sample_rate,
+                    label="HarmonicPreservationGuard",
                 )
                 if _hpg_result.adopted:
                     restored_audio = _hpg_result.audio
@@ -20048,7 +20117,6 @@ class UnifiedRestorerV3:
         if not hasattr(self, "_pbc") or self._pbc is None:
             return {"current": 0, "total": 0, "name": "", "elapsed_non_exempt_s": 0.0}
         return self._pbc.get_progress()
-
 
     def restore_from_checkpoint(
         self,

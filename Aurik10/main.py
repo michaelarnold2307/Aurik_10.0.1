@@ -462,10 +462,11 @@ def main():
     # Fix: warm up numba JIT on the main thread using librosa.feature (avoids
     # the get_call_template bug in numba's dispatcher for gufunc paths).
     try:
+        from io import BytesIO as _BytesIO
+
         import librosa as _librosa_warmup
         import numpy as _np_warmup
         import soundfile as _sf_warmup
-        from io import BytesIO as _BytesIO
 
         # Use melspectrogram warmup (avoids numba gufunc dispatcher bug)
         _dummy = _np_warmup.zeros(2048, dtype=_np_warmup.float32)

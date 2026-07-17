@@ -89,10 +89,12 @@ def stabilize_tape_level(
     # ── Step 1: RMS envelope ──────────────────────────────────────────
     env_win = max(32, int(0.020 * sample_rate))  # 20 ms
     env_hop = max(16, env_win // 2)
-    env_rms = np.array([
-        float(np.sqrt(np.mean(mono[i:i + env_win].astype(np.float64) ** 2) + 1e-12))
-        for i in range(0, max(1, n_samples - env_win), env_hop)
-    ])
+    env_rms = np.array(
+        [
+            float(np.sqrt(np.mean(mono[i : i + env_win].astype(np.float64) ** 2) + 1e-12))
+            for i in range(0, max(1, n_samples - env_win), env_hop)
+        ]
+    )
 
     if len(env_rms) < 8:
         return audio.copy(), 0
@@ -135,9 +137,13 @@ def stabilize_tape_level(
 
     # STFT of mono for analysis
     _, _, X_mono = signal.stft(
-        mono.astype(np.float64), fs=sample_rate, window="hann",
-        nperseg=fft_size, noverlap=fft_size - hop_stft,
-        boundary="even", padded=True,
+        mono.astype(np.float64),
+        fs=sample_rate,
+        window="hann",
+        nperseg=fft_size,
+        noverlap=fft_size - hop_stft,
+        boundary="even",
+        padded=True,
     )
     n_freqs, n_frames_stft = X_mono.shape
     stft_centres = np.arange(n_frames_stft) * hop_stft + fft_size // 2
@@ -158,8 +164,14 @@ def stabilize_tape_level(
 
         # Per-dip strength (capped by protected zones)
         event_strength = _compute_dip_strength(
-            mono, dip_start_idx * env_hop, dip_end_idx * env_hop,
-            sample_rate, strength, max_deficit, gain_cap_db, protected_zones,
+            mono,
+            dip_start_idx * env_hop,
+            dip_end_idx * env_hop,
+            sample_rate,
+            strength,
+            max_deficit,
+            gain_cap_db,
+            protected_zones,
         )
 
         # Map to STFT frames
@@ -204,15 +216,22 @@ def stabilize_tape_level(
     # ── Step 4: Apply to audio ─────────────────────────────────────────
     def _apply(ch: np.ndarray) -> np.ndarray:
         _, _, X = signal.stft(
-            ch.astype(np.float64), fs=sample_rate, window="hann",
-            nperseg=fft_size, noverlap=fft_size - hop_stft,
-            boundary="even", padded=True,
+            ch.astype(np.float64),
+            fs=sample_rate,
+            window="hann",
+            nperseg=fft_size,
+            noverlap=fft_size - hop_stft,
+            boundary="even",
+            padded=True,
         )
         n_apply = min(X.shape[1], spectral_gain.shape[1])
         X[:, :n_apply] *= spectral_gain[:, :n_apply]
         _, y = signal.istft(
-            X, fs=sample_rate, window="hann",
-            nperseg=fft_size, noverlap=fft_size - hop_stft,
+            X,
+            fs=sample_rate,
+            window="hann",
+            nperseg=fft_size,
+            noverlap=fft_size - hop_stft,
             boundary="even",
         )
         out = np.zeros(n_samples, dtype=np.float64)
@@ -235,6 +254,7 @@ def stabilize_tape_level(
 
 
 # ── Helpers ────────────────────────────────────────────────────────────
+
 
 def _compute_dip_strength(
     mono: np.ndarray,

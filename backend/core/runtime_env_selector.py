@@ -7,7 +7,7 @@ Supports: NVIDIA CUDA, AMD ROCm, CPU-only fallback.
 
 from __future__ import annotations
 
-import json, sys
+import json
 import logging
 import os
 import subprocess

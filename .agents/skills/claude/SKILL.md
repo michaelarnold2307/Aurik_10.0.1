@@ -100,6 +100,7 @@ mp3_low  (Physical)       → IQR-Guard, Bandbreiten-Cap, Pre-Echo-Schutz
 ```
 
 **Chain-Awareness über alle Detektoren hinweg:**
+
 - MediumDetector → physikalische Chain + `physical_analog_sources`
 - EraClassifier → `material_prior` als Precursor (nicht als Primary-Override)
 - DefectScanner → kettenadaptive Schwellwerte für ALLE 20 Defekttypen

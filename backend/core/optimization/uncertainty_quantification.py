@@ -20,6 +20,7 @@ import numpy as np
 
 try:
     import torch
+
     _HAS_TORCH = True
 except ImportError:
     torch = None  # type: ignore[assignment]

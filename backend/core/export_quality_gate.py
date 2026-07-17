@@ -91,9 +91,7 @@ class ExportQualityGate:
             result.true_peak_dbtp = ExportQualityGate._measure_true_peak(arr)
             if result.true_peak_dbtp > _TRUEPEAK_FAIL_DBTP:
                 result.passed = False
-                result.errors.append(
-                    f"True Peak {result.true_peak_dbtp:+.1f} dBTP > {_TRUEPEAK_FAIL_DBTP:+.1f} dBTP"
-                )
+                result.errors.append(f"True Peak {result.true_peak_dbtp:+.1f} dBTP > {_TRUEPEAK_FAIL_DBTP:+.1f} dBTP")
             elif result.true_peak_dbtp > _TRUEPEAK_WARN_DBTP:
                 result.warnings.append(
                     f"True Peak {result.true_peak_dbtp:+.1f} dBTP > {_TRUEPEAK_WARN_DBTP:+.1f} dBTP — Clipping-Risiko"
@@ -105,13 +103,12 @@ class ExportQualityGate:
             lufs_hi = lufs_target + _LUFS_TOLERANCE
             if result.integrated_lufs < lufs_lo or result.integrated_lufs > lufs_hi:
                 result.lufs_in_range = False
-                result.warnings.append(
-                    f"LUFS {result.integrated_lufs:+.1f} außerhalb [{lufs_lo:+.0f}, {lufs_hi:+.0f}]"
-                )
+                result.warnings.append(f"LUFS {result.integrated_lufs:+.1f} außerhalb [{lufs_lo:+.0f}, {lufs_hi:+.0f}]")
 
             # ── 3. Listening Fatigue ──────────────────────────────────
             try:
                 from backend.core.listening_fatigue_metric import measure_fatigue
+
                 result.fatigue_score = float(measure_fatigue(audio, sr))
                 if result.fatigue_score > _FATIGUE_WARN:
                     result.fatigue_ok = False
@@ -151,7 +148,7 @@ class ExportQualityGate:
     @staticmethod
     def _measure_true_peak(arr: np.ndarray) -> float:
         """Misst den True Peak (dBTP).
-        
+
         Verwendet Sample-Peak mit +0.5 dB Sicherheitsmarge für
         Intersample-Peaks (entspricht ~4× Oversampling-Schätzung).
         """
@@ -166,27 +163,27 @@ class ExportQualityGate:
         try:
             mono = arr.mean(axis=0) if arr.ndim > 1 else arr
             mono = mono.astype(np.float64)
-            
+
             # RMS über 400ms-Blöcke mit einfachem Gating
             block_n = max(1, int(sr * 0.4))
             n_blocks = max(1, len(mono) // block_n)
             block_rms = []
             for i in range(n_blocks):
-                seg = mono[i * block_n:(i + 1) * block_n]
-                rms = float(np.sqrt(np.mean(seg ** 2) + 1e-12))
+                seg = mono[i * block_n : (i + 1) * block_n]
+                rms = float(np.sqrt(np.mean(seg**2) + 1e-12))
                 block_rms.append(rms)
             block_rms = np.array(block_rms)
-            
+
             # Gate: untere 10% der Blöcke ignorieren (Stille)
             if len(block_rms) >= 10:
                 threshold = float(np.percentile(block_rms, 10))
                 active = block_rms[block_rms > threshold]
             else:
                 active = block_rms
-            
+
             if len(active) < 1:
                 return -70.0
-                
+
             integrated_rms = float(np.mean(active))
             if integrated_rms < 1e-10:
                 return -70.0

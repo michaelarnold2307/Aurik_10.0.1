@@ -1,6 +1,6 @@
+import hashlib
 import io
 import logging
-import hashlib
 import math
 import os
 import tempfile
@@ -43,7 +43,8 @@ def _transfer_metadata(source_path: str, target_path: str, *, transfer_chain: li
         return
     try:
         get_metadata_preserver().transfer(
-            source_path, target_path,
+            source_path,
+            target_path,
             aurik_version=_AURIK_VERSION,
             transfer_chain=transfer_chain,
         )
@@ -105,7 +106,9 @@ _POWR3_COEFFS = np.array(
 )
 
 
-def _apply_powr3_dither(audio: np.ndarray, bit_depth: int, *, seed: int | None = None, cd_active: bool = False) -> np.ndarray:
+def _apply_powr3_dither(
+    audio: np.ndarray, bit_depth: int, *, seed: int | None = None, cd_active: bool = False
+) -> np.ndarray:
     """Wendet an: POW-r Type 3 noise-shaped dither (primary) before integer quantisation.
 
     Uses error-feedback-approximated noise shaping: TPDF dither is pre-shaped
@@ -163,7 +166,9 @@ def _apply_powr3_dither(audio: np.ndarray, bit_depth: int, *, seed: int | None =
     return cast(np.ndarray, out)
 
 
-def _apply_tpdf_dither(audio: np.ndarray, bit_depth: int, *, seed: int | None = None, cd_active: bool = False) -> np.ndarray:
+def _apply_tpdf_dither(
+    audio: np.ndarray, bit_depth: int, *, seed: int | None = None, cd_active: bool = False
+) -> np.ndarray:
     """TPDF fallback dither — no noise shaping.
 
     Used when scipy is unavailable.  Amplitude = ±1 LSB triangular noise.
@@ -191,7 +196,9 @@ def _apply_tpdf_dither(audio: np.ndarray, bit_depth: int, *, seed: int | None = 
     return cast(np.ndarray, out)
 
 
-def apply_dither(audio: np.ndarray, bit_depth: int = 16, *, seed: int | None = None, cd_active: bool = False) -> np.ndarray:
+def apply_dither(
+    audio: np.ndarray, bit_depth: int = 16, *, seed: int | None = None, cd_active: bool = False
+) -> np.ndarray:
     """Wendet an: dither before integer quantisation.
 
     Primary: POW-r Type 3 noise-shaped dither (spec §DSP-Spezialregeln).

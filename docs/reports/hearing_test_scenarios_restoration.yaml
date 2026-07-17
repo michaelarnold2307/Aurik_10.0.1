@@ -16,10 +16,10 @@ scenarios:
       description: "Original rock recording from vinyl with audible distortion, wow/flutter, and surface crackle"
 
     expected_defects_scanner:
-      - "crackle_noise" (severity: high)
-      - "wow_flutter" (severity: medium)
-      - "rumble" (severity: low)
-      - "distortion_clipping" (severity: medium)
+      - "crackle_noise (severity: high)"
+      - "wow_flutter (severity: medium)"
+      - "rumble (severity: low)"
+      - "distortion_clipping (severity: medium)"
 
     restoration_objectives:
       - "Remove surface crackle without affecting vocal presence"
@@ -71,9 +71,9 @@ scenarios:
       description: "Jazz vocal recording on reel-to-reel with audible tape hiss and 2–3 short dropouts (< 500 ms)"
 
     expected_defects_scanner:
-      - "tape_hiss_broadband_noise" (severity: high)
-      - "dropout_short_duration" (severity: medium)
-      - "tape_saturation_soft_clipping" (severity: low)
+      - "tape_hiss_broadband_noise (severity: high)"
+      - "dropout_short_duration (severity: medium)"
+      - "tape_saturation_soft_clipping (severity: low)"
 
     restoration_objectives:
       - "Reduce tape hiss without removing musical texture"
@@ -125,9 +125,9 @@ scenarios:
       description: "Shellac 78 rpm recording of soprano with pervasive clicking, frequency loss (narrow bandwidth ≤ 5 kHz), and mechanical noise"
 
     expected_defects_scanner:
-      - "crackle_click_heavy" (severity: very_high)
-      - "frequency_loss_high_frequency" (severity: high)
-      - "rumble_mechanical_noise" (severity: medium)
+      - "crackle_click_heavy (severity: very_high)"
+      - "frequency_loss_high_frequency (severity: high)"
+      - "rumble_mechanical_noise (severity: medium)"
 
     restoration_objectives:
       - "Remove click storm without affecting vocal naturalism"

@@ -143,7 +143,7 @@ def verify_output_quality(original: np.ndarray, processed: np.ndarray, sr: int) 
     _fft_o = np.abs(np.fft.rfft(orig * np.hanning(n)))
     _fft_p = np.abs(np.fft.rfft(proc * np.hanning(n)))
     _corr_num = np.sum((_fft_o - np.mean(_fft_o)) * (_fft_p - np.mean(_fft_p)))
-    _corr_den = np.sqrt(np.sum((_fft_o - np.mean(_fft_o))**2) * np.sum((_fft_p - np.mean(_fft_p))**2) + 1e-20)
+    _corr_den = np.sqrt(np.sum((_fft_o - np.mean(_fft_o)) ** 2) * np.sum((_fft_p - np.mean(_fft_p)) ** 2) + 1e-20)
     spectral_correlation = float(_corr_num / _corr_den)
 
     # Kein NaN/Inf im Output

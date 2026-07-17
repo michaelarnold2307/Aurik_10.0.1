@@ -64,8 +64,6 @@ verblindete Hörtests und reproduzierbare Wettbewerbsvergleiche belastbar.
 | Phase 58 Hallucination | — | **§2.46e HallucinationGuard + IntroducedArtifactDetector** | Aurik intern |
 | Phase 66 Comfort | — | **Human-Hearing-Comfort-Policy** (zentrale Hörkomfort-Steuerung) | Aurik §2.44 |
 
-
-
 ## 🧠 Denker-Intelligenz — Autonome Defekt→Reparatur-Entscheidungskette
 
 **Stand: 6. Juli 2026** | **Dateien: `denker/phase_interaction_denker.py`, `backend/core/vocal_no_harm_gate.py`**
@@ -115,6 +113,7 @@ DefectScanner (62 Typen)
 **Stand: 4. Juli 2026** | **38 Dateien modifiziert, 14 neue Dateien** | **358+ Tests**
 
 ### Neue psychoakustische Modelle
+
 | Modell | Standard | Zweck |
 |--------|----------|-------|
 | **ATH** | ISO 226:2023 | Absolute Hörschwelle — Defekte unterhalb der Hörbarkeit werden ignoriert |
@@ -124,6 +123,7 @@ DefectScanner (62 Typen)
 | **Forward Masking** | Fastl & Zwicker 2007 | Frequenzabhängiges zeitliches Masking (logarithmisch) |
 
 ### Neue Entscheidungsintelligenz
+
 | Komponente | Funktion |
 |------------|----------|
 | **PIM** (Perceptual Intensity Mapper) | 10 Frequenzbänder × N Song-Sektionen → kalibrierte Intensitäts-Map |
@@ -134,26 +134,31 @@ DefectScanner (62 Typen)
 | **Cross-Phase Awareness** | Phase B kennt Δ von Phase A |
 
 ### Neue Defekttypen (+8)
+
 `MPEG_FRAME_LOSS`, `STEREO_FIELD_COLLAPSE`, `PHASE_ROTATION`, `DROPOUT_OXIDE`, `DROPOUT_HEAD_CONTACT`, `DROPOUT_SPLICE`, `ASYMMETRIC_CLIPPING`, `TRANSIENT_IMD`
 
 ### Vokal-Supremacy
+
 - **Speaker Identity Guard**: ECAPA-TDNN (192-dim) + MFCC-Fallback (60/80-dim)
 - **Vocal Overprocessing Detector**: Lisp-Erkennung, Formant-Drift, Sibilanz-Überreduktion
 - **Vibrato-Guard**: Cross-Band-Coherence schützt Vibrato vor Flutter-Fehlklassifikation
 
 ### GUI/Laien-Verbesserungen
+
 - `get_layman_summary()`: „Deine Musik erstrahlt in neuem Glanz!"-Kommunikation
 - `get_pipeline_ab_snapshots()`: Base64-Audio für Vorher/Nachher-Player
 - `--dry-run`, `--json`, `--abx`, `--progress`, `--resume` CLI-Flags
 - ML-Modell-Status in der GUI sichtbar
 
 ### Export & Delivery
+
 - **Bit-Perfect-Archiv-Pfad**: `export_bitperfect()` mit BWF-Metadaten
 - **11 Playback-Profile** (inkl. Car-Sedan, SUV, Bluetooth-Speaker, Club-PA)
 - **ISRC/UPC-Metadaten**, **Multi-Format-Export**
 - **Continuous Learning**: UCB1 + State-Persistenz + Decay-Faktor 0.99
 
 ### §v10 Pleasantness-First: Jeder Song individuell (Juli 2026)
+
 - **SNR-Adaptive Defekterkennung**: Kein blinder Material-Glaube — jeder Song wird gemessen.
   Click-Thresholds, Tape-Splice, alle 8 Detektoren passen sich dem gemessenen SNR an.
 - **Spectrum-Aware EQ**: Final EQ (Phase 16) + Mastering Polish (Phase 17) messen
@@ -164,6 +169,7 @@ DefectScanner (62 Typen)
   `_measure_harmonic_density()` — 3 neue Messfunktionen für individuelle Song-Optimierung.
 
 ### Behobene Bugs
+
 | Bug | Fix |
 |-----|-----|
 | Binäres Gate (Lautstärkesprünge 3-18dB) | Soft-Knee-Sigmoid + 200ms Hanning-Crossfade |
@@ -555,6 +561,7 @@ inkl. NaN/Inf-Tests, Bounds-Tests, Mono+Stereo, Edge-Cases, Thread-Safety.
 ### 🔍 Pre-Commit Static-Value-Guard (§v10)
 
 Verhindert blinde statische Werte ohne Song-Messung:
+
 ```bash
 # Manuell ausführen
 python scripts/pre_commit_static_guard.py --ci

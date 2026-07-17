@@ -215,6 +215,23 @@
 
 ---
 
+## Anti-Regression Guards (§G)
+
+Diese Guards verhindern das Wiederauftreten historisch bekannter Bugs.
+Jeder Eintrag dokumentiert den Bug, die Ursache und die fixierte Guard-Regel.
+
+| §Ref | Bug | Guard-Regel | Dateien |
+|---|---|---|---|
+| `§G-DIV0` | Divide-by-zero in UVR MDX-Net Ensemble (`RuntimeWarning`) | `max(len(sessions), 1)` vor jeder Division durch Session-Anzahl | `plugins/uvr_mdxnet_plugin.py` |
+| `§G-KWARG` | `quality_mode`-Kwarg-Drift: Aufrufer übergibt Parameter, den `__init__` nicht akzeptiert | `__init__` MUSS alle dokumentierten Kwargs akzeptieren; `.pyc` nach jeder Signature-Änderung löschen | `backend/core/unified_restorer_v3.py`, `scripts/continuous_deep_analysis.py` |
+| `§G-SF-READ` | `_load_with_sf()`-Signatur verweigert `always_2d`-Parameter | Wrapper-Funktionen MÜSSEN dieselbe Signatur wie die gewrappte Funktion akzeptieren (`**kwargs` oder explizit) | `backend/file_import.py` |
+| `§G-MODULE` | ImportError durch fehlendes Modul (`pre_analysis_runner`) | Kein Import ohne existierendes Modul; `try/except ImportError` bei optionalen Modulen | `scripts/continuous_deep_analysis.py` |
+| `§G-LOG-GUARD` | Log-Spam durch identische Nachrichten in Tight-Loops | `log_message()` dedupliziert aufeinanderfolgende identische Nachrichten (max 1/s, burst 1000) | `backend/core/core_utils.py` |
+| `§G-CORRUPT` | Korrumpierte try/except-Struktur durch fehlerhafte Code-Rekonstruktion | Keine KI-generierten Code ohne Syntax-Prüfung mergen; `ast.parse()` im Pre-Commit | `scripts/orchestrate_quality_monitoring.py` |
+| `§G-CACHE` | Stale `.pyc`-Dateien liefern alte Bytecode-Version aus | `find . -name '__pycache__' -exec rm -rf {} +` nach jedem Signature- oder Import-Change | Projekt-Root |
+
+---
+
 ## Wie neue §-Referenzen hinzufügen
 
 1. Im Code: `# §2.XX Beschreibung`

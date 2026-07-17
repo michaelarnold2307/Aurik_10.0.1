@@ -1,6 +1,6 @@
 """§v10.15 Phase Contract Tests
 =============================
-Validates: phase output types, audio shapes, stereo handling, 
+Validates: phase output types, audio shapes, stereo handling,
 PostGate signatures, OneTakeExport fallback, STCG consistency.
 
 Run: python3 -m pytest backend/tests/test_phase_contracts.py -v
@@ -8,7 +8,6 @@ Run: python3 -m pytest backend/tests/test_phase_contracts.py -v
 
 import numpy as np
 import pytest
-
 
 # ── Phase Import Helpers ────────────────────────────────────────
 
@@ -44,15 +43,11 @@ class TestPhaseResultContract:
         audio = _make_stereo_audio()
         result = phase.process(audio, sample_rate=48000, material_type="cassette")
 
-        assert isinstance(result, PhaseResult), (
-            f"phase_09 returned {type(result).__name__}, expected PhaseResult"
-        )
+        assert isinstance(result, PhaseResult), f"phase_09 returned {type(result).__name__}, expected PhaseResult"
         assert isinstance(result.audio, np.ndarray), "PhaseResult.audio must be ndarray"
         assert result.audio.ndim in (1, 2), f"audio must be 1D or 2D, got {result.audio.ndim}D"
         # Shape must be consistent with input
-        assert result.audio.shape == audio.shape, (
-            f"output shape {result.audio.shape} != input shape {audio.shape}"
-        )
+        assert result.audio.shape == audio.shape, f"output shape {result.audio.shape} != input shape {audio.shape}"
 
     def test_phase29_returns_phaseresult(self):
         """phase_29_tape_hiss_reduction must return PhaseResult."""
@@ -63,9 +58,7 @@ class TestPhaseResultContract:
         audio = _make_stereo_audio()
         result = phase.process(audio, sample_rate=48000)
 
-        assert isinstance(result, PhaseResult), (
-            f"phase_29 returned {type(result).__name__}, expected PhaseResult"
-        )
+        assert isinstance(result, PhaseResult), f"phase_29 returned {type(result).__name__}, expected PhaseResult"
         assert isinstance(result.audio, np.ndarray), "PhaseResult.audio must be ndarray"
 
     def test_phase06_returns_phaseresult(self):
@@ -77,9 +70,7 @@ class TestPhaseResultContract:
         audio = _make_stereo_audio()
         result = phase.process(audio, sample_rate=48000)
 
-        assert isinstance(result, PhaseResult), (
-            f"phase_06 returned {type(result).__name__}, expected PhaseResult"
-        )
+        assert isinstance(result, PhaseResult), f"phase_06 returned {type(result).__name__}, expected PhaseResult"
         assert isinstance(result.audio, np.ndarray), "PhaseResult.audio must be ndarray"
 
 
@@ -89,13 +80,17 @@ class TestPhaseResultContract:
 class TestStereoShapeContract:
     """Stereo input must produce same-shape stereo output."""
 
-    @pytest.mark.parametrize("phase_name,module_path,class_name", [
-        ("phase_09", "backend.core.phases.phase_09_crackle_removal", "CrackleRemovalPhase"),
-        ("phase_29", "backend.core.phases.phase_29_tape_hiss_reduction", "TapeHissReductionPhase"),
-    ])
+    @pytest.mark.parametrize(
+        "phase_name,module_path,class_name",
+        [
+            ("phase_09", "backend.core.phases.phase_09_crackle_removal", "CrackleRemovalPhase"),
+            ("phase_29", "backend.core.phases.phase_29_tape_hiss_reduction", "TapeHissReductionPhase"),
+        ],
+    )
     def test_stereo_in_stereo_out(self, phase_name, module_path, class_name):
         """Stereo (N,2) input → stereo (N,2) output."""
         import importlib
+
         mod = importlib.import_module(module_path)
         phase_cls = getattr(mod, class_name)
         phase = phase_cls()
@@ -104,19 +99,21 @@ class TestStereoShapeContract:
 
         if result.audio is not None:
             if audio.ndim == 2:
-                assert result.audio.ndim == 2, (
-                    f"{phase_name}: stereo input got {result.audio.ndim}D output"
-                )
+                assert result.audio.ndim == 2, f"{phase_name}: stereo input got {result.audio.ndim}D output"
                 assert result.audio.shape == audio.shape, (
                     f"{phase_name}: shape mismatch {audio.shape} → {result.audio.shape}"
                 )
 
-    @pytest.mark.parametrize("phase_name,module_path,class_name", [
-        ("phase_09", "backend.core.phases.phase_09_crackle_removal", "CrackleRemovalPhase"),
-    ])
+    @pytest.mark.parametrize(
+        "phase_name,module_path,class_name",
+        [
+            ("phase_09", "backend.core.phases.phase_09_crackle_removal", "CrackleRemovalPhase"),
+        ],
+    )
     def test_mono_in_mono_out(self, phase_name, module_path, class_name):
         """Mono (N,) input → mono (N,) output."""
         import importlib
+
         mod = importlib.import_module(module_path)
         phase_cls = getattr(mod, class_name)
         phase = phase_cls()
@@ -124,12 +121,8 @@ class TestStereoShapeContract:
         result = phase.process(audio, sample_rate=48000)
 
         if result.audio is not None:
-            assert result.audio.ndim == 1, (
-                f"{phase_name}: mono input got {result.audio.ndim}D output"
-            )
-            assert len(result.audio) == len(audio), (
-                f"{phase_name}: length mismatch {len(audio)} → {len(result.audio)}"
-            )
+            assert result.audio.ndim == 1, f"{phase_name}: mono input got {result.audio.ndim}D output"
+            assert len(result.audio) == len(audio), f"{phase_name}: length mismatch {len(audio)} → {len(result.audio)}"
 
 
 # ── Phase Contract Guard Tests ──────────────────────────────────
@@ -149,16 +142,18 @@ class TestPhaseContractGuard:
 
     def test_guard_rejects_wrong_ndim(self):
         """guard_phase_input must reject 3D audio."""
-        from backend.core.phase_contract_guard import guard_phase_input
         import pytest
+
+        from backend.core.phase_contract_guard import guard_phase_input
 
         with pytest.raises(ValueError, match="must be 1D or 2D"):
             guard_phase_input(np.zeros((2, 3, 100), dtype=np.float32), 48000, "test")
 
     def test_guard_output_rejects_non_phaseresult(self):
         """guard_phase_output must reject non-PhaseResult."""
-        from backend.core.phase_contract_guard import guard_phase_output
         import pytest
+
+        from backend.core.phase_contract_guard import guard_phase_output
 
         with pytest.raises(TypeError, match="expected PhaseResult"):
             guard_phase_output("not_a_phaseresult", np.zeros(100), "test")
@@ -223,9 +218,7 @@ class TestSTCGConsistency:
 
         result = stcg._verify_lag_multi_point(signal, signal, sr)
         # Near-zero lag expected for identical channels
-        assert abs(result["median_lag"]) < 5, (
-            f"identical signals should have ~0 lag, got {result['median_lag']}"
-        )
+        assert abs(result["median_lag"]) < 5, f"identical signals should have ~0 lag, got {result['median_lag']}"
 
     def test_correct_interchannel_delay_preserves_shape(self):
         """correct_interchannel_delay must preserve input shape."""
@@ -237,12 +230,8 @@ class TestSTCGConsistency:
         audio = _make_stereo_audio(duration_s=4.0)
         result = stcg.correct_interchannel_delay(audio, 48000, phase_id="test")
 
-        assert result.shape == audio.shape, (
-            f"STCG changed shape: {audio.shape} → {result.shape}"
-        )
-        assert result.dtype == audio.dtype, (
-            f"STCG changed dtype: {audio.dtype} → {result.dtype}"
-        )
+        assert result.shape == audio.shape, f"STCG changed shape: {audio.shape} → {result.shape}"
+        assert result.dtype == audio.dtype, f"STCG changed dtype: {audio.dtype} → {result.dtype}"
 
 
 # ── PostGate Lambda Contract ────────────────────────────────────
@@ -254,6 +243,7 @@ class TestPostGateLambdaContract:
     def test_antimuffling_lambda_signature(self):
         """AntiMufflingPass: PostGate-kompatible Signatur (a, sr, strength=None)."""
         from backend.core.anti_muffling_pass import AntiMufflingPass
+
         amp = AntiMufflingPass()
         audio = _make_mono_audio()
         result = amp.process(audio, 48000)
@@ -262,6 +252,7 @@ class TestPostGateLambdaContract:
     def test_vocal_clarity_lambda_signature(self):
         """VocalClarityMax: PostGate-kompatible Signatur (a, sr, strength=None)."""
         from backend.core.vocal_clarity_max import VocalClarityMax
+
         vcm = VocalClarityMax()
         audio = _make_mono_audio()
         result = vcm.process(audio, 48000)

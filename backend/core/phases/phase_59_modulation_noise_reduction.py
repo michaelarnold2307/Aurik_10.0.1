@@ -24,8 +24,9 @@ import time as _time
 import numpy as np
 import scipy.signal as sps
 
+from backend.core.ml_model_readiness import check_ml_model_ready
+
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult
-from backend.core.ml_model_readiness import check_ml_model_ready  # noqa: E402
 
 logger = logging.getLogger(__name__)
 

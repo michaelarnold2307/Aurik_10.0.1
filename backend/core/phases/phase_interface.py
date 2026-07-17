@@ -399,6 +399,7 @@ class PhaseInterface(abc.ABC):
         if _is_nr:
             try:
                 from backend.core.breath_preserver import protect_breath
+
                 audio, _breath_mask = protect_breath(audio, sample_rate)
             except Exception as _bp_exc:
                 self._logger.debug("BreathPreserver protect skipped: %s", _bp_exc)
@@ -422,6 +423,7 @@ class PhaseInterface(abc.ABC):
         if _breath_mask is not None:
             try:
                 from backend.core.breath_preserver import restore_breath
+
                 result.audio = restore_breath(result.audio, _breath_mask, audio)
             except Exception as _bp_exc:
                 self._logger.debug("BreathPreserver restore skipped: %s", _bp_exc)

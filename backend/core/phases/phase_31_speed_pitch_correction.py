@@ -69,10 +69,10 @@ import scipy.signal as signal
 
 from backend.core.audio_utils import compute_gated_rms_dbfs, compute_signal_relative_gate_dbfs
 from backend.core.defect_scanner import MaterialType
+from backend.core.ml_model_readiness import check_ml_model_ready
 from backend.core.stereo_temporal_coherence_guard import get_stereo_temporal_coherence_guard
 
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult, create_phase_result
-from backend.core.ml_model_readiness import check_ml_model_ready  # noqa: E402
 
 # pylint: disable=import-outside-toplevel
 logger = logging.getLogger(__name__)

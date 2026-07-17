@@ -139,6 +139,7 @@ def _sbr_extend(audio: np.ndarray, sr: int) -> np.ndarray:
 
 # ── librosa wrappers (graceful degradation without librosa) ──────────
 
+
 def _librosa_stft(audio, n_fft=2048, hop_length=512):
     """STFT with librosa or numpy fallback."""
     try:

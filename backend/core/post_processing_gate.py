@@ -23,8 +23,9 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 import numpy as np
 
@@ -126,7 +127,8 @@ class PostProcessingGate:
         except Exception as exc:
             logger.warning(
                 "PostGate [%s]: Komponente fehlgeschlagen (%s) — Original zurück",
-                label, exc,
+                label,
+                exc,
             )
             self._total_skipped += 1
             return PostGateResult(
@@ -141,7 +143,9 @@ class PostProcessingGate:
         if processed.shape != audio.shape:
             logger.warning(
                 "PostGate [%s]: Shape-Änderung %s → %s — Original zurück",
-                label, audio.shape, processed.shape,
+                label,
+                audio.shape,
+                processed.shape,
             )
             self._total_skipped += 1
             return PostGateResult(
@@ -170,7 +174,9 @@ class PostProcessingGate:
         if regressions:
             logger.info(
                 "PostGate [%s]: Regression in %d/%d Zielen (%s) — Komponente ÜBERSPRUNGEN",
-                label, len(regressions), len(goals),
+                label,
+                len(regressions),
+                len(goals),
                 ", ".join(regressions[:3]),
             )
             self._total_skipped += 1
@@ -186,7 +192,9 @@ class PostProcessingGate:
 
         logger.debug(
             "PostGate [%s]: Alle %d Ziele OK — Komponente übernommen (%.1f ms)",
-            label, len(goals), (time.time() - t0) * 1000.0,
+            label,
+            len(goals),
+            (time.time() - t0) * 1000.0,
         )
         self._total_adopted += 1
         return PostGateResult(
@@ -214,7 +222,7 @@ class PostProcessingGate:
             return {g: full_scores.get(g, 0.5) for g in goals}
         except Exception:
             # Fallback: leere Scores — Gate wird immer passieren
-            return {g: 0.5 for g in goals}
+            return dict.fromkeys(goals, 0.5)
 
     # ── Statistik ─────────────────────────────────────────────────────
 

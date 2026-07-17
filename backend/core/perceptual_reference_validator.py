@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+
 import numpy as np
 
 logger = logging.getLogger(__name__)
@@ -25,11 +26,37 @@ logger = logging.getLogger(__name__)
 _RESTORATION_GATE: float = 0.85
 
 # Bark-Bänder (25 Bänder, 0–20 kHz)
-_BARK_EDGES = np.array([
-    0, 100, 200, 300, 400, 510, 630, 770, 920, 1080, 1270, 1480, 1720,
-    2000, 2320, 2700, 3150, 3700, 4400, 5300, 6400, 7700, 9500, 12000,
-    15500, 20000,
-], dtype=np.float64)
+_BARK_EDGES = np.array(
+    [
+        0,
+        100,
+        200,
+        300,
+        400,
+        510,
+        630,
+        770,
+        920,
+        1080,
+        1270,
+        1480,
+        1720,
+        2000,
+        2320,
+        2700,
+        3150,
+        3700,
+        4400,
+        5300,
+        6400,
+        7700,
+        9500,
+        12000,
+        15500,
+        20000,
+    ],
+    dtype=np.float64,
+)
 
 
 @dataclass
@@ -54,19 +81,20 @@ class PerceptualValidationResult:
 
 
 class PerceptualReferenceValidator:
-
     @staticmethod
     def calibrate(audio: np.ndarray, sr: int, label: str = "original") -> PerceptualAnchor:
         """Einmalig vor der Pipeline: Anker aus Original berechnen."""
         try:
             arr = np.asarray(audio, dtype=np.float64)
-            mono = arr.mean(axis=0) if (arr.ndim > 1 and arr.shape[0] <= 2) else (
-                arr.mean(axis=1) if arr.ndim > 1 else arr
+            mono = (
+                arr.mean(axis=0)
+                if (arr.ndim > 1 and arr.shape[0] <= 2)
+                else (arr.mean(axis=1) if arr.ndim > 1 else arr)
             )
             n = len(mono)
 
             # A) Bark-Hüllkurve (25 Bänder, 10 s gemittelt)
-            bark_env = PerceptualReferenceValidator._bark_envelope(mono[:min(n, sr * 10)], sr)
+            bark_env = PerceptualReferenceValidator._bark_envelope(mono[: min(n, sr * 10)], sr)
 
             # B) Onsets
             onsets = PerceptualReferenceValidator._detect_onsets(mono)
@@ -80,7 +108,7 @@ class PerceptualReferenceValidator:
             else:
                 lr_corr = 1.0
 
-            rms = float(np.sqrt(np.mean(mono ** 2) + 1e-12))
+            rms = float(np.sqrt(np.mean(mono**2) + 1e-12))
 
             return PerceptualAnchor(
                 label=label,
@@ -99,20 +127,20 @@ class PerceptualReferenceValidator:
         result = PerceptualValidationResult()
         try:
             arr = np.asarray(audio, dtype=np.float64)
-            mono = arr.mean(axis=0) if (arr.ndim > 1 and arr.shape[0] <= 2) else (
-                arr.mean(axis=1) if arr.ndim > 1 else arr
+            mono = (
+                arr.mean(axis=0)
+                if (arr.ndim > 1 and arr.shape[0] <= 2)
+                else (arr.mean(axis=1) if arr.ndim > 1 else arr)
             )
 
             # A) Spektrale Fidelity: Pearson-r der Bark-Hüllkurven
             if anchor.bark_envelope is not None:
-                current = PerceptualReferenceValidator._bark_envelope(mono[:min(len(mono), sr * 10)], sr)
+                current = PerceptualReferenceValidator._bark_envelope(mono[: min(len(mono), sr * 10)], sr)
                 ref = np.asarray(anchor.bark_envelope, dtype=np.float64)
                 # Pearson-Korrelation (robuster als Kosinus bei Rauschen)
                 ref_c = ref - ref.mean()
                 cur_c = current - current.mean()
-                corr = float(np.dot(ref_c, cur_c) / (
-                    np.sqrt(np.sum(ref_c ** 2)) * np.sqrt(np.sum(cur_c ** 2)) + 1e-12
-                ))
+                corr = float(np.dot(ref_c, cur_c) / (np.sqrt(np.sum(ref_c**2)) * np.sqrt(np.sum(cur_c**2)) + 1e-12))
                 # Auf [0,1] mappen: r=-1→0, r=0→0.5, r=1→1
                 result.spectral_fidelity = float(np.clip((corr + 1.0) / 2.0, 0.0, 1.0))
 
@@ -143,18 +171,21 @@ class PerceptualReferenceValidator:
                 result.stereo_coherence = 1.0
 
             # D) Energie
-            cur_rms = float(np.sqrt(np.mean(mono ** 2) + 1e-12))
+            cur_rms = float(np.sqrt(np.mean(mono**2) + 1e-12))
             ratio = min(cur_rms, anchor.rms) / (max(cur_rms, anchor.rms) + 1e-12)
             result.energy_preservation = float(np.clip(ratio, 0.0, 1.0))
 
             # PSS
-            result.perceptual_similarity = float(np.clip(
-                0.40 * result.spectral_fidelity
-                + 0.25 * result.transient_preservation
-                + 0.20 * result.stereo_coherence
-                + 0.15 * result.energy_preservation,
-                0.0, 1.0,
-            ))
+            result.perceptual_similarity = float(
+                np.clip(
+                    0.40 * result.spectral_fidelity
+                    + 0.25 * result.transient_preservation
+                    + 0.20 * result.stereo_coherence
+                    + 0.15 * result.energy_preservation,
+                    0.0,
+                    1.0,
+                )
+            )
 
             result.components = {
                 "spectral": round(result.spectral_fidelity, 4),
@@ -191,7 +222,7 @@ class PerceptualReferenceValidator:
             count += 1
         if count > 0:
             acc /= count
-        acc /= (np.max(acc) + 1e-12)
+        acc /= np.max(acc) + 1e-12
         return acc
 
     @staticmethod
@@ -204,7 +235,7 @@ class PerceptualReferenceValidator:
         prev_e = 1e-12
         for i in range(n_frames):
             start = i * hop
-            e = float(np.sum(mono[start:start + frame_n] ** 2))
+            e = float(np.sum(mono[start : start + frame_n] ** 2))
             if e > prev_e * 3.0 and e > 1e-8:
                 onsets.append(start)
             prev_e = e

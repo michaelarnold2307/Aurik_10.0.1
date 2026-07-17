@@ -99,7 +99,9 @@ REGRESSION_THRESHOLD: float = 0.025
 # eliminieren den größten Teil des Messrauschens; engere Schwellwerte fangen
 # nun echte Regressionen zuverlässiger ab ohne False-Positives.
 REGRESSION_THRESHOLD_GOOD: float = 0.020  # restorability ≥ 70
-REGRESSION_THRESHOLD_FAIR: float = 0.045  # restorability 40–69 (§v10.0.4: 0.035→0.045, verhindert False-Positives bei transient_energie)
+REGRESSION_THRESHOLD_FAIR: float = (
+    0.045  # restorability 40–69 (§v10.0.4: 0.035→0.045, verhindert False-Positives bei transient_energie)
+)
 REGRESSION_THRESHOLD_POOR: float = (
     0.050  # restorability < 40 (maximal tolerant) — erhöht von 0.040, da 0.040 best-effort-Kaskaden auslöste
 )
@@ -3115,6 +3117,7 @@ def _measure_quick(
     # §v10.15: Listening Fatigue via DSP proxy
     try:
         from backend.core.listening_fatigue_metric import fatigue_as_pmgg_goal
+
         scores["listening_fatigue"] = fatigue_as_pmgg_goal(audio, sr)
     except Exception:
         scores["listening_fatigue"] = 0.5
@@ -3906,7 +3909,7 @@ class PerPhaseMusicalGoalsGate:
         # §v10.17: 2s snippet for A/B comparison
         _snippet_n = min(len(sample_before), sr * 2)
         _snippet_start = (len(sample_before) - _snippet_n) // 2
-        _ab_snippet = sample_before[_snippet_start:_snippet_start + _snippet_n]
+        _ab_snippet = sample_before[_snippet_start : _snippet_start + _snippet_n]
 
         # Effective goal set: Schnitt aus FAST_GOALS_SUBSET + applicable_goals
         if applicable_goals is not None:
@@ -4259,7 +4262,9 @@ class PerPhaseMusicalGoalsGate:
 
     @staticmethod
     def _binary_search_strengths(
-        initial: float, max_iters: int, precision: float,
+        initial: float,
+        max_iters: int,
+        precision: float,
     ) -> tuple[list[float], str]:
         """§v10.16: Binäre Intervallhalbierung (Hilfsfunktion).
 
@@ -4865,7 +4870,9 @@ class PerPhaseMusicalGoalsGate:
         # die MAXIMALE Stärke ohne Regression mit ±1.5% Präzision.
         _RETRY_BUDGET_S = 300.0
         _max_retries_for_prio, _RETRY_BUDGET_S, self._last_retry_budget_policy = self._resolve_retry_budget_policy(
-            phase_kwargs, max_retries=_max_retries_for_prio, retry_budget_s=_RETRY_BUDGET_S,
+            phase_kwargs,
+            max_retries=_max_retries_for_prio,
+            retry_budget_s=_RETRY_BUDGET_S,
         )
         _USE_BINARY = _max_retries_for_prio >= 3  # Binärsuche nur bei ≥3 Retries
 
@@ -5222,19 +5229,24 @@ class PerPhaseMusicalGoalsGate:
         try:
             if best_audio.ndim == 2 and audio.ndim == 2:
                 from backend.file_import import _estimate_interchannel_lag_samples as _lag_measure
+
                 _lag_before = _lag_measure(audio, 48000)
                 _lag_after = _lag_measure(best_audio, 48000)
                 _lag_delta = abs(_lag_after - _lag_before)
                 if _lag_delta > 2:
                     logger.error(
                         "§v10.17 LAG-GATE [%s]: Phase introduced +%d samples lag — REVERTING to pre-phase audio",
-                        phase_id, _lag_delta,
+                        phase_id,
+                        _lag_delta,
                     )
                     try:
                         from backend.core.phase_error_registry import get_error_registry
-                        get_error_registry().record(phase_id, "lag_introduced",
-                            f"lag delta={_lag_delta} samples", retries=0, severity="error")
-                    except Exception: pass
+
+                        get_error_registry().record(
+                            phase_id, "lag_introduced", f"lag delta={_lag_delta} samples", retries=0, severity="error"
+                        )
+                    except Exception:
+                        pass
                     return audio, effective_scores_before, "lag_rejected", 0.0
         except Exception:
             pass
@@ -5242,13 +5254,15 @@ class PerPhaseMusicalGoalsGate:
         # §v10.17 PSS-Gate: Perceptual Similarity gegen Original
         try:
             from backend.core.perceptual_reference_validator import get_perceptual_validator
+
             _prv = get_perceptual_validator()
             if _prv is not None and hasattr(_prv, "_anchor"):
                 _pss_r = _prv.validate(best_audio, 48000, _prv._anchor)
                 if not _pss_r.accepted:
                     logger.warning("§v10.17 PSS-Gate [%s]: PSS=%.4f rejected", phase_id, _pss_r.perceptual_similarity)
                     return audio, effective_scores_before, "pss_rejected", 0.0
-        except Exception: pass
+        except Exception:
+            pass
 
         return best_audio, best_scores, best_action, best_strength
 

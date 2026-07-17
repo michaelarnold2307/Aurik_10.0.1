@@ -20,6 +20,7 @@ from pathlib import Path
 _PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(_PROJECT_ROOT))
 
+
 def run_amrb_gate() -> dict:
     """Führt AMRB CI-Gate Check aus."""
     result = {
@@ -45,12 +46,14 @@ def run_amrb_gate() -> dict:
     }
 
     for scenario, baseline_oqs in AMRB_BASELINE_OQS.items():
-        result["details"].append({
-            "scenario": scenario,
-            "baseline_oqs": baseline_oqs,
-            "status": "skipped",
-            "note": "Voller AMRB-Test benötigt reale Audiodateien im corpus/",
-        })
+        result["details"].append(
+            {
+                "scenario": scenario,
+                "baseline_oqs": baseline_oqs,
+                "status": "skipped",
+                "note": "Voller AMRB-Test benötigt reale Audiodateien im corpus/",
+            }
+        )
         result["skipped"] += 1
 
     # Lightweight mode: Da keine echten AMRB-Dateien im corpus/ sind,
@@ -67,6 +70,7 @@ def run_amrb_gate() -> dict:
 
 def main() -> int:
     import argparse
+
     p = argparse.ArgumentParser(description="AMRB CI-Gate Lightweight")
     p.add_argument("--ci", action="store_true")
     p.add_argument("--json", action="store_true")

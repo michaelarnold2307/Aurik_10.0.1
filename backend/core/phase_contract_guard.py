@@ -6,8 +6,11 @@ Imported by UnifiedRestorerV3 to validate every phase call.
 """
 
 from __future__ import annotations
+
 import logging
+
 import numpy as np
+
 from .phases.phase_interface import PhaseResult
 
 logger = logging.getLogger(__name__)
@@ -15,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 def guard_phase_input(audio: np.ndarray, sample_rate: int, phase_id: str) -> np.ndarray:
     """Validate phase input and normalize audio shape.
-    
+
     Returns normalized audio (N, 2) for stereo, (N,) for mono.
     Raises TypeError on invalid input types.
     """
@@ -23,46 +26,43 @@ def guard_phase_input(audio: np.ndarray, sample_rate: int, phase_id: str) -> np.
         if isinstance(audio, (tuple, list)):
             logger.error(
                 "PhaseContract [%s]: received %s instead of ndarray — extracting",
-                phase_id, type(audio).__name__,
+                phase_id,
+                type(audio).__name__,
             )
             audio = audio[0] if len(audio) > 0 else np.zeros(1, dtype=np.float32)
         audio = np.asarray(audio, dtype=np.float32)
-    
+
     if not isinstance(sample_rate, (int, float)):
         raise TypeError(f"PhaseContract [{phase_id}]: sample_rate must be int, got {type(sample_rate)}")
-    
+
     if audio.ndim not in (1, 2):
         raise ValueError(f"PhaseContract [{phase_id}]: audio must be 1D or 2D, got {audio.ndim}D shape={audio.shape}")
-    
+
     if audio.ndim == 2 and audio.shape[0] > 2 and audio.shape[1] > 2:
         raise ValueError(f"PhaseContract [{phase_id}]: ambiguous shape {audio.shape}")
-    
+
     return np.ascontiguousarray(audio, dtype=np.float32)
 
 
 def guard_phase_output(result, audio_in: np.ndarray, phase_id: str) -> PhaseResult:
     """Validate phase output is a proper PhaseResult with valid audio.
-    
+
     Returns the PhaseResult (passes through if valid).
     """
     from .phases.phase_interface import PhaseResult
-    
+
     if not isinstance(result, PhaseResult):
         raise TypeError(
             f"PhaseContract [{phase_id}]: expected PhaseResult, got {type(result).__name__}. "
             f"Phase must return create_phase_result(audio=..., modifications=..., warnings=...)"
         )
-    
+
     if result.audio is not None:
         if not isinstance(result.audio, np.ndarray):
-            raise TypeError(
-                f"PhaseContract [{phase_id}]: PhaseResult.audio must be ndarray, got {type(result.audio)}"
-            )
+            raise TypeError(f"PhaseContract [{phase_id}]: PhaseResult.audio must be ndarray, got {type(result.audio)}")
         if result.audio.ndim not in (1, 2):
-            raise ValueError(
-                f"PhaseContract [{phase_id}]: result audio must be 1D or 2D, got {result.audio.ndim}D"
-            )
-    
+            raise ValueError(f"PhaseContract [{phase_id}]: result audio must be 1D or 2D, got {result.audio.ndim}D")
+
     return result
 
 
@@ -76,5 +76,8 @@ def guard_phase_shape_consistency(audio_out: np.ndarray, audio_in: np.ndarray, p
     if delta_pct > 0.1:
         logger.warning(
             "PhaseContract [%s]: output length %d differs from input %d by %.2f%%",
-            phase_id, len_out, len_in, delta_pct,
+            phase_id,
+            len_out,
+            len_in,
+            delta_pct,
         )

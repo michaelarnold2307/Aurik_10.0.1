@@ -56,11 +56,11 @@ Jedes Unterverzeichnis enthält eine `manifest.yaml` mit Metadaten:
 
 | Quelle | URL | Typ | Lizenz |
 |--------|-----|-----|--------|
-| Internet Archive 78rpm | https://archive.org/details/78rpm | Schellack, Vinyl | Public Domain |
-| Musopen | https://musopen.org | Klassik, alle Materialien | Public Domain / CC0 |
-| Freesound (CC0) | https://freesound.org | Effekte, kurze Clips | CC0 |
-| IASA Training Collection | https://www.iasa-web.org | Alle historischen Medien | Educational Use |
-| Europeana Sounds | https://www.europeana.eu | Historische Aufnahmen | Varies (PD/CC) |
+| Internet Archive 78rpm | <https://archive.org/details/78rpm> | Schellack, Vinyl | Public Domain |
+| Musopen | <https://musopen.org> | Klassik, alle Materialien | Public Domain / CC0 |
+| Freesound (CC0) | <https://freesound.org> | Effekte, kurze Clips | CC0 |
+| IASA Training Collection | <https://www.iasa-web.org> | Alle historischen Medien | Educational Use |
+| Europeana Sounds | <https://www.europeana.eu> | Historische Aufnahmen | Varies (PD/CC) |
 
 ## Aufnahmen hinzufügen
 

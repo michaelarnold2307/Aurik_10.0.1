@@ -15,6 +15,7 @@ Der Denker berechnet den `global_scalar` aus allen verfügbaren Informationen.
 Einzelne Phasen treffen **keine** eigenständigen „sei konservativer"-Entscheidungen.
 
 **Phasen dürfen nur binäre Capability-Checks durchführen:**
+
 - „Kann ich auf diesem Material überhaupt etwas Sinnvolles tun?" → Ja/Nein
 - **Nicht erlaubt:** „Ich reduziere meine Stärke um 30% weil bw_loss hoch ist."
 
@@ -107,6 +108,7 @@ alle Phasen-Überlappungen im Frequenzbereich identifiziert und die Stärken so
 verteilt, dass die kumulative Wirkung ≤ 100% der gewünschten Bearbeitung bleibt.
 
 **Architektur:**
+
 ```
 CrossPhaseCoordinator.analyze(phase_plan)
     → Overlap-Matrix [phase_i × phase_j × freq_band]
@@ -128,6 +130,7 @@ Cosine-Crossfades (200 ms) verhindern hörbare Übergänge zwischen Sektionen.
 (Presence Boost). Diese beiden Phasen haben den größten per-Segment-Variationsbedarf.
 
 **Implementierung pro Phase:**
+
 ```python
 envelope = kwargs.get("strength_envelope")
 if envelope is not None:
@@ -156,6 +159,7 @@ persistieren. Beim nächsten Song derselben Künstlerin die gespeicherten
 Stimmparameter als Prior laden, nicht von Null rechnen.
 
 **Architektur:**
+
 ```
 BatchSessionLearner.store(song_id, "singer_voice_model", svm_result)
     ↓
@@ -199,6 +203,7 @@ mit voller Qualität, aber zeitlich begrenzt. Der Nutzer hört, validiert,
 und startet dann die vollständige Restaurierung.
 
 **Architektur:**
+
 ```
 restore(audio, mode="preview", preview_duration_s=30)
     → volle Pre-Analyse auf voller Länge

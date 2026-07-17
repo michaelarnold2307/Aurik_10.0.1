@@ -37,9 +37,9 @@ import numpy as np
 import scipy.signal as sig
 
 from backend.core.audio_utils import safe_to_mono
+from backend.core.ml_model_readiness import check_ml_model_ready
 
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult
-from backend.core.ml_model_readiness import check_ml_model_ready  # noqa: E402
 
 try:
     from dsp.formant_system import FormantSystem as _FormantSystemCls

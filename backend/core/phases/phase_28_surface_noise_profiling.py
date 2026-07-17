@@ -58,10 +58,10 @@ from scipy.signal import lfilter_zi as _lfilter_zi
 
 from backend.core.audio_utils import safe_to_mono, to_channels_last
 from backend.core.defect_scanner import MaterialType
+from backend.core.ml_model_readiness import check_ml_model_ready
 from backend.core.restoration_policy import get_effective_song_goal_weights
 
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult
-from backend.core.ml_model_readiness import check_ml_model_ready  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -360,11 +360,12 @@ class SurfaceNoiseProfiling(PhaseInterface):
             from backend.core.adaptive_parameter_infrastructure import derive_noise_floor
 
             _nf28 = derive_noise_floor(audio, sample_rate)
-            config["vad_threshold_db"] = float(np.clip(
-                _nf28["noise_floor_db"] + 6.0, -60.0, -25.0
-            ))
-            logger.debug("Phase 28 adaptive: vad_threshold=%.0fdB (noise_floor=%.1fdB)",
-                        config["vad_threshold_db"], _nf28["noise_floor_db"])
+            config["vad_threshold_db"] = float(np.clip(_nf28["noise_floor_db"] + 6.0, -60.0, -25.0))
+            logger.debug(
+                "Phase 28 adaptive: vad_threshold=%.0fdB (noise_floor=%.1fdB)",
+                config["vad_threshold_db"],
+                _nf28["noise_floor_db"],
+            )
         except Exception:
             pass
 
@@ -625,9 +626,9 @@ class SurfaceNoiseProfiling(PhaseInterface):
             if makeup_gain_db > 0.0:
                 try:
                     from backend.core.global_gain_budget import get_global_gain_budget
+
                     _approved = get_global_gain_budget().request(
-                        "phase_28_surface_noise_profiling", makeup_gain_db,
-                        priority="normal"
+                        "phase_28_surface_noise_profiling", makeup_gain_db, priority="normal"
                     )
                     makeup_gain_db = _approved
                 except Exception:

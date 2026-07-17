@@ -536,16 +536,16 @@ class HarmonicRestorationPhase(PhaseInterface):
             # Miss harmonische Dichte: wie viele Peaks im Spektrum?
             try:
                 _mono_p07 = audio if audio.ndim == 1 else audio.mean(axis=0)
-                _spec_p07 = np.abs(np.fft.rfft(_mono_p07[:min(len(_mono_p07), 48000)]))
+                _spec_p07 = np.abs(np.fft.rfft(_mono_p07[: min(len(_mono_p07), 48000)]))
                 _spec_p07 = _spec_p07 / (np.max(_spec_p07) + 1e-12)
                 # Peaks oberhalb -20dB Schwelle zählen → harmonische Dichte
-                _peaks_p07 = np.sum((_spec_p07[1:-1] > _spec_p07[:-2]) & 
-                                    (_spec_p07[1:-1] > _spec_p07[2:]) & 
-                                    (_spec_p07[1:-1] > 0.1))
+                _peaks_p07 = np.sum(
+                    (_spec_p07[1:-1] > _spec_p07[:-2]) & (_spec_p07[1:-1] > _spec_p07[2:]) & (_spec_p07[1:-1] > 0.1)
+                )
                 _harmonic_density_p07 = np.clip(_peaks_p07 / max(len(_spec_p07) * 0.05, 1), 0.0, 1.0)
             except Exception:
                 _harmonic_density_p07 = 0.3  # konservativer Default
-            
+
             _p07_sat_scale = 1.0
             if _p07_soft_sat_sev > 0.35:
                 # Lineare Reduzierung: severity 0.35→scale 1.0, severity 1.0→scale 0.12

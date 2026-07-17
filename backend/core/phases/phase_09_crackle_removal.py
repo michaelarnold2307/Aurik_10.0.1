@@ -85,10 +85,10 @@ from backend.core.audio_utils import compute_signal_relative_gate_dbfs as _sig_g
 from backend.core.audio_utils import to_channels_last
 from backend.core.ml_memory_budget import release as _ml_release
 from backend.core.ml_memory_budget import try_allocate as _try_allocate
+from backend.core.ml_model_readiness import check_ml_model_ready
 from backend.core.restoration_policy import get_effective_song_goal_weights
 
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult, create_phase_result
-from backend.core.ml_model_readiness import check_ml_model_ready  # noqa: E402
 
 # ML-Hybrid Quality Mode System
 try:
@@ -881,12 +881,14 @@ class CrackleRemovalPhase(PhaseInterface):
             _base_threshold = float(params.get("transient_threshold", 0.10))
             # Adaptiv: onset_threshold (2–6) skaliert die Empfindlichkeit
             # Hoher Wert = viele natürliche Transienten → Schwelle anheben
-            params["transient_threshold"] = float(np.clip(
-                _base_threshold * (_ts09["onset_threshold"] / 3.5),
-                0.01, 0.50
-            ))
-            logger.debug("Phase 09 adaptive: crackle_threshold=%.3f (crest=%.1f)",
-                        params["transient_threshold"], _ts09["crest_factor"])
+            params["transient_threshold"] = float(
+                np.clip(_base_threshold * (_ts09["onset_threshold"] / 3.5), 0.01, 0.50)
+            )
+            logger.debug(
+                "Phase 09 adaptive: crackle_threshold=%.3f (crest=%.1f)",
+                params["transient_threshold"],
+                _ts09["crest_factor"],
+            )
         except Exception:
             pass
 
@@ -1135,7 +1137,8 @@ class CrackleRemovalPhase(PhaseInterface):
         # §v10.15: Mono→Stereo via gain-ratio (kein Broadcast, kein Shape-Mismatch)
         if _p09_stereo:
             _p09_gain = np.divide(
-                _p09_restored_mono, _p09_work,
+                _p09_restored_mono,
+                _p09_work,
                 out=np.ones_like(_p09_work),
                 where=np.abs(_p09_work) > 1e-10,
             )
@@ -1232,6 +1235,13 @@ class CrackleRemovalPhase(PhaseInterface):
                 if (restored.ndim == 2 and restored.shape[1] == 2 and restored.shape[0] > 2)
                 else restored.astype(np.float32)
             )
+            # §G-SHAPE-GUARD: Ensure compatible shapes before subtraction
+            if _a09cf.shape != _r09cf.shape:
+                if _a09cf.ndim == _r09cf.ndim:
+                    _a09cf = _a09cf.ravel()[: min(_a09cf.size, _r09cf.size)]
+                    _r09cf = _r09cf.ravel()[: min(_a09cf.size, _r09cf.size)]
+                else:
+                    raise ValueError(f"Incompatible shapes: {_a09cf.shape} vs {_r09cf.shape}")
             _nt09_d = _nt09_fn(_a09cf - _r09cf, _mat09_str, sr=sample_rate)
             if _nt09_d > 0.25:
                 restored = (0.5 * restored + 0.5 * audio).astype(np.float32)
@@ -1255,6 +1265,11 @@ class CrackleRemovalPhase(PhaseInterface):
                 if (restored.ndim == 2 and restored.shape[1] == 2 and restored.shape[0] > 2)
                 else restored.astype(np.float32)
             )
+            # §G-SHAPE-GUARD: Ensure compatible shapes
+            if _a09cf2.shape != _r09cf2.shape:
+                if _a09cf2.ndim == _r09cf2.ndim:
+                    _a09cf2 = _a09cf2.ravel()[: min(_a09cf2.size, _r09cf2.size)]
+                    _r09cf2 = _r09cf2.ravel()[: min(_a09cf2.size, _r09cf2.size)]
             _sc09 = _scg09(_a09cf2, _r09cf2, sample_rate)
             if not _sc09.ok:
                 restored = (0.70 * restored + 0.30 * audio).astype(np.float32)

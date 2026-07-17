@@ -1,15 +1,15 @@
 {
-  "id": "security",
-  "name": "SECURITY",
-  "description": "| Version | Status | |---------|------------------------------| | 9.12.x | ✅ Unterstützt (aktiv) | | < 9.12 | ❌ Keine Sicherheits-Updates |",
-  "version": "0.0.0",
-  "entry": "SKILL.md",
-  "triggers": {
-    "commands": [],
-    "promptPatterns": [],
-    "fileTypes": []
-  },
   "allowedTools": [],
   "assets": [],
-  "priority": 0
+  "description": "| Version | Status | |---------|------------------------------| | 9.12.x | \u2705 Unterst\u00fctzt (aktiv) | | < 9.12 | \u274c Keine Sicherheits-Updates |",
+  "entry": "SKILL.md",
+  "id": "security",
+  "name": "SECURITY",
+  "priority": 0,
+  "triggers": {
+    "commands": [],
+    "fileTypes": [],
+    "promptPatterns": []
+  },
+  "version": "0.0.0"
 }

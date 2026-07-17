@@ -177,7 +177,7 @@ class TapeHeadArtifactRepair:
         # die KEINE Azimuth-Fehler sind. Nur korrigieren, wenn die Kanäle
         # tatsächlich das gleiche Signal enthalten (korreliert sind).
         # Unkorreliertes Material → Phasenkorrektur = Kammfilter = zerstoerte Baesse.
-        _mean_corr_az = float(np.corrcoef(left[:min(n, sr*5)], right[:min(n, sr*5)]).flat[1])
+        _mean_corr_az = float(np.corrcoef(left[: min(n, sr * 5)], right[: min(n, sr * 5)]).flat[1])
         _mean_corr_az = abs(_mean_corr_az) if np.isfinite(_mean_corr_az) else 1.0
         if _mean_corr_az < 0.40:
             logger.info(

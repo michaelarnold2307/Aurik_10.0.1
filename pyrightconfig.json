@@ -18,10 +18,7 @@
     "logs",
     "models"
   ],
-  "extraPaths": [
-    ".",
-    "plugins"
-  ],
+  "extraPaths": [".", "plugins"],
   "pythonVersion": "3.10",
   "reportArgumentType": "none",
   "reportAttributeAccessIssue": "none",

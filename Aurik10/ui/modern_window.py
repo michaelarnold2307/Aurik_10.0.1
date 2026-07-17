@@ -222,6 +222,9 @@ try:
         get_genre_classifier_fn as _bridge_get_genre_classifier_fn,
     )
     from backend.api.bridge import (
+        get_layman_summary as _bridge_get_layman_summary,
+    )
+    from backend.api.bridge import (
         get_load_audio_fn as _bridge_get_load_audio_fn,
     )
     from backend.api.bridge import (
@@ -9827,6 +9830,7 @@ class DefectStoryWidget(QFrame):
         html = f"{summary}<br><table cellspacing='1' cellpadding='1' width='100%'>{header}{''.join(rows)}</table>"
         self._body.setText(html)
 
+
 class RecordSleeveWidget(QtWidgets.QFrame):
     """3D-Schallplatten-Cover — liegt auf dem Monitor.
 
@@ -9973,7 +9977,7 @@ class RecordSleeveWidget(QtWidgets.QFrame):
         layout.setSpacing(8)
         layout.addWidget(QtWidgets.QLabel("<b style='font-size:11pt; color:#C8D8FF;'>🎧 Player</b>"))
         row = QtWidgets.QHBoxLayout()
-        for icon, tip in [("▶","Original"), ("⏸","Pause"), ("⏮","Anfang"), ("⏭","Ende")]:
+        for icon, tip in [("▶", "Original"), ("⏸", "Pause"), ("⏮", "Anfang"), ("⏭", "Ende")]:
             btn = QtWidgets.QPushButton(icon)
             btn.setToolTip(tip)
             btn.setFixedSize(42, 36)
@@ -18683,7 +18687,6 @@ class ModernMainWindow(QMainWindow):
             _pending,
         )
 
-
     def _on_watchdog_budget_warning(self):
         """§v10.15 Budget-Warnung: Dialog VOR dem harten Watchdog.
 
@@ -18698,14 +18701,14 @@ class ModernMainWindow(QMainWindow):
             _elapsed = int((time.monotonic() - self.batch_thread._start_ts) / 60)
         logger.info(
             "§v10.15 Budget-Warnung #%d: Pipeline laeuft seit %d min",
-            self._watchdog_dialog_count, _elapsed,
+            self._watchdog_dialog_count,
+            _elapsed,
         )
         _msg = QMessageBox(self)
         _msg.setWindowTitle("Aurik – Zeitbudget")
         _msg.setIcon(QMessageBox.Question)
         _msg.setText(
-            "Die Restauration laeuft seit " + str(_elapsed) + " Minuten. "
-            "Die Pipeline arbeitet unveraendert weiter."
+            "Die Restauration laeuft seit " + str(_elapsed) + " Minuten. Die Pipeline arbeitet unveraendert weiter."
         )
         _msg.setInformativeText(
             "Wie moechtest Du fortfahren?\n\n"
@@ -18720,12 +18723,14 @@ class ModernMainWindow(QMainWindow):
         _msg.setDefaultButton(_btn_continue)
         _auto = QTimer(self)
         _auto.setSingleShot(True)
+
         def _on_auto():
             try:
                 if not _msg.isHidden():
                     _msg.done(0)
             except Exception:
                 pass
+
         _auto.timeout.connect(_on_auto)
         _auto.start(60_000)
         _msg.exec_()
@@ -18750,6 +18755,7 @@ class ModernMainWindow(QMainWindow):
         self._watchdog_timer.start(_new)
         self._watchdog_budget_timer.start(int(_new * 0.75))
         self.title_bar.set_status("Maximale Qualitaet – laeuft weiter …", "#68A068")
+
     def _on_watchdog_timeout(self):
         """§0c Watchdog: Zeitlimit — graceful stop statt hartem Kill.
 
@@ -19485,6 +19491,9 @@ class ModernMainWindow(QMainWindow):
         if restoration_result is not None:
             try:
                 _xp = _bridge_get_experience_insights(restoration_result)
+                # §v10 Laien-verständliche Zusammenfassung (innovative Nutzer-Kommunikation)
+                _layman = _bridge_get_layman_summary(restoration_result)
+                self._latest_layman_summary = dict(_layman or {})
                 self._latest_experience_insights = dict(_xp or {})
                 _joy = float((_xp or {}).get("joy_index", 0.0) or 0.0)
                 _fat = float((_xp or {}).get("fatigue_index", 0.0) or 0.0)
@@ -21571,8 +21580,37 @@ class ModernMainWindow(QMainWindow):
                             f"⚠️  Restaurierung mit Einschränkungen\n   {fail_reason or degradation_status}"
                         )
                 else:
-                    summary_lines.append("✅  Restaurierung erfolgreich abgeschlossen")
-                    summary_lines.append("🛡️  Klangcharakter und Originalbalance wurden dabei bewusst geschützt")
+                    # §v10 Premium-Laien-Kommunikation — reichhaltig & individuell
+                    _ls = getattr(self, "_latest_layman_summary", None) or {}
+                    _icon = str(_ls.get("icon", "") or "").strip()
+                    _headline = str(_ls.get("headline", "") or "").strip()
+                    _subtitle = str(_ls.get("subtitle", "") or "").strip()
+                    _story = str(_ls.get("story", "") or "").strip()
+                    _body = str(_ls.get("body", "") or "").strip()
+                    _quality_label = str(_ls.get("quality_label", "") or "").strip()
+                    _recommendation = str(_ls.get("recommendation", "") or "").strip()
+                    _fun_fact = str(_ls.get("fun_fact", "") or "").strip()
+                    _stats = _ls.get("stats", {}) or {}
+                    if _headline:
+                        summary_lines.append(f"\n{_icon}  {_headline}")
+                    if _subtitle:
+                        summary_lines.append(f"   {_subtitle}")
+                    if _story:
+                        summary_lines.append(f"\n   {_story}")
+                    if _quality_label:
+                        summary_lines.append(f"\n   📊 Qualitätseinstufung: {_quality_label}")
+                    if _body:
+                        summary_lines.append(f"\n   {_body}")
+                    if _stats:
+                        _stat_parts = []
+                        for _sk, _sv in _stats.items():
+                            _stat_parts.append(f"{_sk}: {_sv}")
+                        if _stat_parts:
+                            summary_lines.append(f"\n   📈 {', '.join(_stat_parts)}")
+                    if _recommendation:
+                        summary_lines.append(f"\n   {_recommendation}")
+                    if _fun_fact:
+                        summary_lines.append(f"\n   💡 {_fun_fact}")
 
                 cause_map_de = {
                     "tape_hiss": "Bandrauschen",

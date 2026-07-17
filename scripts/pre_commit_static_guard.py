@@ -40,13 +40,13 @@ def find_undefined_names(filepath: Path) -> list[tuple[int, str]]:
         return []
 
     issues = []
-    _ = set(dir(__builtins__)) if hasattr(__builtins__, '__dict__') else set()
+    _ = set(dir(__builtins__)) if hasattr(__builtins__, "__dict__") else set()
 
     for node in ast.walk(tree):
         # Suche nach try/except mit `pass` gefolgt von Name-Nutzung
         if isinstance(node, ast.Try):
             for handler in node.handlers:
-                if handler.type is None or (isinstance(handler.type, ast.Name) and handler.type.id == 'Exception'):
+                if handler.type is None or (isinstance(handler.type, ast.Name) and handler.type.id == "Exception"):
                     if handler.body and isinstance(handler.body[0], ast.Pass):
                         # Prüfe nachfolgende Statements auf undefined names
                         pass
@@ -56,12 +56,12 @@ def find_undefined_names(filepath: Path) -> list[tuple[int, str]]:
 
 def scan_file(filepath: Path) -> list[str]:
     """Scannt eine Datei auf verdächtige Muster (try: pass + undefined)."""
-    if not filepath.exists() or filepath.suffix != '.py':
+    if not filepath.exists() or filepath.suffix != ".py":
         return []
-    if '.venv' in str(filepath) or '__pycache__' in str(filepath):
+    if ".venv" in str(filepath) or "__pycache__" in str(filepath):
         return []
     # Skip test files (they use pytest fixtures which are legal undefined names)
-    if '/tests/' in str(filepath) or str(filepath).startswith('tests/'):
+    if "/tests/" in str(filepath) or str(filepath).startswith("tests/"):
         return []
 
     content = filepath.read_text(encoding="utf-8", errors="replace")
@@ -72,28 +72,50 @@ def scan_file(filepath: Path) -> list[str]:
     while i < len(lines):
         line = lines[i].strip()
         # Muster: `try:` gefolgt von `pass` gefolgt von Variable
-        if line == 'try:' and i + 2 < len(lines):
+        if line == "try:" and i + 2 < len(lines):
             next_line = lines[i + 1].strip()
-            if next_line == 'pass':
+            if next_line == "pass":
                 # Check next 5 non-empty lines for variable usage
                 for j in range(i + 2, min(i + 8, len(lines))):
                     check = lines[j].strip()
-                    if check.startswith('#') or check.startswith('logger.'):
+                    if check.startswith("#") or check.startswith("logger."):
                         continue
-                    if not check or check == 'pass':
+                    if not check or check == "pass":
                         continue
                     # Suche nach _identifier = ... oder _identifier.method()
                     import re
-                    match = re.match(r'^(\w+)\s*[=\.(]', check)
-                    if match and match.group(1) not in ('if', 'for', 'while', 'return', 'import', 'from', 'with', 'else', 'elif', 'except', 'finally', 'raise', 'assert', 'yield', 'break', 'continue'):
+
+                    match = re.match(r"^(\w+)\s*[=\.(]", check)
+                    if match and match.group(1) not in (
+                        "if",
+                        "for",
+                        "while",
+                        "return",
+                        "import",
+                        "from",
+                        "with",
+                        "else",
+                        "elif",
+                        "except",
+                        "finally",
+                        "raise",
+                        "assert",
+                        "yield",
+                        "break",
+                        "continue",
+                    ):
                         var_name = match.group(1)
                         # Prüfe ob die Variable im try-Block definiert wird
                         defined_in_try = any(
-                            f'{var_name} =' in lines[k] or f'import {var_name}' in lines[k] or f'as {var_name}' in lines[k]
+                            f"{var_name} =" in lines[k]
+                            or f"import {var_name}" in lines[k]
+                            or f"as {var_name}" in lines[k]
                             for k in range(i + 1, j)
                         )
                         if not defined_in_try:
-                            issues.append(f"{filepath.relative_to(_PROJECT_ROOT)}:{j+1}: Verdacht auf undefined name '{var_name}' nach `try: pass`")
+                            issues.append(
+                                f"{filepath.relative_to(_PROJECT_ROOT)}:{j + 1}: Verdacht auf undefined name '{var_name}' nach `try: pass`"
+                            )
                             break
                     break
 
@@ -105,11 +127,11 @@ def scan_file(filepath: Path) -> list[str]:
 
 def check_silent_except_pass(filepath: Path) -> list[str]:
     """V74: Findet 'except ... : pass' ohne logging oder Kommentar."""
-    if not filepath.exists() or filepath.suffix != '.py':
+    if not filepath.exists() or filepath.suffix != ".py":
         return []
-    if '.venv' in str(filepath) or '__pycache__' in str(filepath):
+    if ".venv" in str(filepath) or "__pycache__" in str(filepath):
         return []
-    if '/tests/' in str(filepath) or str(filepath).startswith('tests/'):
+    if "/tests/" in str(filepath) or str(filepath).startswith("tests/"):
         return []  # Tests may have intentional pass in mocks
 
     content = filepath.read_text(encoding="utf-8", errors="replace")
@@ -120,24 +142,28 @@ def check_silent_except_pass(filepath: Path) -> list[str]:
     for i, line in enumerate(lines):
         stripped = line.strip()
         # Detect except block start
-        if stripped.startswith('except') and ':' in stripped:
+        if stripped.startswith("except") and ":" in stripped:
             in_except = True
             continue
         if in_except:
             # Check if the body is just 'pass' without logging
-            if stripped == 'pass':
+            if stripped == "pass":
                 # Look for logger in the surrounding context (±3 lines)
-                context = lines[max(0,i-3):min(len(lines),i+4)]
-                has_logger = any('logger.' in l for l in context)
-                has_comment = any(l.strip().startswith('#') and ('expected' in l.lower() or 'intentional' in l.lower() or 'noqa' in l.lower()) for l in context)
+                context = lines[max(0, i - 3) : min(len(lines), i + 4)]
+                has_logger = any("logger." in l for l in context)
+                has_comment = any(
+                    l.strip().startswith("#")
+                    and ("expected" in l.lower() or "intentional" in l.lower() or "noqa" in l.lower())
+                    for l in context
+                )
                 if not has_logger and not has_comment:
                     issues.append(
-                        f"{filepath.relative_to(_PROJECT_ROOT)}:{i+1}: "
+                        f"{filepath.relative_to(_PROJECT_ROOT)}:{i + 1}: "
                         f"V74 Silent except:pass without logging — add logger.debug() or comment"
                     )
                 in_except = False
                 continue
-            if stripped and not stripped.startswith('#'):
+            if stripped and not stripped.startswith("#"):
                 in_except = False  # Non-pass body found, not a silent except
     return issues
 
@@ -147,24 +173,28 @@ def get_target_files(mode: str = "all") -> list[Path]:
     if mode == "staged":
         result = subprocess.run(
             ["git", "diff", "--cached", "--name-only", "--diff-filter=ACM"],
-            capture_output=True, text=True, cwd=str(_PROJECT_ROOT),
+            capture_output=True,
+            text=True,
+            cwd=str(_PROJECT_ROOT),
         )
-        files = [f for f in result.stdout.strip().split('\n') if f.endswith('.py')]
+        files = [f for f in result.stdout.strip().split("\n") if f.endswith(".py")]
         return [_PROJECT_ROOT / f for f in files]
     elif mode == "changed":
         result = subprocess.run(
             ["git", "diff", "--name-only", "--diff-filter=ACM"],
-            capture_output=True, text=True, cwd=str(_PROJECT_ROOT),
+            capture_output=True,
+            text=True,
+            cwd=str(_PROJECT_ROOT),
         )
-        files = [f for f in result.stdout.strip().split('\n') if f.endswith('.py')]
+        files = [f for f in result.stdout.strip().split("\n") if f.endswith(".py")]
         return [_PROJECT_ROOT / f for f in files]
     else:
         # Nur kürzlich geänderte Dateien (letzte 7 Tage)
         files = []
         for py_file in _PROJECT_ROOT.rglob("*.py"):
-            if '.venv' in str(py_file) or '__pycache__' in str(py_file):
+            if ".venv" in str(py_file) or "__pycache__" in str(py_file):
                 continue
-            if 'models/' in str(py_file) or 'node_modules/' in str(py_file):
+            if "models/" in str(py_file) or "node_modules/" in str(py_file):
                 continue
             files.append(py_file)
         return files
@@ -172,15 +202,17 @@ def get_target_files(mode: str = "all") -> list[Path]:
 
 def main() -> int:
     import argparse
+
     p = argparse.ArgumentParser(description="Pre-Commit Static Guard")
     p.add_argument("--staged", action="store_true", help="Nur git-staged Dateien")
     p.add_argument("--changed", action="store_true", help="Nur git-diff Dateien")
     p.add_argument("--all", action="store_true", help="Alle Projekt-.py-Dateien (Default)")
     p.add_argument("--json", action="store_true", help="JSON-Ausgabe")
     p.add_argument(
-        "files", nargs="*", default=None,
-        help="Explizite Datei-Liste (von pre-commit übergeben). "
-             "Wenn angegeben, werden NUR diese Dateien gescannt.",
+        "files",
+        nargs="*",
+        default=None,
+        help="Explizite Datei-Liste (von pre-commit übergeben). Wenn angegeben, werden NUR diese Dateien gescannt.",
     )
     args = p.parse_args()
 
@@ -206,6 +238,7 @@ def main() -> int:
 
     if args.json:
         import json
+
         print(json.dumps({"clean": len(all_issues) == 0, "files": len(files), "issues": all_issues}))
     else:
         if all_issues:

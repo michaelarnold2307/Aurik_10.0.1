@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 
 # ── §G46 Harmonic Preservation ──────────────────────────────────────────
 
+
 def compute_harmonic_preservation_score(
     original: np.ndarray,
     processed: np.ndarray,
@@ -113,9 +114,7 @@ def compute_harmonic_preservation_score(
     return float(np.dot(hnr_ratios, weights))
 
 
-def _detect_f0_autocorr(
-    signal: np.ndarray, sr: int, f0_min: float, f0_max: float
-) -> float | None:
+def _detect_f0_autocorr(signal: np.ndarray, sr: int, f0_min: float, f0_max: float) -> float | None:
     """Detect F0 via autocorrelation (robust, no FFT dependency)."""
     max_lag = int(sr / f0_min)
     min_lag = int(sr / f0_max)
@@ -123,8 +122,8 @@ def _detect_f0_autocorr(
         return None
     # Autocorrelation
     s = signal - np.mean(signal)
-    corr = np.correlate(s, s, mode='full')
-    corr = corr[len(corr)//2:]  # Keep positive lags
+    corr = np.correlate(s, s, mode="full")
+    corr = corr[len(corr) // 2 :]  # Keep positive lags
     corr[:min_lag] = 0.0
     if len(corr) <= max_lag:
         return None
@@ -136,9 +135,7 @@ def _detect_f0_autocorr(
     return sr / peak_idx
 
 
-def _compute_hnr(
-    signal: np.ndarray, sr: int, f0: float, n_harmonics: int
-) -> float | None:
+def _compute_hnr(signal: np.ndarray, sr: int, f0: float, n_harmonics: int) -> float | None:
     """Compute Harmonic-to-Noise Ratio in dB."""
     n_fft = 4096
     if n_fft >= len(signal):
@@ -158,11 +155,11 @@ def _compute_hnr(
             break
         bw = hz * 0.05  # ±5%
         lo = int(np.searchsorted(freqs, hz - bw))
-        hi = int(np.searchsorted(freqs, hz + bw, side='right'))
+        hi = int(np.searchsorted(freqs, hz + bw, side="right"))
         lo = max(0, lo)
         hi = min(len(freqs) - 1, hi)
         if hi > lo:
-            harm_energy += float(np.sum(spec[lo:hi]**2))
+            harm_energy += float(np.sum(spec[lo:hi] ** 2))
             harm_mask[lo:hi] = True
 
     if harm_energy < 1e-20:
@@ -174,7 +171,7 @@ def _compute_hnr(
     if not np.any(noise_mask):
         return 100.0  # Pure harmonics, no noise
 
-    noise_energy = float(np.sum(spec[noise_mask]**2))
+    noise_energy = float(np.sum(spec[noise_mask] ** 2))
     if noise_energy < 1e-20:
         return 100.0
 
@@ -182,9 +179,7 @@ def _compute_hnr(
     return float(hnr)
 
 
-def _harmonic_fallback_flatness(
-    orig: np.ndarray, proc: np.ndarray, sr: int
-) -> float:
+def _harmonic_fallback_flatness(orig: np.ndarray, proc: np.ndarray, sr: int) -> float:
     """Fallback: compare spectral flatness in midrange."""
     n_fft = 4096
     if len(orig) < n_fft:
@@ -198,10 +193,12 @@ def _harmonic_fallback_flatness(
     mask = (freqs >= 300) & (freqs <= 4000)
     if not np.any(mask):
         return 1.0
+
     # Spectral flatness: geometric mean / arithmetic mean
     def _flatness(x):
         x = np.maximum(x, 1e-15)
         return float(np.exp(np.mean(np.log(x))) / np.mean(x))
+
     fo = _flatness(so[mask])
     fp = _flatness(sp[mask])
     # Flatter spectrum = less harmonic structure = damaged
@@ -210,6 +207,7 @@ def _harmonic_fallback_flatness(
         return 1.0
     ratio = min(fo, fp) / max(fo, fp)
     return float(ratio)
+
 
 # ── §G47 Transient Preservation ─────────────────────────────────────────
 
@@ -448,9 +446,7 @@ def _extract_formants(audio: np.ndarray, sr: int, n_formants: int = 4) -> list[f
         return []
 
 
-def _formant_energy_fallback(
-    orig: np.ndarray, proc: np.ndarray, sr: int, formant_range: tuple
-) -> float:
+def _formant_energy_fallback(orig: np.ndarray, proc: np.ndarray, sr: int, formant_range: tuple) -> float:
     """Fallback: Energie-Erhaltung im Formantbereich."""
     n_fft = 2048
     n_min = min(len(orig), len(proc))
@@ -625,8 +621,7 @@ def compute_emotional_arc_score(
         loudness_corr = 1.0
     else:
         loudness_corr = float(
-            np.dot(lufs_o - np.mean(lufs_o), lufs_p - np.mean(lufs_p))
-            / (len(lufs_o) * so * sp + 1e-12)
+            np.dot(lufs_o - np.mean(lufs_o), lufs_p - np.mean(lufs_p)) / (len(lufs_o) * so * sp + 1e-12)
         )
         loudness_corr = max(0.0, min(1.0, (loudness_corr + 1.0) / 2.0))
     loudness_score = float(loudness_corr)
@@ -692,16 +687,14 @@ def compute_emotional_arc_score(
     silence_thresh = -60.0  # dBFS
     lufs_o_db = 20.0 * np.log10(
         np.array(
-            [max(float(np.sqrt(np.mean(orig[i * hop_s : i * hop_s + win_s] ** 2))), 1e-15)
-             for i in range(n_frames)],
+            [max(float(np.sqrt(np.mean(orig[i * hop_s : i * hop_s + win_s] ** 2))), 1e-15) for i in range(n_frames)],
             dtype=np.float64,
         )
         + 1e-15
     )
     lufs_p_db = 20.0 * np.log10(
         np.array(
-            [max(float(np.sqrt(np.mean(proc[i * hop_s : i * hop_s + win_s] ** 2))), 1e-15)
-             for i in range(n_frames)],
+            [max(float(np.sqrt(np.mean(proc[i * hop_s : i * hop_s + win_s] ** 2))), 1e-15) for i in range(n_frames)],
             dtype=np.float64,
         )
         + 1e-15
@@ -718,10 +711,7 @@ def compute_emotional_arc_score(
     # ── Aggregate ──
     return float(
         np.clip(
-            0.40 * loudness_score
-            + 0.30 * contrast_score
-            + 0.20 * spectral_score
-            + 0.10 * silence_score,
+            0.40 * loudness_score + 0.30 * contrast_score + 0.20 * spectral_score + 0.10 * silence_score,
             0.0,
             1.0,
         )

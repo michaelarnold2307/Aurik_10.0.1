@@ -9,48 +9,56 @@
 ## Gefundene Root Causes (Chronik)
 
 ### RC1: STCG Mid-Window misst variablen Lag nicht
+
 **Symptom**: LAG_PROBE_0B → korrigiert zu 0, LAG_PROBE_1 → wieder -8900
 **Ursache**: STCG maß nur 10s Mid-Window. Bei 0%→-8900, 50%→0, 100%→-7297 sah Mid-Window 0 und korrigierte nichts.
 **Fix**: STCG verwendet Multi-Point-Median (3 Positionen) als PRIMÄRE Messung.
 **Commits**: `0ab8a7f1`, `b0132490`
 
 ### RC2: Phase 12 xcorr-Fallback überschrieb STCG
+
 **Symptom**: Trotz STCG-Korrektur war Lag nach Phase 12 wieder da.
 **Ursache**: `_preserve_phase_loudness` führte NACH erfolgreichem STCG einen Onset-Energy-Fallback durch, der die Sub-Sample-Korrektur mit grobem `np.concatenate` überschrieb.
 **Fix**: Fallback nur bei STCG-Exception (`_stcg_applied`-Flag).
 **Commit**: `785fa2c0`
 
 ### RC3: LAG_PROBE_0B nutzte np.roll
+
 **Symptom**: Zirkuläre Audio-Artefakte, Längenänderung.
 **Ursache**: Lag-Korrektur verwendete `np.roll` (zirkulär) + Audio-Trunkierung statt `scipy.ndimage.shift`.
 **Fix**: STCG-Aufruf mit Sub-Sample-Präzision.
 **Commit**: `8a127caf`
 
 ### RC4: Multi-Point-Funktion ignorierte Channels-First
+
 **Symptom**: `LAG_PROBE 0B: points=[n/a]` – leere Messung.
 **Ursache**: `_estimate_interchannel_lag_multi_point` nahm `arr.shape[0]` als Sample-Anzahl. Bei (2,N) war das 2.
 **Fix**: Orientierungserkennung analog Single-Point-Funktion.
 **Commit**: `b0132490`
 
 ### RC5: Phase 24 nutzte signal.correlate (primitiv)
+
 **Symptom**: Lag-Deltas bis 1303 Samples, aber max Suchraum 960 – Lags >20ms unsichtbar.
 **Ursache**: Phase 24 hatte eigene Lag-Erkennung mit `signal.correlate` (kein GCC-PHAT, kein Whitening, ganzzahliger Shift).
 **Fix**: Vollständiger Ersatz durch STCG (Multi-Point, GCC-PHAT, ±200ms, cubic spline).
 **Commit**: `81e2762a`
 
 ### RC6: STCG 20ms Pre-Pipeline-Guard
+
 **Symptom**: 185ms Source-Lag wurde als "False-Positive" verworfen.
 **Ursache**: Guard verwarf Lags >20ms pauschal ohne Verifikation.
 **Fix**: Multi-Point-Verifikation ersetzt den Blind-Guard.
 **Commit**: `b0132490`
 
 ### RC7: Soft-Saturation pauschal preserved
+
 **Symptom**: Generation-Loss-Saturation (Kassette, MP3) wurde als "künstlerisch" eingestuft.
 **Ursache**: Genre-Profil + Fallback setzten `soft_saturation_preserve=True` ohne Chain-Depth-Prüfung.
 **Fix**: Chain-Depth-Guard + SaturationDiscriminator (H2/H3/H5-Signalanalyse).
 **Commits**: `ac251532`, `8648b759`, `d07167f8`
 
 ### RC8: Scipy-STFT-Warnungen (62+ ungeschützte Aufrufer)
+
 **Symptom**: "nperseg=2048 > input length=2" flutete das Log.
 **Ursache**: 62+ `scipy.signal.stft`-Aufrufe ohne Längen-Guard in 30+ Dateien.
 **Fix**: Zentraler Guard in `backend/__init__.py` (patched `scipy.signal.stft`).
@@ -92,6 +100,7 @@
 Diese Regeln werden durch Pre-Commit-Hooks und den `scripts/aurik_verboten_linter.py` durchgesetzt:
 
 ### L1: STCG-Import-Check (→ §G61, §V27)
+
 ```python
 # VERBOTEN:
 import scipy.signal; lag = signal.correlate(l, r, mode="full")
@@ -102,12 +111,14 @@ from backend.core.stereo_temporal_coherence_guard import get_stereo_temporal_coh
 ```
 
 ### L2: np.roll-Stereo-Check (→ §G62, §V32)
+
 ```python
 # Pattern: np.roll( ... audio[:, 1] ... ) oder np.roll( ... audio[1] ... )
 # → WARNING: "np.roll für Stereo-Kanal-Shift – verwende STCG oder scipy.ndimage.shift"
 ```
 
 ### L3: Multi-Point-Pflicht (→ §G60, §V30)
+
 ```python
 # Pattern: _estimate_interchannel_lag_samples(audio, sr)  # Single-Point
 # → INFO: "Single-Point Lag-Messung – §G60 empfiehlt Multi-Point"
@@ -115,6 +126,7 @@ from backend.core.stereo_temporal_coherence_guard import get_stereo_temporal_coh
 ```
 
 ### L4: STFT-Längen-Guard (→ §G66, §V31)
+
 ```python
 # Pattern: signal.stft(x, ...) ohne vorheriges len(x) >= nperseg
 # → WARNING: "scipy.signal.stft ohne Längen-Guard – §G66"
@@ -122,6 +134,7 @@ from backend.core.stereo_temporal_coherence_guard import get_stereo_temporal_coh
 ```
 
 ### L5: Orientierungs-Check (→ §G63)
+
 ```python
 # Pattern: arr.shape[0] in Lag-Messfunktion ohne ndim-Check
 # → WARNING: "shape[0] als implizite Sample-Anzahl – §G63"
@@ -132,6 +145,7 @@ from backend.core.stereo_temporal_coherence_guard import get_stereo_temporal_coh
 ## Test-Vorgaben
 
 ### T1: Lag-Regressionstest (Pflicht bei jeder STCG-/Phase-12/24-Änderung)
+
 ```python
 def test_lag_varied_across_song():
     """Simuliert variablen Lag: 0%→-8900, 50%→0, 100%→-7297."""
@@ -140,6 +154,7 @@ def test_lag_varied_across_song():
 ```
 
 ### T2: Orientierungs-Test
+
 ```python
 def test_lag_both_orientations():
     """Test channels-first (2,N) und channels-last (N,2)."""
@@ -148,6 +163,7 @@ def test_lag_both_orientations():
 ```
 
 ### T3: Kein np.roll in Lag-Pfad
+
 ```python
 def test_no_np_roll_in_lag_correction():
     """Assert: kein Aufruf von np.roll mit audio[:, 1] im Lag-Korrektur-Pfad."""

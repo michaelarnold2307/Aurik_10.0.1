@@ -145,7 +145,13 @@ class OnboardingWizard(QtWidgets.QDialog):
                 "💿",
                 "#FFB300",
             ),
-            ("studio", "🎯 Studio 2026", "Modern · Klar & kraftvoll\nFür Spotify, YouTube & Streaming", "🎯", "#00B0FF"),
+            (
+                "studio",
+                "🎯 Studio 2026",
+                "Modern · Klar & kraftvoll\nFür Spotify, YouTube & Streaming",
+                "🎯",
+                "#00B0FF",
+            ),
         ]:
             card = QtWidgets.QFrame()
             card.setStyleSheet(

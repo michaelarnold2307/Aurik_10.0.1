@@ -952,16 +952,18 @@ def _print_prognose_terminal(
     # §2.46b: Tonträgerkette anzeigen wenn mehrstufig
     if chain_label and " → " in chain_label:
         lines.append(f"  {_ANSI_DIM}Tonträgerkette{_ANSI_RESET} : {_ANSI_CYAN}{chain_label}{_ANSI_RESET}")
-    lines.extend([
-        f"  {_ANSI_DIM}Aufnahme-Ära{_ANSI_RESET}    : {f'{decade}er' if decade else '—'}",
-        f"  {_ANSI_DIM}Genre{_ANSI_RESET}           : {genre if genre else '—'}",
-        f"  {_ANSI_DIM}SNR{_ANSI_RESET}             : {snr_db:.1f} dB",
-        "",
-        f"  {_ANSI_BOLD}Chancen-Score{_ANSI_RESET}   : {_color_grade(grade, f'{score100:.0f} / 100  ({grade_de})')}",
-        f"  {_ANSI_BOLD}MOS-Prognose{_ANSI_RESET}    : {predicted_mos:.2f}  [{mos_range[0]:.1f}–{mos_range[1]:.1f}]",
-        f"  {_ANSI_BOLD}Phasen-Schätzung{_ANSI_RESET}: {lo}–{hi} Phasen",
-        "",
-    ])
+    lines.extend(
+        [
+            f"  {_ANSI_DIM}Aufnahme-Ära{_ANSI_RESET}    : {f'{decade}er' if decade else '—'}",
+            f"  {_ANSI_DIM}Genre{_ANSI_RESET}           : {genre if genre else '—'}",
+            f"  {_ANSI_DIM}SNR{_ANSI_RESET}             : {snr_db:.1f} dB",
+            "",
+            f"  {_ANSI_BOLD}Chancen-Score{_ANSI_RESET}   : {_color_grade(grade, f'{score100:.0f} / 100  ({grade_de})')}",
+            f"  {_ANSI_BOLD}MOS-Prognose{_ANSI_RESET}    : {predicted_mos:.2f}  [{mos_range[0]:.1f}–{mos_range[1]:.1f}]",
+            f"  {_ANSI_BOLD}Phasen-Schätzung{_ANSI_RESET}: {lo}–{hi} Phasen",
+            "",
+        ]
+    )
 
     if limiting_defects:
         lines.append(f"  {_ANSI_AMBER}Hauptschäden{_ANSI_RESET}:")

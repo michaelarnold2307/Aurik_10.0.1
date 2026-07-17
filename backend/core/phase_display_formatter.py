@@ -20,12 +20,10 @@ PHASE_DISPLAY: dict[str, str] = {
     "phase_07_harmonic_restoration": "🎵✨ Harmonische Restauration",
     "phase_08_transient_preservation": "⚡ Transienten-Erhalt",
     "phase_09_crackle_removal": "🧹⚡ Knistern-Entfernung",
-    
     # Transport / time
     "phase_12_wow_flutter_fix": "🎢 Gleichlauf-Korrektur",
     "phase_25_azimuth_correction": "📐 Azimut-Korrektur",
     "phase_31_speed_pitch_correction": "🎯 Geschwindigkeits-Korrektur",
-    
     # Stereo / spatial
     "phase_13_stereo_enhancement": "🔊✨ Stereo-Anreicherung",
     "phase_14_phase_correction": "🔄🔊 Phasenlage-Korrektur",
@@ -33,7 +31,6 @@ PHASE_DISPLAY: dict[str, str] = {
     "phase_34_mid_side_processing": "🎯 M/S-Prozessor",
     "phase_48_stereo_width_enhancer": "📐 Stereo-Breite",
     "phase_62_crosstalk_cancellation": "🔇 Übersprech-Unterdrückung",
-    
     # Tonal / EQ
     "phase_16_final_eq": "🎛️✨ Abschluss-EQ",
     "phase_17_mastering_polish": "💿✨ Mastering-Politur",
@@ -44,45 +41,36 @@ PHASE_DISPLAY: dict[str, str] = {
     "phase_39_air_band_enhancement": "💨 Luftband-Anhebung",
     "phase_40_loudness_normalization": "📏 Lautheits-Normalisierung",
     "phase_47_truepeak_limiter": "📏 True-Peak-Limiter",
-    
     # Spectral repair
     "phase_23_spectral_repair": "🔧 Spektrale Reparatur",
     "phase_50_spectral_repair": "🔧 Spektrale Nachreparatur",
     "phase_56_spectral_band_gap_repair": "🔧 Bandlücken-Reparatur",
-    
     # Dropout / gaps
     "phase_24_dropout_repair": "🩹 Aussetzer-Reparatur",
     "phase_27_click_pop_removal": "🎯 Knackser-Entfernung",
-    
     # Noise / surface
     "phase_28_surface_noise_profiling": "📊 Oberflächen-Rauschen",
     "phase_29_tape_hiss_reduction": "📼 Band-Rausch-Unterdrückung",
     "phase_59_modulation_noise_reduction": "📼 Modulations-Rauschen",
-    
     # Dynamics
     "phase_26_dynamic_range_expansion": "📈 Dynamik-Erweiterung",
     "phase_36_transient_shaper": "🔨 Transienten-Shaper",
     "phase_54_transparent_dynamics": "🎚️ Transparente Dynamik",
-    
     # Vocal / production
     "phase_43_ml_deesser": "🎤 ML De-Esser",
     "phase_46_studio_reverb_removal": "🏠 Studio-Hall-Entfernung",
     "phase_49_advanced_dereverb": "🔇 Enthallung",
     "phase_65_vocal_naturalness_restoration": "🌿 Gesangs-Natürlichkeit",
-    
     # Reverb / room
     "phase_20_reverb_reduction": "🏠 Hall-Reduktion",
-    
     # Carrier-specific
     "phase_60_inner_groove_distortion_repair": "💿 Innenrillen-Verzerrung",
     "phase_61_groove_echo_cancellation": "💿 Rillen-Echo",
     "phase_64_tape_splice_repair": "📼 Band-Klebestelle",
-    
     # Advanced / AI
     "phase_41_output_format_optimization": "📦 Ausgabe-Optimierung",
     "phase_53_semantic_audio": "🧠 Semantische Analyse",
     "phase_55_diffusion_inpainting": "🎨 Diffusion-Inpainting",
-    
     # Post-processing
     "phase_42_stem_remix": "🎚️ Stem-Remix",
     "phase_44_loudness_range": "📏 Loudness-Range",

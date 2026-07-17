@@ -77,7 +77,6 @@ Alle Patterns werden über `unified_restorer_v3.py` integriert:
 | §T | <500 ms | Allpass + Modulation, einmal pro Pipeline |
 | §G | Variabel | Max 2 zusätzliche UV3-Durchläufe |
 
-
 ## §12.5 [RELEASE_MUST] §v10 SNR/Spectrum/Harmonic-Adaption (Juli 2026)
 
 **Prinzip:** Kein blinder Material-Glaube. Jeder Song wird individuell gemessen.

@@ -3,6 +3,7 @@ test_gap_detector.py — v10 Test-Gap-Detector
 =============================================
 Finds spec paragraphs without tests and material coverage gaps.
 """
+
 from __future__ import annotations
 
 import logging
@@ -16,11 +17,13 @@ logger = logging.getLogger(__name__)
 
 CRITICAL_SPECS = ["0h", "0i", "0p", "0a", "2.44", "2.49"]
 
+
 @dataclass
 class GapResult:
     spec_ref: str
     description: str
     severity: str = "warning"
+
 
 @dataclass
 class TestGapReport:
@@ -30,6 +33,7 @@ class TestGapReport:
     total_specs_found: int = 0
     total_tests_found: int = 0
     coverage_pct: float = 0.0
+
 
 class TestGapDetector:
     def __init__(self, repo_root: str = ".") -> None:
@@ -57,16 +61,22 @@ class TestGapDetector:
         pattern = re.compile(r"([0-9]+[a-z]?(?:\.[0-9]+)?[a-z]?)")
         for py_file in self._root.rglob("*.py"):
             p = str(py_file)
-            if "__pycache__" in p: continue
-            if exclude_tests and "/tests/" in p: continue
-            if not exclude_tests and "/tests/" not in p: continue
+            if "__pycache__" in p:
+                continue
+            if exclude_tests and "/tests/" in p:
+                continue
+            if not exclude_tests and "/tests/" not in p:
+                continue
             try:
                 for m in pattern.finditer(py_file.read_text(errors="ignore")):
                     refs.add(m.group(1))
-            except Exception: pass
+            except Exception:
+                pass
         return refs
 
+
 _detector: TestGapDetector | None = None
+
 
 def get_detector() -> TestGapDetector:
     global _detector

@@ -9,19 +9,19 @@ Three workflow improvements for UV3 phase execution:
 Usage in UV3:
     from backend.core.pipeline_budget_controller import PipelineBudgetController
     _pbc = PipelineBudgetController(pipeline_wall_budget=4800.0)
-    
+
     # At phase start:
     _pbc.on_phase_start(phase_id, phase_idx, total_phases)
-    
+
     # During phase setup:
     budget_scalar = _pbc.get_budget_scalar(elapsed_non_exempt_s)
     effective_strength *= budget_scalar
-    
+
     # Phase time cap check:
     if _pbc.is_phase_timed_out(phase_id, phase_start_ts):
         logger.warning("Phase skipped due to time cap")
         continue
-    
+
     # For Watchdog dialog:
     progress = _pbc.get_progress()
 """
@@ -39,11 +39,11 @@ logger = logging.getLogger(__name__)
 # ── Per-Phase Time Caps (prevents individual ML-phase hangs) ──
 PHASE_TIME_CAP_S: dict[str, float] = {
     "phase_06_frequency_restoration": 2700.0,  # NVSR max 45 min
-    "phase_03_denoise": 1800.0,                 # MelBandRoformer+Resemble 30 min
-    "phase_23_spectral_repair": 1800.0,         # FlashSR 30 min
-    "phase_12_wow_flutter_fix": 1200.0,         # pYIN+CREPE 20 min
-    "phase_20_reverb_reduction": 1200.0,        # SGMSE+ 20 min
-    "phase_29_tape_hiss_reduction": 900.0,      # OMLSA/IMCRA 15 min
+    "phase_03_denoise": 1800.0,  # MelBandRoformer+Resemble 30 min
+    "phase_23_spectral_repair": 1800.0,  # FlashSR 30 min
+    "phase_12_wow_flutter_fix": 1200.0,  # pYIN+CREPE 20 min
+    "phase_20_reverb_reduction": 1200.0,  # SGMSE+ 20 min
+    "phase_29_tape_hiss_reduction": 900.0,  # OMLSA/IMCRA 15 min
 }
 FALLBACK_TIME_CAP_S: float = 3600.0  # 60 min default
 
@@ -94,7 +94,9 @@ class PipelineBudgetController:
         if elapsed > cap:
             logger.warning(
                 "§v10.15 Phase-Time-Cap: %s elapsed %.0fs > cap %.0fs — recommend skip",
-                phase_id, elapsed, cap,
+                phase_id,
+                elapsed,
+                cap,
             )
             return True
         return False
@@ -122,7 +124,8 @@ class PipelineBudgetController:
         if pressure > 0.80:
             logger.info(
                 "§v10.15 Budget-Pressure: %.0f%% → quality scalar=%.2f",
-                pressure * 100, scalar,
+                pressure * 100,
+                scalar,
             )
         return float(scalar)
 

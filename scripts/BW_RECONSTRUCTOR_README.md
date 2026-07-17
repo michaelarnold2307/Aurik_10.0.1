@@ -7,6 +7,7 @@ empfohlene Lösung für Aurik der **DSP-basierte Harmonic Exciter**:
 `plugins/bw_harmonic_exciter.py`.
 
 **Warum DSP statt ML:**
+
 - 26/30 Musiksegmente verbessert, 0 verschlechtert
 - 0 MB Modell, <10ms Latenz, kein Training nötig
 - Garantiert: blend=0 = Original unverändert

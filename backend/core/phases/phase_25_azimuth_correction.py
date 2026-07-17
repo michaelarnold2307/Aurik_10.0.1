@@ -63,9 +63,9 @@ from scipy import signal
 
 from backend.core.core_utils import fft_crosscorr
 from backend.core.defect_scanner import MaterialType
+from backend.core.ml_model_readiness import check_ml_model_ready
 
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult
-from backend.core.ml_model_readiness import check_ml_model_ready  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -711,6 +711,7 @@ class AzimuthCorrectionPhaseV2(PhaseInterface):
 
         # scipy.ndimage.shift: cubic spline (order=3), zero-padding, sub-sample
         from scipy.ndimage import shift as _ndimage_shift
+
         corrected = band_audio.copy()
         corrected[:, 1] = _ndimage_shift(
             corrected[:, 1].astype(np.float64),

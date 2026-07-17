@@ -2253,7 +2253,7 @@ class GrooveMetric:
                 # Ohne Timing-Check maskiert der Guard echte Groove-Degradation
                 # (z.B. DTW-rms=106ms bei 102% onset count → score 1.0 — falsch).
                 _onset_preservation = result.n_onsets_restored / max(result.n_onsets_original, 1)
-                _dtw_rms_ok = getattr(result, 'dtw_rms_ms', 999.0) < 15.0
+                _dtw_rms_ok = getattr(result, "dtw_rms_ms", 999.0) < 15.0
                 if _onset_preservation >= 0.95 and _dtw_rms_ok:
                     _onset_score = float(np.clip(0.60 + 0.15 * (_onset_preservation - 0.95) / 0.05, 0.60, 0.75))
                     logger.info(
@@ -2261,7 +2261,7 @@ class GrooveMetric:
                         result.n_onsets_restored,
                         result.n_onsets_original,
                         _onset_preservation * 100,
-                        getattr(result, 'dtw_rms_ms', 0.0),
+                        getattr(result, "dtw_rms_ms", 0.0),
                         _dtw_score,
                         _onset_score,
                     )

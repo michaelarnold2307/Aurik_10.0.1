@@ -75,15 +75,15 @@ PRIMUS_INTER_PARES = "Wenn panns_singing >= 0.25, erhält Stimmqualität Vorrang
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-
 @dataclass
 class RequiredPattern:
     """Eine GEBOTEN-Regel — was MUSS vorhanden sein."""
-    id: str           # G01-G40
-    category: str     # Logging, Audio, Pipeline, Test
-    pattern: str      # Erkennungsmuster (muss vorhanden sein)
+
+    id: str  # G01-G40
+    category: str  # Logging, Audio, Pipeline, Test
+    pattern: str  # Erkennungsmuster (muss vorhanden sein)
     description: str  # Was verlangt wird
-    severity: str     # critical / warning
+    severity: str  # critical / warning
 
 
 @dataclass
@@ -232,117 +232,477 @@ FORBIDDEN_PATTERNS: list[ForbiddenPattern] = [
         "warning",
     ),
     # ── V10.0.7: Fortgeschrittene Regeln (V21-V42, 7 neue)
-    ForbiddenPattern("V21","Noise","noise.texture.*resynth","Noise-Textur-Resynthese ohne Original-Referenz","Noise-Textur aus Original extrahieren","warning"),
-    ForbiddenPattern("V33","Material","MaterialType.*missing|CASSETTE.*not in","Neues MaterialType ohne vollstaendige dict-Eintraege","Jedes dict[MaterialType,...] MUSS vollstaendig sein","critical"),
-    ForbiddenPattern("V38","Strength","uniform.*strength.*loop|strength.*for.*in.*events","Einheitliche Strength fuer disparate Defekt-Events","Per-Event-Strength-Oracle Pflicht","warning"),
-    ForbiddenPattern("V39","Phase","phase_21.*CAUSE|phase_35.*CAUSE|phase_42.*CAUSE","Phase 21/35/42 in Restoration-CAUSE_TO_PHASES","Diese Phasen NIE fuer Restoration-Cause vorschlagen","critical"),
-    ForbiddenPattern("V40","NR","denoise.*ohne.*NMR|phase_03.*ohne.*feedback","NR-Phase ohne NMR-Feedback","compute_nmr_score() Pflicht","warning"),
-    ForbiddenPattern("V41","Masking","additive.*ohne.*ForwardMasking","Additive Phase ohne ForwardMaskingGuard","ForwardMaskingGuard bei panns_singing>=0.25","warning"),
-    ForbiddenPattern("V42","Roughness","NR.*ohne.*roughness|phase_29.*ohne.*check","NR-Phase ohne Roughness-Check","check_roughness_regression() Pflicht","warning"),
-    ForbiddenPattern("V22","PreEcho","pre.echo.*ohne.*guard|transient.*ohne.*PreEcho","Pre-Echo-Schutz ohne Guard","PreEchoPrevention Pflicht","warning"),
-    ForbiddenPattern("V23","Mono","mono.*kompatibilitaet.*ohne.*check|MonoCompat","Mono-Kompatibilitaet ohne Check","Mono-Kompatibilitaets-Check Pflicht","warning"),
-    ForbiddenPattern("V24","Spectral","spektralfarbe.*ohne.*guard|spectral.*color.*ohne","Spektralfarbe ohne Guard","SpectralColorGuard Pflicht","warning"),
-    ForbiddenPattern("V25","Waerme","waermeband.*ohne.*guard|warmth.*band.*ohne","Waermeband ohne Guard","Waermeband-Guard Pflicht","warning"),
-    ForbiddenPattern("V26","Onset","onset.*preserv.*ohne.*guard|onset.*guard.*fehlt","Onset-Preservation ohne Guard","OnsetPreservationGuard Pflicht","warning"),
-    ForbiddenPattern("V27","Defect","JITTER.*phase_12|jitter.*wow_flutter","JITTER mit phase_12 behandeln (falscher Algorithmus)","phase_14+phase_23 fuer digitale Jitter","critical"),
-    ForbiddenPattern("V28","Defect","NR_BREATHING.*phase_03|breathing.*denoise","NR-Atmen mit weiterer NR behandeln","phase_54+phase_08 fuer NR-Artefakte","critical"),
-    ForbiddenPattern("V29","Defect","OVERLOAD.*phase_63|overload.*intermodulation","Overload mit IMD-Reduktion behandeln","phase_09+phase_23 fuer harmonische Verzerrung","critical"),
-    ForbiddenPattern("V30","Defect","ALIASING.*phase_03|aliasing.*denoise","Aliasing mit Denoise behandeln","Nur phase_23+phase_50 fuer Alias-Frequenzen","critical"),
-    ForbiddenPattern("V31","Defect","ROOM_MODE.*phase_05|room.*rumble","Raumresonanzen mit Rumble-Filter (zu breit)","phase_04 Notch-EQ als Primary","warning"),
-    ForbiddenPattern("V32","Guard","transparenz.*ohne.*drift_exclusion|Hiss.*ohne.*exclusion","NR-Phase ohne transparenz in DRIFT_EXCLUSIONS","transparenz in _PHASE_SPECIFIC_DRIFT_EXCLUSIONS","warning"),
-    ForbiddenPattern("V34","Phase","MaterialType.*ohne.*CASSETTE|CASSETTE.*fehlt.*dict","MaterialType.CASSETTE fehlt in dict","Alle dict[MaterialType,...] vollstaendig befuellen","critical"),
-    ForbiddenPattern("V35","Phase","phase_63.*ohne.*M/S|IMD.*ohne.*mid.side","Phase_63 ohne M/S-Domain","M/S-Domain: Notch aus Mid, symmetrisch auf Mid+Side","warning"),
-    ForbiddenPattern("V36","Phase","phase.*ohne.*strength_feedback|wetness.*ohne.*feedback","Phase-Wetness ohne Mess-Feedback","PhaseConductor.recommend() mit 4D-State-Vektor","warning"),
-    ForbiddenPattern("V37","Guard","feste.*guard.*schwelle|MAX_DRIFT.*ohne.*adaptive","Feste Guard-Schwellwerte","compute_adaptive_drift_tolerance()","warning"),
-    ForbiddenPattern("V43","Formant","formant.*guard.*±1dB|jnd.*ohne.*resolve","Formant-Guard mit uniformem ±1dB","resolve_jnd_tolerance_db(freq_hz) Pflicht","warning"),
-    ForbiddenPattern("V44","Spatial","spatial_depth.*ohne.*IACC|spatial.*ohne.*iacc","spatial_depth ohne IACC","compute_iacc(audio,sr) in spatial_depth","warning"),
-    ForbiddenPattern("V45","Emotion","emotionalitaet.*ohne.*VAT|emotion.*ohne.*valence","emotionalitaet ohne VAT-Blend","VATEmotionEstimator als Blend","warning"),
-    ForbiddenPattern("V46","dBFS","dBFS.*\*.*strength|dbfs.*multiply","dBFS mit linearem Faktor multipliziert","level_db + 20*log10(max(strength,1e-6))","critical"),
-    ForbiddenPattern("V47","Clip","clipping.*0\.999.*ohne.*sub|FLAT_TOPS.*ohne.*adjacent","Clipping nur via FLAT_TOPS ohne Sub-Ceiling","detect_sub_ceiling_clipping()+Adjacent-Ratio","critical"),
-    ForbiddenPattern("V48","GAF","goal_applicability.*ohne.*transfer_chain|GAF.*ohne.*chain","GAF ohne transfer_chain-Parameter","evaluate_goal_applicability(transfer_chain=...)","warning"),
-    ForbiddenPattern("V49","Goals","goals_passed.*ohne.*inapplicable|goals_passed.*ohne.*Ausschluss","goals_passed ohne inapplicable-Ausschluss","_count_passed schliesst _inappl aus","warning"),
-    ForbiddenPattern("V50","Goals","messe_ziele.*ohne.*reference|measure_all.*ohne.*ref","messe_ziele() ohne reference-Parameter","messe_ziele(audio,sr,reference=pre_audio)","warning"),
-    ForbiddenPattern("V51","Dataclass","RestaurierErgebnis.*ohne.*goal_applicability|Ergebnis.*ohne.*goal_applic","Dataclass ohne goal_applicability-Feld","goal_applicability:dict in Dataclass","warning"),
-    ForbiddenPattern("V52","GAF","separation_fidelity.*ohne.*near.mono|separation.*ohne.*codec","separation_fidelity ohne Near-Mono-Codec","Joint-Stereo-Codec->separation_fidelity inapplicable","warning"),
-    ForbiddenPattern("V53","Singer","singer_id.*rollback.*ohne.*dsp_fallback|singer.*ohne.*fallback","Singer-ID-Rollback ohne DSP-Fallback-Guard","if sic<0.92 and not singer_id_dsp_fallback","critical"),
-    ForbiddenPattern("V54","HPG","update_reference_memory.*nie.*gerufen|_hg\.update.*never","update_reference_memory() nie aufgerufen","HPI>0+af>=0.95 -> _hg.update_reference_memory()","critical"),
-    ForbiddenPattern("V55","LPC","lpc_formant.*ohne.*era_decade|enhance.*ohne.*era","lpc_formant_enhance ohne era_decade","era_decade<1960->WLPC-Pfad aktivieren","warning"),
-    ForbiddenPattern("V56","Frontend","_AURIK_VERSION.*=.*9\.\d+|hartcodierte.*Version.*Frontend","Frontend-Version hartcodiert","_AURIK_VERSION=unknown als Fallback","critical"),
-    ForbiddenPattern("V57","Masking","additive.*phase.*ohne.*ForwardMasking.*panns|phase_.*add.*ohne.*mask","Neue additive Phase ohne ForwardMaskingGuard","ForwardMaskingGuard bei panns_singing>=0.25","warning"),
-    ForbiddenPattern("V58","Mypy","return.*ndarray.*no-any-return|->.*ndarray.*Any","no-any-return in ndarray-Funktionen","cast(np.ndarray,result) oder type:ignore","warning"),
+    ForbiddenPattern(
+        "V21",
+        "Noise",
+        "noise.texture.*resynth",
+        "Noise-Textur-Resynthese ohne Original-Referenz",
+        "Noise-Textur aus Original extrahieren",
+        "warning",
+    ),
+    ForbiddenPattern(
+        "V33",
+        "Material",
+        "MaterialType.*missing|CASSETTE.*not in",
+        "Neues MaterialType ohne vollstaendige dict-Eintraege",
+        "Jedes dict[MaterialType,...] MUSS vollstaendig sein",
+        "critical",
+    ),
+    ForbiddenPattern(
+        "V38",
+        "Strength",
+        "uniform.*strength.*loop|strength.*for.*in.*events",
+        "Einheitliche Strength fuer disparate Defekt-Events",
+        "Per-Event-Strength-Oracle Pflicht",
+        "warning",
+    ),
+    ForbiddenPattern(
+        "V39",
+        "Phase",
+        "phase_21.*CAUSE|phase_35.*CAUSE|phase_42.*CAUSE",
+        "Phase 21/35/42 in Restoration-CAUSE_TO_PHASES",
+        "Diese Phasen NIE fuer Restoration-Cause vorschlagen",
+        "critical",
+    ),
+    ForbiddenPattern(
+        "V40",
+        "NR",
+        "denoise.*ohne.*NMR|phase_03.*ohne.*feedback",
+        "NR-Phase ohne NMR-Feedback",
+        "compute_nmr_score() Pflicht",
+        "warning",
+    ),
+    ForbiddenPattern(
+        "V41",
+        "Masking",
+        "additive.*ohne.*ForwardMasking",
+        "Additive Phase ohne ForwardMaskingGuard",
+        "ForwardMaskingGuard bei panns_singing>=0.25",
+        "warning",
+    ),
+    ForbiddenPattern(
+        "V42",
+        "Roughness",
+        "NR.*ohne.*roughness|phase_29.*ohne.*check",
+        "NR-Phase ohne Roughness-Check",
+        "check_roughness_regression() Pflicht",
+        "warning",
+    ),
+    ForbiddenPattern(
+        "V22",
+        "PreEcho",
+        "pre.echo.*ohne.*guard|transient.*ohne.*PreEcho",
+        "Pre-Echo-Schutz ohne Guard",
+        "PreEchoPrevention Pflicht",
+        "warning",
+    ),
+    ForbiddenPattern(
+        "V23",
+        "Mono",
+        "mono.*kompatibilitaet.*ohne.*check|MonoCompat",
+        "Mono-Kompatibilitaet ohne Check",
+        "Mono-Kompatibilitaets-Check Pflicht",
+        "warning",
+    ),
+    ForbiddenPattern(
+        "V24",
+        "Spectral",
+        "spektralfarbe.*ohne.*guard|spectral.*color.*ohne",
+        "Spektralfarbe ohne Guard",
+        "SpectralColorGuard Pflicht",
+        "warning",
+    ),
+    ForbiddenPattern(
+        "V25",
+        "Waerme",
+        "waermeband.*ohne.*guard|warmth.*band.*ohne",
+        "Waermeband ohne Guard",
+        "Waermeband-Guard Pflicht",
+        "warning",
+    ),
+    ForbiddenPattern(
+        "V26",
+        "Onset",
+        "onset.*preserv.*ohne.*guard|onset.*guard.*fehlt",
+        "Onset-Preservation ohne Guard",
+        "OnsetPreservationGuard Pflicht",
+        "warning",
+    ),
+    ForbiddenPattern(
+        "V27",
+        "Defect",
+        "JITTER.*phase_12|jitter.*wow_flutter",
+        "JITTER mit phase_12 behandeln (falscher Algorithmus)",
+        "phase_14+phase_23 fuer digitale Jitter",
+        "critical",
+    ),
+    ForbiddenPattern(
+        "V28",
+        "Defect",
+        "NR_BREATHING.*phase_03|breathing.*denoise",
+        "NR-Atmen mit weiterer NR behandeln",
+        "phase_54+phase_08 fuer NR-Artefakte",
+        "critical",
+    ),
+    ForbiddenPattern(
+        "V29",
+        "Defect",
+        "OVERLOAD.*phase_63|overload.*intermodulation",
+        "Overload mit IMD-Reduktion behandeln",
+        "phase_09+phase_23 fuer harmonische Verzerrung",
+        "critical",
+    ),
+    ForbiddenPattern(
+        "V30",
+        "Defect",
+        "ALIASING.*phase_03|aliasing.*denoise",
+        "Aliasing mit Denoise behandeln",
+        "Nur phase_23+phase_50 fuer Alias-Frequenzen",
+        "critical",
+    ),
+    ForbiddenPattern(
+        "V31",
+        "Defect",
+        "ROOM_MODE.*phase_05|room.*rumble",
+        "Raumresonanzen mit Rumble-Filter (zu breit)",
+        "phase_04 Notch-EQ als Primary",
+        "warning",
+    ),
+    ForbiddenPattern(
+        "V32",
+        "Guard",
+        "transparenz.*ohne.*drift_exclusion|Hiss.*ohne.*exclusion",
+        "NR-Phase ohne transparenz in DRIFT_EXCLUSIONS",
+        "transparenz in _PHASE_SPECIFIC_DRIFT_EXCLUSIONS",
+        "warning",
+    ),
+    ForbiddenPattern(
+        "V34",
+        "Phase",
+        "MaterialType.*ohne.*CASSETTE|CASSETTE.*fehlt.*dict",
+        "MaterialType.CASSETTE fehlt in dict",
+        "Alle dict[MaterialType,...] vollstaendig befuellen",
+        "critical",
+    ),
+    ForbiddenPattern(
+        "V35",
+        "Phase",
+        "phase_63.*ohne.*M/S|IMD.*ohne.*mid.side",
+        "Phase_63 ohne M/S-Domain",
+        "M/S-Domain: Notch aus Mid, symmetrisch auf Mid+Side",
+        "warning",
+    ),
+    ForbiddenPattern(
+        "V36",
+        "Phase",
+        "phase.*ohne.*strength_feedback|wetness.*ohne.*feedback",
+        "Phase-Wetness ohne Mess-Feedback",
+        "PhaseConductor.recommend() mit 4D-State-Vektor",
+        "warning",
+    ),
+    ForbiddenPattern(
+        "V37",
+        "Guard",
+        "feste.*guard.*schwelle|MAX_DRIFT.*ohne.*adaptive",
+        "Feste Guard-Schwellwerte",
+        "compute_adaptive_drift_tolerance()",
+        "warning",
+    ),
+    ForbiddenPattern(
+        "V43",
+        "Formant",
+        "formant.*guard.*±1dB|jnd.*ohne.*resolve",
+        "Formant-Guard mit uniformem ±1dB",
+        "resolve_jnd_tolerance_db(freq_hz) Pflicht",
+        "warning",
+    ),
+    ForbiddenPattern(
+        "V44",
+        "Spatial",
+        "spatial_depth.*ohne.*IACC|spatial.*ohne.*iacc",
+        "spatial_depth ohne IACC",
+        "compute_iacc(audio,sr) in spatial_depth",
+        "warning",
+    ),
+    ForbiddenPattern(
+        "V45",
+        "Emotion",
+        "emotionalitaet.*ohne.*VAT|emotion.*ohne.*valence",
+        "emotionalitaet ohne VAT-Blend",
+        "VATEmotionEstimator als Blend",
+        "warning",
+    ),
+    ForbiddenPattern(
+        "V46",
+        "dBFS",
+        r"dBFS.*\*.*strength|dbfs.*multiply",
+        "dBFS mit linearem Faktor multipliziert",
+        "level_db + 20*log10(max(strength,1e-6))",
+        "critical",
+    ),
+    ForbiddenPattern(
+        "V47",
+        "Clip",
+        r"clipping.*0\.999.*ohne.*sub|FLAT_TOPS.*ohne.*adjacent",
+        "Clipping nur via FLAT_TOPS ohne Sub-Ceiling",
+        "detect_sub_ceiling_clipping()+Adjacent-Ratio",
+        "critical",
+    ),
+    ForbiddenPattern(
+        "V48",
+        "GAF",
+        "goal_applicability.*ohne.*transfer_chain|GAF.*ohne.*chain",
+        "GAF ohne transfer_chain-Parameter",
+        "evaluate_goal_applicability(transfer_chain=...)",
+        "warning",
+    ),
+    ForbiddenPattern(
+        "V49",
+        "Goals",
+        "goals_passed.*ohne.*inapplicable|goals_passed.*ohne.*Ausschluss",
+        "goals_passed ohne inapplicable-Ausschluss",
+        "_count_passed schliesst _inappl aus",
+        "warning",
+    ),
+    ForbiddenPattern(
+        "V50",
+        "Goals",
+        "messe_ziele.*ohne.*reference|measure_all.*ohne.*ref",
+        "messe_ziele() ohne reference-Parameter",
+        "messe_ziele(audio,sr,reference=pre_audio)",
+        "warning",
+    ),
+    ForbiddenPattern(
+        "V51",
+        "Dataclass",
+        "RestaurierErgebnis.*ohne.*goal_applicability|Ergebnis.*ohne.*goal_applic",
+        "Dataclass ohne goal_applicability-Feld",
+        "goal_applicability:dict in Dataclass",
+        "warning",
+    ),
+    ForbiddenPattern(
+        "V52",
+        "GAF",
+        "separation_fidelity.*ohne.*near.mono|separation.*ohne.*codec",
+        "separation_fidelity ohne Near-Mono-Codec",
+        "Joint-Stereo-Codec->separation_fidelity inapplicable",
+        "warning",
+    ),
+    ForbiddenPattern(
+        "V53",
+        "Singer",
+        "singer_id.*rollback.*ohne.*dsp_fallback|singer.*ohne.*fallback",
+        "Singer-ID-Rollback ohne DSP-Fallback-Guard",
+        "if sic<0.92 and not singer_id_dsp_fallback",
+        "critical",
+    ),
+    ForbiddenPattern(
+        "V54",
+        "HPG",
+        r"update_reference_memory.*nie.*gerufen|_hg\.update.*never",
+        "update_reference_memory() nie aufgerufen",
+        "HPI>0+af>=0.95 -> _hg.update_reference_memory()",
+        "critical",
+    ),
+    ForbiddenPattern(
+        "V55",
+        "LPC",
+        "lpc_formant.*ohne.*era_decade|enhance.*ohne.*era",
+        "lpc_formant_enhance ohne era_decade",
+        "era_decade<1960->WLPC-Pfad aktivieren",
+        "warning",
+    ),
+    ForbiddenPattern(
+        "V56",
+        "Frontend",
+        r"_AURIK_VERSION.*=.*9\.\d+|hartcodierte.*Version.*Frontend",
+        "Frontend-Version hartcodiert",
+        "_AURIK_VERSION=unknown als Fallback",
+        "critical",
+    ),
+    ForbiddenPattern(
+        "V57",
+        "Masking",
+        "additive.*phase.*ohne.*ForwardMasking.*panns|phase_.*add.*ohne.*mask",
+        "Neue additive Phase ohne ForwardMaskingGuard",
+        "ForwardMaskingGuard bei panns_singing>=0.25",
+        "warning",
+    ),
+    ForbiddenPattern(
+        "V58",
+        "Mypy",
+        "return.*ndarray.*no-any-return|->.*ndarray.*Any",
+        "no-any-return in ndarray-Funktionen",
+        "cast(np.ndarray,result) oder type:ignore",
+        "warning",
+    ),
 ]
 
 REQUIRED_PATTERNS: list[RequiredPattern] = [
-    RequiredPattern("G01","Logging","logger = logging.getLogger","Jede .py-Datei braucht Logger-Initialisierung","critical"),
-    RequiredPattern("G02","NaN","nan_to_num|isfinite","Ausgabe-Audio MUSS NaN/Inf-Schutz haben","critical"),
-    RequiredPattern("G03","Type","def \w+\([^)]*:\s*\w+","Oeffentliche Funktionen brauchen Type-Hints","warning"),
-    RequiredPattern("G05","Data","@dataclass","API-Rueckgaben MÜSSEN @dataclass sein","warning"),
-    RequiredPattern("G06","Lock","threading\.Lock\(\)","Singletons brauchen threading.Lock()","critical"),
-    RequiredPattern("G08","GPU","get_torch_device","GPU-Zugriff NUR via get_torch_device()","critical"),
-    RequiredPattern("G09","Audio","load_audio_file","Audio-Import NUR via load_audio_file()","critical"),
-    RequiredPattern("G12","ZeroPhase","sosfiltfilt","Signal-Addition braucht zero-phase Filter","critical"),
-    RequiredPattern("G13","Artifact","artifact_freedom.*0\.95","Ausgabe MUSS artifact_freedom>=0.95","critical"),
-    RequiredPattern("G16","Gate","reference_for_gate","Gate braucht reference_for_gate","critical"),
-    RequiredPattern("G18","Envelope","_musical_gain_envelope","Gain MUSS _musical_gain_envelope() nutzen","critical"),
-    RequiredPattern("G41","Pleasantness","compute_pleasantness|check_phase_start","HPE-Check vor/nach JEDER Phase Pflicht","critical"),
-    RequiredPattern("G42","Consistent","deterministic|seed|reproducible","Gleicher Input = gleicher Output","critical"),
-    RequiredPattern("G43","CLP","clp_max_attenuation|CLPZone|get_clp_attenuation","NR-Staerke MUSS CLP-Maske respektieren","critical"),
-    RequiredPattern("G44","Whisper","whisper_detail|whisper_preservation|WhisperPreservation","Leise-Passagen MUESSEN geschuetzt werden","critical"),
-    RequiredPattern("G45","Dynamics","dynamics_preserver|check_and_restore_dynamics","Nach Kompressor/Limiter Dynamik pruefen","critical"),
-    RequiredPattern("G46","Adaptive","compute_adaptive_thresholds","Goal-Schwellen aus Materialphysik berechnen","critical"),
-    RequiredPattern("G47","Version","from backend.core.version import|AURIK_VERSION","Version NUR aus version.py","warning"),
-    RequiredPattern("G48","Error","logger.warning|logger.error|exc_info=True","Exceptions MUESSEN geloggt werden","critical"),
-    RequiredPattern("G49","Dither","dither|TPDF|triangular","16-bit Export MUSS gedithert werden","warning"),
-    RequiredPattern("G50","PhaseOrder","phase_order.*material|adaptive.*phase.*order","Phasen-Reihenfolge materialabhaengig","warning"),
-    RequiredPattern("G51","Watchdog","WatchdogMonitor|get_watchdog|pipeline_guard","Watchdog in JEDEM Lauf aktiv","critical"),
-    RequiredPattern("G52","Timeout","timeout|_MAX_PHASE_SECONDS|phase_timeout","Jede Phase braucht Timeout","critical"),
-    RequiredPattern("G53","Memory","ml_memory_budget|try_allocate|memory_limit","Speicher vor ML-Ladung pruefen","critical"),
-    RequiredPattern("G54","ColdStart","COLDSTART|_coldstart|cold_start","Cold-Start braucht Zeitbudget","warning"),
-    RequiredPattern("G55","GPUFallback","CPUExecutionProvider|cpu.*fallback.*onnx","GPU-Fehler -> ONNX-CPU weiter","critical"),
-    RequiredPattern("G56","Chain","transfer_chain|chain_string|Tontraegerkette","Transfer-Ketten erkennen","critical"),
-    RequiredPattern("G57","Bandwidth","original.*medium|oldest.*carrier","Aeltester Traeger = Bandbreiten-Ziel","warning"),
-    RequiredPattern("G58","Codec","codec.*artifact|mpeg.*frame|mp3.*artifact","Codec-Artefakte getrennt behandeln","warning"),
-    RequiredPattern("G59","Dolby","DolbyNR|dolby_nr|dolby_type","Dolby vor NR erkennen","warning"),
-    RequiredPattern("G60","RIAA","RIAA|riaa_eq|riaa_curve","RIAA vor Vinyl invers anwenden","warning"),
-    RequiredPattern("G61","Primus","panns_singing.*0.25|primus.*inter.*pares","Stimmqualitaet VORRANG bei Gesang","critical"),
-    RequiredPattern("G62","Formant","formant.*guard|formant.*integrity","Formant-Integritaet nach Vokal-Phase","critical"),
-    RequiredPattern("G63","Sibilance","sibilance.*preserv|deesser.*intelligibility","Sibilanten nach De-Essing unterscheidbar","warning"),
-    RequiredPattern("G64","Vibrato","vibrato.*preserv|vibrato.*guard","Vibrato MUSS erhalten bleiben","critical"),
-    RequiredPattern("G65","Breath","breath.*preserv|breath.*emotion","Atem als musikalisch intentional","warning"),
-    RequiredPattern("G66","Export","artifact_freedom.*0.95.*pleasantness","Vor Export: af>=0.95 UND hpe>=0.35","critical"),
-    RequiredPattern("G67","PleasantnessGate","pleasantness.*worse|hpe.*rollback","Wenn schlechter -> Original ausgeben","critical"),
-    RequiredPattern("G68","Regression","test.*regression|regression.*test","Spec-Aenderung braucht Regression-Test","warning"),
-    RequiredPattern("G69","Agent","get_constitution|SpecConstitution","KI-Agenten nutzen SpecConstitution","warning"),
-    RequiredPattern("G70","VersionCheck","__version__|AURIK_VERSION","Keine hartcodierten Versionsnummern","critical"),
-    RequiredPattern("G04","Doc","def test_|def check_|def get_|def compute_","Oeffentliche Funktionen brauchen Docstrings","warning"),
-    RequiredPattern("G07","ML","DSP.*fallback|cpu.*fallback|CPUExecutionProvider","ML-Plugins brauchen DSP-Fallback","critical"),
-    RequiredPattern("G10","Test","test_.*\.py|def test_","Jede Spec-$-Referenz MUSS einen Test haben","warning"),
-    RequiredPattern("G11","Loudness","loudness|LUFS|lufs","Ausgabe MUSS LUFS-normalisiert sein","warning"),
-    RequiredPattern("G14","Vocal","vqi|vocal_quality|VocalQuality","panns_singing>=0.25 -> VQI Pflicht","critical"),
-    RequiredPattern("G15","DC","filtfilt.*1.*-1.*0.9995","reel_tape: zero-phase DC-Filter","warning"),
-    RequiredPattern("G17","Peak","percentile.*99.9","Peak-Guard: np.percentile(99.9)","warning"),
-    RequiredPattern("G19","Material","MaterialType|material_type","dict[MaterialType,...] vollstaendig","critical"),
-    RequiredPattern("G20","NR","compute_nmr_score|nmr_score","NR->NMR-Score Pflicht","warning"),
-    RequiredPattern("G21","Glue","glue_stage|phase_glue|GlueStage","Glue-Stage in ALLEN Modi","critical"),
-    RequiredPattern("G22","PIM","pim|perceptual_intensity","PIM vor Phasen-Loop","warning"),
-    RequiredPattern("G23","RLP","rlp|reflective_listening","RLP nach Phasen-Loop","warning"),
-    RequiredPattern("G24","Export","artifact_freedom.*0.95.*export","Export: artifact_freedom pruefen","critical"),
-    RequiredPattern("G25","Warmup","warmup|_ROCM_WARMUP|warmup_rocm","ROCm-GPU warmup Pflicht","warning"),
-    RequiredPattern("G26","Recovery","cpu.*fallback|CPU.*fallback|CPUExecution","GPU-Fehler -> CPU Fallback","critical"),
-    RequiredPattern("G27","Budget","_3X_RT_LIMIT|rt_factor|rt_limit","8xRT-Budget Pflicht","critical"),
-    RequiredPattern("G28","Checkpoint","save_checkpoint|checkpoint|recovery","Crash-Recovery Checkpoints","warning"),
-    RequiredPattern("G29","Memory","ml_memory_budget|memory_budget","ML-Memory vor Allocation","warning"),
-    RequiredPattern("G30","CrossPhase","CumulativeInteractionGuard|cumulative","Cross-Phase-Guards Pflicht","warning"),
-    RequiredPattern("G31","UnitTest","test_phase_.*\.py|def test_phase","Phase-Unit-Test Pflicht","warning"),
-    RequiredPattern("G32","CI","workflows|ci_benchmark|CI_GATE","CI: artifact_freedom-Regression","warning"),
-    RequiredPattern("G33","Coverage","coverage|pytest-cov","Test-Coverage >=80%","warning"),
-    RequiredPattern("G34","Linter","ruff|mypy|pre-commit-config","Pre-Commit: ruff+mypy","critical"),
-    RequiredPattern("G35","Benchmark","amrb|AMRB|worldclass.*benchmark","AMRB-Benchmark Pflicht","warning"),
-    RequiredPattern("G36","Version","CHANGELOG|changelog","CHANGELOG.md Pflicht","warning"),
-    RequiredPattern("G37","Lock","with.*_lock|with.*Lock","Lock mit with-Statement","warning"),
-    RequiredPattern("G38","Path","Path\(|pathlib","pathlib.Path Pflicht","warning"),
-    RequiredPattern("G39","Encoding","encoding.*utf","UTF-8 Pflicht","warning"),
-    RequiredPattern("G40","License","Aurik 10|Copyright.*Aurik","Lizenzheader Pflicht","warning"),
+    RequiredPattern(
+        "G01", "Logging", "logger = logging.getLogger", "Jede .py-Datei braucht Logger-Initialisierung", "critical"
+    ),
+    RequiredPattern("G02", "NaN", "nan_to_num|isfinite", "Ausgabe-Audio MUSS NaN/Inf-Schutz haben", "critical"),
+    RequiredPattern("G03", "Type", r"def \w+\([^)]*:\s*\w+", "Oeffentliche Funktionen brauchen Type-Hints", "warning"),
+    RequiredPattern("G05", "Data", "@dataclass", "API-Rueckgaben MÜSSEN @dataclass sein", "warning"),
+    RequiredPattern("G06", "Lock", r"threading\.Lock\(\)", "Singletons brauchen threading.Lock()", "critical"),
+    RequiredPattern("G08", "GPU", "get_torch_device", "GPU-Zugriff NUR via get_torch_device()", "critical"),
+    RequiredPattern("G09", "Audio", "load_audio_file", "Audio-Import NUR via load_audio_file()", "critical"),
+    RequiredPattern("G12", "ZeroPhase", "sosfiltfilt", "Signal-Addition braucht zero-phase Filter", "critical"),
+    RequiredPattern("G13", "Artifact", r"artifact_freedom.*0\.95", "Ausgabe MUSS artifact_freedom>=0.95", "critical"),
+    RequiredPattern("G16", "Gate", "reference_for_gate", "Gate braucht reference_for_gate", "critical"),
+    RequiredPattern(
+        "G18", "Envelope", "_musical_gain_envelope", "Gain MUSS _musical_gain_envelope() nutzen", "critical"
+    ),
+    RequiredPattern(
+        "G41",
+        "Pleasantness",
+        "compute_pleasantness|check_phase_start",
+        "HPE-Check vor/nach JEDER Phase Pflicht",
+        "critical",
+    ),
+    RequiredPattern(
+        "G42", "Consistent", "deterministic|seed|reproducible", "Gleicher Input = gleicher Output", "critical"
+    ),
+    RequiredPattern(
+        "G43",
+        "CLP",
+        "clp_max_attenuation|CLPZone|get_clp_attenuation",
+        "NR-Staerke MUSS CLP-Maske respektieren",
+        "critical",
+    ),
+    RequiredPattern(
+        "G44",
+        "Whisper",
+        "whisper_detail|whisper_preservation|WhisperPreservation",
+        "Leise-Passagen MUESSEN geschuetzt werden",
+        "critical",
+    ),
+    RequiredPattern(
+        "G45",
+        "Dynamics",
+        "dynamics_preserver|check_and_restore_dynamics",
+        "Nach Kompressor/Limiter Dynamik pruefen",
+        "critical",
+    ),
+    RequiredPattern(
+        "G46", "Adaptive", "compute_adaptive_thresholds", "Goal-Schwellen aus Materialphysik berechnen", "critical"
+    ),
+    RequiredPattern(
+        "G47", "Version", "from backend.core.version import|AURIK_VERSION", "Version NUR aus version.py", "warning"
+    ),
+    RequiredPattern(
+        "G48", "Error", "logger.warning|logger.error|exc_info=True", "Exceptions MUESSEN geloggt werden", "critical"
+    ),
+    RequiredPattern("G49", "Dither", "dither|TPDF|triangular", "16-bit Export MUSS gedithert werden", "warning"),
+    RequiredPattern(
+        "G50",
+        "PhaseOrder",
+        "phase_order.*material|adaptive.*phase.*order",
+        "Phasen-Reihenfolge materialabhaengig",
+        "warning",
+    ),
+    RequiredPattern(
+        "G51", "Watchdog", "WatchdogMonitor|get_watchdog|pipeline_guard", "Watchdog in JEDEM Lauf aktiv", "critical"
+    ),
+    RequiredPattern(
+        "G52", "Timeout", "timeout|_MAX_PHASE_SECONDS|phase_timeout", "Jede Phase braucht Timeout", "critical"
+    ),
+    RequiredPattern(
+        "G53", "Memory", "ml_memory_budget|try_allocate|memory_limit", "Speicher vor ML-Ladung pruefen", "critical"
+    ),
+    RequiredPattern("G54", "ColdStart", "COLDSTART|_coldstart|cold_start", "Cold-Start braucht Zeitbudget", "warning"),
+    RequiredPattern(
+        "G55", "GPUFallback", "CPUExecutionProvider|cpu.*fallback.*onnx", "GPU-Fehler -> ONNX-CPU weiter", "critical"
+    ),
+    RequiredPattern(
+        "G56", "Chain", "transfer_chain|chain_string|Tontraegerkette", "Transfer-Ketten erkennen", "critical"
+    ),
+    RequiredPattern(
+        "G57", "Bandwidth", "original.*medium|oldest.*carrier", "Aeltester Traeger = Bandbreiten-Ziel", "warning"
+    ),
+    RequiredPattern(
+        "G58", "Codec", "codec.*artifact|mpeg.*frame|mp3.*artifact", "Codec-Artefakte getrennt behandeln", "warning"
+    ),
+    RequiredPattern("G59", "Dolby", "DolbyNR|dolby_nr|dolby_type", "Dolby vor NR erkennen", "warning"),
+    RequiredPattern("G60", "RIAA", "RIAA|riaa_eq|riaa_curve", "RIAA vor Vinyl invers anwenden", "warning"),
+    RequiredPattern(
+        "G61", "Primus", "panns_singing.*0.25|primus.*inter.*pares", "Stimmqualitaet VORRANG bei Gesang", "critical"
+    ),
+    RequiredPattern(
+        "G62", "Formant", "formant.*guard|formant.*integrity", "Formant-Integritaet nach Vokal-Phase", "critical"
+    ),
+    RequiredPattern(
+        "G63",
+        "Sibilance",
+        "sibilance.*preserv|deesser.*intelligibility",
+        "Sibilanten nach De-Essing unterscheidbar",
+        "warning",
+    ),
+    RequiredPattern("G64", "Vibrato", "vibrato.*preserv|vibrato.*guard", "Vibrato MUSS erhalten bleiben", "critical"),
+    RequiredPattern("G65", "Breath", "breath.*preserv|breath.*emotion", "Atem als musikalisch intentional", "warning"),
+    RequiredPattern(
+        "G66", "Export", "artifact_freedom.*0.95.*pleasantness", "Vor Export: af>=0.95 UND hpe>=0.35", "critical"
+    ),
+    RequiredPattern(
+        "G67",
+        "PleasantnessGate",
+        "pleasantness.*worse|hpe.*rollback",
+        "Wenn schlechter -> Original ausgeben",
+        "critical",
+    ),
+    RequiredPattern(
+        "G68", "Regression", "test.*regression|regression.*test", "Spec-Aenderung braucht Regression-Test", "warning"
+    ),
+    RequiredPattern(
+        "G69", "Agent", "get_constitution|SpecConstitution", "KI-Agenten nutzen SpecConstitution", "warning"
+    ),
+    RequiredPattern(
+        "G70", "VersionCheck", "__version__|AURIK_VERSION", "Keine hartcodierten Versionsnummern", "critical"
+    ),
+    RequiredPattern(
+        "G04",
+        "Doc",
+        "def test_|def check_|def get_|def compute_",
+        "Oeffentliche Funktionen brauchen Docstrings",
+        "warning",
+    ),
+    RequiredPattern(
+        "G07", "ML", "DSP.*fallback|cpu.*fallback|CPUExecutionProvider", "ML-Plugins brauchen DSP-Fallback", "critical"
+    ),
+    RequiredPattern("G10", "Test", r"test_.*\.py|def test_", "Jede Spec-$-Referenz MUSS einen Test haben", "warning"),
+    RequiredPattern("G11", "Loudness", "loudness|LUFS|lufs", "Ausgabe MUSS LUFS-normalisiert sein", "warning"),
+    RequiredPattern("G14", "Vocal", "vqi|vocal_quality|VocalQuality", "panns_singing>=0.25 -> VQI Pflicht", "critical"),
+    RequiredPattern("G15", "DC", "filtfilt.*1.*-1.*0.9995", "reel_tape: zero-phase DC-Filter", "warning"),
+    RequiredPattern("G17", "Peak", "percentile.*99.9", "Peak-Guard: np.percentile(99.9)", "warning"),
+    RequiredPattern("G19", "Material", "MaterialType|material_type", "dict[MaterialType,...] vollstaendig", "critical"),
+    RequiredPattern("G20", "NR", "compute_nmr_score|nmr_score", "NR->NMR-Score Pflicht", "warning"),
+    RequiredPattern("G21", "Glue", "glue_stage|phase_glue|GlueStage", "Glue-Stage in ALLEN Modi", "critical"),
+    RequiredPattern("G22", "PIM", "pim|perceptual_intensity", "PIM vor Phasen-Loop", "warning"),
+    RequiredPattern("G23", "RLP", "rlp|reflective_listening", "RLP nach Phasen-Loop", "warning"),
+    RequiredPattern("G24", "Export", "artifact_freedom.*0.95.*export", "Export: artifact_freedom pruefen", "critical"),
+    RequiredPattern("G25", "Warmup", "warmup|_ROCM_WARMUP|warmup_rocm", "ROCm-GPU warmup Pflicht", "warning"),
+    RequiredPattern(
+        "G26", "Recovery", "cpu.*fallback|CPU.*fallback|CPUExecution", "GPU-Fehler -> CPU Fallback", "critical"
+    ),
+    RequiredPattern("G27", "Budget", "_3X_RT_LIMIT|rt_factor|rt_limit", "8xRT-Budget Pflicht", "critical"),
+    RequiredPattern(
+        "G28", "Checkpoint", "save_checkpoint|checkpoint|recovery", "Crash-Recovery Checkpoints", "warning"
+    ),
+    RequiredPattern("G29", "Memory", "ml_memory_budget|memory_budget", "ML-Memory vor Allocation", "warning"),
+    RequiredPattern(
+        "G30", "CrossPhase", "CumulativeInteractionGuard|cumulative", "Cross-Phase-Guards Pflicht", "warning"
+    ),
+    RequiredPattern("G31", "UnitTest", r"test_phase_.*\.py|def test_phase", "Phase-Unit-Test Pflicht", "warning"),
+    RequiredPattern("G32", "CI", "workflows|ci_benchmark|CI_GATE", "CI: artifact_freedom-Regression", "warning"),
+    RequiredPattern("G33", "Coverage", "coverage|pytest-cov", "Test-Coverage >=80%", "warning"),
+    RequiredPattern("G34", "Linter", "ruff|mypy|pre-commit-config", "Pre-Commit: ruff+mypy", "critical"),
+    RequiredPattern("G35", "Benchmark", "amrb|AMRB|worldclass.*benchmark", "AMRB-Benchmark Pflicht", "warning"),
+    RequiredPattern("G36", "Version", "CHANGELOG|changelog", "CHANGELOG.md Pflicht", "warning"),
+    RequiredPattern("G37", "Lock", "with.*_lock|with.*Lock", "Lock mit with-Statement", "warning"),
+    RequiredPattern("G38", "Path", r"Path\(|pathlib", "pathlib.Path Pflicht", "warning"),
+    RequiredPattern("G39", "Encoding", "encoding.*utf", "UTF-8 Pflicht", "warning"),
+    RequiredPattern("G40", "License", "Aurik 10|Copyright.*Aurik", "Lizenzheader Pflicht", "warning"),
 ]
 
 
@@ -607,6 +967,7 @@ class SpecConstitution:
         Returns: list of (pattern, is_present)
         """
         import re
+
         results: list[tuple[RequiredPattern, bool]] = []
         for rp in REQUIRED_PATTERNS:
             try:
@@ -619,7 +980,6 @@ class SpecConstitution:
     def find_missing_requirements(self, code_text: str) -> list[RequiredPattern]:
         """Gibt alle VERLETZTEN PFLICHT-Regeln zurueck."""
         return [rp for rp, present in self.check_required_in_code(code_text) if not present]
-
 
     def get_musical_goal_thresholds(self, material: str = "unknown") -> dict[str, float]:
         """Gibt Goal-Schwellwerte zurück, material-adaptiv mit Floor-Toleranzen.
@@ -673,9 +1033,7 @@ class SpecConstitution:
 
         # Normalisiere Bandbreite auf [200, 20000] Hz
         _bw_log = math.log10(max(effective_bandwidth_hz, 200.0))
-        bw_norm = max(0.0, min(1.0,
-            (_bw_log - math.log10(200.0)) / (math.log10(20000.0) - math.log10(200.0))
-        ))
+        bw_norm = max(0.0, min(1.0, (_bw_log - math.log10(200.0)) / (math.log10(20000.0) - math.log10(200.0))))
 
         # Normalisiere SNR auf [15, 90] dB
         snr_norm = max(0.0, min(1.0, (effective_snr_db - 15.0) / 75.0))

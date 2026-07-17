@@ -17,10 +17,10 @@ scenarios:
       description: "Contemporary pop track with compressed dynamics, vocal thin and recessed. Goal: restore presence and punch without sounding artificial"
 
     source_defects_present:
-      - "Dynamic range collapse" (RMS variation < 6 dB)
-      - "Vocal presence scooped" (2–4 kHz dip)
-      - "Low-mid mud" (250–500 Hz elevated, uncontrolled)"
-      - "Hi-hat brittleness" (8–12 kHz harshness from compression artifacts)
+      - "Dynamic range collapse (RMS variation < 6 dB)"
+      - "Vocal presence scooped (2–4 kHz dip)"
+      - "Low-mid mud (250–500 Hz elevated, uncontrolled)"
+      - "Hi-hat brittleness (8–12 kHz harshness from compression artifacts)"
 
     studio2026_enhancement_objectives:
       - "Restore dynamic feel: micro-dynamics (transients) + macro-dynamics (verse/chorus contrast)"

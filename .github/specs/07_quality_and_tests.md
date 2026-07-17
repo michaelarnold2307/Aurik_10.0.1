@@ -845,7 +845,6 @@ np.array([...], rtol=1e-5, atol=1e-8)  # np.array() kennt keine Toleranzen
 **CI-Gate:** Kein Test darf durch diesen Fehler brechen. Pattern-Check via
 `grep -rPn '(?<=np\.(abs|tanh|zeros|array|ones|full|arange))\(' tests/ | grep rtol` als Pre-Commit.
 
-
 ### §5.7a [RELEASE_MUST] Modusgetrennte Hörvalidierungs-Checkliste (v9.10.130)
 
 Die externe Hörvalidierung MUSS beide Modi getrennt ausweisen. Ein kombinierter
@@ -1421,7 +1420,6 @@ Fehlt einer dieser Nachweise, ist der Weltspitzen-Claim fuer den Patch nicht gue
 Fuer psychoakustische Kern-Changes ist die konsolidierte Engineering-Basis in
 `docs/PSYCHOACOUSTIC_ENGINEERING_INSIGHTS_2026-05-21.md` normativ zu nutzen
 (Architektur, Telemetrie, DoD, offene Risiken).
-
 
 ## v10 Test-Status
 

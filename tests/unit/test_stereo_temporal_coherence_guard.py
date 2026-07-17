@@ -315,8 +315,7 @@ class TestUniversalPlausibilityGuard:
         lag = 3813  # samples (~79.4 ms @ 48 kHz)
         audio_in = self._make_stereo_with_real_large_lag(lag)
         audio_out = self.guard.correct_interchannel_delay(audio_in, SR, phase_id="pre_pipeline")
-        np.testing.assert_array_equal(audio_out, audio_in,
-            err_msg="STCG pre_pipeline must NOT correct delays > 20 ms")
+        np.testing.assert_array_equal(audio_out, audio_in, err_msg="STCG pre_pipeline must NOT correct delays > 20 ms")
 
     def test_post_pipeline_large_lag_is_blocked(self):
         """phase_id='post_pipeline' with 79.4 ms lag → BLOCKED (§v10.14 universal guard).
@@ -329,8 +328,9 @@ class TestUniversalPlausibilityGuard:
         lag = 3813  # samples (~79.4 ms @ 48 kHz)
         audio_in = self._make_stereo_with_real_large_lag(lag)
         audio_out = self.guard.correct_interchannel_delay(audio_in, SR, phase_id="post_pipeline")
-        np.testing.assert_array_equal(audio_out, audio_in,
-            err_msg="STCG post_pipeline must NOT correct delays > 20 ms (§v10.14 universal guard)")
+        np.testing.assert_array_equal(
+            audio_out, audio_in, err_msg="STCG post_pipeline must NOT correct delays > 20 ms (§v10.14 universal guard)"
+        )
 
     def test_intra_phase_large_lag_is_blocked(self):
         """Intra-phase callers (phase_12, phase_24, etc.) with large lag → blocked."""
@@ -338,8 +338,9 @@ class TestUniversalPlausibilityGuard:
         audio_in = self._make_stereo_with_real_large_lag(lag)
         for phase_id in ["phase_12_pre_chunking", "phase_12_wow_flutter_fix", "phase_24"]:
             audio_out = self.guard.correct_interchannel_delay(audio_in, SR, phase_id=phase_id)
-            np.testing.assert_array_equal(audio_out, audio_in,
-                err_msg=f"STCG [{phase_id}] must NOT correct delays > 20 ms")
+            np.testing.assert_array_equal(
+                audio_out, audio_in, err_msg=f"STCG [{phase_id}] must NOT correct delays > 20 ms"
+            )
 
     def test_small_lag_within_20ms_is_still_corrected(self):
         """Small delays (≤ 20 ms) must still be corrected, regardless of phase_id."""
@@ -349,9 +350,7 @@ class TestUniversalPlausibilityGuard:
             audio_out = self.guard.correct_interchannel_delay(audio_in, SR, phase_id=phase_id)
             r_in = audio_in[1]
             r_out = audio_out[1]
-            assert not np.array_equal(r_out, r_in), (
-                f"STCG [{phase_id}] must still correct small delays ≤ 20 ms"
-            )
+            assert not np.array_equal(r_out, r_in), f"STCG [{phase_id}] must still correct small delays ≤ 20 ms"
 
     def test_multi_point_consistent_large_lag_is_blocked(self):
         """Even when multi-point spread is tight (≤ 20 samples), large magnitude
@@ -361,8 +360,9 @@ class TestUniversalPlausibilityGuard:
         lag = 7200  # 150 ms — consistent throughout the file
         audio_in = self._make_stereo_with_real_large_lag(lag, n=SR * 60)
         audio_out = self.guard.correct_interchannel_delay(audio_in, SR, phase_id="post_pipeline")
-        np.testing.assert_array_equal(audio_out, audio_in,
-            err_msg="Consistent 150ms lag must be blocked despite tight multi-point spread")
+        np.testing.assert_array_equal(
+            audio_out, audio_in, err_msg="Consistent 150ms lag must be blocked despite tight multi-point spread"
+        )
 
     def test_zero_lag_passes_through_all_phase_ids(self):
         """Clean stereo with no lag must pass through unchanged for ALL callers.
@@ -377,14 +377,18 @@ class TestUniversalPlausibilityGuard:
         # Perfectly aligned stereo — NO inter-channel delay
         audio_in = np.vstack([mono[np.newaxis, :], mono[np.newaxis, :]])
         for phase_id in [
-            "pre_pipeline", "post_pipeline",
-            "phase_12_pre_chunking", "phase_12_wow_flutter_fix",
-            "phase_24", "phase_31",
+            "pre_pipeline",
+            "post_pipeline",
+            "phase_12_pre_chunking",
+            "phase_12_wow_flutter_fix",
+            "phase_24",
+            "phase_31",
         ]:
             audio_out = self.guard.correct_interchannel_delay(audio_in, SR, phase_id=phase_id)
-            np.testing.assert_array_equal(audio_out, audio_in,
+            np.testing.assert_array_equal(
+                audio_out,
+                audio_in,
                 err_msg=(
-                    f"STCG [{phase_id}] corrupted clean zero-lag stereo — "
-                    f"false positive correction on lag-free input"
-                ))
-
+                    f"STCG [{phase_id}] corrupted clean zero-lag stereo — false positive correction on lag-free input"
+                ),
+            )

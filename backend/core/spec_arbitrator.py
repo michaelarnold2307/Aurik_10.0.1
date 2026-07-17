@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 # ── Constants ───────────────────────────────────────────────────────────
 CONSECUTIVE_RUNS_FOR_UPGRADE: int = 5
-MIN_EXCEED_PCT: float = 0.05        # 5% over spec target
+MIN_EXCEED_PCT: float = 0.05  # 5% over spec target
 MIN_CONFIDENCE_FOR_AUTO: float = 0.85
 
 # ── Data structures ─────────────────────────────────────────────────────
@@ -44,12 +44,13 @@ MIN_CONFIDENCE_FOR_AUTO: float = 0.85
 @dataclass
 class SpecUpgradeProposal:
     """A concrete proposal to raise a spec threshold."""
+
     metric: str
     current_spec: float
     proposed_spec: float
     avg_achieved: float
     consecutive_runs: int
-    confidence: float         # 0-1
+    confidence: float  # 0-1
     recommendation: str
 
     def is_ready(self) -> bool:
@@ -62,6 +63,7 @@ class SpecUpgradeProposal:
 @dataclass
 class ArbitratorReport:
     """Full arbitrator output after evaluating a pipeline run."""
+
     proposals: list[SpecUpgradeProposal] = field(default_factory=list)
     ready_upgrades: list[SpecUpgradeProposal] = field(default_factory=list)
     auto_upgrades: list[SpecUpgradeProposal] = field(default_factory=list)
@@ -77,8 +79,8 @@ class SpecArbitrator:
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._history: dict[str, list[float]] = {}    # metric -> [values]
-        self._consecutive_counts: dict[str, int] = {}   # metric -> consecutive exceeds
+        self._history: dict[str, list[float]] = {}  # metric -> [values]
+        self._consecutive_counts: dict[str, int] = {}  # metric -> consecutive exceeds
         self._run_count: int = 0
 
     def evaluate(
@@ -102,11 +104,11 @@ class SpecArbitrator:
             self._run_count += 1
             report.total_runs = self._run_count
 
-            for metric in getattr(comparison, 'metrics', []):
-                name = getattr(metric, 'name', '')
-                achieved = getattr(metric, 'code_achieved', 0.0)
-                target = getattr(metric, 'spec_target', 0.0)
-                exceeds = getattr(metric, 'exceeds', False)
+            for metric in getattr(comparison, "metrics", []):
+                name = getattr(metric, "name", "")
+                achieved = getattr(metric, "code_achieved", 0.0)
+                target = getattr(metric, "spec_target", 0.0)
+                exceeds = getattr(metric, "exceeds", False)
 
                 if name not in self._history:
                     self._history[name] = []
@@ -154,14 +156,10 @@ class SpecArbitrator:
         # Summary
         if report.auto_upgrades:
             metrics = [p.metric for p in report.auto_upgrades]
-            report.summary = (
-                f"AUTO-UPGRADE: {len(report.auto_upgrades)} specs ready: {', '.join(metrics)}"
-            )
+            report.summary = f"AUTO-UPGRADE: {len(report.auto_upgrades)} specs ready: {', '.join(metrics)}"
         elif report.ready_upgrades:
             metrics = [p.metric for p in report.ready_upgrades]
-            report.summary = (
-                f"UPGRADE-READY: {len(report.ready_upgrades)} specs: {', '.join(metrics)}"
-            )
+            report.summary = f"UPGRADE-READY: {len(report.ready_upgrades)} specs: {', '.join(metrics)}"
         elif report.proposals:
             report.summary = f"PROPOSAL: {len(report.proposals)} upgrades pending"
         else:

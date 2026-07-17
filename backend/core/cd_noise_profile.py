@@ -59,87 +59,119 @@ def _compute_sliding_erb_gain(audio_mono, sr, noise_db=-96.0, segment_s=10.0):
     multiple 10-second segments and averages with Hanning weights.
     This adapts to songs that change spectral character over time.
     """
-    n=len(audio_mono)
-    seg_samples=int(segment_s*sr)
-    if n<seg_samples*2:
-        return _compute_erb_band_gain(audio_mono,sr,noise_db)
+    n = len(audio_mono)
+    seg_samples = int(segment_s * sr)
+    if n < seg_samples * 2:
+        return _compute_erb_band_gain(audio_mono, sr, noise_db)
     # Slide 10s windows with 50% overlap
-    hop=seg_samples//2
-    n_segments=max(1,(n-seg_samples)//hop+1)
-    gains=[]
+    hop = seg_samples // 2
+    n_segments = max(1, (n - seg_samples) // hop + 1)
+    gains = []
     for i in range(n_segments):
-        start=i*hop
-        seg=audio_mono[start:start+seg_samples]
-        g=_compute_erb_band_gain(seg,sr,noise_db)
+        start = i * hop
+        seg = audio_mono[start : start + seg_samples]
+        g = _compute_erb_band_gain(seg, sr, noise_db)
         gains.append(g)
     # Average all gains (equal weight per segment)
-    return np.mean(gains,axis=0)
+    return np.mean(gains, axis=0)
+
 
 def _compute_erb_band_gain(audio_mono, sr, noise_db=-96.0):
     n_fft, n_bins = 2048, 1025
-    freqs = np.fft.rfftfreq(n_fft, d=1.0/sr)
-    mid = len(audio_mono)//2
-    seg_len = min(int(2.0*sr), len(audio_mono)//2)
-    seg = audio_mono[max(0,mid-seg_len//2):max(0,mid-seg_len//2)+seg_len].astype(np.float64)
+    freqs = np.fft.rfftfreq(n_fft, d=1.0 / sr)
+    mid = len(audio_mono) // 2
+    seg_len = min(int(2.0 * sr), len(audio_mono) // 2)
+    seg = audio_mono[max(0, mid - seg_len // 2) : max(0, mid - seg_len // 2) + seg_len].astype(np.float64)
     if len(seg) < n_fft:
         return np.ones(n_bins, dtype=np.float64)
-    hop = n_fft//2
-    n_frames = (len(seg)-n_fft)//hop+1
+    hop = n_fft // 2
+    n_frames = (len(seg) - n_fft) // hop + 1
     win = np.hanning(n_fft)
     mag_mean = np.zeros(n_bins, dtype=np.float64)
     for i in range(n_frames):
-        s=i*hop
-        mag_mean += np.abs(np.fft.rfft(seg[s:s+n_fft]*win))
-    mag_mean /= max(n_frames,1)
-    mag_db = 20.0*np.log10(np.maximum(mag_mean,1e-15))
-    centers = np.array([50,150,250,350,450,570,700,840,1000,1170,1370,1600,1850,2150,2500,2900,3400,4000,4800,5800,7000,8500,10500,13500,19500])
-    centers = centers[(centers>freqs[1])&(centers<freqs[-1])]
+        s = i * hop
+        mag_mean += np.abs(np.fft.rfft(seg[s : s + n_fft] * win))
+    mag_mean /= max(n_frames, 1)
+    mag_db = 20.0 * np.log10(np.maximum(mag_mean, 1e-15))
+    centers = np.array(
+        [
+            50,
+            150,
+            250,
+            350,
+            450,
+            570,
+            700,
+            840,
+            1000,
+            1170,
+            1370,
+            1600,
+            1850,
+            2150,
+            2500,
+            2900,
+            3400,
+            4000,
+            4800,
+            5800,
+            7000,
+            8500,
+            10500,
+            13500,
+            19500,
+        ]
+    )
+    centers = centers[(centers > freqs[1]) & (centers < freqs[-1])]
     n_bands = len(centers)
     erb_c = _hz_to_erb(centers.astype(np.float64))
-    bw = 24.7*(4.37*centers/1000.0+1.0)
-    band_levels = np.full(n_bands,-200.0)
-    for i,(cf,b) in enumerate(zip(centers,bw)):
-        m=(freqs>=cf-b/2)&(freqs<=cf+b/2)
+    bw = 24.7 * (4.37 * centers / 1000.0 + 1.0)
+    band_levels = np.full(n_bands, -200.0)
+    for i, (cf, b) in enumerate(zip(centers, bw)):
+        m = (freqs >= cf - b / 2) & (freqs <= cf + b / 2)
         if np.any(m):
-            band_levels[i]=np.max(mag_db[m])
+            band_levels[i] = np.max(mag_db[m])
     bin_erb = _hz_to_erb(freqs)
-    mask_db = np.full(n_bins,-200.0)
+    mask_db = np.full(n_bins, -200.0)
     for i in range(n_bands):
-        lv=band_levels[i]
-        if lv<-140:continue
-        dist=bin_erb-erb_c[i]
-        spread=np.where(dist>=0,lv-25.0*dist,lv+10.0*dist)
-        mask_db=np.maximum(mask_db,spread)
-    f=np.clip(freqs,20.0,20000.0)
-    th_spl=(3.64*(f/1000.0)**(-0.8)
-            -6.5*np.exp(-0.6*(f/1000.0-3.3)**2)
-            +np.where(f<1000,1e-3*(f/1000.0)**4,0.0))
-    th_dbfs=np.clip(th_spl-100.0,-140.0,0.0)
-    mask_db=np.maximum(mask_db,th_dbfs)
-    gain=(noise_db>mask_db).astype(np.float64)
-    gain[mag_db>-40.0]=0.0
-    gain=np.convolve(gain,np.ones(3)/3,mode='same')
-    gain=np.clip(gain,0.0,1.0)
-    gain[0]=0.0
+        lv = band_levels[i]
+        if lv < -140:
+            continue
+        dist = bin_erb - erb_c[i]
+        spread = np.where(dist >= 0, lv - 25.0 * dist, lv + 10.0 * dist)
+        mask_db = np.maximum(mask_db, spread)
+    f = np.clip(freqs, 20.0, 20000.0)
+    th_spl = (
+        3.64 * (f / 1000.0) ** (-0.8)
+        - 6.5 * np.exp(-0.6 * (f / 1000.0 - 3.3) ** 2)
+        + np.where(f < 1000, 1e-3 * (f / 1000.0) ** 4, 0.0)
+    )
+    th_dbfs = np.clip(th_spl - 100.0, -140.0, 0.0)
+    mask_db = np.maximum(mask_db, th_dbfs)
+    gain = (noise_db > mask_db).astype(np.float64)
+    gain[mag_db > -40.0] = 0.0
+    gain = np.convolve(gain, np.ones(3) / 3, mode="same")
+    gain = np.clip(gain, 0.0, 1.0)
+    gain[0] = 0.0
     return gain
 
 
 def _apply_erb_gain_to_noise(noise, erb_gain):
-    n_bins=len(erb_gain)
-    erb_freqs=np.linspace(0,0.5,n_bins)
-    n_fft_full=1
-    while n_fft_full<len(noise):
-        n_fft_full<<=1
-    n_full_bins=n_fft_full//2+1
-    full_freqs=np.linspace(0,0.5,n_full_bins)
-    gain_interp=np.interp(full_freqs,erb_freqs,erb_gain)
-    spectrum=np.fft.rfft(noise.astype(np.float64),n=n_fft_full)
-    spectrum*=gain_interp
-    filtered=np.fft.irfft(spectrum,n=n_fft_full)[:len(noise)]
-    orig_rms=float(np.sqrt(np.mean(noise.astype(np.float64)**2)))
-    filt_rms=float(np.sqrt(np.mean(filtered**2)))
-    if filt_rms>1e-15:
-        filtered*=orig_rms/filt_rms
+    n_bins = len(erb_gain)
+    erb_freqs = np.linspace(0, 0.5, n_bins)
+    n_fft_full = 1
+    while n_fft_full < len(noise):
+        n_fft_full <<= 1
+    n_full_bins = n_fft_full // 2 + 1
+    full_freqs = np.linspace(0, 0.5, n_full_bins)
+    gain_interp = np.interp(full_freqs, erb_freqs, erb_gain)
+    spectrum = np.fft.rfft(noise.astype(np.float64), n=n_fft_full)
+    spectrum *= gain_interp
+    filtered = np.fft.irfft(spectrum, n=n_fft_full)[: len(noise)]
+    orig_rms = float(np.sqrt(np.mean(noise.astype(np.float64) ** 2)))
+    filt_rms = float(np.sqrt(np.mean(filtered**2)))
+    if filt_rms > 1e-15:
+        filtered *= orig_rms / filt_rms
     return filtered
 
 
@@ -281,10 +313,13 @@ def _compute_onset_strength(audio: np.ndarray, sr: int) -> float:
     n_frames = (len(audio) - n_fft) // hop
     if n_frames < 3:
         return 0.0
-    energies = np.array([
-        float(np.sum(np.abs(np.fft.rfft(audio[i * hop : i * hop + n_fft] * win)[10:100]) ** 2))
-        for i in range(n_frames)
-    ], dtype=np.float64)
+    energies = np.array(
+        [
+            float(np.sum(np.abs(np.fft.rfft(audio[i * hop : i * hop + n_fft] * win)[10:100]) ** 2))
+            for i in range(n_frames)
+        ],
+        dtype=np.float64,
+    )
     if np.max(energies) < 1e-15:
         return 0.0
     energies /= np.max(energies)
@@ -411,15 +446,22 @@ def inject_cd_noise_profile(
     # §G39: Monitoring
     snr_before = _compute_snr_db(arr)
     snr_after = _compute_snr_db(result)
-    diff_max = float(np.max(np.abs(result.ravel()[:len(arr.ravel())] - arr.ravel())))
+    diff_max = float(np.max(np.abs(result.ravel()[: len(arr.ravel())] - arr.ravel())))
     noise_peak_db = 20.0 * np.log10(max(diff_max, 1e-15))
 
     logger.info(
         "💿 CD-Noise SOTA [%s/%d-bit]: SNR %.1f -> %.1f dB | "
         "active: %d/%d (%.1f%%) | peak: %.1f dBFS | onset: %.4f | seed=%d",
-        mode, bit_depth, snr_before, snr_after,
-        active_samples, len(mono), 100.0 * active_samples / max(len(mono), 1),
-        noise_peak_db, onset, seed,
+        mode,
+        bit_depth,
+        snr_before,
+        snr_after,
+        active_samples,
+        len(mono),
+        100.0 * active_samples / max(len(mono), 1),
+        noise_peak_db,
+        onset,
+        seed,
     )
 
     return result.astype(np.float32)

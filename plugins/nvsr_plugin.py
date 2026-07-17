@@ -344,7 +344,7 @@ class NvsrPlugin:
 
         # §Physik-Guard: Quellband-Energie prüfen — leeres Quellband → Passthrough
         # SBR braucht echte harmonische Information. Synthese aus Rauschen klingt unnatürlich.
-        _src_band_energy = float(np.mean(np.abs(Zxx[src_low_bin:src_high_bin + 1, :]) ** 2))
+        _src_band_energy = float(np.mean(np.abs(Zxx[src_low_bin : src_high_bin + 1, :]) ** 2))
         if _src_band_energy < 1e-8:
             logger.debug("NvsrPlugin: Quellband ohne Energie → Passthrough")
             _, channel_out = _sp_signal.istft(Zxx, fs=sr, nperseg=N_FFT, noverlap=N_FFT - HOP, boundary="even")
@@ -363,12 +363,13 @@ class NvsrPlugin:
         # Vektorisiertes Temporal-Smoothing (3-Frame Median für Transienten-Erhalt)
         # Median-Filter erhält Attack-Flanken besser als Mean-Filter
         from scipy.ndimage import median_filter as _medfilt
+
         src_env_smooth = _medfilt(src_env.astype(np.float64), size=(1, 3)).astype(np.float32)
 
         # Transienten-Erkennung: spektrale Energie-Differenz zwischen benachbarten Frames
         # Ein Frame ist transient, wenn die Energie > 3× des gleitenden Mittelwerts ist
         _frame_energy = np.sum(src_env_smooth, axis=0)  # (T,)
-        _frame_energy_smooth = np.convolve(_frame_energy, np.ones(5)/5.0, mode='same')
+        _frame_energy_smooth = np.convolve(_frame_energy, np.ones(5) / 5.0, mode="same")
         # §GEBOT-G04: Adaptiver Transienten-Schwellwert — abhängig von spektraler Dynamik
         # Ruhiges Material → niedrigere Schwelle, dynamisches Material → höhere Schwelle
         _frame_energy_std = np.std(_frame_energy_smooth) / max(np.mean(_frame_energy_smooth), 1e-12)
@@ -400,7 +401,9 @@ class NvsrPlugin:
             _weights = np.ones(n_src_bins, dtype=np.float32)
             _weights[_peaks] = _peak_weight
             _interp_base = np.interp(tgt_bins_norm, src_bins_norm, _src_frame).astype(np.float32)
-            _interp_peak = np.interp(tgt_bins_norm, src_bins_norm, _src_frame * _weights / np.mean(_weights)).astype(np.float32)
+            _interp_peak = np.interp(tgt_bins_norm, src_bins_norm, _src_frame * _weights / np.mean(_weights)).astype(
+                np.float32
+            )
             # Adaptive Blend: harmonik-reich → mehr Peak-Weighted, rauschig → mehr Base
             _peak_blend = np.clip(0.5 + np.mean(_harmonic_density) * 3.0, 0.5, 0.85)
             tgt_mag[:, t_idx] = _interp_peak * _peak_blend + _interp_base * (1.0 - _peak_blend)
@@ -425,7 +428,9 @@ class NvsrPlugin:
         # §GEBOT-G03: Adaptiver Energy-Bias — spektrale Balance des Quellbands respektieren
         # Quelle mit viel HF-Energie → weniger Bias nötig (natürlich hell)
         # Quelle mit wenig HF-Energie → mehr Bias (konservativ, kein Übersteuern)
-        _hf_ratio = float(np.mean(src_env_smooth[n_src_bins//2:]) / max(np.mean(src_env_smooth[:n_src_bins//2]), 1e-12))
+        _hf_ratio = float(
+            np.mean(src_env_smooth[n_src_bins // 2 :]) / max(np.mean(src_env_smooth[: n_src_bins // 2]), 1e-12)
+        )
         _hf_ratio_db = 10.0 * np.log10(max(_hf_ratio, 1e-6))
         if panns_singing >= 0.4:
             _bias_base = 0.0  # Gesang: volle HF-Präsenz
@@ -473,7 +478,9 @@ class NvsrPlugin:
                     fade = 1.0
                 # Transiente Frames: SBR auf 30% reduzieren für pristine Attacks
                 _frame_strength = np.where(_is_transient, strength * 0.3, strength)
-                Zxx_out[tb, :] = (1.0 - fade * _frame_strength) * Zxx[tb, :] + fade * _frame_strength * tgt_complex[bi, :]
+                Zxx_out[tb, :] = (1.0 - fade * _frame_strength) * Zxx[tb, :] + fade * _frame_strength * tgt_complex[
+                    bi, :
+                ]
 
         # iSTFT
         _, channel_sbr = _sp_signal.istft(Zxx_out, fs=sr, nperseg=N_FFT, noverlap=N_FFT - HOP, boundary="even")

@@ -122,19 +122,19 @@ sequenceDiagram
     MD->>KB: Physikalische Features\n(wow/flutter, crackle, bandwidth)
     KB-->>MD: _MEDIUM_ORDER + _KNOWN_CHAINS
     MD-->>IMPORT: transfer_chain=['vinyl','cassette','mp3_low']
-    
+
     IMPORT->>GC: Audio
     GC-->>IMPORT: genre='Deutscher Schlager'\nlanguage='de'
-    
+
     IMPORT->>BV: chain + genre + language
     BV->>KB: get_genre_constraints(['vinyl','cassette'])
     KB-->>BV: excluded=['hip_hop','techno',...]\npreferred=['rock','schlager','pop',...]
     BV-->>BV: ✅ Schlager in preferred → valid
-    
+
     BV->>KB: _best_matching_chain(genre='schlager', language='de')
     KB-->>BV: ['reel_tape','vinyl','cassette','mp3_low']
     BV-->>CHAIN: verfeinerte Kette
-    
+
     CHAIN->>CHAIN: Deep-Transfer-Chain Injection\n(Era-Material + Vinyl-Inference)
     CHAIN-->>EXPORT: reel_tape → vinyl → cassette → mp3_low
 ```

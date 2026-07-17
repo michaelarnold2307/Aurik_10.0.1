@@ -33,7 +33,9 @@ class StreamingProcessor:
         self.chunk_s = chunk_seconds
         self.overlap_s = overlap_seconds
         if overlap_seconds >= chunk_seconds / 2:
-            raise ValueError(f"Überlappung ({overlap_seconds}s) muss < Hälfte der Blockgröße ({chunk_seconds/2}s) sein")
+            raise ValueError(
+                f"Überlappung ({overlap_seconds}s) muss < Hälfte der Blockgröße ({chunk_seconds / 2}s) sein"
+            )
 
     def process(
         self,
@@ -79,8 +81,9 @@ class StreamingProcessor:
             end = min(pos + chunk_samples, n_total)
             chunk = audio[pos:end] if audio.ndim == 1 else audio[pos:end, :]
 
-            logger.debug("StreamingProcessor: Block %d — %d–%d Samples (%.1f–%.1fs)",
-                         chunk_idx, pos, end, pos / sr, end / sr)
+            logger.debug(
+                "StreamingProcessor: Block %d — %d–%d Samples (%.1f–%.1fs)", chunk_idx, pos, end, pos / sr, end / sr
+            )
 
             try:
                 processed = process_fn(chunk, sr, **kwargs)
@@ -98,7 +101,7 @@ class StreamingProcessor:
                     else:
                         processed = np.vstack([processed, np.zeros((end - pos - n_proc, processed.shape[1]))])
                 else:
-                    processed = processed[:end - pos] if processed.ndim == 1 else processed[:end - pos, :]
+                    processed = processed[: end - pos] if processed.ndim == 1 else processed[: end - pos, :]
 
             # Crossfade-Übergang (außer erster und letzter Block)
             if chunk_idx == 0:
@@ -138,7 +141,10 @@ class StreamingProcessor:
         else:
             result = result / weight_sum
 
-        logger.info("StreamingProcessor: %d Blöcke verarbeitet — %.1f MB eingespart",
-                     chunk_idx, (n_total * 4 / 1024 / 1024) * (1 - chunk_samples / n_total))
+        logger.info(
+            "StreamingProcessor: %d Blöcke verarbeitet — %.1f MB eingespart",
+            chunk_idx,
+            (n_total * 4 / 1024 / 1024) * (1 - chunk_samples / n_total),
+        )
 
         return np.clip(result, -1.0, 1.0).astype(np.float32)

@@ -186,7 +186,7 @@ class ArtifactDetector:
                 expected[j] = np.median(spec[lo:hi])
 
             # Hole: bin is >30 dB below expected
-            holes = (spec < expected - 30.0)
+            holes = spec < expected - 30.0
             hole_count += int(np.sum(holes))
             total_bins += len(spec)
 
@@ -255,9 +255,7 @@ class ArtifactDetector:
                 continue
 
             pre_energy = float(np.mean(mono[onset_sample - pre_samples : onset_sample] ** 2))
-            post_energy = float(
-                np.mean(mono[onset_sample + 100 : onset_sample + 100 + post_samples] ** 2)
-            )
+            post_energy = float(np.mean(mono[onset_sample + 100 : onset_sample + 100 + post_samples] ** 2))
 
             if post_energy < 1e-15:
                 continue

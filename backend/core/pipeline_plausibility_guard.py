@@ -106,7 +106,11 @@ class PipelinePlausibilityGuard:
     """Prüft die Pipeline-Konfiguration auf Plausibilität."""
 
     def __init__(self) -> None:
-        pass
+        """Initialize the plausibility guard with default thresholds."""
+        self._min_confidence: float = 0.6
+        self._warn_bandwidth_hz: float = 8000.0
+        self._max_phases: int = 64
+        self._issues: list[str] = []
 
     def check(
         self,
@@ -144,8 +148,7 @@ class PipelinePlausibilityGuard:
         # 2. Material-Konfidenz
         if material_confidence < 0.15 and material != "unknown":
             report.warnings.append(
-                f"Material-Erkennung sehr unsicher ({material_confidence:.0%}). "
-                f"'{material}' könnte falsch sein."
+                f"Material-Erkennung sehr unsicher ({material_confidence:.0%}). '{material}' könnte falsch sein."
             )
 
         # 3. Phasen-Anzahl
@@ -174,18 +177,11 @@ class PipelinePlausibilityGuard:
             report.passed = False
 
         # 5. Widersprüchliche Phasen
-        _contra = [
-            (a, b)
-            for a, b in CONTRADICTORY_PHASE_PAIRS
-            if a in selected_phases and b in selected_phases
-        ]
+        _contra = [(a, b) for a, b in CONTRADICTORY_PHASE_PAIRS if a in selected_phases and b in selected_phases]
         report.contradictory_found = _contra
         if _contra:
             for a, b in _contra:
-                report.errors.append(
-                    f"Widersprüchliche Phasen: '{a}' + '{b}'. "
-                    "Eine davon sollte entfernt werden."
-                )
+                report.errors.append(f"Widersprüchliche Phasen: '{a}' + '{b}'. Eine davon sollte entfernt werden.")
             report.passed = False
 
         # 6. Material-Profil vs gemessene Werte
@@ -194,8 +190,7 @@ class PipelinePlausibilityGuard:
             _snr_range = _profile.get("typical_snr_range", (0, 100))
             if snr_db < _snr_range[0] - 5:
                 report.info.append(
-                    f"SNR ({snr_db:.1f} dB) ist ungewöhnlich niedrig für '{material}'. "
-                    "Stärkere Entrauschung nötig."
+                    f"SNR ({snr_db:.1f} dB) ist ungewöhnlich niedrig für '{material}'. Stärkere Entrauschung nötig."
                 )
             _bw_range = _profile.get("typical_bw_hz", (0, 48000))
             if bandwidth_hz < _bw_range[0] * 0.5:
@@ -214,9 +209,7 @@ class PipelinePlausibilityGuard:
             )
         if material in ("cd_digital", "streaming") and era < 1980:
             report.era_plausible = False
-            report.info.append(
-                f"Digitales Material mit Ära {era} — wahrscheinlich eine spätere Digitalisierung."
-            )
+            report.info.append(f"Digitales Material mit Ära {era} — wahrscheinlich eine spätere Digitalisierung.")
 
         # 8. Carrier-Chain-Kohärenz
         if carrier_chain:

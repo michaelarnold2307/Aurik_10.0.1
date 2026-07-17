@@ -80,6 +80,7 @@ def phase_vocoder_timestretch(
         _sg_win += 1
     if n_analysis_frames >= _sg_win >= 5:
         from scipy.signal import savgol_filter
+
         sf_per_frame = savgol_filter(sf_per_frame, _sg_win, 2, mode="interp")
     sf_per_frame = np.clip(sf_per_frame, _MIN_STRETCH, _MAX_STRETCH)
 
@@ -89,15 +90,15 @@ def phase_vocoder_timestretch(
 
     # ── Step 1: Analysis STFT ────────────────────────────────────────
     win = np.hanning(n_fft).astype(np.float64)
-    win_sq = win ** 2
+    win_sq = win**2
 
     # Build analysis frames via sliding_window_view + batched rfft
     if n_analysis_frames < 2:
         return audio_f.copy()
 
-    frames = np.lib.stride_tricks.sliding_window_view(
-        audio_f.astype(np.float64), n_fft
-    )[::analysis_hop][:n_analysis_frames]
+    frames = np.lib.stride_tricks.sliding_window_view(audio_f.astype(np.float64), n_fft)[::analysis_hop][
+        :n_analysis_frames
+    ]
     stft = np.fft.rfft(frames * win, axis=1, n=n_fft)  # (T, F)
 
     mag = np.abs(stft).astype(np.float64)
@@ -130,9 +131,7 @@ def phase_vocoder_timestretch(
     synthesis_hop_arr = analysis_hop / np.clip(sf_per_frame, _MIN_STRETCH, _MAX_STRETCH)
 
     # Build synthesis time grid
-    synthesis_times = np.cumsum(
-        np.concatenate([[0.0], synthesis_hop_arr[:-1]])
-    )  # (T,) in samples
+    synthesis_times = np.cumsum(np.concatenate([[0.0], synthesis_hop_arr[:-1]]))  # (T,) in samples
 
     # Total synthesis samples: keep output same length as input
     total_synth_samples = n_samples

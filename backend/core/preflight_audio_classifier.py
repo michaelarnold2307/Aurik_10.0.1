@@ -1,16 +1,18 @@
-
 """§v10.17 PreflightAudioClassifier — erkennt Silence/Mono/Ultra-Short VOR der Pipeline.
 
 Vermeidet dass 64 Phasen auf 1-Sekunden-Stille oder Mono-Dateien laufen.
 """
 
 from __future__ import annotations
-import logging, numpy as np
+
+import logging
 from dataclasses import dataclass
+
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
-_MIN_DURATION_S: float = 3.0     # < 3s → "ultra_short"
+_MIN_DURATION_S: float = 3.0  # < 3s → "ultra_short"
 _SILENCE_RMS_THRESHOLD: float = 1e-5  # RMS unter diesem Wert = Stille
 _MONO_CORR_THRESHOLD: float = 0.999  # L/R-Korrelation > 0.999 = Mono
 
@@ -47,10 +49,8 @@ def classify_audio(audio: np.ndarray, sr: int) -> AudioClass:
             result.should_skip_phases = ["ALL_STEREO_PHASES", "ALL_DYNAMICS_PHASES"]
 
         # RMS / Silence
-        mono = arr.mean(axis=0) if (arr.ndim > 1 and arr.shape[0] <= 2) else (
-            arr.mean(axis=1) if arr.ndim > 1 else arr
-        )
-        rms = float(np.sqrt(np.mean(mono ** 2) + 1e-12))
+        mono = arr.mean(axis=0) if (arr.ndim > 1 and arr.shape[0] <= 2) else (arr.mean(axis=1) if arr.ndim > 1 else arr)
+        rms = float(np.sqrt(np.mean(mono**2) + 1e-12))
         result.rms = rms
         result.peak_db = 20.0 * np.log10(float(np.max(np.abs(mono))) + 1e-12)
 

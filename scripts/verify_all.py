@@ -3,6 +3,7 @@
 verify_all.py — Vollständige Aurik-Verifikationssuite.
 Führt alle Gates aus und produziert einen Abschlussbericht.
 """
+
 from __future__ import annotations
 
 import json
@@ -17,6 +18,7 @@ from pathlib import Path
 ROOT = Path(__file__).parent.parent
 VENV = ROOT / ".venv_aurik" / "bin" / "python"
 
+
 @dataclass
 class Check:
     name: str
@@ -24,6 +26,7 @@ class Check:
     duration_s: float = 0.0
     output: str = ""
     details: dict = field(default_factory=dict)
+
 
 def run(cmd: list[str], timeout: int = 120) -> tuple[int, str, float]:
     t0 = time.perf_counter()
@@ -34,6 +37,7 @@ def run(cmd: list[str], timeout: int = 120) -> tuple[int, str, float]:
         return -1, "TIMEOUT", timeout
     except Exception as e:
         return -2, str(e), time.perf_counter() - t0
+
 
 def main():
     results: list[Check] = []
@@ -64,7 +68,7 @@ def main():
     # Check 3: VERBOTEN Linter
     rc, out, dur = run([str(VENV), "scripts/aurik_verboten_linter.py", "--json"], 60)
     try:
-        linter_data = json.loads(out.split('\n')[-2] if '\n' in out else out)
+        linter_data = json.loads(out.split("\n")[-2] if "\n" in out else out)
     except Exception:
         linter_data = {"clean": False, "issues": -1}
     c = Check("VERBOTEN Linter", "pass" if linter_data.get("clean") else "fail", dur)
@@ -114,14 +118,22 @@ def main():
     # ── EBENE 3: Normative Tests ────────────────────────────────────────
     print("\n── EBENE 3: Normative Tests ──")
 
-    rc, out, dur = run([
-        str(VENV), "-m", "pytest",
-        "tests/normative/test_no_production_stubs.py",
-        "tests/normative/test_full_pipeline_determinism.py",
-        "tests/normative/test_p2_audit_and_deployment_mode.py",
-        "-q", "--timeout=30", "--tb=short", "--no-header",
-    ], 120)
-    passed = re.search(r'(\d+)\s+passed', out)
+    rc, out, dur = run(
+        [
+            str(VENV),
+            "-m",
+            "pytest",
+            "tests/normative/test_no_production_stubs.py",
+            "tests/normative/test_full_pipeline_determinism.py",
+            "tests/normative/test_p2_audit_and_deployment_mode.py",
+            "-q",
+            "--timeout=30",
+            "--tb=short",
+            "--no-header",
+        ],
+        120,
+    )
+    passed = re.search(r"(\d+)\s+passed", out)
     c = Check("Normative Tests", "pass" if rc == 0 else "fail", dur)
     c.details = {"passed": int(passed.group(1)) if passed else 0}
     results.append(c)
@@ -131,25 +143,28 @@ def main():
     print("\n── P1 VERIFIKATION: V27-V31+V39 ──")
 
     # Check: V27-V31 matches in UNIFIED_RESTORER are all comments
-    p1_files = ["backend/core/causal_defect_reasoner.py", "backend/core/defect_phase_mapper.py",
-                "backend/core/unified_restorer_v3.py"]
+    p1_files = [
+        "backend/core/causal_defect_reasoner.py",
+        "backend/core/defect_phase_mapper.py",
+        "backend/core/unified_restorer_v3.py",
+    ]
     p1_violations = []
     for fp in p1_files:
         if not (ROOT / fp).exists():
             continue
         text = (ROOT / fp).read_text(encoding="utf-8", errors="replace")
-        for i, line in enumerate(text.split('\n'), 1):
+        for i, line in enumerate(text.split("\n"), 1):
             s = line.strip()
             # Only check non-comment, non-docstring lines
-            if s.startswith('#') or s.startswith('"""') or s.startswith("'''"):
+            if s.startswith("#") or s.startswith('"""') or s.startswith("'''"):
                 continue
-            if 'JITTER_ARTIFACTS' in s and 'phase_12' in s:
+            if "JITTER_ARTIFACTS" in s and "phase_12" in s:
                 p1_violations.append((fp, i, s[:120]))
-            if 'NR_BREATHING' in s and ('phase_03' in s or 'phase_29' in s):
+            if "NR_BREATHING" in s and ("phase_03" in s or "phase_29" in s):
                 p1_violations.append((fp, i, s[:120]))
-            if 'OVERLOAD_DISTORTION' in s and 'phase_63' in s:
+            if "OVERLOAD_DISTORTION" in s and "phase_63" in s:
                 p1_violations.append((fp, i, s[:120]))
-            if re.search(r'\bALIASING\b', s) and 'phase_03' in s:
+            if re.search(r"\bALIASING\b", s) and "phase_03" in s:
                 p1_violations.append((fp, i, s[:120]))
 
     c = Check("P1: V27-V31 Code-Audit", "pass" if not p1_violations else "fail", 0)
@@ -167,13 +182,13 @@ def main():
         if pf.name == "__init__.py":
             continue
         text = pf.read_text(encoding="utf-8", errors="replace")
-        lines = text.split('\n')
+        lines = text.split("\n")
         for i, line in enumerate(lines):
-            if 'sosfilt(' in line and 'sosfiltfilt' not in line:
+            if "sosfilt(" in line and "sosfiltfilt" not in line:
                 # Check if result modifies output signal (audio_out, result, output)
-                for j in range(i, min(i+5, len(lines))):
-                    if any(kw in lines[j] for kw in ['audio_out +=', 'audio_out =', 'output =']):
-                        sosfilt_signal.append((pf.name, i+1, line.strip()[:100]))
+                for j in range(i, min(i + 5, len(lines))):
+                    if any(kw in lines[j] for kw in ["audio_out +=", "audio_out =", "output ="]):
+                        sosfilt_signal.append((pf.name, i + 1, line.strip()[:100]))
                         break
 
     c = Check("P2: sosfilt im Signalpfad", "pass" if not sosfilt_signal else "fail", 0)
@@ -191,13 +206,13 @@ def main():
             text = py_file.read_text(encoding="utf-8", errors="replace")
         except Exception:
             continue
-        if 'np.max(np.abs(audio))' in text:
-            lines = text.split('\n')
+        if "np.max(np.abs(audio))" in text:
+            lines = text.split("\n")
             for i, line in enumerate(lines):
-                if 'np.max(np.abs(audio))' in line:
-                    for j in range(i, min(i+3, len(lines))):
-                        if re.search(r'(?:gain|scale|norm)\s*=', lines[j]):
-                            np_max_gain.append((rp, i+1, line.strip()[:120]))
+                if "np.max(np.abs(audio))" in line:
+                    for j in range(i, min(i + 3, len(lines))):
+                        if re.search(r"(?:gain|scale|norm)\s*=", lines[j]):
+                            np_max_gain.append((rp, i + 1, line.strip()[:120]))
                             break
 
     c = Check("P2: np.max in Gain-Pfad", "pass" if not np_max_gain else "fail", 0)
@@ -216,9 +231,8 @@ def main():
         "summary": f"{passed}/{total} gates passed",
         "all_pass": failed == 0,
         "checks": [
-            {"name": r.name, "status": r.status, "duration_s": round(r.duration_s, 1), **r.details}
-            for r in results
-        ]
+            {"name": r.name, "status": r.status, "duration_s": round(r.duration_s, 1), **r.details} for r in results
+        ],
     }
 
     (ROOT / "reports").mkdir(exist_ok=True)
@@ -232,6 +246,7 @@ def main():
     print("Report: reports/verify_all_report.json")
 
     return 0 if failed == 0 else 1
+
 
 if __name__ == "__main__":
     sys.exit(main())

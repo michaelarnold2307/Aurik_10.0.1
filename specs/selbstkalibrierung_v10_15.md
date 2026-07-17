@@ -41,6 +41,7 @@
 | Preflight-Risk     | ✅        | Risiko-basiert                            |
 
 **PMGG-Regeln (unverändert):**
+
 1. 5 s Stichprobe aus Audio-Mitte VOR der Phase messen (15 Ziele)
 2. Phase ausführen
 3. Dieselben 15 Ziele NACH der Phase messen
@@ -71,6 +72,7 @@
 | HarmonicLatticeAnalyzer  | Guard        | PostGate: TonalCenter              |
 
 **PostGate-Regeln (NEU):**
+
 1. 5 s Stichprobe VOR der Komponente messen (5 Ziele, DSP-only, ≤ 80 ms)
 2. Komponente ausführen
 3. 5 Ziele NACH der Komponente messen
@@ -98,6 +100,7 @@
 **Nachher (v10.15):** `strength = calibrate(audio, sr)` → ∈ [0.05, 0.25]
 
 Kalibrierung:
+
 - Analysiert die spektrale Dichte und den Dynamikumfang
 - Bei bereits „lebendigem" Material (hohe Mikrodynamik) → niedrige Stärke
 - Bei „sterilem" Material (flache Dynamik) → höhere Stärke
@@ -106,6 +109,7 @@ Kalibrierung:
 ## Ausnahmen — keine Selbstkalibrierung
 
 Folgende Komponenten haben KEINE Kalibrierung, weil sie:
+
 - binär sind (entweder sie erkennen einen Defekt und reparieren, oder nicht)
 - keine tunable Parameter haben
 - immer konservativ arbeiten
@@ -120,6 +124,7 @@ Folgende Komponenten haben KEINE Kalibrierung, weil sie:
 ## Pre-Commit / Watchdog
 
 Keine Änderungen nötig:
+
 - `_GLOBAL_MAX_MS` ist bereits in `stereo_temporal_coherence_guard.py` definiert
 - PostGate wird als neue Klasse in `backend/core/post_processing_gate.py` implementiert
 - Keine bestehenden Watchdog-Regeln betroffen

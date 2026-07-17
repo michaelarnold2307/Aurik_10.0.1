@@ -22,7 +22,7 @@ import numpy as np
 # RQI-Schwellwerte (§GEBOT-G54)
 # ---------------------------------------------------------------------------
 RQI_GOOD = 0.50  # oberhalb: Restaurierung erfolgreich → Warnings unterdrücken
-RQI_BAD = 0.30   # unterhalb: echtes Qualitätsproblem → WARNING berechtigt
+RQI_BAD = 0.30  # unterhalb: echtes Qualitätsproblem → WARNING berechtigt
 
 
 def compute_rqi(
@@ -124,10 +124,13 @@ def compute_rqi(
     naturalness = float(np.clip(0.5 * _smoothness_gain + 0.5 * _hnr_gain, 0.0, 1.0))
 
     # ── RQI ─────────────────────────────────────────────────────────────
-    rqi = float(np.clip(
-        0.40 * defect_reduction + 0.30 * bw_gain + 0.30 * naturalness,
-        0.0, 1.0,
-    ))
+    rqi = float(
+        np.clip(
+            0.40 * defect_reduction + 0.30 * bw_gain + 0.30 * naturalness,
+            0.0,
+            1.0,
+        )
+    )
 
     # ── Interpretation ───────────────────────────────────────────────────
     if rqi >= RQI_GOOD:

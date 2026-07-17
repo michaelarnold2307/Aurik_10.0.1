@@ -237,7 +237,6 @@ class StemRemixBalancer:
 
 ---
 
-
 ### v10-Amendment (2026-07-12)
 
 **MERT-v1-330M weight_norm/Parametrizations-Kompatibilität** (v10, 2026-07-12):
@@ -247,6 +246,7 @@ Der MERT-v1-330M-Checkpoint wurde mit einer älteren `transformers`-Version gesp
 Die weights werden von PyTorch automatisch in die neuen Parametrizations-Namen konvertiert. Das Modell ist voll funktionsfähig. Die Warnung beim Laden wird jetzt durch `ignore_mismatched_sizes=True` in `AutoModel.from_pretrained()` unterdrückt.
 
 **Implementierung**: `plugins/mert_plugin.py` → `AutoModel.from_pretrained(..., ignore_mismatched_sizes=True)`.
+
 ## §2.2 Pipeline-Ablauf (kanonisch, Code-genau)
 
 ### §2.2.0 Sample-Rate-Vertrag (Dual-SR, [RELEASE_MUST])
@@ -470,7 +470,6 @@ Audio-Ausgang + RestorationResult
 
 ---
 
-
 ### v10-Amendment (2026-07-12)
 
 **Hip-Hop-Veto bei deutschsprachigem Material** (v10, 2026-07-12):
@@ -480,6 +479,7 @@ Deutscher Schlager aus den 1970ern, der durch eine analoge Kette (Vinyl→Casset
 **Fix**: Analog zu den existierenden Latin/Reggae-Vetoes in `GermanSchlagerClassifier.classify()`: Wenn `alt_genre == "Hip-Hop"` UND `lang_de_score >= 0.30` (deutschsprachiges Material) UND `n_active >= 1` (Schlager-Evidenz vorhanden) → Override zu Schlager.
 
 **Implementierung**: `backend/core/genre_classifier.py` → nach Latin/Reggae-Veto:
+
 ```python
 if not is_schlager and n_active >= 1 and alt_genre == "Hip-Hop" and lang_de_score >= 0.30:
     is_schlager = True
@@ -487,6 +487,7 @@ if not is_schlager and n_active >= 1 and alt_genre == "Hip-Hop" and lang_de_scor
 ```
 
 **Einschränkung**: Greift nur bei `lang_de_score >= 0.30`. Bei extrem degradiertem Material ohne erkennbare Sprachsignatur bleibt die Fehlklassifikation möglich — dann ist manuelles Genre-Override nötig.
+
 ## §2.30b [RELEASE_MUST] Post-Smoothing-Quiet-Zone-Clamp-Invariante (v9.11.15)
 
 **Normative Reihenfolge in UV3 (kanonisch):**
@@ -1819,16 +1820,16 @@ if float(_hpi_result.hpi) > 0.0 and _af_save >= 0.95:
 alle 5 Fallback-Stufen liefern None → `timbral_fidelity` nutzt stets nur den degradierten Input
 → Restaurierungsqualität systematisch unterschätzt → HPG-Lernkurve deaktiviert.
 
-
 ### v10-Amendment (2026-07-12)
 
 **Final-Export-Audio-Gate: Restoration-Mode verwendet `best_carrier_checkpoint`** (v10, 2026-07-12):
 
-Das finale Export-Gate (§2.44/§2.49) in `unified_restorer_v3.py` vergleicht das restaurierte Audio standardmäßig gegen `analysis_audio` (degradiertes Original). Eine gute Restaurierung klingt jedoch *anders* (sauberer) als das degradierte Original → der Artifact-Freedom-Detektor meldet fälschlich `af=0.000` ("100 % Unterschied") → unnötiger Rollback.
+Das finale Export-Gate (§2.44/§2.49) in `unified_restorer_v3.py` vergleicht das restaurierte Audio standardmäßig gegen `analysis_audio` (degradiertes Original). Eine gute Restaurierung klingt jedoch _anders_ (sauberer) als das degradierte Original → der Artifact-Freedom-Detektor meldet fälschlich `af=0.000` ("100 % Unterschied") → unnötiger Rollback.
 
 **Fix**: Im Restoration-Mode (`not self.is_studio_mode()`) verwendet das Final-Gate jetzt `self._best_carrier_checkpoint` als Referenz — das Zwischenergebnis, gegen das der Restorer tatsächlich optimiert hat. Falls kein Carrier-Checkpoint existiert, fällt das Gate auf `analysis_audio` zurück. Studio-Mode bleibt unverändert.
 
 **Implementierung**: `backend/core/unified_restorer_v3.py` → Zeile ~18629:
+
 ```python
 if not self.is_studio_mode():
     _carrier_ref = getattr(self, "_best_carrier_checkpoint", None)
@@ -1838,6 +1839,7 @@ else:
 ```
 
 **Erwartetes Ergebnis**: Kein falscher `af=0.000`-Rollback mehr. Das finale Tor vergleicht »finaler Output vs bester Zwischenstand« — genau das, was es in der Restoration intendiert.
+
 ## §2.45 [RELEASE_MUST] Minimal-Intervention-Prinzip (v9.10.122, aktualisiert §2.54)
 
 **Restoration**: Phasen ohne hörbare Verbesserung werden NICHT angewendet:
@@ -2124,7 +2126,6 @@ Implementierung in `backend/core/unified_restorer_v3.py`:
 
 > Kreuzreferenz: Slim Core §2.46, Spec 01 §8.2 Rauschboden modus-differenziert
 
-
 ### §2.46a.1 Vinyl-Inference (v10.0.0-Phantom)
 
 Wenn `reel_tape` und `cassette` in der erkannten Kette sind und die
@@ -2133,7 +2134,6 @@ Dies ist eine logische Inferenz aus der Defektanalyse — kein physikalisches
 Risiko für das Audio.
 
 Implementiert in `backend/core/pre_analysis.py` (§Vinyl-Inference).
-
 
 ### v10-Amendment (2026-07-12)
 
@@ -2157,6 +2157,7 @@ if _chain_injected:
     for _m in reversed(_chain_injected):
         _chain.insert(_dpos, _m)
 ```
+
 ## §2.46a [RELEASE_MUST] Deep-Transfer-Chain-Pflicht (v9.10.124)
 
 Importsongs mit **3+ Tonträgerstufen** müssen vollständig modelliert werden. Die
@@ -2948,7 +2949,6 @@ Ohne diese Prüfung restauriert der HPI-Rollback ein stereo-zerstörtes Signal.
 
 ---
 
-
 ### v10-Amendment (2026-07-12)
 
 **IAD-Logging nach Schweregrad gestaffelt** (v10, 2026-07-12):
@@ -2964,6 +2964,7 @@ Die `logger.warning`-Ausgabe des IAD (Introduced Artifact Detector) in `unified_
 **Begründung**: `fraction=0.003` (0,3 %) `musical_noise` auf Cassette-Material ist normales spektrales Restrauschen jeder NR. `artifact_freedom_penalty=0.997` liegt weit über der 0.95-Veto-Schwelle. Eine WARNING bei <1 % ist ein Fehlalarm, der vom tatsächlichen Qualitätsverlust (≥5 %) ablenkt.
 
 **Implementierung**: `backend/core/unified_restorer_v3.py` → `_iad_is_trivial = _frac_iad < 0.01` → `logger.info` vs `logger.warning`.
+
 ## §2.49c [RELEASE_MUST] Psychoakustischer Rauheit/Schärfe-Guard (v9.11.x)
 
 **Motivierung**: ArtifactFreedomGate §2.49 prüft strukturelle Artefakte (Spectral Noise,
@@ -4644,11 +4645,9 @@ def test_ssip_reassembly_bit_exact_silence():
         )
 ```
 
-
 ## v10: PIM & RLP
 
 Der **Perceptual Intensity Mapper (PIM)** wird VOR dem Phasen-Loop ausgeführt und kalibriert 10 Frequenzbänder × N Song-Sektionen. Der **Reflective Listening Pass (RLP)** läuft NACH dem Loop und bessert Restprobleme nach.
-
 
 ## v10.0.0: Phasen 51–66 — Erweiterte Restaurierungsphasen
 
@@ -4674,7 +4673,6 @@ Der **Perceptual Intensity Mapper (PIM)** wird VOR dem Phasen-Loop ausgeführt u
 Alle Phasen werden über `backend/core/phases/__init__.py` mit bedingten Imports exportiert
 (try/except ImportError, Graceful Degradation).
 
-
 ## §2.46a: Transferkette in Export-Metadaten (v10.0.0)
 
 **Pflicht**: Jeder Export (WAV, FLAC, MP3, AIFF, OGG) muss die erkannte
@@ -4690,7 +4688,6 @@ Die Tonträgerkette wird vor dem Export vom `TontraegerketteDenker` per
 `exporter.set_chain_metadata()` gesetzt und während `export_audio()` via
 `_build_chain_metadata()` ausgelesen und an `MetadataPreserver.transfer(transfer_chain=...)`
 weitergereicht.
-
 
 ## §2.46b: Deep-Transfer-Chain — Mehrstufige Tonträgerketten-Inferenz (v10.0.0)
 
@@ -4749,6 +4746,7 @@ Ergebnis: reel_tape → vinyl → cassette → mp3_low
 ### 2.46b-IV: Vinyl-Inference (Heuristik, kein Audio-Eingriff)
 
 **Bedingung**: Alle drei Kriterien müssen erfüllt sein:
+
 1. `reel_tape` ist in der Kette (Master-Aufnahme auf Band)
 2. `cassette` ist in der Kette (Consumer-Überspielung)
 3. Die Aufnahme-Ära liegt zwischen 1950 und 1990 (Vinyl-Ära)
@@ -4778,7 +4776,6 @@ print(f'Multi-Gen: {md.is_multi_generation}')
 "
 ```
 
-
 ## §2.46c: Phase 12 Material-Adaptiver Pitch-Span-Threshold (v10.0.0)
 
 **Pflicht**: Phase 12 (Wow/Flutter) darf bei Cassette/Reel-Tape mit
@@ -4789,8 +4786,6 @@ DefectScanner-bestätigtem Wow/Flutter (Score ≥ 0.70) NICHT durch starren
 - **Alle anderen**: Threshold = 100 Cents
 - Datenfluss: `process()` → `self._mat_type_for_stretch` → `_calculate_stretch_factors()`
 - Datei: `backend/core/phases/phase_12_wow_flutter_fix.py`
-
-
 
 ### v10-Amendment (2026-07-12)
 
@@ -4811,17 +4806,20 @@ bidirektionale Validierung durch:
    - Verfeinerte Kette ersetzt Original im `MediumResult`
 
 3. **Datenfluss**:
+
    ```
    Import → MediumDetect → GenreDetect → Bidirektionale Validierung
    → Chain-Refinement → Deep-Transfer-Chain → Export
    ```
 
 **Implementierung**:
+
 - `backend/core/pre_analysis.py` → Bidirektionale Validierung vor Chain-Injection
 - `backend/core/genre_classifier.py` → `SchlagerClassificationResult.language_code`
 - `forensics/medium_detector.py` → `get_genre_constraints()`, `_best_matching_chain(genre, language)`
 
 **Knowledge Base** (alle in `forensics/medium_detector.py`):
+
 - `_MEDIUM_ORDER`: 20 Tonträger chronologisch (1877→2020)
 - `_KNOWN_CHAINS`: 76 Transfer-Ketten-Templates
 - `_GENRE_EARLIEST_ORDER`: 195 Genres × 14 Ära-Gruppen
@@ -4830,7 +4828,6 @@ bidirektionale Validierung durch:
 - `_LANGUAGE_MEDIUM_BONUS`: 7 Sprachen × Medium-Präferenzen
 - `_STUDIO_FORMAT_INDICATORS`: 21 Studio-Charakteristiken
 - `_MEDIUM_DISPLAY_NAMES`: 20 deutsche GUI-Namen
-
 
 ## §2.46d: AudioSR Recovery-Kette (v10.0.3 final)
 
@@ -4880,7 +4877,6 @@ bidirektionale Validierung durch:
 - Filter: Butterworth 4. Ordnung, Zero-Phase, float64, 90% Ziel-Nyquist
 - Datei: `backend/core/dsp/lpc_formant_tracker.py`
 
-
 ### v10-Amendment (2026-07-12)
 
 **SFT LEVEL_COLLAPSE: Phasenkorrektur-Phasen → INFO** (v10, 2026-07-12):
@@ -4911,24 +4907,28 @@ LEVEL_COLLAPSE in anderen Phasen bleibt als WARNING erhalten.
 
 **Phase-Fazit-System** (v10.0.3):
 Jede Phase loggt ein menschenlesbares Fazit mit 0-10 Score:
+
 ```
 ┌─ Phase 03 (Entrauschen) ───────────────────────────────────┐
 │ ✅ Rauschen um 12.3 dB reduziert                            │
 │ 🏆 Score: 8.5 / 10.0  (SNR: 18→30 dB, ML: ja)              │
 └─────────────────────────────────────────────────────────────┘
 ```
+
 - `backend/core/phase_fazit.py`: `log_phase_fazit()` + `log_restoration_summary()`
 - Integration in `create_phase_result()` via neue `phase_id`/`phase_name` Parameter
 - Score = `quality_estimate × 10`
 - Restaurations-Zusammenfassung mit Tonträgerkette als Geschichte in Klartext
 
 **Laienfreundliche Kommunikation** (v10.0.3):
+
 - `backend/core/phase_names.py`: Mapping phase_id → deutsche Anzeigenamen
 - Log-Meldungen: `▶ phase_03_denoise (Entrauschen) startet (2/42)`
 - Post-Restoration: Box mit Qualitäts-Label (🏆 Weltklasse/✅ Ausgezeichnet/👍 Sehr gut)
 - Qualitäts-Labels: 95%+ 🏆, 85%+ ✅, 70%+ 👍, 50%+ ⚡, 30%+ ⚠️
 
 **MediumDetector SOTA Knowledge Base** (v10.0.3):
+
 - `_MEDIUM_ORDER`: 20 Tonträger chronologisch (1877→2020)
 - `_KNOWN_CHAINS`: 76 Transfer-Ketten-Templates
 - `_GENRE_EARLIEST_ORDER`: 195 Genres × 14 Ära-Gruppen
@@ -4940,12 +4940,14 @@ Jede Phase loggt ein menschenlesbares Fazit mit 0-10 Score:
 - `get_genre_constraints(chain)`: Bidirektionale API für Genre-Validierung
 
 **Chronologische Ketten-Sortierung** (v10.0.3):
+
 - `_MEDIUM_ORDER` korrigiert: reel_tape(6) vor vinyl(7)
 - Chronologische Sortierung im MediumDetector (line ~2530)
 - "No backward jumps"-Gate entfernt (blockierte sekundäre Träger)
 - Sortierung nach Deep-Transfer-Chain-Injection in pre_analysis
 
 **ML-Readiness Flood-Control** (v10.0.3):
+
 - `_FAILURE_CACHE`: WARNING nur einmal pro model+phase
 - `clear_readiness_cache()` für neuen Restoration-Run
 - ONNX MIOPEN-Warnungen unterdrückt (50+ Zeilen pro Load)

@@ -143,8 +143,8 @@ def _estimate_delay_subsample(ref: np.ndarray, target: np.ndarray, sr: int) -> f
     t = t[:n].astype(np.float64)
 
     # Energy check — skip silence channels
-    r_rms = float(np.sqrt(np.mean(r ** 2)))
-    t_rms = float(np.sqrt(np.mean(t ** 2)))
+    r_rms = float(np.sqrt(np.mean(r**2)))
+    t_rms = float(np.sqrt(np.mean(t**2)))
     if r_rms < 1e-8 or t_rms < 1e-8:
         return 0.0
 
@@ -160,7 +160,7 @@ def _estimate_delay_subsample(ref: np.ndarray, target: np.ndarray, sr: int) -> f
     _corr = _signal_correlate(
         _l_ms / (_l_std * float(n)),
         _r_ms / _r_std,
-        method='fft',
+        method="fft",
     )
     _center = len(r) - 1
     _max_lag = min(_MAX_DELAY_SAMPLES, _center)
@@ -354,9 +354,7 @@ class StereoTemporalCoherenceGuard:
             # to prevent comb filtering from false channel shifts.
             delay = 0.0
             _mp_spread = -1
-            logger.info(
-                "STCG [%s]: only 1 measurement point — unreliable for stereo-panned material, skipping"
-            )
+            logger.info("STCG: only 1 measurement point — unreliable for stereo-panned material, skipping")
             return audio
 
         delay_ms = delay / sr * 1000.0
@@ -364,7 +362,9 @@ class StereoTemporalCoherenceGuard:
         if abs(delay) < _CORRECTION_THRESHOLD_SAMPLES:
             logger.debug(
                 "STCG [%s]: delay=%.4f samples (%.3f ms) — within threshold, no correction",
-                phase_id, delay, delay_ms,
+                phase_id,
+                delay,
+                delay_ms,
             )
             return audio
 
@@ -381,13 +381,18 @@ class StereoTemporalCoherenceGuard:
         # that destroys bass frequencies and introduces distortion — this is
         # the root cause of "verschluckte Bässe" and "verzerrter Klang" in
         # previous runs.
-        _mean_corr = float(np.corrcoef(ch_l[:min(len(ch_l), sr*10)], ch_r[:min(len(ch_r), sr*10)]).flat[1]) if len(ch_l) > 10 else 1.0
+        _mean_corr = (
+            float(np.corrcoef(ch_l[: min(len(ch_l), sr * 10)], ch_r[: min(len(ch_r), sr * 10)]).flat[1])
+            if len(ch_l) > 10
+            else 1.0
+        )
         _mean_corr = abs(_mean_corr) if np.isfinite(_mean_corr) else 1.0
         if _mean_corr < 0.40:
             logger.info(
                 "STCG [%s]: inter-channel correlation=%.3f < 0.40 — "
                 "channels contain different material (stereo panning), NOT a timing error — skipping",
-                phase_id, _mean_corr,
+                phase_id,
+                _mean_corr,
             )
             return audio
 
@@ -395,13 +400,19 @@ class StereoTemporalCoherenceGuard:
             logger.info(
                 "STCG [%s]: delay=%.1f ms > global limit %.0f ms (spread=%d) — "
                 "physically implausible; likely MP3 joint-stereo artifact, skipping",
-                phase_id, delay_ms, _GLOBAL_MAX_MS, int(_mp_spread),
+                phase_id,
+                delay_ms,
+                _GLOBAL_MAX_MS,
+                int(_mp_spread),
             )
             return audio
 
         logger.info(
             "STCG [%s]: delay=%.4f samples (%.3f ms, spread=%d) — correcting R channel",
-            phase_id, delay, delay_ms, int(_mp_spread),
+            phase_id,
+            delay,
+            delay_ms,
+            int(_mp_spread),
         )
 
         # §v10.16 Cumulative correction: track total applied shift.
@@ -415,7 +426,8 @@ class StereoTemporalCoherenceGuard:
             logger.info(
                 "STCG [%s]: cumulative correction %.1f ms exceeds 5 ms limit — "
                 "skipping to prevent comb filtering from accumulated shifts",
-                phase_id, self._cumulative_correction_samples / sr * 1000,
+                phase_id,
+                self._cumulative_correction_samples / sr * 1000,
             )
             self._cumulative_correction_samples = 0.0
             return audio

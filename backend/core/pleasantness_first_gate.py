@@ -32,12 +32,12 @@ logger = logging.getLogger(__name__)
 # Frequencies where the ear is most sensitive (2-5kHz): threshold ~0 dB SPL
 # Frequencies below 100Hz and above 10kHz: threshold rises significantly
 HUMAN_HEARING_THRESHOLD_DB_SPL: dict[str, float] = {
-    "1000Hz": 0.0,    # Reference: 0 dB SPL = hearing threshold
-    "2000Hz": -2.0,   # Ear most sensitive here
-    "3000Hz": -3.0,   # Maximum sensitivity
+    "1000Hz": 0.0,  # Reference: 0 dB SPL = hearing threshold
+    "2000Hz": -2.0,  # Ear most sensitive here
+    "3000Hz": -3.0,  # Maximum sensitivity
     "4000Hz": -2.0,
-    "100Hz":  20.0,   # Much less sensitive at low frequencies
-    "50Hz":   35.0,
+    "100Hz": 20.0,  # Much less sensitive at low frequencies
+    "50Hz": 35.0,
     "10000Hz": 10.0,  # Less sensitive at high frequencies
     "16000Hz": 25.0,
 }
@@ -52,6 +52,7 @@ MAX_CONSECUTIVE_NO_IMPROVEMENT: int = 3  # Stop if 3 phases don't improve
 @dataclass
 class PhasePleasantness:
     """Pleasantness-Snapshot vor/nach einer Phase."""
+
     phase_name: str
     hpe_before: float
     hpe_after: float
@@ -63,6 +64,7 @@ class PhasePleasantness:
 @dataclass
 class CrossPhaseConsensus:
     """Kumulative Wirkung ueber mehrere Phasen."""
+
     total_delta: float = 0.0
     phases_applied: int = 0
     phases_improved: int = 0
@@ -73,17 +75,19 @@ class CrossPhaseConsensus:
 @dataclass
 class DefectInaudibilityResult:
     """Prueft ob ein Defekt nach Restoration unter der Hoerschwelle liegt."""
+
     defect_type: str
-    pre_level_db: float       # Vor Restoration
-    post_level_db: float       # Nach Restoration
+    pre_level_db: float  # Vor Restoration
+    post_level_db: float  # Nach Restoration
     hearing_threshold_db: float  # Hoerschwelle bei dieser Frequenz
-    inaudible: bool            # True wenn post < threshold
-    margin_db: float           # Wie weit unter der Schwelle
+    inaudible: bool  # True wenn post < threshold
+    margin_db: float  # Wie weit unter der Schwelle
 
 
 @dataclass
 class PleasantnessGateReport:
     """Gesamt-Report des Pleasantness-First-Gate."""
+
     phase_checks: list[PhasePleasantness] = field(default_factory=list)
     consensus: CrossPhaseConsensus = field(default_factory=CrossPhaseConsensus)
     inaudibility: list[DefectInaudibilityResult] = field(default_factory=list)
@@ -129,6 +133,7 @@ class PleasantnessFirstGate:
         self._consecutive_no_improvement = 0
         try:
             from backend.core.human_pleasantness_estimator import compute_pleasantness
+
             hpe = compute_pleasantness(audio, sr)
             return hpe.score
         except Exception:
@@ -145,6 +150,7 @@ class PleasantnessFirstGate:
         """
         try:
             from backend.core.human_pleasantness_estimator import compute_pleasantness
+
             hpe_current = compute_pleasantness(self._current_audio, self._original_sr)
             hpe_candidate = compute_pleasantness(candidate_audio, self._original_sr)
 
@@ -158,13 +164,9 @@ class PleasantnessFirstGate:
                 )
             if delta < HPE_MIN_IMPROVEMENT:
                 return True, (
-                    f"HPE-Gate ALLOWED {phase_name}: "
-                    f"marginal ({delta:+.3f}) — keine signifikante Verbesserung"
+                    f"HPE-Gate ALLOWED {phase_name}: marginal ({delta:+.3f}) — keine signifikante Verbesserung"
                 )
-            return True, (
-                f"HPE-Gate ALLOWED {phase_name}: "
-                f"Pleasantness verbessert ({delta:+.3f})"
-            )
+            return True, (f"HPE-Gate ALLOWED {phase_name}: Pleasantness verbessert ({delta:+.3f})")
         except Exception as e:
             logger.debug("PleasantnessFirstGate HPE check error: %s", e)
             return True, f"HPE-Gate SKIPPED {phase_name}: HPE unavailable"
@@ -173,6 +175,7 @@ class PleasantnessFirstGate:
         """Nach einer Phase: Pleasantness-Delta messen."""
         try:
             from backend.core.human_pleasantness_estimator import compute_pleasantness
+
             hpe_before = compute_pleasantness(self._current_audio, self._original_sr)
             hpe_after = compute_pleasantness(result_audio, self._original_sr)
             delta = hpe_after.score - hpe_before.score
@@ -204,8 +207,7 @@ class PleasantnessFirstGate:
 
             if self._consecutive_no_improvement >= MAX_CONSECUTIVE_NO_IMPROVEMENT:
                 logger.warning(
-                    "PleasantnessFirstGate: %d Phasen ohne Verbesserung — "
-                    "weitere Phasen werden uebersprungen",
+                    "PleasantnessFirstGate: %d Phasen ohne Verbesserung — weitere Phasen werden uebersprungen",
                     self._consecutive_no_improvement,
                 )
 
@@ -289,9 +291,7 @@ class PleasantnessFirstGate:
                     f"— emotionale Bögen gefaehrdet (max 3dB erlaubt)"
                 )
             elif spread > 1.5:
-                logger.debug(
-                    "Musical-Phrasing: '%s' Sektionen variieren %.1fdB (akzeptabel)", label, spread
-                )
+                logger.debug("Musical-Phrasing: '%s' Sektionen variieren %.1fdB (akzeptabel)", label, spread)
 
         return warnings
 

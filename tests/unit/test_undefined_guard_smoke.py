@@ -24,6 +24,7 @@ class TestPsutilGuardSmoke:
     def test_unified_restorer_imports_cleanly(self):
         """unified_restorer_v3 ist ohne ImportError importierbar."""
         from backend.core.unified_restorer_v3 import RestorationConfig, RestorationResult
+
         assert RestorationConfig is not None
         assert RestorationResult is not None
 

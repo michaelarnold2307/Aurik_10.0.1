@@ -221,12 +221,13 @@ class PipelineGuard:
         # Adaptive Goal Evaluation: dynamische Schwellen aus Materialphysik
         try:
             from backend.core.spec_constitution import get_constitution
+
             const = get_constitution()
 
             # Schaetze physikalische Eigenschaften aus CLP + Material
             est_bw_hz = 20000.0  # default
-            est_snr_db = 60.0    # default
-            est_era = 2000       # default
+            est_snr_db = 60.0  # default
+            est_era = 2000  # default
 
             if self._clp_result is not None and self._clp_result.zone_scores:
                 # Bandbreite aus CLP-Zonen schaetzen
@@ -254,10 +255,18 @@ class PipelineGuard:
 
             # Era aus Material-Typ schaetzen
             material_era = {
-                "wax_cylinder": 1910, "shellac": 1940, "vinyl": 1970,
-                "tape": 1965, "reel_tape": 1960, "cassette": 1985,
-                "cd_digital": 1995, "dat": 1990, "mp3_low": 2000,
-                "mp3_high": 2005, "aac": 2010, "streaming": 2015,
+                "wax_cylinder": 1910,
+                "shellac": 1940,
+                "vinyl": 1970,
+                "tape": 1965,
+                "reel_tape": 1960,
+                "cassette": 1985,
+                "cd_digital": 1995,
+                "dat": 1990,
+                "mp3_low": 2000,
+                "mp3_high": 2005,
+                "aac": 2010,
+                "streaming": 2015,
             }
             est_era = material_era.get(self._material, 2000)
 
@@ -302,10 +311,10 @@ class PipelineGuard:
         except Exception as e:
             logger.debug("PipelineGuard: adaptive goals error: %s", e)
 
-
         # G41/G67: PleasantnessFirstGate — HPE-First validation
         try:
             from backend.core.pleasantness_first_gate import PleasantnessFirstGate
+
             pfg = PleasantnessFirstGate()
             pfg.start_session(self._original_audio if self._original_audio is not None else final_audio, sr)
             check = pfg.check_phase_end("restoration", final_audio)
@@ -364,6 +373,7 @@ class PipelineGuard:
             return 99.0
         try:
             from backend.core.pipeline_guard import get_clp_max_attenuation_for_frequency
+
             return get_clp_max_attenuation_for_frequency(freq_hz, self._clp_result)
         except Exception:
             return 99.0
@@ -414,12 +424,17 @@ class PipelineGuard:
             loss = dyn.check_phase(phase_name, audio, sr)
             if loss.severity == "severe" or dyn.should_restore():
                 from backend.core.dynamics_preserver import restore_dynamics
-                logger.info("PipelineGuard: Auto-Dynamics-Recovery after %s (loss=%.1fdB)",
-                            phase_name, dyn.cumulative_loss_db)
+
+                logger.info(
+                    "PipelineGuard: Auto-Dynamics-Recovery after %s (loss=%.1fdB)", phase_name, dyn.cumulative_loss_db
+                )
                 return restore_dynamics(audio, sr, self._original_profile, strength=0.5)
             if loss.severity == "moderate":
-                logger.debug("PipelineGuard: Dynamics loss after %s: %.1fdB (moderate, no recovery)",
-                             phase_name, loss.total_loss_db)
+                logger.debug(
+                    "PipelineGuard: Dynamics loss after %s: %.1fdB (moderate, no recovery)",
+                    phase_name,
+                    loss.total_loss_db,
+                )
         except Exception as e:
             logger.debug("PipelineGuard: dynamics check error: %s", e)
         return audio
@@ -441,9 +456,12 @@ class PipelineGuard:
     def is_dynamics_phase(self, phase_name: str) -> bool:
         """Prueft ob eine Phase Dynamics-relevant ist."""
         dynamics_phases = {
-            "phase_10_compression", "phase_11_limiting",
-            "phase_26_dynamic_range_expansion", "phase_36_transient_shaper",
-            "phase_40_loudness_normalization", "phase_54_transparent_dynamics",
+            "phase_10_compression",
+            "phase_11_limiting",
+            "phase_26_dynamic_range_expansion",
+            "phase_36_transient_shaper",
+            "phase_40_loudness_normalization",
+            "phase_54_transparent_dynamics",
         }
         return any(p in phase_name.lower() for p in dynamics_phases)
 

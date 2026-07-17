@@ -35,7 +35,8 @@ def detect_vocal_damage(vocal_stem_mono: np.ndarray, sr: int) -> dict:
       confidence: 0-1 overall repair confidence
     """
     n = len(vocal_stem_mono)
-    if n < 2048: return {"needs_repair": False, "confidence": 0.0}
+    if n < 2048:
+        return {"needs_repair": False, "confidence": 0.0}
 
     n_fft = 4096
     while n_fft < n:
@@ -72,9 +73,7 @@ def detect_vocal_damage(vocal_stem_mono: np.ndarray, sr: int) -> dict:
         harmonic_density = 0.5
 
     needs_repair = is_bandlimited or is_distorted
-    confidence = float(
-        0.5 * float(is_bandlimited) + 0.3 * float(is_distorted) + 0.2 * (1.0 - harmonic_density)
-    )
+    confidence = float(0.5 * float(is_bandlimited) + 0.3 * float(is_distorted) + 0.2 * (1.0 - harmonic_density))
 
     return {
         "bandwidth_hz": bandwidth_hz,
@@ -87,9 +86,7 @@ def detect_vocal_damage(vocal_stem_mono: np.ndarray, sr: int) -> dict:
     }
 
 
-def apply_vocal_repair(
-    vocal_stem: np.ndarray, sr: int, *, damage: dict | None = None
-) -> np.ndarray:
+def apply_vocal_repair(vocal_stem: np.ndarray, sr: int, *, damage: dict | None = None) -> np.ndarray:
     """§G58: Repair damaged vocals before enhancement.
 
     Applies bandwidth extension and/or distortion repair based on

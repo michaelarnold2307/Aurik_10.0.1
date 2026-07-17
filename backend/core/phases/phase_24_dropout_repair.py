@@ -1391,6 +1391,7 @@ class DropoutRepairPhase(PhaseInterface):
         # Ersetzt die alte signal.correlate-Methode (max 960 samples, ganzzahlig)
         try:
             from backend.core.stereo_temporal_coherence_guard import get_stereo_temporal_coherence_guard
+
             _stcg = get_stereo_temporal_coherence_guard()
             _lag_in_result = _stcg._verify_lag_multi_point(
                 original_audio[:, 0], original_audio[:, 1], sample_rate, num_points=3
@@ -1421,7 +1422,9 @@ class DropoutRepairPhase(PhaseInterface):
         stats["lag_output_corrected_samples"] = int(lag_delta)
         logger.info(
             "Phase 24 stereo-lag safety (STCG): corrected delta=%.1f samples (in=%d out=%d)",
-            lag_delta, int(lag_in), int(lag_out),
+            lag_delta,
+            int(lag_in),
+            int(lag_out),
         )
         return np.clip(corrected, -1.0, 1.0), stats
 

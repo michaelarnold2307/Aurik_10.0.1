@@ -171,7 +171,6 @@ def _separate_sources(audio: np.ndarray, sr: int) -> dict[str, np.ndarray]:
     """
     import os as _os
 
-
     _mono = audio.ndim == 1
     audio = np.atleast_2d(audio).astype(np.float32)
 

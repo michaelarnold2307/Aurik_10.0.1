@@ -20,6 +20,7 @@ from pathlib import Path
 
 try:
     import librosa
+
     _HAS_LIBROSA = True
 except ImportError:
     librosa = None  # type: ignore[assignment]

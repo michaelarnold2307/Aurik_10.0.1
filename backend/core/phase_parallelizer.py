@@ -26,8 +26,9 @@ Date: 2026-07-13
 """
 
 import logging
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Callable
+from typing import Any
 
 import numpy as np
 
@@ -50,8 +51,8 @@ _PARALLEL_GROUPS: dict[str, list[str]] = {
 # Phases that MUST run sequentially (strong dependencies)
 _SEQUENTIAL_PHASES: set[str] = {
     "phase_12_wow_flutter",  # modifies timing — must run first
-    "phase_35_multiband",     # depends on all prior spectral phases
-    "phase_40_loudness",      # must be last
+    "phase_35_multiband",  # depends on all prior spectral phases
+    "phase_40_loudness",  # must be last
 }
 
 
@@ -107,9 +108,7 @@ class ParallelPhaseExecutor:
                 available = [p for p in phase_ids if p in phase_funcs]
                 if not available:
                     continue
-                future = executor.submit(
-                    self._execute_group, audio_after_seq, sr, available, phase_funcs, context
-                )
+                future = executor.submit(self._execute_group, audio_after_seq, sr, available, phase_funcs, context)
                 futures[future] = group_name
 
             for future in as_completed(futures):
@@ -156,6 +155,6 @@ def estimate_parallel_speedup(num_phases: int = 68, num_workers: int = 4) -> flo
     parallel fraction ~70% split across workers.
     """
     sequential = 0.30  # 30% must run sequentially
-    parallel = 0.70    # 70% can be parallelized
+    parallel = 0.70  # 70% can be parallelized
     speedup = 1.0 / (sequential + parallel / num_workers)
     return speedup

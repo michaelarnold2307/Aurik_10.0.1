@@ -7,11 +7,14 @@ import numpy as np
 import soundfile as sf
 
 
-def _load_with_sf(filepath):
-    """Wrapper for sf.read — use load_audio_file() for production pipelines."""
+def _load_with_sf(filepath, always_2d: bool = False):
+    """Wrapper for sf.read — use load_audio_file() for production pipelines.
+
+    §G-SF-READ: Accepts all sf.read() kwargs to prevent signature-drift bugs.
+    """
     import soundfile as sf
 
-    return sf.read(filepath)
+    return sf.read(filepath, always_2d=always_2d)
 
 
 logger = logging.getLogger(__name__)
@@ -200,7 +203,7 @@ def _estimate_interchannel_lag_multi_point(
         if arr.shape[0] == 2 and arr.shape[1] > 2:
             chunk = arr[:, start:end]  # (2, window_n)
         else:
-            chunk = arr[start:end]     # (window_n, 2)
+            chunk = arr[start:end]  # (window_n, 2)
         l_ch, r_ch = _get_lr(chunk)
 
         # GCC-PHAT auf diesem Fenster
@@ -604,11 +607,12 @@ def load_audio_file(
         _import_lag_before = _estimate_interchannel_lag_samples(audio_work, sr)
         _import_lag_after = _import_lag_before
         if abs(_import_lag_before) > 64:
-            logger.warning(
-                "load_audio_file: detected interchannel lag=%d samples (%.1f ms) before pipeline",
+            _lag_ms = (_import_lag_before / float(sr)) * 1000.0
+            _msg = "load_audio_file: detected interchannel lag=%d samples (%.1f ms) before pipeline" % (
                 _import_lag_before,
-                (_import_lag_before / float(sr)) * 1000.0,
+                _lag_ms,
             )
+            logger.warning(_msg)
             if sr == 48000:
                 try:
                     from backend.core.stereo_temporal_coherence_guard import (

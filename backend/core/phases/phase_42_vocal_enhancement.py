@@ -54,9 +54,9 @@ from scipy import signal
 from backend.core.audio_utils import safe_to_mono
 from backend.core.defect_scanner import MaterialType
 from backend.core.dsp.stem_routing_policy import prefer_demucs_native_from_material
+from backend.core.ml_model_readiness import check_ml_model_ready
 
 from .phase_interface import PhaseCategory, PhaseInterface, PhaseMetadata, PhaseResult
-from backend.core.ml_model_readiness import check_ml_model_ready  # noqa: E402
 
 # VocalAI Enhancement (Spec §2.8 — Stimmtyp-adaptive Gesangsverarbeitung)
 try:
@@ -767,13 +767,17 @@ class VocalEnhancement(PhaseInterface):
 
             # §G58 Vocal Repair: detect and fix damaged vocals before enhancement
             try:
-                from backend.core.phases.vocal_repair import detect_vocal_damage, apply_vocal_repair
+                from backend.core.phases.vocal_repair import apply_vocal_repair, detect_vocal_damage
+
                 _v_repair_mono = safe_to_mono(vocals_stem) if vocals_stem.ndim == 2 else vocals_stem
                 _v_damage = detect_vocal_damage(_v_repair_mono.astype(np.float64), sample_rate)
                 if _v_damage.get("needs_repair"):
                     vocals_stem = apply_vocal_repair(vocals_stem, sample_rate, damage=_v_damage)
-                    logger.info("Phase42 VocalRepair: damage detected (bw=%.0fHz crest=%.1fdB) — repaired",
-                                _v_damage.get("bandwidth_hz",0), _v_damage.get("crest_factor_db",0))
+                    logger.info(
+                        "Phase42 VocalRepair: damage detected (bw=%.0fHz crest=%.1fdB) — repaired",
+                        _v_damage.get("bandwidth_hz", 0),
+                        _v_damage.get("crest_factor_db", 0),
+                    )
             except Exception as _vr_exc:
                 logger.debug("Phase42 VocalRepair skipped: %s", _vr_exc)
 

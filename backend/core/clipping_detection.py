@@ -494,12 +494,10 @@ def analyse_clipping(audio: np.ndarray, sr: int) -> ClippingAnalysisResult:
     # When thd_odd==1.0 AND thd_even==1.0 with flat_tops near 0, the
     # polyphonic estimator found no valid frames → no harmonic evidence.
     # Confidence should reflect this near-zero certainty.
-    _no_harmonic_data = (abs(thd_odd - 1.0) < 0.001 and abs(thd_even - 1.0) < 0.001 and flat_pct < 0.01)
+    _no_harmonic_data = abs(thd_odd - 1.0) < 0.001 and abs(thd_even - 1.0) < 0.001 and flat_pct < 0.01
     if _no_harmonic_data:
         confidence = 0.0
-        logger.debug(
-            "ClippingDetector: no harmonic data available (polyphonic/no-clear-fundamental) — confidence=0.0"
-        )
+        logger.debug("ClippingDetector: no harmonic data available (polyphonic/no-clear-fundamental) — confidence=0.0")
     else:
         flat_distance = abs(flat_pct - FLAT_TOPS_THRESHOLD_PCT) / max(flat_pct, FLAT_TOPS_THRESHOLD_PCT, 1e-6)
         if thd_odd + thd_even < 1e-8:
