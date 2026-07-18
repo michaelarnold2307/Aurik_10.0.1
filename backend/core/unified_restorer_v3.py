@@ -31752,6 +31752,15 @@ class UnifiedRestorerV3:
                 acc = getattr(self, "_resolved_defects_accumulator", {})
                 acc.update(_resolved)
             if hasattr(_r, "success"):
+                # §v10.31c: Auch bei PhaseResult mit .success das .audio
+                # auf Tuple prüfen — manche Phasen setzen .audio versehentlich
+                # als tuple, was post-processing mit .ndim crasht.
+                if hasattr(_r, "audio"):
+                    _ra = _r.audio
+                    if isinstance(_ra, (tuple, list)):
+                        _r.audio = _ra[0] if len(_ra) > 0 else current_audio
+                    if not isinstance(_r.audio, np.ndarray):
+                        _r.audio = np.asarray(current_audio, dtype=np.float32)
                 return _r
             if isinstance(_r, np.ndarray):
                 return SimpleNamespace(
@@ -31763,9 +31772,17 @@ class UnifiedRestorerV3:
             # §v10.18: Falls das Objekt .audio hat (z.B. _SegResult), als success behandeln.
             # Der Fallback sollte nur für komplett unbrauchbare Typen greifen.
             if hasattr(_r, "audio"):
+                _audio_raw = _r.audio
+                # §v10.31c: Universelle Tuple→ndarray-Normalisierung.
+                # Einige Phasen/Pfade können .audio als tuple zurückgeben;
+                # post-processing greift auf .ndim zu und crasht bei tuple.
+                if isinstance(_audio_raw, (tuple, list)):
+                    _audio_raw = _audio_raw[0] if len(_audio_raw) > 0 else current_audio
+                if not isinstance(_audio_raw, np.ndarray):
+                    _audio_raw = np.asarray(current_audio, dtype=np.float32)
                 return SimpleNamespace(
                     success=True,
-                    audio=_r.audio,
+                    audio=_audio_raw,
                     execution_time_seconds=getattr(_r, "execution_time_seconds", 0.0),
                     warnings=[],
                 )
@@ -35922,7 +35939,7 @@ class UnifiedRestorerV3:
                         )
                         if _ig_rolled_back:
                             current_audio = np.clip(_ig_audio, -1.0, 1.0)
-                            logger.warning("§2.48 Rollback applied after %s", phase_id)
+                            logger.info("§2.48 Rollback applied after %s", phase_id)
                             self._register_phase_goal_conflict_event(phase_id, "interaction_guard_rollback")
                             # §2.45a-VII CIG-Rollback: Phase war effektiv nicht wirksam —
                             # Cumulative Guard darf keinen Makeup-Gain anwenden und
