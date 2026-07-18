@@ -1,5 +1,5 @@
 """
-§2.35c [RELEASE_MUST] Vocal Register Detector — Aurik 9.12.0
+§2.35c [RELEASE_MUST] Vocal Register Detector — Aurik 10.0.0
 
 Erkennt das Vokalregister (Kopfstimme / Bruststimme / Fry / Flüstern) aus dem
 Audiosignal via FCPE-F0 + spektraler Flachheit. Gibt einen register-adaptiven
@@ -230,7 +230,7 @@ def get_vocal_register_cache() -> _VocalRegisterCache:
 
 
 # ---------------------------------------------------------------------------
-# §Passaggio-Schutz — Registerübergangs-Glättung (v9.12.1)
+# §Passaggio-Schutz — Registerübergangs-Glättung (v10.0.0)
 # ---------------------------------------------------------------------------
 
 # Fensterbreite (in Frames) für Übergangsglätte um erkannte Passaggio-Punkte.
@@ -387,7 +387,7 @@ def detect_vocal_register_temporal(
 
 
 # ---------------------------------------------------------------------------
-# §Multi-Singer-Erkennung (v9.12.1)
+# §Multi-Singer-Erkennung (v10.0.0)
 # ---------------------------------------------------------------------------
 
 # Schwellwert für simultane F0-Konturen (normierte ACF-Peak-Distanz)
@@ -492,7 +492,7 @@ def detect_multi_singer(
             hss_residual = hss.copy()
             hss_residual[suppress_mask] = 0.0
 
-            # §Gap9 v9.12.8: Zweiter Peak: muss signifikant sein (>55% des ersten).
+            # §Gap9 v10.0.0: Zweiter Peak: muss signifikant sein (>55% des ersten).
             # Schwellwert-Anhebung von 0.40 → 0.55: Hintergrundchor typischerweise
             # 40–55% Energie des Solisten → löst kein Multi-Singer-Gate mehr aus.
             # Nur echte Duette / gleichberechtigte Chöre (> 55%) deaktivieren das

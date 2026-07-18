@@ -1,6 +1,6 @@
 """
 User Acceptance Test (UAT) — Acceptance Criteria & Release Gates
-Aurik 9.10.77 — Formal Validation Suite
+Aurik 10.0.0 — Formal Validation Suite
 Status: 28. März 2026
 
 This module defines 30 acceptance criteria (15 Restoration + 15 Studio 2026)
@@ -1560,7 +1560,7 @@ def test_amrb_stratified_multi_scenario_gate():
         report = run_benchmark(
             BenchmarkConfig(
                 restoration_fn=_aurik_restoration_fn,
-                system_name="Aurik 9 UAT Gate G6",
+                system_name="Aurik 10.0.0 UAT Gate G6",
                 n_items_per_scenario=1,
                 duration_s=5.0,
                 scenarios=gate_scenarios,

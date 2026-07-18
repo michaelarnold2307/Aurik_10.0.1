@@ -1,4 +1,4 @@
-# Aurik 9 — Kontinuierliches Qualitäts-Monitoring & Deep-Analysis
+# Aurik 10.0.0 — Kontinuierliches Qualitäts-Monitoring & Deep-Analysis
 
 ## Überblick
 
@@ -238,6 +238,6 @@ python scripts/orchestrate_quality_monitoring.py --audio song.mp3
 
 ---
 
-**Version**: Aurik 9.20.3  
+**Version**: Aurik 10.0.0  
 **Stand**: Mai 2026  
 **Autor**: Aurik Engineering Team

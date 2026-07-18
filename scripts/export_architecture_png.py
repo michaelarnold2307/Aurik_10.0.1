@@ -1,5 +1,5 @@
 """
-Aurik 9.x.x — Systemarchitektur-Übersicht als hochauflösende PNG.
+Aurik 10.0.0.x.x — Systemarchitektur-Übersicht als hochauflösende PNG.
 Ausgabe: docs/aurik_architecture.png  (300 dpi, 7680×4320 px bei 25.6"×14.4")
 """
 
@@ -807,7 +807,7 @@ ax.plot([0.008, 0.008], [0.152, 0.940], color=rgba("#334155", 0.4), lw=1.5, zord
 ax.text(
     0.5,
     0.012,
-    "Aurik 9.10.45 · 6312 Tests · Python 3.10 · PyQt5 · FastAPI · ONNX Runtime (CPU-only) · "
+    "Aurik 10.0.0 · 6312 Tests · Python 3.10 · PyQt5 · FastAPI · ONNX Runtime (CPU-only) · "
     "EBU R128 · ITU-R BS.1770-4 · ISO 532-1:2017 · ISO 226:2003 · Stand: Februar 2026",
     ha="center",
     va="bottom",

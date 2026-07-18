@@ -487,7 +487,7 @@ class AzimuthCorrectionPhaseV2(PhaseInterface):
             )
 
         # Step 5: Apply per-band phase correction
-        # v9.10.97: Time-varying azimuth correction for cassette head-settling.
+        # v10.0.0: Time-varying azimuth correction for cassette head-settling.
         # During the first 20 s, head engagement can drift — use windowed analysis
         # and time-varying correction curve (Cedar Azimuth Corrector-class quality).
         corrected_bands = []
@@ -730,7 +730,7 @@ class AzimuthCorrectionPhaseV2(PhaseInterface):
         global_azimuth: BandAzimuthAnalysis,
         band_index: int,
     ) -> np.ndarray:
-        """Time-varying azimuth correction for cassette head-settling (v9.10.97).
+        """Time-varying azimuth correction for cassette head-settling (v10.0.0).
 
         During tape-start (first ~20 s), the head engagement angle drifts as the
         tape tension equalizes.  A single global shift value is insufficient —

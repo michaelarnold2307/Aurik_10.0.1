@@ -1,5 +1,5 @@
 """
-Phase 8: Professional Transient Preservation - Aurik 9.0
+Phase 8: Professional Transient Preservation - Aurik 10.0.0
 =========================================================
 
 Professional multi-band transient shaping with spectral flux onset detection competing with SPL Transient Designer.
@@ -74,7 +74,7 @@ BENCHMARK COMPARISON:
 - Softube Transient Shaper: Simple but effective
 - Aurik v2.0: Professional, multi-band, <0.4× realtime ✅
 
-Author: Aurik 9.0 Development Team
+Author: Aurik 10.0.0 Development Team
 Version: 2.0.0 (Professional Upgrade)
 Date: 15. Februar 2026
 """
@@ -308,8 +308,8 @@ class TransientPreservationPhase(PhaseInterface):
                         _overlap = min(_fz_end, _audio_dur) - max(_fz_start, 0.0)
                         if _overlap > 0:
                             _frisson_cap = min(_frisson_cap, 0.30)
-            except Exception:
-                pass  # Non-blocking
+            except Exception as _e:
+                logger.debug("phase_phase_08_transient_preservation: non-critical exception: %s", _e)  # Non-blocking
             if _frisson_cap < 1.0:
                 _effective_strength = float(_effective_strength * _frisson_cap)
                 logger.debug("§v10 Phase 08 Frisson-Protect: cap=%.2f strength=%.2f", _frisson_cap, _effective_strength)
@@ -353,8 +353,8 @@ class TransientPreservationPhase(PhaseInterface):
                 _ts["crest_factor"],
                 _ts["onset_threshold"],
             )
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.debug("backend.core.phases.phase_08_transient_preservation: non-critical exception: %s", _e)
 
         # Override attack boost if specified
         if attack_boost_db is not None:

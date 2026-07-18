@@ -1,4 +1,4 @@
-"""riaa_equalizer.py — Autonomous RIAA & historical disc-equalisation for Aurik 9.
+"""riaa_equalizer.py — Autonomous RIAA & historical disc-equalisation for Aurik 10.0.0.
 
 Supports standard RIAA (1954) as well as pre-RIAA historical curves:
   Columbia (1938), AES (1951), FFRR (1953), NAB-tape (7.5 ips / 15 ips).

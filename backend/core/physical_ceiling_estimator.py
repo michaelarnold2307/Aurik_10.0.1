@@ -1,6 +1,6 @@
 """
 backend/core/physical_ceiling_estimator.py
-Aurik 9 -- Spec §2.33: PhysicalCeilingEstimator
+Aurik 10.0.0 -- Spec §2.33: PhysicalCeilingEstimator
 
 Schaetzt informationstheoretische Qualitaets-Obergrenzen
 aus Quell-SNR und Bandbreite.
@@ -263,7 +263,7 @@ class PhysicalCeilingEstimator:
             ceiling["brillanz"] = min(ceiling["brillanz"], 0.85)
 
         # Tape/Kassette: Deckel für HF-Metriken — rekalibriert mit material-adaptiver Formel
-        # §9.12.7 [BUG-FIX v9.12.7]: Ceiling an neue BrillanzMetric-Formeldynamik angepasst.
+        # §9.12.7 [BUG-FIX v10.0.0]: Ceiling an neue BrillanzMetric-Formeldynamik angepasst.
         # Mit material-adaptiver Kalibration (offset=0.10, divisor=1.20) gibt tape crest_peak≈8
         # score≈0.67, crest_peak≈12 score≈0.82. Physikalische Obergrenze: 0.78/0.50.
         elif material in {"tape", "cassette"}:

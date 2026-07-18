@@ -1,5 +1,5 @@
 """
-Aurik 9 — forensics-Paket
+Aurik 10.0.0 — forensics-Paket
 ==========================
 Forensische Analyse von Tonträgerketten und Medientypen.
 """

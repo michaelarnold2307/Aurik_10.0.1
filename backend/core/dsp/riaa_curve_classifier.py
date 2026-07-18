@@ -1,6 +1,6 @@
 """
 backend/core/dsp/riaa_curve_classifier.py
-Aurik 9 — Spec §6.6 (v9.12.0): RIAA-Kurven-Klassifikation — normative Metriken.
+Aurik 10.0.0 — Spec §6.6 (v10.0.0): RIAA-Kurven-Klassifikation — normative Metriken.
 
 Bayesianische Klassifikation des Disc-EQ-Kurventyps (pre-RIAA / RIAA-Varianten)
 aus dem Audiofile-Spektrum. Ergänzt §6.3a (Zeitkonstanten) um Klassifikations-

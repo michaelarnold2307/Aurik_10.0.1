@@ -1,7 +1,7 @@
 """
 tests/unit/test_v97_cognitive_layer.py
 =========================================
-Aurik 9.7 — Cognitive Layer Test-Suite
+Aurik 10.0.0 — Cognitive Layer Test-Suite
 
 Testet alle 4 neuen Weltklasse-Module:
   Sektion 17: PerceptualEmbedder (8 Tests)

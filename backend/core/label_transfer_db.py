@@ -1,4 +1,4 @@
-"""§LTD-1 LabelTransferDB — Label- and pressing-plant-specific artifact profiles (v9.12.1).
+"""§LTD-1 LabelTransferDB — Label- and pressing-plant-specific artifact profiles (v10.0.0).
 
 Extends `carrier_transfer_characteristics.py` with label/pressing-plant-level
 detail: known EQ curves, mastering signatures, and artifact profiles derived
@@ -18,7 +18,7 @@ Sources:
   - Aurik internal carrier analysis DB (2026)
 
 DSP-only: no ML, no network, no Docker, fully offline.
-Spec: §LTD-1 LabelTransferDB (v9.12.1)
+Spec: §LTD-1 LabelTransferDB (v10.0.0)
 """
 
 from __future__ import annotations

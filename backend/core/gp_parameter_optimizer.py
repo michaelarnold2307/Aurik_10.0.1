@@ -1,5 +1,5 @@
 """
-Gaussian-Process Parameter Optimizer — Aurik 9.7
+Gaussian-Process Parameter Optimizer — Aurik 10.0.0
 ==================================================
 Adaptiver Parameter-Optimierer auf Basis Gaussianischer Prozesse (GP).
 Lernt materialspezifische optimale Restaurierungsparameter aus vergangenen

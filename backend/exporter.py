@@ -107,7 +107,7 @@ _POWR3_COEFFS = np.array(
 
 
 def _apply_powr3_dither(
-    audio: np.ndarray, bit_depth: int, *, seed: int | None = None, cd_active: bool = False
+    audio: np.ndarray, bit_depth: int, *, seed: int | None = 42, cd_active: bool = False
 ) -> np.ndarray:
     """Wendet an: POW-r Type 3 noise-shaped dither (primary) before integer quantisation.
 
@@ -167,7 +167,7 @@ def _apply_powr3_dither(
 
 
 def _apply_tpdf_dither(
-    audio: np.ndarray, bit_depth: int, *, seed: int | None = None, cd_active: bool = False
+    audio: np.ndarray, bit_depth: int, *, seed: int | None = 42, cd_active: bool = False
 ) -> np.ndarray:
     """TPDF fallback dither — no noise shaping.
 
@@ -664,7 +664,7 @@ def export_audio(
 
     # 3. Dithering before integer quantisation (spec §DSP-Spezialregeln)
     if bit_depth < 32 and export_format.lower() not in ("mp3", "aac", "m4a", "opus"):
-        audio = apply_dither(audio, bit_depth=bit_depth, seed=seed, cd_active=True)
+        audio = apply_dither(audio, bit_depth=bit_depth, seed=dither_seed, cd_active=True)
 
     subtype = _SUBTYPE_MAP.get(bit_depth)
 
@@ -683,8 +683,8 @@ def export_audio(
                 _chain_dict = _build_chain_metadata()
                 if _chain_dict:
                     _chain_list = [str(v) for v in _chain_dict.values() if v]
-            except Exception:
-                pass
+            except Exception as _e:
+                logger.debug("exporter: non-critical exception: %s", _e)
             _transfer_metadata(source_path, export_path, transfer_chain=_chain_list)
             # BWF-Metadaten für WAV/RF64 schreiben
             if export_format.lower() in ("wav", "rf64"):
@@ -733,8 +733,8 @@ def export_audio(
                 _chain_dict2 = _build_chain_metadata()
                 if _chain_dict2:
                     _chain_list2 = [str(v) for v in _chain_dict2.values() if v]
-            except Exception:
-                pass
+            except Exception as _e:
+                logger.debug("exporter: non-critical exception: %s", _e)
             _transfer_metadata(source_path, export_path, transfer_chain=_chain_list2)
             _size_mb = os.path.getsize(export_path) / (1024 * 1024)
             logger.info("Export abgeschlossen: %s (%.1f MB, %s)", export_path, _size_mb, export_format.upper())

@@ -1,5 +1,5 @@
 """
-Sibilance-Pathology-Classifier — Lücke 4 (v9.12.x)
+Sibilance-Pathology-Classifier — Lücke 4 (v10.0.0.x)
 ====================================================
 
 Klassifiziert Sibillanten-Zeitfenster in drei grundlegend verschiedene Zustände,
@@ -24,7 +24,7 @@ Aufruf (non-blocking):
     # Injiziert via kwargs in phase_43: sibilance_pathology=segs
 
 Author: Aurik Development Team
-Version: 1.0.0 (v9.12.x — Lücke 4)
+Version: 1.0.0 (v10.0.0.x — Lücke 4)
 """
 
 from __future__ import annotations

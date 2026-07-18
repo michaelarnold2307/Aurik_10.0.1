@@ -1,5 +1,5 @@
 """
-backend/core/adaptive_chunk_processor.py — Aurik 9 §7.6: Severity-adaptive Chunk-Verarbeitung
+backend/core/adaptive_chunk_processor.py — Aurik 10.0.0 §7.6: Severity-adaptive Chunk-Verarbeitung
 
 Provides chunk-size computation and a generic chunked-processing wrapper
 that phases can opt into.  Chunk size is driven by defect severity:
@@ -288,7 +288,7 @@ def process_in_adaptive_chunks(
     fade_samples = max(1, int(crossfade_s * sr))
     hop_samples = max(1, chunk_samples - fade_samples)  # overlap = fade_samples
 
-    # Half-Hanning COLA-compliant crossfade windows (Lücke-E-Fix v9.10.100).
+    # Half-Hanning COLA-compliant crossfade windows (Lücke-E-Fix v10.0.0).
     # w_in[i] = 0.5*(1 - cos(π*i/N))  rising Hanning half → smooth C¹ boundary
     # w_out = 1 - w_in  → w_in + w_out = 1.0 for all i (COLA at 50 % overlap)
     # §9.10.119: float64 intermediate precision eliminates float32 accumulation
@@ -354,8 +354,10 @@ def process_in_adaptive_chunks(
                             processed = np.vstack([_ch_l[np.newaxis, :], _r_corrected[np.newaxis, :]]).astype(
                                 np.float32
                             )
-            except Exception:
-                pass
+            except Exception as _acp_xcorr_exc:
+                logger.debug(
+                    "adaptive_chunk_processor: chunk cross-correlation failed (non-critical): %s", _acp_xcorr_exc
+                )
 
         # Build weight envelope for this chunk
         chunk_len = end - pos

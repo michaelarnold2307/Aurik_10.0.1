@@ -10,7 +10,7 @@ Anforderungen aus der Spec:
   * PMGG wraps jedes PhaseInterface.process() in UnifiedRestorerV3
   * Nach jeder Phase: 5-s-Stichprobe → measure_quick() auf 6 Schnell-Ziele
   * Δ < −threshold → Retry-1 (×0.65) → Retry-2 (×0.50) → Retry-3 (×0.35) → Retry-4 (×0.20) → Retry-5 (×0.10) → Rollback
-  * max. 5 Retries = MAX_RETRIES Konstante  (v9.15-B3)
+  * max. 5 Retries = MAX_RETRIES Konstante  (v10.0.0-B3)
   * Deaktivierbar via reset()
   * wrap_phase gibt 3-Tuple (audio_out, scores_after, log_entry) zurück
 
@@ -47,7 +47,7 @@ from backend.core.per_phase_musical_goals_gate import (
 try:
     from backend.core.per_phase_musical_goals_gate import _RETRY_STRENGTHS
 except ImportError:
-    _RETRY_STRENGTHS = [0.65, 0.50, 0.35, 0.20, 0.10]  # v9.15-B3 Fallback
+    _RETRY_STRENGTHS = [0.65, 0.50, 0.35, 0.20, 0.10]  # v10.0.0-B3 Fallback
 
 
 # ── Hilfsfunktionen & Mock-Phasen ────────────────────────────────────────────
@@ -198,10 +198,10 @@ class TestConstants:
         assert pytest.approx(0.025, abs=1e-9) == REGRESSION_THRESHOLD
 
     def test_05_max_retries_value(self):
-        assert MAX_RETRIES == 5  # v9.15-B3: 5-Retry-Strategie
+        assert MAX_RETRIES == 5  # v10.0.0-B3: 5-Retry-Strategie
 
     def test_06_fast_goals_subset_length(self):
-        assert len(FAST_GOALS_SUBSET) == 15  # v9.12.13: alle 15 Musical Goals per-Phase geprüft
+        assert len(FAST_GOALS_SUBSET) == 15  # v10.0.0: alle 15 Musical Goals per-Phase geprüft
 
     def test_07_fast_goals_contains_brillanz(self):
         assert "brillanz" in FAST_GOALS_SUBSET
@@ -212,13 +212,13 @@ class TestConstants:
     def test_09_retry_strengths_values(self):
         assert (
             pytest.approx([0.65, 0.50, 0.35, 0.25, 0.15], abs=1e-9) == _RETRY_STRENGTHS
-        )  # v9.10.79: 5 Stufen, Floor 0.15
+        )  # v10.0.0: 5 Stufen, Floor 0.15
 
     def test_10_sample_duration_positive(self):
         assert SAMPLE_DURATION_S > 0.0
 
     def test_11_retry_strengths_count(self):
-        assert len(_RETRY_STRENGTHS) == 5  # v9.10.79: 5 Stufen, Floor 0.15
+        assert len(_RETRY_STRENGTHS) == 5  # v10.0.0: 5 Stufen, Floor 0.15
 
 
 class TestWrapPhaseReturnType:

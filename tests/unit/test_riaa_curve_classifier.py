@@ -2,7 +2,7 @@ from __future__ import annotations
 
 """
 tests/unit/test_riaa_curve_classifier.py
-Aurik 9 — Spec §6.6 Tests: RIAA-Kurven-Klassifikation
+Aurik 10.0.0 — Spec §6.6 Tests: RIAA-Kurven-Klassifikation
 """
 
 

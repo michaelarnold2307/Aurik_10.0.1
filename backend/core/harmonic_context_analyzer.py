@@ -1,5 +1,5 @@
 """
-backend/core/harmonic_context_analyzer.py — HarmonicContextAnalyzer (Aurik 9 §HCA-1)
+backend/core/harmonic_context_analyzer.py — HarmonicContextAnalyzer (Aurik 10.0.0 §HCA-1)
 ======================================================================================
 Chord-progression and harmonic-density analysis for NR-gate awareness.
 

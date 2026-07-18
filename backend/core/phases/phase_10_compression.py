@@ -99,7 +99,7 @@ class CompressionPhase(PhaseInterface):
             "low_mid": [-16, 3.2, 20, 150, 8, 3.8],
             "mid_high": [-14, 3.8, 10, 100, 10, 4.8],
             "high": [-16, 2.2, 5, 80, 6, 2.8],
-        },  # v9.12.9: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
+        },  # v10.0.0: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
         MaterialType.CD_DIGITAL: {
             "bass": [-24, 2.0, 30, 200, 4, 2.0],  # Light compression
             "low_mid": [-22, 2.5, 20, 150, 6, 2.5],
@@ -125,7 +125,7 @@ class CompressionPhase(PhaseInterface):
         MaterialType.SHELLAC: 0.50,  # 50% parallel compression
         MaterialType.VINYL: 0.40,  # 40%
         MaterialType.TAPE: 0.45,  # 45%
-        MaterialType.CASSETTE: 0.45,  # v9.12.9: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
+        MaterialType.CASSETTE: 0.45,  # v10.0.0: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
         MaterialType.CD_DIGITAL: 0.30,  # 30% (light)
         MaterialType.STREAMING: 0.20,  # 20% (minimal)
         MaterialType.UNKNOWN: 0.30,  # Vinyl-ähnlich
@@ -136,7 +136,7 @@ class CompressionPhase(PhaseInterface):
         MaterialType.SHELLAC: "rms",  # RMS for natural sound
         MaterialType.VINYL: "rms",
         MaterialType.TAPE: "rms",
-        MaterialType.CASSETTE: "rms",  # v9.12.9: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
+        MaterialType.CASSETTE: "rms",  # v10.0.0: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
         MaterialType.CD_DIGITAL: "peak",  # Peak for precision
         MaterialType.STREAMING: "peak",
         MaterialType.UNKNOWN: "rms",  # Vinyl-ähnlich
@@ -519,7 +519,7 @@ class CompressionPhase(PhaseInterface):
         # Step 2: Apply makeup gain via §2.45a-II envelope (music-frames only)
         if makeup_db > 0.001:
             makeup_lin = float(10.0 ** (makeup_db / 20.0))
-            # §2.45a-II v9.12.2: reference_for_gate=audio (pre-compression) → signal-relative gate
+            # §2.45a-II v10.0.0: reference_for_gate=audio (pre-compression) → signal-relative gate
             audio_compressed = apply_musical_gain_envelope(
                 audio_compressed,
                 makeup_lin,

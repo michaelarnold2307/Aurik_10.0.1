@@ -1,5 +1,5 @@
 """
-Perceptual Loss Functions für Aurik 8.0
+Perceptual Loss Functions für Aurik 10.0.0
 
 Implementiert psychoakustisch und musikalisch fundierte Loss Functions:
 1. PANNs-based High-Level Perceptual Loss

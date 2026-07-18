@@ -2,7 +2,7 @@
 applyTo: "tests/**/*.py"
 ---
 
-# Test-Regeln (normativ, Aurik 9.12.x)
+# Test-Regeln (normativ, Aurik 10.0.0.x)
 
 ## GC-Konventionen
 

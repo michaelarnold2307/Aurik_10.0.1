@@ -238,7 +238,7 @@ class TestMicroDynamicsMetric:
     def test_10_no_reference_dynamic_music_meets_threshold(self):
         """Normaldynamisches Audio (cv≈0.12) ohne Referenz erzielt Score ≥ 0.92.
 
-        Regression-Test für v9.10.57: altes cv/0.3 lieferte 0.33–0.60 für
+        Regression-Test für v10.0.0: altes cv/0.3 lieferte 0.33–0.60 für
         typische Musik; neue Formel 0.60 + cv*4.0 kalibriert korrekt.
         """
         from backend.core.musical_goals.musical_goals_metrics import MicroDynamicsMetric

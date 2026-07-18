@@ -83,7 +83,7 @@ class AiDecrackler:
     def _process_channel(self, x: np.ndarray, sr: int) -> np.ndarray:
         """Remove crackle events via AR-predicted gap interpolation.
 
-        v9.20.3-Fix: Linear interpolation over gaps up to 5 ms (240 samples at
+        v10.0.0-Fix: Linear interpolation over gaps up to 5 ms (240 samples at
         48 kHz) created audible "holes" — the human ear perceives a straight-line
         ramp >1 ms as a signal dropout. Replaced with forward-backward Burg AR
         prediction that preserves the local spectral envelope of the surrounding
@@ -121,7 +121,7 @@ class AiDecrackler:
                     j += 1
                 gap = j - i
                 if gap > 0:
-                    # ── AR-basierte Lückenfüllung (v9.20.3) ──
+                    # ── AR-basierte Lückenfüllung (v10.0.0) ──
                     # Kontext vor und nach der Lücke für AR-Modellierung
                     ctx_left = max(32, min(gap * 4, i))
                     ctx_right = max(32, min(gap * 4, n - j))

@@ -1,4 +1,4 @@
-# Contributing to Aurik 9.x.x
+# Contributing to Aurik 10.0.8
 
 **Vielen Dank für dein Interesse an Aurik!**
 
@@ -55,7 +55,7 @@ Beschreibe das Problem kurz und präzise.
 - OS: Linux / macOS / Windows
 - Python Version: 3.11
 - Aurik Version: 8.0.0
-- GPU: NVIDIA RTX 3090 / CPU-only
+- GPU: AMD Radeon (ROCm-kompatibel) / CPU + optionale AMD-GPU (ROCM/DirectML)
 
 **Additional Context:**
 Screenshots, Error-Messages, Logs
@@ -99,7 +99,7 @@ Warum ist die Funktion nützlich?
 
 - Python 3.10+
 - Git
-- (Optional) NVIDIA GPU mit CUDA 12.8
+- (Optional) AMD GPU mit ROCm 6.x
 
 ### Installation
 

@@ -37,7 +37,7 @@ class TestDenoiseModelSelection:
     """Test denoise model selection logic."""
 
     def test_vinyl_uses_canonical_instrumental_route(self, policy_engine):
-        """Vinyl medium should stay inside canonical Aurik 9 routing."""
+        """Vinyl medium should stay inside canonical Aurik 10.0.0 routing."""
         context = {"detected_medium": "vinyl"}
         model = policy_engine.select_denoise_model(context, {})
         assert model == CANONICAL_INSTRUMENTAL_NR_ROUTE
@@ -324,7 +324,7 @@ class TestSelectAllModels:
         assert "separation" in models
         assert "quality" in models
 
-        # Denoise should be routed through the canonical Aurik 9 policy facade.
+        # Denoise should be routed through the canonical Aurik 10.0.0 policy facade.
         assert models["denoise"] == CANONICAL_VOCAL_NR_ROUTE
 
         # Quality should be list

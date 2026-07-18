@@ -1,5 +1,5 @@
 """
-§Cross-Segment Timbral Coherence Guard — konsistenter Rauschboden (v9.12.1)
+§Cross-Segment Timbral Coherence Guard — konsistenter Rauschboden (v10.0.0)
 
 Zweck: Stellt sicher, dass der Rauschboden-Charakter (spektrale Form, Textur)
 über alle Segmente eines Songs konsistent bleibt. Verhindert, dass NR-Phasen

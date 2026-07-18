@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""goal_monitor.py — Aurik 9 Musical-Goals-Diagnose-Monitor.
+"""goal_monitor.py — Aurik 10.0.0 Musical-Goals-Diagnose-Monitor.
 
 Liest `logs/aurik_backend.log` und zeigt für jeden abgeschlossenen Lauf:
     • Alle 15 Ziel-Scores mit effektivem Schwellwert, Gap und Pass/Fail
@@ -621,7 +621,7 @@ def runs_to_json(runs: list[RunReport]) -> dict:
 def main() -> None:
     """Einstiegspunkt des CLI-Diagnose-Monitors."""
     parser = argparse.ArgumentParser(
-        description="Aurik 9 Musical-Goals-Diagnose-Monitor",
+        description="Aurik 10.0.0 Musical-Goals-Diagnose-Monitor",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--log", default=str(DEFAULT_LOG), help="Pfad zur Log-Datei")
@@ -684,7 +684,7 @@ def main() -> None:
         print(json.dumps(runs_to_json(selected), ensure_ascii=False, indent=2))
         return
 
-    print(f"\n{BLD('Aurik 9 — Musical Goals Monitor')}  {DIM(f'[{n_show} Lauf/Läufe aus {log_path.name}]')}")
+    print(f"\n{BLD('Aurik 10.0.0 — Musical Goals Monitor')}  {DIM(f'[{n_show} Lauf/Läufe aus {log_path.name}]')}")
 
     for report in selected:
         print_run(report, show_trajectories=args.trajectory, filter_goal=args.goal)
@@ -728,7 +728,7 @@ def _watch_mode(log_path: Path, args: argparse.Namespace) -> None:
     """Tail the log file and print new GOAL_SCORECARD entries as they appear."""
     import time  # pylint: disable=import-outside-toplevel
 
-    print(f"{BLD('Aurik 9 — Goal Monitor LIVE')}  {DIM(f'(watching {log_path.name})')}")
+    print(f"{BLD('Aurik 10.0.0 — Goal Monitor LIVE')}  {DIM(f'(watching {log_path.name})')}")
     print(DIM("Warte auf neuen Lauf... (Ctrl+C zum Beenden)"))
 
     seen_scorecards: set[str] = set()

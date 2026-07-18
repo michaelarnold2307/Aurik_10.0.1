@@ -1,4 +1,4 @@
-# Aurik 9.x.x — CI Checkliste fuer optionale Test-Abhaengigkeiten
+# Aurik 10.0.8 — CI Checkliste fuer optionale Test-Abhaengigkeiten
 
 **Ziel:** Vermeidbare `skipped`-Tests in CI minimieren, ohne absichtliche Environment-Skips zu brechen.
 

@@ -1,6 +1,6 @@
-# Contributing to Aurik 9.12.8
+# Contributing to Aurik 10.0.8
 
-Thank you for your interest in contributing to Aurik 9! This document provides guidelines and instructions for contributing to this project.
+Thank you for your interest in contributing to Aurik 10.0.8! This document provides guidelines and instructions for contributing to this project.
 
 ## Table of Contents
 
@@ -17,7 +17,7 @@ Thank you for your interest in contributing to Aurik 9! This document provides g
 
 ## Getting Started
 
-Aurik 9 is a professional-grade audio restoration and enhancement software with a hybrid DSP + ML architecture. Before contributing, please:
+Aurik 10.0.0 is a professional-grade audio restoration and enhancement software with a hybrid DSP + ML architecture. Before contributing, please:
 
 1. Read the [README.md](README.md)
 2. Review the [Roadmap](docs/aurik9_roadmap.md)
@@ -58,15 +58,15 @@ python start_aurik_90.py
 ```
 Aurik_Standalone/
 ├── core/                    # Core processing engine
-│   ├── phases/             # 64 processing phases (Phase 01–64)
+│   ├── phases/             # 68 processing phases (Phase 01–66 + Vocal Repair + Glue Stage)
 │   ├── unified_restorer_v3.py  # Main pipeline orchestrator
-│   ├── defect_scanner.py   # Defect detection (46 DefectTypes)
+│   ├── defect_scanner.py   # Defect detection (62 DefectTypes)
 │   └── musical_goals/      # 14 perceptual quality goals
 ├── dsp/                     # DSP algorithms (OMLSA, NMF-β, PGHI, …)
 ├── plugins/                 # ML plugins (ONNX/local, all with DSP fallback)
 ├── denker/                  # Cognitive orchestration layer
 ├── backend/                 # API and backend utilities
-├── tests/                   # Test suite (~11598 unit tests)
+├── tests/                   # Test suite (~18.400+ tests)
 ├── docs/                    # Documentation
 ├── Aurik10/                # GUI (PyQt5-based, frameless dark-theme)
 ├── models/                  # ML model weights (not tracked in Git)
@@ -530,7 +530,7 @@ We are committed to providing a welcoming and inclusive environment. Please:
 ### Low Priority / Future
 
 1. **Custom ML Models:** Train Aurik-specific models
-2. **GPU Acceleration:** CUDA support (currently CPU-only)
+2. **GPU Acceleration:** CUDA/ROCm/DirectML support (CPU + optionale AMD-GPU)
 3. **Real-time Processing:** Live audio processing
 4. **Plugin Formats:** VST/AU for DAW integration
 5. **Cloud Processing:** Backend API for web/mobile apps
@@ -545,7 +545,7 @@ Contributors will be recognized in:
 - Release notes
 - Project documentation
 
-Thank you for contributing to Aurik 9.0! 🎵✨
+Thank you for contributing to Aurik 10.0.0! 🎵✨
 
 ---
 

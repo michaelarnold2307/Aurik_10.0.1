@@ -1,9 +1,9 @@
-"""Plugins-Paket — ML- und DSP-Plugin-Registrierung für Aurik 9."""
+"""Plugins-Paket — ML- und DSP-Plugin-Registrierung für Aurik 10.0.0."""
 
 # Ermöglicht Plugin-Importe als aurik6.plugins.*
 
 # ---------------------------------------------------------------------------
-# SOTA-Plugins (v9.9.x) — kein Docker, kein CUDA, CPU-only
+# SOTA-Plugins (v10.0.0.x) — kein Docker, kein CUDA, CPU-only
 # ---------------------------------------------------------------------------
 
 from .apollo_plugin import (

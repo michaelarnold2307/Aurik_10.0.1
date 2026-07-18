@@ -163,7 +163,7 @@ class TestGrooveEdgeCases:
 
 
 # ---------------------------------------------------------------------------
-# v9.11.14: Bidirektionaler Onset-Guard + Catastrophic-Fallback
+# v10.0.0: Bidirektionaler Onset-Guard + Catastrophic-Fallback
 # ---------------------------------------------------------------------------
 
 

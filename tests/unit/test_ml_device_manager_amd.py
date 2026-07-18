@@ -232,7 +232,7 @@ class TestGlobalWrappers:
 class TestFp16PluginAudit:
     """Verify that every fp16-eligible ONNX plugin sources get_ort_providers (auto-fp16 via §8.7).
 
-    Since v9.11.14, get_ort_providers() automatically activates fp16 for eligible plugins
+    Since v10.0.0, get_ort_providers() automatically activates fp16 for eligible plugins
     on ROCm Tier 1–3. Plugins must NOT manually call get_ort_providers_fp16() — they should
     use the canonical get_ort_providers() which applies fp16 automatically when appropriate.
     """
@@ -252,7 +252,7 @@ class TestFp16PluginAudit:
 
     @pytest.mark.parametrize("plugin_name,rel_path", list(_PLUGIN_FILE_MAP.items()))
     def test_uses_canonical_ort_providers(self, plugin_name: str, rel_path: str) -> None:
-        """Plugin source must import get_ort_providers (auto-fp16 since v9.11.14)."""
+        """Plugin source must import get_ort_providers (auto-fp16 since v10.0.0)."""
         import pathlib
 
         workspace_root = pathlib.Path(__file__).parents[2]
@@ -267,7 +267,7 @@ class TestFp16PluginAudit:
 
 
 # ---------------------------------------------------------------------------
-# AMD GPU Architecture Detection Tests (v9.11.14 §8.7)
+# AMD GPU Architecture Detection Tests (v10.0.0 §8.7)
 # ---------------------------------------------------------------------------
 
 
@@ -343,7 +343,7 @@ class TestAmdArchitectureDetection:
 
 
 # ---------------------------------------------------------------------------
-# GPU Tier Computation Tests (v9.11.14 §8.7)
+# GPU Tier Computation Tests (v10.0.0 §8.7)
 # ---------------------------------------------------------------------------
 
 
@@ -402,7 +402,7 @@ class TestGpuTierComputation:
 
 
 # ---------------------------------------------------------------------------
-# Tier-based Plugin Exclusion Tests (v9.11.14 §8.7)
+# Tier-based Plugin Exclusion Tests (v10.0.0 §8.7)
 # ---------------------------------------------------------------------------
 
 
@@ -474,7 +474,7 @@ class TestTierBasedExclusion:
 
 
 # ---------------------------------------------------------------------------
-# Auto-fp16 Activation Tests (v9.11.14 §8.7)
+# Auto-fp16 Activation Tests (v10.0.0 §8.7)
 # ---------------------------------------------------------------------------
 
 
@@ -552,7 +552,7 @@ class TestAutoFp16:
 
 
 # ---------------------------------------------------------------------------
-# gpu_status_summary — new fields (v9.11.14 §8.7)
+# gpu_status_summary — new fields (v10.0.0 §8.7)
 # ---------------------------------------------------------------------------
 
 
@@ -602,7 +602,7 @@ class TestGpuStatusSummaryExtended:
 
 
 # ---------------------------------------------------------------------------
-# gpu_architecture / gpu_tier properties (v9.11.14 §8.7)
+# gpu_architecture / gpu_tier properties (v10.0.0 §8.7)
 # ---------------------------------------------------------------------------
 
 
@@ -625,7 +625,7 @@ class TestManagerProperties:
 
 
 # ---------------------------------------------------------------------------
-# RDNA4 architecture detection (v9.11.14)
+# RDNA4 architecture detection (v10.0.0)
 # ---------------------------------------------------------------------------
 
 
@@ -671,7 +671,7 @@ class TestRdna4Detection:
 
 
 # ---------------------------------------------------------------------------
-# APU / iGPU name patterns (v9.11.14)
+# APU / iGPU name patterns (v10.0.0)
 # ---------------------------------------------------------------------------
 
 
@@ -768,7 +768,7 @@ class TestApuPatterns:
 
 
 # ---------------------------------------------------------------------------
-# DirectML tier uplift — GCN4/5 on Windows vs ROCm (v9.11.14)
+# DirectML tier uplift — GCN4/5 on Windows vs ROCm (v10.0.0)
 # ---------------------------------------------------------------------------
 
 
@@ -817,7 +817,7 @@ class TestDirectMlTierUplift:
 
 
 # ---------------------------------------------------------------------------
-# DirectML full-stack: arch + tier + provider detection (v9.11.14)
+# DirectML full-stack: arch + tier + provider detection (v10.0.0)
 # ---------------------------------------------------------------------------
 
 

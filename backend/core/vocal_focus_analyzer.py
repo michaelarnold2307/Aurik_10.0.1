@@ -1,5 +1,5 @@
 """
-VocalFocusAnalyzer (VFA) — §0p [RELEASE_MUST] Aurik 9.12.1
+VocalFocusAnalyzer (VFA) — §0p [RELEASE_MUST] Aurik 10.0.0
 ===========================================================
 
 Aggregiert alle vokalspezifischen Analysen zu einem einzelnen VFAResult,
@@ -18,7 +18,7 @@ Komponenten:
 Singleton-Pattern (thread-safe double-checked locking).
 Performance: ≤ 3 s für 30 s Stereo (48 kHz) ohne ML-Modelle.
 
-Spec: copilot-instructions.md §0p (v9.12.1)
+Spec: copilot-instructions.md §0p (v10.0.0)
 """
 
 from __future__ import annotations
@@ -99,7 +99,7 @@ class VFAResult:
     vibrato_zones: list[tuple[float, float]] = field(default_factory=list)
     """Vibrato-geschützte Passagen (F0-Modulation 4–7 Hz). Leer wenn nicht erkannt."""
 
-    # §Gap1 Emotional Context — Tension/Release/Climax/Whisper (v9.12.x)
+    # §Gap1 Emotional Context — Tension/Release/Climax/Whisper (v10.0.0.x)
     tension_zones: list[tuple[float, float]] = field(default_factory=list)
     """Spannungs-Passagen (start_s, end_s): steigende Energie + hoher Spectral Centroid.
     DSP-Schutz: Strength-Reduktion in Tension-Zonen um 20 % (kein Over-NR vor Klimax)."""

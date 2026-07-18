@@ -7,7 +7,7 @@ Ensures that:
    in _PHASE_REQUIRED_MODELS for that phase.
 2. Every model listed in _PHASE_REQUIRED_MODELS is actually used (try_allocate'd) by
    that phase somewhere in the code.
-3. Phase_23 maps Apollo (not just AudioSR) — regression test for the v9.11.14 crash.
+3. Phase_23 maps Apollo (not just AudioSR) — regression test for the v10.0.0 crash.
 """
 
 
@@ -69,7 +69,7 @@ class TestPLMPhaseModelSync:
         )
 
     def test_phase_23_includes_apollo(self):
-        """Regression: phase_23 must map Apollo (crash fix v9.11.14)."""
+        """Regression: phase_23 must map Apollo (crash fix v10.0.0)."""
         models = _PHASE_REQUIRED_MODELS.get("phase_23_spectral_repair", frozenset())
         assert "Apollo" in models, (
             f"phase_23 _PHASE_REQUIRED_MODELS={models} — Apollo missing! "

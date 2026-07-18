@@ -133,8 +133,8 @@ class DirectDefectRepair:
                     xi = np.arange(s0, s1, dtype=np.float64)
                     yi = np.polyval(coeffs, xi)
                     result[ch, s0:s1] = yi.astype(np.float32)
-                except Exception:
-                    pass
+                except Exception as _e:
+                    logger.debug("direct_defect_repair: non-critical exception: %s", _e)
         return result
 
     def _repair_scratches(self, audio, sr, scratches):

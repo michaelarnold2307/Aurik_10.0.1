@@ -70,8 +70,8 @@ class TestGapDetector:
             try:
                 for m in pattern.finditer(py_file.read_text(errors="ignore")):
                     refs.add(m.group(1))
-            except Exception:
-                pass
+            except Exception as _e:
+                logger.debug("test_gap_detector: non-critical exception: %s", _e)
         return refs
 
 

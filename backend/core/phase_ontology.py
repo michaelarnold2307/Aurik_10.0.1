@@ -1,5 +1,5 @@
 """
-Aurik 9 — Phase-Typ-Ontologie §2.48a [RELEASE_MUST]
+Aurik 10.0.0 — Phase-Typ-Ontologie §2.48a [RELEASE_MUST]
 =====================================================
 Zentrales Register für Phase-Operationstypen.
 
@@ -49,7 +49,7 @@ Wissenschaftliche Grundlage:
 
   ENHANCEMENT  — kombiniert mehrere Typen; default für Phasen ohne speziellen Charakter.
 
-Reference: Spec 02 §2.48a (v9.11.0)
+Reference: Spec 02 §2.48a (v10.0.0)
 """
 
 from __future__ import annotations

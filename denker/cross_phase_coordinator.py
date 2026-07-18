@@ -160,6 +160,13 @@ PHASE_FREQ_PROFILES: dict[str, dict[str, Any]] = {
         "category": "additive",
         "human_label": "Harmonik-Boost",
     },
+    "phase_07_declipper": {  # §v10.18: Selbstkalibrierender Declipper
+        "affects": [
+            (20, 20000, 0.4),  # Breitband: rekonstruiert Samples über gesamtes Spektrum
+        ],
+        "category": "additive",
+        "human_label": "Declipper",
+    },
     "phase_42_vocal_enhancement": {
         "affects": [
             (500, 2000, 0.7),  # formant region

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-"""Tests für §8.1.1a [RELEASE_MUST] Studio-2026 OQS-Gate (v9.10.130).
+"""Tests für §8.1.1a [RELEASE_MUST] Studio-2026 OQS-Gate (v10.0.0).
 
 Verifiziert:
 - Studio 2026 threshold = 88.0, Restoration threshold = 80.0

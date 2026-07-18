@@ -8,7 +8,7 @@ This implementation is PRIVACY-COMPLIANT (§2.36):
 - Only numeric sentiment vectors are passed downstream
 - DSP fallback when no ML model is available
 
-Spec: §LSM-1 Lyrics-Semantics-Model (v9.12.1)
+Spec: §LSM-1 Lyrics-Semantics-Model (v10.0.0)
 """
 
 from __future__ import annotations

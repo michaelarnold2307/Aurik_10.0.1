@@ -1,7 +1,11 @@
-# Aurik 9.x.x — Implementierte Architektur
+> **⚠️ ARCHIVIERT — siehe SPEC.md und docs/architecture/ARCHITECTURE.md für aktuelle Architektur (v10.0.8).**
+>
+> Diese Datei beschreibt die historische Architektur von Aurik 10.0.8 und ist nicht mehr aktuell.
 
-**Stand:** Mai 2026  
-**Version:** 9.20.3  
+# Aurik 10.0.8 — Implementierte Architektur (ARCHIVIERT)
+
+**Stand:** Juli 2026  
+**Version:** 10.0.8  
 **Status:** ✅ Produktionsbereit
 
 > Hinweis: Diese Seite ist eine Architekturübersicht. Normative Details stehen in `.github/specs/01-14`.
@@ -12,7 +16,7 @@
 
 ### 1. Defect-First, Cognitive Pipeline
 
-Aurik 9 verarbeitet Audio über eine streng geordnete kognitive Pipeline.
+Aurik 10.0.0 verarbeitet Audio über eine streng geordnete kognitive Pipeline.
 Vor jeder Restaurierung wird das Material analysiert, die Ursache ermittelt
 (Bayesianische Kausalinferenz) und die Verarbeitungsparameter optimiert (GP-Optimizer).
 
@@ -22,12 +26,12 @@ TransientDecoupledProcessing (TDP)           ← Schritt 0: Trennung
   -> EraClassifier (1890–2025)                ← Dekaden-Prior
   -> GermanSchlagerClassifier                 ← Zero-Shot Genre
     -> MediumDetector (transfer-chain-aware)    ← Träger-Erkennung
-    -> DefectScanner (54 DefectTypes)           ← Defekt-Erkennung
-    -> CausalDefectReasoner (34 Kausal-Ursachen)← Ursachen-Inferenz
+    -> DefectScanner (62 DefectTypes)           ← Defekt-Erkennung
+    -> CausalDefectReasoner (62 Kausal-Ursachen)← Ursachen-Inferenz
   -> UncertaintyQuantifier                    ← Konfidenz
   -> GPParameterOptimizer (MOO-Pareto)        ← Parameter-Vorschlag
   -> HarmonicPreservationGuard                ← Partial-Masken
-  -> Phasen 01–64 (je via PMGG-Gate)         ← Verarbeitung
+  -> Phasen 01–68 (je via PMGG-Gate)         ← Verarbeitung
   -> EraAuthenticPerceptualCompletion         ← BW < 10 kHz
   -> IntroducedArtifactDetector               ← Artefakt-Check
   -> FeedbackChain (max. 5 Iter.)             ← Iterative Optimierung
@@ -84,7 +88,7 @@ assert sample_rate == 48000, f"SR muss 48000 Hz sein, erhalten: {sample_rate}"
 
 ---
 
-## Wichtige neue Module (v9.9–v9.20.3)
+## Wichtige neue Module (v10.0.0–v10.0.0)
 
 | Modul | Zweck | Position in Pipeline |
 | --- | --- | --- |
@@ -142,4 +146,4 @@ Frontend kommuniziert ausschließlich über API-Schicht oder Qt-Signals/Slots.
 
 ---
 
-**Aurik 9.20.3 — Mai 2026**
+**Aurik 10.0.8 — Juli 2026**

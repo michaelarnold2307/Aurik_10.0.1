@@ -5,7 +5,7 @@ Provides ``get_noise_reducer()`` as bridge-compatible accessor (§9.7.4).
 Delegates to ``plugins.deepfilternet_v3_ii_plugin.get_deepfilternet_plugin()``.
 
 Author: Aurik Development Team
-Version: 9.10.57
+Version: 10.0.0
 """
 
 from __future__ import annotations

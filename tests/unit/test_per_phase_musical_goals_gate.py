@@ -1,7 +1,7 @@
 """
 tests/unit/test_per_phase_musical_goals_gate.py
 ================================================
-Aurik 9.9 — PerPhaseMusicalGoalsGate (§2.29)
+Aurik 10.0.0 — PerPhaseMusicalGoalsGate (§2.29)
 
 26 Unit-Tests.
 Alle Tests synthetisch (keine echten Audio-Dateien).
@@ -379,7 +379,7 @@ class TestPMGGRegression:
         """Null-Phase zerstört Signal — Gate soll Best-Effort/Retry auslösen."""
         gate.reset()
         _, _, entry = gate.wrap_phase(_MockZeroPhase(), audio_5s, SR)
-        # Bei starker Regression: best_effort oder retry (kein Rollback/Skip mehr seit v9.10.64)
+        # Bei starker Regression: best_effort oder retry (kein Rollback/Skip mehr seit v10.0.0)
         assert entry.action in {"passed", "retry1", "retry2", "retry3", "retry4", "retry5"} or entry.action.startswith(
             "best_effort"
         )
@@ -701,7 +701,7 @@ class TestPhaseGoalExclusions:
         assert "artikulation" in PHASE_GOAL_EXCLUSIONS["phase_03"]
 
     def test_38_phase03_tonal_center_excluded(self):
-        """§9.7.11 extension (v9.10.95): tonal_center MUST be excluded from phase_03.
+        """§9.7.11 extension (v10.0.0): tonal_center MUST be excluded from phase_03.
         K-S is invariant to additive white noise but NOT to frequency-selective NR
         (OMLSA/ResembleEnhance apply gain G(f) varying per band → chroma energy
         distribution shifts → K-S argmax changes even though musical key is unchanged).
@@ -711,18 +711,18 @@ class TestPhaseGoalExclusions:
 
         excl = PHASE_GOAL_EXCLUSIONS.get("phase_03", set())
         assert "tonal_center" in excl, (
-            "tonal_center MUST be excluded from phase_03: K-S not invariant to shaped NR (§9.7.11 ext, v9.10.95)"
+            "tonal_center MUST be excluded from phase_03: K-S not invariant to shaped NR (§9.7.11 ext, v10.0.0)"
         )
 
     def test_38b_phase03_excludes_timbre_authentizitaet(self):
-        """v9.10.96: timbre_authentizitaet MUST be excluded from phase_03 —
+        """v10.0.0: timbre_authentizitaet MUST be excluded from phase_03 —
         MFCC-Pearson + centroid-CV proxy disturbed by spectral-envelope change
         after broadband NR (confirmed in logs 2026-03-30: residual 0.046 regression)."""
         from backend.core.per_phase_musical_goals_gate import PHASE_GOAL_EXCLUSIONS
 
         excl = PHASE_GOAL_EXCLUSIONS.get("phase_03", set())
         assert "timbre_authentizitaet" in excl, (
-            "timbre_authentizitaet MUST be in phase_03 exclusions (v9.10.96): "
+            "timbre_authentizitaet MUST be in phase_03 exclusions (v10.0.0): "
             "MFCC correlation against noisy reference is unreliable after denoising"
         )
 
@@ -742,7 +742,7 @@ class TestPhaseGoalExclusions:
         assert "artikulation" in PHASE_GOAL_EXCLUSIONS["phase_29"]
 
     def test_40b_phase29_tonal_center_excluded(self):
-        """§9.7.11 extension (v9.10.95): tonal_center MUST be excluded from phase_29.
+        """§9.7.11 extension (v10.0.0): tonal_center MUST be excluded from phase_29.
         DeepFilterNet v3 II is a learned frequency-selective HF filter: reduces energy
         in high-register chroma bins (C5-B7) while leaving low-register bins less
         affected → K-S correlation shifts even though the musical key is unchanged.
@@ -752,7 +752,7 @@ class TestPhaseGoalExclusions:
         from backend.core.per_phase_musical_goals_gate import PHASE_GOAL_EXCLUSIONS
 
         assert "tonal_center" in PHASE_GOAL_EXCLUSIONS["phase_29"], (
-            "tonal_center MUST be excluded from phase_29: K-S not invariant to HF-selective NR (§9.7.11 ext, v9.10.95)"
+            "tonal_center MUST be excluded from phase_29: K-S not invariant to HF-selective NR (§9.7.11 ext, v10.0.0)"
         )
 
     def test_41_phase55_excludes_artikulation(self):
@@ -878,7 +878,7 @@ class TestPhaseGoalExclusions:
         )
 
     def test_52e_phase02_exclusion_superset_v9_10_91(self):
-        """phase_02 exclusion set must contain all 6 required goals (v9.10.91 — tonal_center resolved via K-S §9.7.11)."""
+        """phase_02 exclusion set must contain all 6 required goals (v10.0.0 — tonal_center resolved via K-S §9.7.11)."""
         from backend.core.per_phase_musical_goals_gate import PHASE_GOAL_EXCLUSIONS
 
         required = {
@@ -1065,7 +1065,7 @@ def _make_pass_phase(phase_id: str):
 
 
 # ---------------------------------------------------------------------------
-# Tests: §2.31b PMGG Song-Kalibrierungs-Integration (v9.10.85/86)
+# Tests: §2.31b PMGG Song-Kalibrierungs-Integration (v10.0.0/86)
 # ---------------------------------------------------------------------------
 
 
@@ -1358,7 +1358,7 @@ class TestPMGGSongCalIntegration:
         assert result is not None
 
     def test_72_phase03_has_six_goals_excluded_v9_13(self):
-        """phase_03 muss genau 6 Goals ausschließen (§V36 v9.13: transient_energie hinzugefügt).
+        """phase_03 muss genau 6 Goals ausschließen (§V36 v10.0.0: transient_energie hinzugefügt).
         OMLSA/DFN entfernt Rauschimpulse → TransientEnergieProxy false P3 (Δ=-0.13)."""
         from backend.core.per_phase_musical_goals_gate import PHASE_GOAL_EXCLUSIONS
 
@@ -1368,14 +1368,14 @@ class TestPMGGSongCalIntegration:
             "authentizitaet",
             "tonal_center",
             "timbre_authentizitaet",
-            "transient_energie",  # §V36 v9.13
+            "transient_energie",  # §V36 v10.0.0
         }
         assert PHASE_GOAL_EXCLUSIONS["phase_03"] == expected, (
             f"phase_03 exclusions: {PHASE_GOAL_EXCLUSIONS['phase_03']} != {expected}"
         )
 
     def test_73_phase29_has_seven_goals_excluded_v9_13(self):
-        """phase_29 muss genau 7 Goals ausschließen (§V36 v9.13: waerme hinzugefügt).
+        """phase_29 muss genau 7 Goals ausschließen (§V36 v10.0.0: waerme hinzugefügt).
         OMLSA/DFN-Suppression im Wärmeband (200-2000 Hz) → false P4 (Δ=-0.17)."""
         from backend.core.per_phase_musical_goals_gate import PHASE_GOAL_EXCLUSIONS
 
@@ -1386,7 +1386,7 @@ class TestPMGGSongCalIntegration:
             "tonal_center",
             "timbre_authentizitaet",
             "transparenz",  # §V32: Tape-Hiss-Carrier inflationiert HF-Crest-Proxy
-            "waerme",  # §V36 v9.13: Wärmeband-Rauschboden → false P4
+            "waerme",  # §V36 v10.0.0: Wärmeband-Rauschboden → false P4
         }
         assert PHASE_GOAL_EXCLUSIONS["phase_29"] == expected, (
             f"phase_29 exclusions: {PHASE_GOAL_EXCLUSIONS['phase_29']} != {expected}"
@@ -1420,7 +1420,7 @@ def test_precise_overrides_use_multisegment_sampling(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# Tests: §9.7.9 Groove-Proxy LF-Robustheit (v9.10.90)
+# Tests: §9.7.9 Groove-Proxy LF-Robustheit (v10.0.0)
 # ---------------------------------------------------------------------------
 
 
@@ -1654,7 +1654,7 @@ class TestKrumhanslSchmucklerTonalCenter:
         assert 0.0 <= score <= 1.0, f"tonal_center out of bounds on silence: {score}"
 
     def test_82_tonal_center_exclusion_for_selective_nr_only(self):
-        """v9.10.95 / 2026-04-10: K-S not invariant to frequency-selective spectral modification.
+        """v10.0.0 / 2026-04-10: K-S not invariant to frequency-selective spectral modification.
         phase_03/phase_29/phase_49/phase_20: shaped NR or spectral-subtraction dereverb
         → tonal_center correctly excluded. phase_08/phase_18: additive-only/gating → K-S stable."""
         from backend.core.per_phase_musical_goals_gate import PHASE_GOAL_EXCLUSIONS
@@ -1664,7 +1664,7 @@ class TestKrumhanslSchmucklerTonalCenter:
             excl = PHASE_GOAL_EXCLUSIONS.get(phase, set())
             assert "tonal_center" in excl, (
                 f"{phase}: tonal_center MUST be excluded - K-S not invariant to frequency-selective "
-                f"spectral modification (v9.10.95 / real-run P2 regression confirmed 2026-04-10). Current: {excl}"
+                f"spectral modification (v10.0.0 / real-run P2 regression confirmed 2026-04-10). Current: {excl}"
             )
 
         # K-S stable phases (no frequency-selective spectral modification) -> tonal_center not excluded
@@ -1892,7 +1892,7 @@ class TestKrumhanslSchmucklerTonalCenter:
     # \u2500\u2500 Combined exclusion invariants \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
 
     def test_92_phase03_exclusions_v9_13(self):
-        """phase_03 muss genau 6 Goals ausschließen (§V36 v9.13: transient_energie).
+        """phase_03 muss genau 6 Goals ausschließen (§V36 v10.0.0: transient_energie).
         OMLSA/DFN entfernt Rauschimpulse → TransientEnergieProxy false P3."""
         from backend.core.per_phase_musical_goals_gate import PHASE_GOAL_EXCLUSIONS
 
@@ -1902,13 +1902,13 @@ class TestKrumhanslSchmucklerTonalCenter:
             "authentizitaet",
             "tonal_center",
             "timbre_authentizitaet",
-            "transient_energie",  # §V36 v9.13
+            "transient_energie",  # §V36 v10.0.0
         }
         excl = PHASE_GOAL_EXCLUSIONS.get("phase_03", set())
         assert excl == expected, f"phase_03: {excl} != {expected}"
 
     def test_93_phase29_exclusions_v9_13(self):
-        """phase_29 muss genau 7 Goals ausschließen (§V36 v9.13: waerme + §V32: transparenz)."""
+        """phase_29 muss genau 7 Goals ausschließen (§V36 v10.0.0: waerme + §V32: transparenz)."""
         from backend.core.per_phase_musical_goals_gate import PHASE_GOAL_EXCLUSIONS
 
         expected = {
@@ -1918,7 +1918,7 @@ class TestKrumhanslSchmucklerTonalCenter:
             "tonal_center",
             "timbre_authentizitaet",
             "transparenz",  # §V32
-            "waerme",  # §V36 v9.13
+            "waerme",  # §V36 v10.0.0
         }
         excl = PHASE_GOAL_EXCLUSIONS.get("phase_29", set())
         assert excl == expected, f"phase_29: {excl} != {expected}"
@@ -2041,7 +2041,7 @@ class TestKrumhanslSchmucklerTonalCenter:
     def test_99_timbre_authentizitaet_proxy_characterisation(self):
         """Characterisation test for timbre_authentizitaet CV-proxy behaviour under noise.
 
-        DISCOVERY (v9.10.92): Broadband noise STABILISES the spectral centroid
+        DISCOVERY (v10.0.0): Broadband noise STABILISES the spectral centroid
         (flat noise spectrum averages out frame-to-frame musical variation) \u2192
         the CV-proxy returns an artificially HIGH score on noisy audio, then
         DROPS after denoising.  This is a false-regression concern in the opposite
@@ -2089,14 +2089,14 @@ class TestKrumhanslSchmucklerTonalCenter:
             f"low_noisy={score_low_noise:.4f} clean={score_clean:.4f} \u0394={delta_digital:.4f}"
         )
 
-        # v9.10.96: timbre_authentizitaet now STATICALLY excluded from phase_03.
+        # v10.0.0: timbre_authentizitaet now STATICALLY excluded from phase_03.
         # MFCC-Pearson + centroid-CV proxy is disturbed by spectral-envelope change
         # after broadband NR regardless of material type — dynamic-only exclusion
         # (§2.31b) was insufficient (confirmed 2026-03-30: residual 0.046 regression
         # causing persistent best-effort across all material types).
         base_excl_03 = PHASE_GOAL_EXCLUSIONS.get("phase_03", set())
         assert "timbre_authentizitaet" in base_excl_03, (
-            "timbre_authentizitaet MUST be in static phase_03 set (v9.10.96): "
+            "timbre_authentizitaet MUST be in static phase_03 set (v10.0.0): "
             "MFCC correlation against noisy reference is unreliable after NR"
         )
 
@@ -2203,7 +2203,7 @@ class TestKrumhanslSchmucklerTonalCenter:
 
     def test_100_phase16_tonal_center_excluded(self):
         """phase_16 (final/mastering EQ) must exclude tonal_center
-        (v9.10.93: EQ shifts chroma energy — K-S not immune to EQ)."""
+        (v10.0.0: EQ shifts chroma energy — K-S not immune to EQ)."""
         from backend.core.per_phase_musical_goals_gate import PHASE_GOAL_EXCLUSIONS
 
         excl = PHASE_GOAL_EXCLUSIONS.get("phase_16", set())
@@ -2211,7 +2211,7 @@ class TestKrumhanslSchmucklerTonalCenter:
 
     def test_101_phase17_tonal_center_and_artikulation_excluded(self):
         """phase_17 (mastering compression) must exclude tonal_center + artikulation
-        (v9.10.93: MB-compression changes attack envelopes + chroma distribution)."""
+        (v10.0.0: MB-compression changes attack envelopes + chroma distribution)."""
         from backend.core.per_phase_musical_goals_gate import PHASE_GOAL_EXCLUSIONS
 
         excl = PHASE_GOAL_EXCLUSIONS.get("phase_17", set())
@@ -2322,12 +2322,12 @@ class TestKrumhanslSchmucklerTonalCenter:
 
 
 # ---------------------------------------------------------------------------
-# §V36 Reference-Paradox NR-Exclusion Guard (v9.13)
+# §V36 Reference-Paradox NR-Exclusion Guard (v10.0.0)
 # ---------------------------------------------------------------------------
 
 
 class TestV36NRExclusionGuard:
-    """§V36 (v9.13): transient_energie in phase_03 + waerme in phase_29 müssen
+    """§V36 (v10.0.0): transient_energie in phase_03 + waerme in phase_29 müssen
     aus PHASE_GOAL_EXCLUSIONS ausgeschlossen sein (Reference Paradox §2.44):
     NR entfernt Rauschimpulse/Rauschenergie, die Proxies falsch inflationierten."""
 
@@ -2340,7 +2340,7 @@ class TestV36NRExclusionGuard:
 
         excl = PHASE_GOAL_EXCLUSIONS.get("phase_03", set())
         assert "transient_energie" in excl, (
-            "phase_03: transient_energie MUSS ausgeschlossen sein (§V36 v9.13): "
+            "phase_03: transient_energie MUSS ausgeschlossen sein (§V36 v10.0.0): "
             "OMLSA/DFN entfernt Rauschimpulse → TransientEnergie-Proxy false-positive P3."
         )
 
@@ -2353,7 +2353,7 @@ class TestV36NRExclusionGuard:
 
         excl = PHASE_GOAL_EXCLUSIONS.get("phase_29", set())
         assert "waerme" in excl, (
-            "phase_29: waerme MUSS ausgeschlossen sein (§V36 v9.13): "
+            "phase_29: waerme MUSS ausgeschlossen sein (§V36 v10.0.0): "
             "OMLSA/DFN-Suppression im Wärmeband → Proxy false-positive P4."
         )
 
@@ -2363,7 +2363,7 @@ class TestV36NRExclusionGuard:
 
         excl = _PHASE_SPECIFIC_DRIFT_EXCLUSIONS.get("phase_03", frozenset())
         assert "transient_energie" in excl, (
-            "CIG phase_03: transient_energie MUSS ausgeschlossen sein (§2.55-Sync §V36 v9.13)."
+            "CIG phase_03: transient_energie MUSS ausgeschlossen sein (§2.55-Sync §V36 v10.0.0)."
         )
 
     def test_126_phase29_cig_excludes_waerme(self):
@@ -2371,7 +2371,7 @@ class TestV36NRExclusionGuard:
         from backend.core.cumulative_interaction_guard import _PHASE_SPECIFIC_DRIFT_EXCLUSIONS
 
         excl = _PHASE_SPECIFIC_DRIFT_EXCLUSIONS.get("phase_29", frozenset())
-        assert "waerme" in excl, "CIG phase_29: waerme MUSS ausgeschlossen sein (§2.55-Sync §V36 v9.13)."
+        assert "waerme" in excl, "CIG phase_29: waerme MUSS ausgeschlossen sein (§2.55-Sync §V36 v10.0.0)."
 
 
 # ---------------------------------------------------------------------------
@@ -2721,3 +2721,21 @@ class TestRestorativeBaselineCapping:
 
         assert audio_out is not None
         assert log_entry.action in ("passed", "sub_threshold", "passthrough", "best_effort_accepted")
+
+    # ── phase_19 tonal_center exclusion (§2.55-Sync 2026-07-18) ─────────────
+
+    def test_123_phase19_excludes_tonal_center(self):
+        """Phase 19 De-Esser redistributes spectral energy in the sibilant range
+        (4–10 kHz) → K-S chroma distribution shifts by up to 3 semitones →
+        false P2 catastrophic regression on tonal_center (Δ=0.9978 confirmed
+        on cassette+schlager, phase had 0 sibilants + 0 dB reduction →
+        pure measurement artifact). §2.55-Sync: tonal_center MUST be excluded."""
+        from backend.core.per_phase_musical_goals_gate import PHASE_GOAL_EXCLUSIONS
+
+        assert "tonal_center" in PHASE_GOAL_EXCLUSIONS.get("phase_19", set()), (
+            "tonal_center MUST be excluded from phase_19: De-Esser sibilance-energy "
+            "redistribution causes false K-S chroma-shift → catastrophic P2 regression "
+            "(Δ=0.9978 confirmed on real cassette+schlager run, 2026-07-18). "
+            "The regression is a measurement artifact — the phase had 0 sibilants "
+            "detected and 0 dB gain reduction applied."
+        )

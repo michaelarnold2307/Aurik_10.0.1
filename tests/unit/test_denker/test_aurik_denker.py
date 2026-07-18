@@ -582,7 +582,7 @@ class TestAurikDenkerDigitalExcellenceGuard:
 
             AurikDenker().denke(audio, SR, no_rt_limit=True)
 
-        # v9.10.72: ExzellenzDenker ruft messe_ziele() statt optimiere() auf
+        # v10.0.0: ExzellenzDenker ruft messe_ziele() statt optimiere() auf
         assert exz_denker_m.messe_ziele.called, "ExzellenzDenker.messe_ziele() wurde nicht aufgerufen"
 
     def test_prefers_messe_und_repariere_when_available(self):
@@ -670,7 +670,7 @@ class TestAurikDenkerDigitalExcellenceGuard:
         assert exz_real.repair_called, "ExzellenzDenker.messe_und_repariere() wurde nicht genutzt"
         assert not exz_real.legacy_called, "Legacy-Path messe_ziele() darf bei verfügbarem Repair-Pfad nicht laufen"
         assert exz_real.last_mode == "restoration"
-        # v9.15.1 Fix G2: _resolve_excellence_material() bevorzugt analogen Ursprungs-Träger
+        # v10.0.0 Fix G2: _resolve_excellence_material() bevorzugt analogen Ursprungs-Träger
         # aus der Transfer-Kette (chain=["tape", "mp3_low"]) → "tape" wird korrekt bevorzugt.
         assert exz_real.last_material in {"tape", "mp3_low", "mp3_high"}
         assert exz_real.last_reference is not None
@@ -2024,7 +2024,7 @@ class TestAurikDenkerQualityEstimateFormula:
 
             result = AurikDenker().denke(audio, SR)
 
-        # v9.10.72: ExzellenzDenker ruft score_mos() EINMAL auf (Stufe 9 Messung).
+        # v10.0.0: ExzellenzDenker ruft score_mos() EINMAL auf (Stufe 9 Messung).
         # Stufe 10 übernimmt den gecachten Wert und ruft score_mos() NICHT erneut auf.
         assert versa_spy.call_count == 1, (
             f"score_mos() wurde {versa_spy.call_count}x aufgerufen — "

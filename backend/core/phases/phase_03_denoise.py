@@ -1,5 +1,5 @@
 """
-Phase 3: Professional Denoise - Aurik 9.0
+Phase 3: Professional Denoise - Aurik 10.0.0
 ==========================================
 
 Professional-grade broadband noise reduction competing with iZotope RX Voice De-noise.
@@ -60,7 +60,7 @@ BENCHMARK COMPARISON:
 - Audacity Noise Reduction: Basic, static profile
 - Aurik v2.0: Professional, hybrid algorithm, <1.2× realtime ✅
 
-Author: Aurik 9.0 Development Team
+Author: Aurik 10.0.0 Development Team
 Version: 2.0.0 (Professional Upgrade)
 Date: 15. Februar 2026
 """
@@ -85,7 +85,7 @@ except ImportError:
     RESOURCE_MANAGER_AVAILABLE = False
     logging.getLogger(__name__).warning("AdaptiveResourceManager not available, no automatic fallback")
 
-# ML-Hybrid Support (Aurik 9.0 - Phase 03 v3.0)
+# ML-Hybrid Support (Aurik 10.0.0 - Phase 03 v3.0)
 try:
     from backend.core.hybrid.hybrid_ml_denoiser import DenoiseConfig, DenoiseStrategy, HybridMLDenoiser
 
@@ -122,7 +122,7 @@ def _determine_era_nr_routing(
     is_non_digital: bool,
 ) -> str:
     """
-    §4.4 SOTA Era-Aware ML-NR Routing decision (v9.12.x).
+    §4.4 SOTA Era-Aware ML-NR Routing decision (v10.0.0.x).
 
     Returns one of:
       "miipher_primary"  — MIIPHER → DFN fallback (deep SNR, post-1950, vocal)
@@ -876,7 +876,7 @@ class DenoisePhase(PhaseInterface):
         _is_vocal_material = _panns_singing >= 0.25 or (_genre_is_vocal and _panns_singing >= 0.10)
         _is_non_digital = material_type not in ("cd_digital", "streaming", "mp3_high")
 
-        # ── BS-RoFormer Vocal-Stem-NR (§0a-konformer MIIPHER-Äquivalent, v9.15.2) ─────────────
+        # ── BS-RoFormer Vocal-Stem-NR (§0a-konformer MIIPHER-Äquivalent, v10.0.0) ─────────────
         # Bei stark vokalhaltigem Material (panns_singing ≥ 0.35) und SNR < 20 dB isoliert
         # BS-RoFormer (SDR ≈ 12.45 dB) den Vokal-Stem vor der NR.  NR wird ausschließlich
         # auf den Vokal-Stem angewendet; Instrumental-Stem bleibt unverändert (§0a Restoration).
@@ -999,7 +999,7 @@ class DenoisePhase(PhaseInterface):
                     )
         # ── Ende BS-RoFormer Vocal-Stem-NR ────────────────────────────────────────────────────
 
-        # §4.4 SOTA Era-Aware ML-NR Routing (v9.12.x)
+        # §4.4 SOTA Era-Aware ML-NR Routing (v10.0.0.x)
         _era_decade_p03 = int(decade) if decade is not None else 1970
         _era_nr_routing = _determine_era_nr_routing(
             _era_decade_p03, material_type, _est_snr_db, _panns_singing, _is_vocal_material, _is_non_digital
@@ -1141,7 +1141,7 @@ class DenoisePhase(PhaseInterface):
             except Exception as _reg_exc:
                 logger.debug("§0p Passaggio temporal phase_03 (non-blocking): %s", _reg_exc)
         _dfn_applied = False
-        # §4.4 MIIPHER Primary Tier (v9.12.x): vocal, SNR < 10 dB, post-1950.
+        # §4.4 MIIPHER Primary Tier (v10.0.0.x): vocal, SNR < 10 dB, post-1950.
         # MIIPHER (W2v-BERT 2.0) delivers highest vocal quality for deep-noise material
         # (Zhang et al. 2023, Google). Fallback: DFN → Wiener (via MiipherPlugin cascade).
         # §0p [RELEASE_MUST]: HNR-Blend after MIIPHER when ΔHNR > 3 dB.
@@ -1155,14 +1155,14 @@ class DenoisePhase(PhaseInterface):
                 _miipher_snr = _est_snr_db if _est_snr_db is not None else 0.0
                 if _miipher_plugin.should_activate(noise_snr_db=_miipher_snr, panns_singing=_panns_singing):
                     _miipher_audio_pre = np.asarray(audio, dtype=np.float32).copy()
-                    # §0p v9.12.9: Register-adaptiver energy_bias (aus VocalRegisterDetector).
+                    # §0p v10.0.0: Register-adaptiver energy_bias (aus VocalRegisterDetector).
                     # _dfn_energy_bias_db wurde bereits temporal berechnet (Kopf=-3, Brust=-6, Fry=-9).
                     _miipher_out = _miipher_plugin.enhance(
                         audio,
                         sr=sample_rate,
                         noise_snr_db=_miipher_snr,
                         vocal_energy_bias_db=_dfn_energy_bias_db,
-                        panns_singing=float(_panns_singing),  # §0p v9.12.9: SGMSE+ Vokal-Mode
+                        panns_singing=float(_panns_singing),  # §0p v10.0.0: SGMSE+ Vokal-Mode
                     )
                     _miipher_out = np.nan_to_num(
                         np.asarray(_miipher_out, dtype=np.float32), nan=0.0, posinf=0.0, neginf=0.0
@@ -1957,7 +1957,7 @@ class DenoisePhase(PhaseInterface):
         # §2.46f Edge-Taper (defense-in-depth): secondary safety net after context-padding above.
         # Context-padding is the primary fix (root cause); edge-taper catches any residual boundary
         # artefacts from ML plugins that internally resample or chunk and lose the padding offset.
-        # §0h BUG-FIX v9.12.5: Silence-aware taper — wenn originale Randzone stumm/Rauschen-only
+        # §0h BUG-FIX v10.0.0: Silence-aware taper — wenn originale Randzone stumm/Rauschen-only
         # ist (RMS < -50 dBFS), wird Stille als Blend-Referenz genutzt statt des originalen
         # Rauschens. Verhindert "Pegelexplosion" bei Songs mit stiller Hiss-Einleitung/-Ausleitung.
         try:
@@ -2109,7 +2109,7 @@ class DenoisePhase(PhaseInterface):
                         _g3_gain = _pm_g3_col * _G_PRES_G3 + (1.0 - _pm_g3_col) * _g3_gain
                         _g3_gain = np.maximum(_g3_gain, 0.10)
                         logger.debug("§4.8a-ii phase_03 preserve_mask: max_pm=%.2f", float(_pm_g3.max()))
-                    # §Gap5 EmotionalArc FrissonZone Schutz (§0p v9.12.8):
+                    # §Gap5 EmotionalArc FrissonZone Schutz (§0p v10.0.0):
                     # Frisson- und Whisper-Zonen erhalten weniger NR (arc_weight ≥ 1.4).
                     # NR-Gain wird in geschützten Zonen Richtung 1.0 geblendet.
                     _arc_plan = kwargs.get("_restoration_context", {}).get("arc_protection_weights")
@@ -2452,8 +2452,8 @@ class DenoisePhase(PhaseInterface):
                     _vfy03["spectral_correlation"],
                 )
                 warnings.append(f"Auto-readjust: RMS change {_vfy03['rms_change_db']:.1f} dB")
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.debug("backend.core.phases.phase_03_denoise: non-critical exception: %s", _e)
 
         return create_phase_result(
             audio=_p03_out(result_audio),
@@ -2526,7 +2526,7 @@ class DenoisePhase(PhaseInterface):
                 # §2.45a-II: signal-relative gate = max(material_floor, P15(ref)+9 dB)
                 # CEDAR/iZotope RX approach: gate derived from actual source noise floor.
                 # Prevents vinyl noise frames (-33 dBFS) from receiving makeup gain;
-                # fixed -36.0 lets them through → Pegelexplosion (v9.12.2).
+                # fixed -36.0 lets them through → Pegelexplosion (v10.0.0).
                 _gate_dbfs_03 = compute_signal_relative_gate_dbfs(original_audio, material_key=material_key)
                 processed_audio = apply_musical_gain_envelope(
                     processed_audio,

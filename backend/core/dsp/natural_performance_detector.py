@@ -1,5 +1,5 @@
 """
-§2.46f Natural-Performance-Artifacts-Guard — v9.12.0
+§2.46f Natural-Performance-Artifacts-Guard — v10.0.0
 
 Schützt performancebedingte Klangereignisse vor versehentlicher Entfernung
 durch NR, Gate, Dereverb oder Pitch-Phasen. Diese Ereignisse sind KEIN Defekt —

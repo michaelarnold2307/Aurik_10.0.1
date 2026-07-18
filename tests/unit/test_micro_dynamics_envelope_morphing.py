@@ -1,7 +1,7 @@
 """
 tests/unit/test_micro_dynamics_envelope_morphing.py
 ====================================================
-Aurik 9.9 — MicroDynamicsEnvelopeMorphing (§2.30)
+Aurik 10.0.0 — MicroDynamicsEnvelopeMorphing (§2.30)
 
 22 Unit-Tests.
 Alle Tests synthetisch (keine echten Audio-Dateien).

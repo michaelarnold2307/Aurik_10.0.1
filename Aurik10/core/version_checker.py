@@ -47,7 +47,7 @@ class VersionCheckResult:
 
 
 def _parse_version(v: str) -> tuple[int, ...]:
-    """Parst 'v9.10.77' oder '9.12.9-hotfix.2' in ein vergleichbares Tupel."""
+    """Parst 'v10.0.0' oder '9.12.9-hotfix.2' in ein vergleichbares Tupel."""
     return tuple(int(part) for part in re.findall(r"\d+", v.lstrip("vV").strip()))
 
 

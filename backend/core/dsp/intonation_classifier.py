@@ -1,5 +1,5 @@
 """
-Intonation Intentionality Classifier — Lücke 1 (v9.12.x)
+Intonation Intentionality Classifier — Lücke 1 (v10.0.0.x)
 =========================================================
 
 Unterscheidet auf F0-Kontur-Ebene, ob eine Pitch-Abweichung INTENTIONAL
@@ -25,7 +25,7 @@ Aufruf:
     # Injiziert in _restoration_context["intonation_events"] für CausalDefectReasoner
 
 Author: Aurik Development Team
-Version: 1.0.0 (v9.12.x — Lücke 1)
+Version: 1.0.0 (v10.0.0.x — Lücke 1)
 """
 
 from __future__ import annotations

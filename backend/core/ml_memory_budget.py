@@ -193,23 +193,23 @@ def _log_system_profile() -> None:
             cpu_count or 0,
             cpu_phys or 0,
         )
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.debug("ml_memory_budget: non-critical exception: %s", _e)
 
 
 _log_system_profile()
 
 # Provide defaults in case _calibrate_guard_thresholds fails (psutil missing, etc.).
 # These are overridden by globals().update() above when calibration succeeds.
-_HEAVY_MODEL_PREEMPTIVE_MIN_GB: float
-_HEAVY_MODEL_PREEMPTIVE_SWAP_PCT: float
-_HEAVY_MODEL_PREEMPTIVE_SWAP_EARLY_PCT: float
-_HEAVY_MODEL_PREEMPTIVE_SWAP_IO_MB_S: float
-_HEAVY_MODEL_PREEMPTIVE_AVAIL_RATIO_MAX: float
-_MIN_FREE_MB_HARD: float
-_PRESSURE_RECOVERY_ATTEMPTS: int
-_PRESSURE_RECOVERY_SLEEP_S: float
-_CALIBRATED_TOTAL_RAM_GB: float
+_HEAVY_MODEL_PREEMPTIVE_MIN_GB: float = 1.0
+_HEAVY_MODEL_PREEMPTIVE_SWAP_PCT: float = 70.0
+_HEAVY_MODEL_PREEMPTIVE_SWAP_EARLY_PCT: float = 45.0
+_HEAVY_MODEL_PREEMPTIVE_SWAP_IO_MB_S: float = 2.0
+_HEAVY_MODEL_PREEMPTIVE_AVAIL_RATIO_MAX: float = 0.20
+_MIN_FREE_MB_HARD: float = 2048.0
+_PRESSURE_RECOVERY_ATTEMPTS: int = 2
+_PRESSURE_RECOVERY_SLEEP_S: float = 0.35
+_CALIBRATED_TOTAL_RAM_GB: float = 8.0
 
 # Cooldown for is_system_thrashing() log-spam guard (BUG G).
 # Log WARNING at most once per 60 s; always return the correct bool.
@@ -712,8 +712,8 @@ def try_allocate(model_name: str, size_gb: float) -> bool:
             from backend.core.ml_model_readiness import invalidate_ml_readiness
 
             invalidate_ml_readiness(model_name)
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.debug("ml_memory_budget: non-critical exception: %s", _e)
         return True
 
 

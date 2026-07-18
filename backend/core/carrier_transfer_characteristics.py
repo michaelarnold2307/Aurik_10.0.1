@@ -3,7 +3,7 @@
 Kanonische Tabelle aller 16 Materialtypen mit physikalischen Grenzwerten.
 Alle Module importieren aus dieser Datei — niemals duplizieren.
 
-Version: 9.12.0 — instructions_version 9.0
+Version: 10.0.0 — instructions_version 9.0
 Changelog: tape DR-Ceiling 68→62 dB (Bug #4/#5): MediumDetector normiert cassette→tape;
   tape repräsentiert Kompaktkassette (Typ I ~55 dB, Typ II ~65 dB, Mittel ≈62 dB);
   nicht Reel-Tape (reel_tape = 72 dB). Inkonsistenz mit §0a Kassette-Ceiling behoben.
@@ -199,7 +199,7 @@ def compute_carrier_recovery_ratio(audio_pre: np.ndarray, audio_post: np.ndarray
                 _nr_db = float(10.0 * np.log10(_floor_pre / (_floor_post + 1e-30)))
                 _nr_ratio = float(np.clip(_nr_db / 80.0, 0.0, 0.40))
 
-            # Component 3: HF-Band (4–16 kHz) — Tape/Cassette-Hiss-Detektion (v9.12.9)
+            # Component 3: HF-Band (4–16 kHz) — Tape/Cassette-Hiss-Detektion (v10.0.0)
             # Tape-Hiss ist im HF-Band relativ zum Musikinhalt am stärksten; das 10. Perzentil
             # der HF-PSD-Bins misst den Hiss-Boden sensitiver als das globale 5. Perzentil.
             _hf_lo = 4000.0

@@ -1,4 +1,4 @@
-# Aurik 9.10.77 — User Acceptance Test (UAT) System
+# Aurik 10.0.0 — User Acceptance Test (UAT) System
 
 **Version:** 1.1  
 **Date:** 2026-04-14  
@@ -8,7 +8,7 @@
 
 ## Overview
 
-This UAT system provides formal acceptance testing and release gate validation for Aurik 9.10.77 across two operational modes:
+This UAT system provides formal acceptance testing and release gate validation for Aurik 10.0.0 across two operational modes:
 
 - **Restoration Mode** — 15 acceptance criteria (R1–R15)
 - **Studio 2026 Mode** — 15 acceptance criteria (S1–S15)

@@ -4,7 +4,7 @@ Phase 19: Gender-Aware De-Esser v4.0
 
 🎯 CURRENT IMPLEMENTATION:
    ✅ Gender-Aware De-Essing (Female/Male/Child + Auto-Detection)
-   ✅ Aurik 9.0 Architecture (Phase Interface, Material-Adaptive)
+   ✅ Aurik 10.0.0 Architecture (Phase Interface, Material-Adaptive)
    ✅ Musical Goals Integration (alle 7 Ziele)
    ✅ State-of-the-Art Multi-Band De-Essing (Soft-Knee, Look-ahead)
 
@@ -125,7 +125,7 @@ try:
     from dsp.vocal_spectral_inpainting import VocalSpectralInpainting
 
     AURIK_8_AVAILABLE = True
-    logger.debug("Aurik 8.0 Enhancement-Module geladen (Formant, Breath, Presence, Inpainting, Dynamics)")
+    logger.debug("Aurik 10.0.0 Enhancement-Module geladen (Formant, Breath, Presence, Inpainting, Dynamics)")
 except ImportError as _aurik8_err:
     BreathIntelligence = None  # type: ignore
     FormantSystem = None  # type: ignore
@@ -134,7 +134,7 @@ except ImportError as _aurik8_err:
     VocalSpectralInpainting = None  # type: ignore
     VocalDynamicsIntelligence = None  # type: ignore
     AURIK_8_AVAILABLE = False
-    logger.debug("Aurik 8.0 Enhancement-Module nicht verfügbar: %s", _aurik8_err)
+    logger.debug("Aurik 10.0.0 Enhancement-Module nicht verfügbar: %s", _aurik8_err)
 
 # ── Robuster GenderDetector aus Vocal-Chain (§2.8) ──────────────
 try:
@@ -167,7 +167,7 @@ except Exception:  # pragma: no cover
 
 
 class VocalGender:
-    """Gender-spezifische Vocal-Profile (aus Aurik 8.0)."""
+    """Gender-spezifische Vocal-Profile (aus Aurik 10.0.0)."""
 
     FEMALE = "female"
     MALE = "male"
@@ -184,7 +184,7 @@ class SibilantType:
 
 
 # ========================================================================
-# GENDER-AWARE VOCAL PROFILES (aus Aurik 8.0 - Musical Excellence)
+# GENDER-AWARE VOCAL PROFILES (aus Aurik 10.0.0 - Musical Excellence)
 # ========================================================================
 
 VOCAL_PROFILES = {
@@ -219,7 +219,7 @@ class DeEsserPhase(PhaseInterface):
     """
     Gender-Aware Vocal Enhancement & Multi-Band De-Esser v3.0.
 
-    Integriert Aurik 8.0 Gender-Profile mit v9.0 Multi-Band-Architektur.
+    Integriert Aurik 10.0.0 Gender-Profile mit v10.0.0 Multi-Band-Architektur.
     Berücksichtigt alle 7 musikalischen Ziele für exzellente Gesangsqualität.
     """
 
@@ -837,7 +837,7 @@ class DeEsserPhase(PhaseInterface):
                     enhanced_audio = _stage_audio
 
                 logger.info(
-                    "✅ Aurik 8.0 Enhancement: %s breaths, %s formants, %s gaps%s",
+                    "✅ Aurik 10.0.0 Enhancement: %s breaths, %s formants, %s gaps%s",
                     self.stats["breath_events_detected"],
                     self.stats["formants_corrected"],
                     self.stats["spectral_gaps_repaired"],
@@ -845,7 +845,7 @@ class DeEsserPhase(PhaseInterface):
                 )
 
             except Exception as e:
-                logger.warning("⚠️ Aurik 8.0 Enhancement failed: %s, continuing with de-essing only", e)
+                logger.warning("⚠️ Aurik 10.0.0 Enhancement failed: %s, continuing with de-essing only", e)
                 enhanced_audio = audio.copy()
 
         # ==============================================================
@@ -1366,7 +1366,7 @@ class DeEsserPhase(PhaseInterface):
                 "gender": self.stats["gender_profile"],
                 "de_essing_applied": True,
                 "algorithm": "world_leading_8stage_pipeline_v4",
-                # Stage 2-6: Aurik 8.0 Enhancement
+                # Stage 2-6: Aurik 10.0.0 Enhancement
                 "aurik_8_enhancement": AURIK_8_AVAILABLE,
                 "breath_events_detected": self.stats["breath_events_detected"],
                 "formants_corrected": self.stats["formants_corrected"],
@@ -3186,7 +3186,7 @@ def _build_union_vocal_profile(genders: list[str]) -> dict:
             category=PhaseCategory.DYNAMICS,
             priority=4,
             dependencies=["04_eq_correction"],
-            estimated_time_factor=0.06,  # Schneller De-Esser (Aurik 8.0 disabled)
+            estimated_time_factor=0.06,  # Schneller De-Esser (Aurik 10.0.0 disabled)
             version="4.1.0",
             memory_requirement_mb=50,  # Moderater Speicher (De-Esser only)
             is_cpu_intensive=True,
@@ -3221,7 +3221,8 @@ def _run_test() -> None:
     logger.debug("=" * 80)
     logger.debug(
         "\n%s",
-        "⚠️  Aurik 8.0 Enhancement Modules: " + ("AVAILABLE ✅" if AURIK_8_AVAILABLE else "ROADMAP ⏸️ (v5.0/Phase 54)"),
+        "⚠️  Aurik 10.0.0 Enhancement Modules: "
+        + ("AVAILABLE ✅" if AURIK_8_AVAILABLE else "ROADMAP ⏸️ (v5.0/Phase 54)"),
     )
     logger.debug("")
 
@@ -3278,9 +3279,9 @@ def _run_test() -> None:
             logger.debug("   Algorithm: %s", result.metadata.get("algorithm", "unknown"))
             logger.debug("   Gender Profile: %s", result.metadata.get("gender", "none"))
 
-            # 🏆 Aurik 8.0 Enhancement Stats
+            # 🏆 Aurik 10.0.0 Enhancement Stats
             if result.metadata.get("aurik_8_enhancement"):
-                logger.debug("\n   🏆 Aurik 8.0 Enhancement Stack:")
+                logger.debug("\n   🏆 Aurik 10.0.0 Enhancement Stack:")
                 logger.debug("      ✅ Breath Events: %s", result.metadata.get("breath_events_detected", 0))
                 logger.debug("      ✅ Formants Tracked: %s frames", result.metadata.get("formants_corrected", 0))
                 logger.debug("      ✅ Spectral Gaps Repaired: %s", result.metadata.get("spectral_gaps_repaired", 0))

@@ -1,4 +1,4 @@
-"""PerceptualQualityScorer — Aurik 9.x.x (Spec §2.6)
+"""PerceptualQualityScorer — Aurik 10.0.0.x.x (Spec §2.6)
 
 Gammatone-NSIM + MCD + LUFS + MOS-Mapping für Musik-Qualitätsbewertung.
 
@@ -124,7 +124,7 @@ class PerceptualQualityScorer:
         _n_fft_pqs = min(2048, len(ref))
         if _n_fft_pqs < 64:
             _n_fft_pqs = 64
-        # §fix-pqs-nsim v9.12.9: Kassetten-/Vinyl-Leader kann erste 2048 Samples zur
+        # §fix-pqs-nsim v10.0.0: Kassetten-/Vinyl-Leader kann erste 2048 Samples zur
         # Stille machen → _std_r=1e-12, _std_d=1e-12 → NSIM=0 (0/0-Artefakt).
         # Scanne das Audio in Schritten von n_fft_pqs und wähle das erste nicht-stille
         # Fenster (Energie > -80 dBFS ≈ 1e-8). Fallback auf Position 0 wenn kein

@@ -1,5 +1,5 @@
 """
-backend/core/dsp/psychoacoustics.py — ISO 532-1 Psychoakustische Lautheitsmessung (Aurik 9 §4.1b)
+backend/core/dsp/psychoacoustics.py — ISO 532-1 Psychoakustische Lautheitsmessung (Aurik 10.0.0 §4.1b)
 ===================================================================================================
 
 Implementiert `compute_specific_loudness_zwicker()` — stationäre Methode nach
@@ -26,7 +26,7 @@ Referenz-Veröffentlichungen:
 
 Performance: ≤ 50 ms für 5-s-Fenster bei 48 000 Hz auf modernem Desktop-CPU.
 
-Author: Aurik 9 Engineering
+Author: Aurik 10.0.0 Engineering
 Version: 1.0.0  (§4.1b RELEASE_MUST)
 """
 
@@ -348,7 +348,7 @@ def compute_specific_loudness_zwicker(
     center_window: bool = True,
 ) -> ZwickerLoudnessResult:
     """
-    Stationäre ISO 532-1 Zwicker-Lautheitsmessung für Aurik 9 §4.1b.
+    Stationäre ISO 532-1 Zwicker-Lautheitsmessung für Aurik 10.0.0 §4.1b.
 
     Algorithmus:
       1. Stereo → Mono (Downmix)

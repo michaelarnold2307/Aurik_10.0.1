@@ -147,7 +147,7 @@ def test_pre_check_clean_audio(quality_gate, sample_audio):
     assert isinstance(result, PreCheckResult)
     # Simple sine wave may not pass all thresholds, but should be measurable
     assert result.measurable, "Goals should be measurable"
-    assert len(result.baseline_scores) >= 7, "Should measure at least 7 goals (v9.9+ hat 10)"
+    assert len(result.baseline_scores) >= 7, "Should measure at least 7 goals (v10.0.0+ hat 10)"
     assert all(0 <= score <= 1.0 for score in result.baseline_scores.values())
     # May have edge cases due to simple signal
     # assert len(result.edge_cases_detected) == 0, "No edge cases for clean audio"

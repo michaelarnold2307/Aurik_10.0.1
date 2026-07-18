@@ -1,4 +1,4 @@
-# Aurik 9.10.77 — UAT Quick Reference
+# Aurik 10.0.0 — UAT Quick Reference
 
 **Generation Date:** 2026-03-28  
 **Status:** CONDITIONAL GO ⚠️  
@@ -180,7 +180,7 @@ pytest tests -m "ml" --run-heavy-tests --timeout=120
 
 ### Statement
 
-**"Aurik 9.10.77 is CONDITIONALLY APPROVED for release pending functional test validation."**
+**"Aurik 10.0.0 is CONDITIONALLY APPROVED for release pending functional test validation."**
 
 ### Conditions
 
@@ -266,5 +266,5 @@ python audit/uat_report_generator.py
 
 ---
 
-_Aurik 9.10.77 — User Acceptance Testing Framework_  
+_Aurik 10.0.0 — User Acceptance Testing Framework_  
 _Generated: 2026-03-28 | Version: 1.0_

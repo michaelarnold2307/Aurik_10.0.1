@@ -20,8 +20,8 @@ Breath-Schutz (§2.46f):
 Singleton:
     get_silence_mask_computer() liefert eine thread-sichere Instanz.
 
-Author: Aurik 9 Engineering
-Version: 1.0.0 (§silence-guarantee RELEASE_MUST, v9.12.3)
+Author: Aurik 10.0.0 Engineering
+Version: 1.0.0 (§silence-guarantee RELEASE_MUST, v10.0.0)
 """
 
 from __future__ import annotations

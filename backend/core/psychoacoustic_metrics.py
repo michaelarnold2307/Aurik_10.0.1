@@ -1,5 +1,5 @@
 """
-Psychoacoustic Metrics Module - Aurik 9.0
+Psychoacoustic Metrics Module - Aurik 10.0.0
 ==========================================
 
 Objective audio quality metrics for validation and optimization.
@@ -18,7 +18,7 @@ Scientific Foundation:
 - Zwicker & Fastl (1999): Psychoacoustics of Hearing
 - Aures (1985): Berechnungsverfahren für den sensorischen Wohlklang
 
-Author: Aurik 9.0 Development Team
+Author: Aurik 10.0.0 Development Team
 Date: 15. Februar 2026
 """
 

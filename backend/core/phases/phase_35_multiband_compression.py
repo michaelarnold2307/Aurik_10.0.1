@@ -116,9 +116,9 @@ class MultibandCompressionPhase(PhaseInterface):
         MaterialType.CASSETTE: {
             "bass": (2.8, -17, 8, 30, 200, 2.8),
             "low_mid": (3.2, -15, 10, 40, 250, 3.2),
-            "mid_high": (3.2, -13, 10, 20, 150, 4.0),  # v9.12.9: leicht reduziert (BW-Ceiling 12 kHz)
-            "high": (2.0, -15, 6, 5, 100, 2.0),  # v9.12.9: HF konservativ
-        },  # v9.12.9: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
+            "mid_high": (3.2, -13, 10, 20, 150, 4.0),  # v10.0.0: leicht reduziert (BW-Ceiling 12 kHz)
+            "high": (2.0, -15, 6, 5, 100, 2.0),  # v10.0.0: HF konservativ
+        },  # v10.0.0: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
         MaterialType.CD_DIGITAL: {
             "bass": (2.5, -20, 6, 25, 180, 2.0),  # Transparent
             "low_mid": (3.0, -18, 8, 35, 220, 2.5),
@@ -154,7 +154,7 @@ class MultibandCompressionPhase(PhaseInterface):
             "low_mid": (1.15, -48),
             "mid_high": (1.15, -52),
             "high": (1.1, -58),
-        },  # v9.12.9: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
+        },  # v10.0.0: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
         MaterialType.CD_DIGITAL: {
             "bass": (1.4, -45),  # Stärkeres Upward (digital clean)
             "low_mid": (1.3, -50),
@@ -206,8 +206,11 @@ class MultibandCompressionPhase(PhaseInterface):
             _effective_strength = float(min(_effective_strength, 0.30))
 
         if _effective_strength <= 0.0:
+            logger.info("Phase 35: skipped — effective_strength=%.3f (no compression applied)", _effective_strength)
             audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
             audio = np.clip(audio, -1.0, 1.0)
+            # §5/5: Echte Peak-Messung auch bei Skip
+            _p35_peak = float(20.0 * np.log10(np.percentile(np.abs(audio), 99.9) + 1e-10))
             return PhaseResult(
                 success=True,
                 audio=audio.copy(),
@@ -220,7 +223,7 @@ class MultibandCompressionPhase(PhaseInterface):
                     "rms_drop_db": 0.0,
                     "loudness_makeup_db": 0.0,
                 },
-                metrics={"rms_change_db": 0.0, "peak_before_db": 0.0, "peak_after_db": 0.0},
+                metrics={"rms_change_db": 0.0, "peak_before_db": _p35_peak, "peak_after_db": _p35_peak},
                 modifications={"algorithm": "skipped_zero_strength", "bands": 4},
             )
 
@@ -232,6 +235,11 @@ class MultibandCompressionPhase(PhaseInterface):
             MaterialType.WAX_CYLINDER,
         }
         if material_type in _analog_sensitive and _effective_strength < 0.25:
+            logger.info(
+                "Phase 35: skipped — effective_strength=%.3f < 0.25 on analog material '%s' (no compression applied)",
+                _effective_strength,
+                material_type.name,
+            )
             audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
             audio = np.clip(audio, -1.0, 1.0)
             return PhaseResult(

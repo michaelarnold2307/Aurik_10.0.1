@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 """
-Tests für LyricsGuided Enhancement (§2.36 Aurik Spec v9.10.46b)
+Tests für LyricsGuided Enhancement (§2.36 Aurik Spec v10.0.0b)
 =================================================================
 
 Abdeckung:

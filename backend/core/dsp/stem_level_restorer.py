@@ -1,4 +1,4 @@
-"""§SLR-1 StemLevelRestorer — Pre-phase vocal/instrumental stem-level NR (v9.12.1).
+"""§SLR-1 StemLevelRestorer — Pre-phase vocal/instrumental stem-level NR (v10.0.0).
 
 Applies MIIPHER (W2v-BERT 2.0) to the vocal stem and DeepFilterNet v3 to the
 instrumental stem BEFORE the main phase pipeline in Restoration mode.  The

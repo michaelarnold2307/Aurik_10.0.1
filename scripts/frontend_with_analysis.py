@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Aurik 9 — Frontend Launcher mit kontinuierlichem Qualitäts-Monitoring
+Aurik 10.0.0 — Frontend Launcher mit kontinuierlichem Qualitäts-Monitoring
 ======================================================================
 
 Startet das PyQt5-Frontend und führt kontinuierliche Tiefenanalyse
@@ -217,7 +217,7 @@ class FrontendWithAnalysisSupervisor:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Aurik 9 Frontend mit kontinuierlicher Tiefenanalyse",
+        description="Aurik 10.0.0 Frontend mit kontinuierlicher Tiefenanalyse",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Beispiele:

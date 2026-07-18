@@ -10,6 +10,7 @@ Prinzipien:
   - 10 Sekunden Mindesteinblenddauer — Zeit zum Lesen
   - Persönliche Ansprache, als würde ein Freund erklären
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -33,10 +34,16 @@ _TRÄGER_NAMEN: dict[str, str] = {
     "unknown": "einem unbekannten Träger",
 }
 _TRÄGER_KURZ: dict[str, str] = {
-    "vinyl": "Vinyl-Platte", "shellac": "Schellackplatte",
-    "reel_tape": "Tonband", "cassette_tape": "Kassette",
-    "cd": "CD", "mp3_low": "MP3", "mp3_high": "MP3",
-    "aac": "AAC", "streaming": "Stream", "digital": "Digital",
+    "vinyl": "Vinyl-Platte",
+    "shellac": "Schellackplatte",
+    "reel_tape": "Tonband",
+    "cassette_tape": "Kassette",
+    "cd": "CD",
+    "mp3_low": "MP3",
+    "mp3_high": "MP3",
+    "aac": "AAC",
+    "streaming": "Stream",
+    "digital": "Digital",
 }
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -48,40 +55,33 @@ _KETTEN_ERZAEHLUNG: list[str] = [
     "Datei — hinterlässt nämlich ganz bestimmte Spuren im Klang. "
     "So wie ein Detektiv anhand von Fingerabdrücken weiss, wer am Tatort war, "
     "erkennt Aurik an diesen Spuren, woher Deine Musik kommt.",
-
     "Deine Musik hat eine kleine Reise hinter sich: {chain}. "
     "Das sind {num_stages} verschiedene Stationen. Aurik hat das herausgefunden, "
     "indem es das Klangbild ganz genau untersucht hat. Jede dieser Stationen "
     "hat ihre eigenen, typischen Merkmale — ähnlich wie verschiedene "
     "Fotos desselben Motivs je nach Kamera anders aussehen.",
-
     "Spannend: Deine Aufnahme war ursprünglich {first_stage} "
     "und hat im Lauf der Zeit {num_stages} weitere Stationen durchlaufen. "
     "Das ist wie bei einem alten Foto, das mehrfach kopiert wurde — "
     "jede Kopie verliert ein bisschen an Schärfe. Aurik weiss genau, "
     "wie es diese Verluste wieder ausgleichen kann.",
-
     "Aurik vergleicht Deine Musik mit 76 verschiedenen Mustern, "
     "die typisch für verschiedene Musikträger sind. Dabei kam heraus: "
     "{chain}. So wie ein erfahrener Uhrmacher am Klang erkennt, "
     "welches Uhrwerk tickt, so erkennt Aurik, woher Deine Musik stammt.",
-
     "Die Untersuchung zeigt: {chain}. Aurik hat dafür über 60 verschiedene "
     "Merkmale Deiner Aufnahme geprüft — vom leisesten Rauschen bis zur "
     "höchsten Höhe. Das Ergebnis: ein klares Bild davon, welchen Weg "
     "Deine Musik genommen hat, bevor sie zu Dir kam.",
-
     "Deine Musik begann ihr Leben als {first_stage}. Seitdem hat sie "
     "eine spannende Reise hinter sich. Aurik weiss jetzt genau, "
     "wie es sie am besten behandelt — so wie ein Restaurator weiss, "
     "ob ein Gemälde auf Leinwand oder Holz gemalt wurde.",
-
     "Wie erkennt Aurik eigentlich, woher Deine Musik kommt? "
     "Ganz einfach: Es hört sich die leisesten Geräusche an — "
     "das feine Knistern einer Platte, das sanfte Rauschen eines Bandes, "
     "die typischen Verluste einer komprimierten Datei. "
     "Jeder dieser Klänge verrät Aurik etwas über die Herkunft.",
-
     "Die Spurensuche ergab: {chain}. Stell Dir das vor wie eine "
     "Geschichte, die Deine Musik erzählt — von ihrer Geburt als "
     "{first_stage} bis zu dem Moment, als sie bei Dir ankam. "
@@ -95,7 +95,6 @@ _WARUM_KETTE_WICHTIG: list[str] = [
     "weiss, woher Deine Musik kommt, kann es die richtigen Werkzeuge "
     "auswählen. So wie ein Arzt eine andere Behandlung braucht als ein "
     "Mechaniker — Aurik braucht für Vinyl andere Methoden als für MP3.",
-
     "Weil Aurik jetzt genau weiss, dass Deine Musik von {chain} stammt, "
     "kann es jeden einzelnen Arbeitsschritt perfekt darauf abstimmen. "
     "So wie ein Koch weiss, ob ein Steak medium oder well-done sein soll — "
@@ -203,29 +202,23 @@ _AKTIVITAETEN: dict[str, list[str]] = {
         "Das Grundrauschen weicht — die Musik atmet auf …",
         "Rauschen und Musik werden voneinander getrennt …",
         "Schicht für Schicht geht das Rauschen weg …",
-        "Wie ein Archäologe, der eine Vase ausgräbt — "
-        "behutsam wird die Musik freigelegt …",
+        "Wie ein Archäologe, der eine Vase ausgräbt — behutsam wird die Musik freigelegt …",
         "Die Details der Aufnahme kommen langsam zum Vorschein …",
         "Was vorher im Rauschen unterging, wird hörbar …",
-        "Aurik arbeitet sich durch das Rauschen — "
-        "wie ein Taucher, der zum Meeresgrund hinabsteigt …",
+        "Aurik arbeitet sich durch das Rauschen — wie ein Taucher, der zum Meeresgrund hinabsteigt …",
         "Langsam wird es stiller im Hintergrund …",
     ],
     "phase_04": [
         "Bringt Bässe, Mitten und Höhen ins Gleichgewicht …",
-        "Die Klangfarbe wird ausbalanciert — nichts dröhnt, "
-        "nichts fehlt …",
-        "Passt den Klang an wie ein Optiker eine Brille — "
-        "so lange, bis alles perfekt scharf ist …",
-        "Was zu dumpf klang, wird klarer. Was zu scharf war, "
-        "wird weicher …",
+        "Die Klangfarbe wird ausbalanciert — nichts dröhnt, nichts fehlt …",
+        "Passt den Klang an wie ein Optiker eine Brille — so lange, bis alles perfekt scharf ist …",
+        "Was zu dumpf klang, wird klarer. Was zu scharf war, wird weicher …",
         "Die richtige Balance für Deine Musik …",
     ],
     "phase_05": [
         "Entfernt tiefes Rumpeln, das man kaum hört …",
         "Das Wummern des Plattentellers verschwindet …",
-        "Alles, was nur die Boxen vibrieren lässt, "
-        "wird entfernt …",
+        "Alles, was nur die Boxen vibrieren lässt, wird entfernt …",
     ],
     "phase_06": [
         "Stellt verlorene Höhen wieder her …",
@@ -233,8 +226,7 @@ _AKTIVITAETEN: dict[str, list[str]] = {
         "Was dumpf war, bekommt wieder Glanz …",
         "Fehlende Klangfarben werden ergänzt …",
         "Die Musik wird wieder luftig und offen …",
-        "Wie beim Öffnen eines Fensters — frische Luft "
-        "für Deine Musik …",
+        "Wie beim Öffnen eines Fensters — frische Luft für Deine Musik …",
     ],
     "phase_07": [
         "Bringt Wärme und Fülle zurück …",
@@ -318,11 +310,9 @@ _AKTIVITAETEN: dict[str, list[str]] = {
 _ALLGEMEINE_AKTIVITAETEN: list[str] = [
     "Arbeitet mit höchster Sorgfalt an Deiner Musik …",
     "Jeder Rechenschritt bringt besseren Klang …",
-    "Gute Restaurierung braucht ein wenig Zeit — "
-    "und die geben wir ihr …",
+    "Gute Restaurierung braucht ein wenig Zeit — und die geben wir ihr …",
     "Deine Musik verdient diese Aufmerksamkeit …",
-    "Im Hintergrund laufen komplexe Berechnungen — "
-    "alles für Deine Musik …",
+    "Im Hintergrund laufen komplexe Berechnungen — alles für Deine Musik …",
     "Qualität vor Geschwindigkeit — immer …",
     "So sorgfältig wie ein Uhrmacher …",
     "Deine Musik in guten Händen …",
@@ -344,7 +334,10 @@ class PhaseProgressNarrator:
     # ── Kontext setzen ──────────────────────────────────────────────────────
 
     def set_context(
-        self, *, material: str = "", era_decade: int | None = None,
+        self,
+        *,
+        material: str = "",
+        era_decade: int | None = None,
         transfer_chain: list[str] | None = None,
         defects: list[str] | None = None,
         restorability: float | None = None,
@@ -375,8 +368,7 @@ class PhaseProgressNarrator:
 
         idx = self._chain_story_index % len(_KETTEN_ERZAEHLUNG)
         self._chain_story_index += 1
-        return _KETTEN_ERZAEHLUNG[idx].format(
-            chain=chain_str, num_stages=num_stages, first_stage=first_stage)
+        return _KETTEN_ERZAEHLUNG[idx].format(chain=chain_str, num_stages=num_stages, first_stage=first_stage)
 
     def chain_summary(self) -> str:
         """Abschliessende Zusammenfassung der Tonträgerkette."""
@@ -411,10 +403,7 @@ class PhaseProgressNarrator:
                 f"so wie man eine Geige von einem Klavier unterscheiden kann."
             )
         elif material:
-            teile.append(
-                f"Deine Musik zeigt alle typischen Eigenschaften "
-                f"von {_TRÄGER_NAMEN.get(material, material)}."
-            )
+            teile.append(f"Deine Musik zeigt alle typischen Eigenschaften von {_TRÄGER_NAMEN.get(material, material)}.")
 
         if ctx.get("era_decade"):
             teile.append("")
@@ -427,8 +416,7 @@ class PhaseProgressNarrator:
 
     # ── Fortschrittsmeldung erzeugen ────────────────────────────────────────
 
-    def message_for(self, phase_id: str, phase_name: str = "",
-                    progress_pct: int = 0) -> str:
+    def message_for(self, phase_id: str, phase_name: str = "", progress_pct: int = 0) -> str:
         now = _time.monotonic()
         phase_key = phase_id or "_unbekannt"
         ctx = self._context
@@ -503,8 +491,8 @@ class PhaseProgressNarrator:
                 if texte:
                     anzahl = len(ctx.get("defects", []) or [])
                     return texte[hash(f"{pid}_{self._session_key}") % len(texte)].format(
-                        material=_TRÄGER_NAMEN.get(material, material or "diesem Träger"),
-                        defect_count=anzahl)
+                        material=_TRÄGER_NAMEN.get(material, material or "diesem Träger"), defect_count=anzahl
+                    )
         return ""
 
     def _aktivitaeten(self, phase_id: str) -> list[str]:
@@ -517,26 +505,42 @@ class PhaseProgressNarrator:
     @staticmethod
     def _symbol(phase_id: str) -> str:
         pid = str(phase_id or "").lower()
-        if "rausch" in pid or "noise" in pid or "denoise" in pid: return "🔇"
-        if "knack" in pid or "click" in pid or "crackle" in pid: return "🔍"
-        if "klang" in pid or "eq" in pid or "frequenz" in pid: return "🎚️"
-        if "harmonisch" in pid or "warm" in pid: return "🔥"
-        if "stimme" in pid or "vocal" in pid or "gesang" in pid: return "🎤"
-        if "stereo" in pid or "raum" in pid: return "🎧"
-        if "master" in pid or "polish" in pid or "schliff" in pid: return "✨"
-        if "export" in pid or "speichern" in pid: return "💾"
-        if "rumble" in pid or "brumm" in pid or "hum" in pid: return "📉"
-        if "reparatur" in pid or "repair" in pid: return "🔧"
-        if "wow" in pid or "flutter" in pid or "gleichlauf" in pid: return "〰️"
-        if "tempo" in pid or "speed" in pid or "pitch" in pid: return "⏱️"
-        if "laut" in pid or "loudness" in pid: return "📊"
-        if "hall" in pid or "reverb" in pid: return "🏠"
-        if "scan" in pid or "analys" in pid or "untersuch" in pid: return "🔬"
+        if "rausch" in pid or "noise" in pid or "denoise" in pid:
+            return "🔇"
+        if "knack" in pid or "click" in pid or "crackle" in pid:
+            return "🔍"
+        if "klang" in pid or "eq" in pid or "frequenz" in pid:
+            return "🎚️"
+        if "harmonisch" in pid or "warm" in pid:
+            return "🔥"
+        if "stimme" in pid or "vocal" in pid or "gesang" in pid:
+            return "🎤"
+        if "stereo" in pid or "raum" in pid:
+            return "🎧"
+        if "master" in pid or "polish" in pid or "schliff" in pid:
+            return "✨"
+        if "export" in pid or "speichern" in pid:
+            return "💾"
+        if "rumble" in pid or "brumm" in pid or "hum" in pid:
+            return "📉"
+        if "reparatur" in pid or "repair" in pid:
+            return "🔧"
+        if "wow" in pid or "flutter" in pid or "gleichlauf" in pid:
+            return "〰️"
+        if "tempo" in pid or "speed" in pid or "pitch" in pid:
+            return "⏱️"
+        if "laut" in pid or "loudness" in pid:
+            return "📊"
+        if "hall" in pid or "reverb" in pid:
+            return "🏠"
+        if "scan" in pid or "analys" in pid or "untersuch" in pid:
+            return "🔬"
         return "⚙️"
 
 
 # Singleton
 _erzaehler: PhaseProgressNarrator | None = None
+
 
 def get_narrator() -> PhaseProgressNarrator:
     global _erzaehler

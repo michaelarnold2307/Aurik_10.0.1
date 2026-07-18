@@ -431,7 +431,7 @@ def run_pre_analysis(
             _chain = list(getattr(_md_val, "transfer_chain", []) or [])
 
             if _chain and _genre_label:
-                _detector = _load_symbol("forensics.medium_detector", "get_medium_detector")()
+                _detector = cast(Callable[[], Any], _load_symbol("forensics.medium_detector", "get_medium_detector"))()
 
                 # 1. Medium → Genre: Sind die erkannten Medien mit dem Genre vereinbar?
                 _constraints = _detector.get_genre_constraints(_chain)
@@ -494,7 +494,9 @@ def run_pre_analysis(
                 _genre_label = str(getattr(result.genre, "genre_label", "") or "")
                 if _genre_label:
                     try:
-                        _detector_cv = _load_symbol("forensics.medium_detector", "get_medium_detector")()
+                        _detector_cv = cast(
+                            Callable[[], Any], _load_symbol("forensics.medium_detector", "get_medium_detector")
+                        )()
                         _constraints_cv = _detector_cv.get_genre_constraints(_cv_chain)
                         _excluded_cv = set(_constraints_cv.get("excluded", []))
                         _genre_key_cv = _genre_label.lower().replace(" ", "_").replace("-", "_")
@@ -502,8 +504,8 @@ def run_pre_analysis(
                             _cv_conflicts.append(f"Genre({_genre_label}) excluded by chain")
                         else:
                             _cv_agreements.append(f"Genre({_genre_label})")
-                    except Exception:
-                        pass
+                    except Exception as _cv_exc:
+                        logger.debug("pre_analysis: genre-chain cross-validation failed (non-critical): %s", _cv_exc)
 
             # Factor 3: Defect scanner material vs chain
             if result.defects is not None:
@@ -665,12 +667,14 @@ def run_pre_analysis(
                 # Chronological sort after all injections
                 if len(_chain) > 1:
                     try:
-                        _sorter = _load_symbol("forensics.medium_detector", "get_medium_detector")()
+                        _sorter = cast(
+                            Callable[[], Any], _load_symbol("forensics.medium_detector", "get_medium_detector")
+                        )()
                         _sorted = sorted(_chain, key=lambda m: _sorter._MEDIUM_ORDER.get(m, 99))
                         if _sorted != _chain:
                             _chain = _sorted
-                    except Exception:
-                        pass
+                    except Exception as _sort_exc:
+                        logger.debug("pre_analysis: transfer-chain sort failed (non-critical): %s", _sort_exc)
 
                 logger.info(
                     "pre_analysis: Deep-Transfer-Chain: %s (injected=%s, era=%s, defect=%s)",

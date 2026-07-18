@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Aurik 9.0 - Benchmark Results Analyzer
+Aurik 10.0.0 - Benchmark Results Analyzer
 Analysiert Benchmark-Ergebnisse und erstellt detaillierte Vergleichsberichte
 Phase 3b: Validation & Real-World Testing
 Datum: 16. Februar 2026
@@ -110,7 +110,7 @@ def analyze_quality_target(stats: dict[str, Any]) -> dict[str, Any]:
     avg_naturalness = stats.get("avg_naturalness")
 
     if avg_naturalness is not None:
-        # Aurik 9.0 targets: Overall 0.88-0.90, Naturalness 0.81
+        # Aurik 10.0.0 targets: Overall 0.88-0.90, Naturalness 0.81
         if avg_naturalness >= 0.88:
             analysis["status"] = "excellent"
             analysis["meets_targets"] = True
@@ -194,7 +194,7 @@ def compare_with_commercial(stats: dict[str, Any], mode: str = "BALANCED"):
         "SpectraLayers Pro": {"overall": 0.87, "naturalness": 0.85, "rt_factor": 2.5, "price": 399},
     }
 
-    # Aurik 9.0 (from stats)
+    # Aurik 10.0.0 (from stats)
     aurik_naturalness = stats.get("avg_naturalness", 0)
 
     rt_factors = {"FAST": 0.5, "BALANCED": 1.5, "MAXIMUM": 4.0}
@@ -205,7 +205,7 @@ def compare_with_commercial(stats: dict[str, Any], mode: str = "BALANCED"):
 
     # Aurik
     print(
-        f"{Colors.BOLD}Aurik 9.0 ({mode}){Colors.ENDC:<15} "
+        f"{Colors.BOLD}Aurik 10.0.0 ({mode}){Colors.ENDC:<15} "
         f"{Colors.OKGREEN}{0.88:>8.2f}{Colors.ENDC}  "
         f"{Colors.OKGREEN}{aurik_naturalness:>8.4f}{Colors.ENDC}  "
         f"{Colors.OKGREEN}{aurik_rt:>10.1f}×{Colors.ENDC}  "
@@ -240,7 +240,7 @@ def generate_markdown_report(results_dir: Path, stats: dict[str, Any], analysis:
     report_file = results_dir / "analysis_report.md"
 
     with open(report_file, "w") as f:
-        f.write("# Aurik 9.0 - Benchmark Analysis Report\n\n")
+        f.write("# Aurik 10.0.0 - Benchmark Analysis Report\n\n")
         f.write(f"**Date:** {Path.cwd().name}\n")
         f.write(f"**Quality Mode:** {mode}\n")
         f.write(f"**Results Directory:** {results_dir}\n\n")
@@ -296,7 +296,7 @@ def generate_markdown_report(results_dir: Path, stats: dict[str, Any], analysis:
         f.write("| System | Overall | Naturalness | RT Factor | Price |\n")
         f.write("|--------|---------|-------------|-----------|-------|\n")
         f.write(
-            f"| **Aurik 9.0 ({mode})** | **0.88-0.90** | **{avg_nat:.4f}** | **{1.5 if mode == 'BALANCED' else 0.5 if mode == 'FAST' else 4.0:.1f}×** | **$0** |\n"
+            f"| **Aurik 10.0.0 ({mode})** | **0.88-0.90** | **{avg_nat:.4f}** | **{1.5 if mode == 'BALANCED' else 0.5 if mode == 'FAST' else 4.0:.1f}×** | **$0** |\n"
         )
         f.write("| iZotope RX 10 | 0.90 | 0.88 | 3.0× | $1,299 |\n")
         f.write("| CEDAR Cambridge | 0.92 | 0.90 | 4.5× | $2,000-$8,000 |\n")
@@ -333,7 +333,7 @@ def generate_markdown_report(results_dir: Path, stats: dict[str, Any], analysis:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Analyze Aurik 9.0 benchmark results",
+        description="Analyze Aurik 10.0.0 benchmark results",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -388,7 +388,7 @@ Examples:
     # Load metrics
     metrics_file = results_dir / "aurik_metrics.json"
 
-    print_header("Aurik 9.0 - Benchmark Results Analyzer")
+    print_header("Aurik 10.0.0 - Benchmark Results Analyzer")
 
     print(f"Results Directory: {results_dir}")
     print(f"Quality Mode:      {args.mode}")

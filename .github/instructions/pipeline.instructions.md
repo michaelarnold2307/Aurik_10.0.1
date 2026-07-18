@@ -2,9 +2,9 @@
 applyTo: "backend/core/unified_restorer_v3.py"
 ---
 
-# UV3 — Pipeline-Regeln (normativ, Aurik 9.12.x)
+# UV3 — Pipeline-Regeln (normativ, Aurik 10.0.0.x)
 
-## §2.31 Material-Phase-Initialstärken — Transfer-Chain-Aware [RELEASE_MUST v9.12.9]
+## §2.31 Material-Phase-Initialstärken — Transfer-Chain-Aware [RELEASE_MUST v10.0.0]
 
 **Problem**: Wenn `_restoration_context["transfer_chain"]` mehrere Stufen enthält (z.B. `["vinyl", "cassette"]`), darf nur die **strengste** Schwächungsstufe über alle Kettenglieder die Initialstärke einer Phase bestimmen.
 
@@ -51,7 +51,7 @@ HPI = studio_quality_gain * PQS_improvement * artifact_freedom * emotional_arc_p
 # KANONISCH — Studio 2026 (Vokal, panns_singing >= 0.35) [§0p Pflicht]:
 HPI = studio_quality_gain * PQS_improvement * VQI * artifact_freedom * emotional_arc_preservation
 
-# MERT-Floor PFLICHT (Bug-Fix v9.12.0):
+# MERT-Floor PFLICHT (Bug-Fix v10.0.0):
 MERT_similarity = max(raw_mert, 0.5)  # verhindert Gesamt-Kollaps auf 0
 
 # carrier_chain_recovery_ratio — KANONISCHE BERECHNUNG (Pflicht vor HPI):
@@ -230,7 +230,7 @@ duerfen nicht als ungeordnete Sonderfaelle konkurrieren.
 # Klasse B: RECOVERY_TRIGGER
 #   - vqi < material_vqi_floor
 #   - singer_identity_cosine < 0.92 (wenn multi_singer=False UND singer_id_dsp_fallback=False)
-#     §DSP-Fallback-Guard (v9.15.3): singer_id_dsp_fallback=True → Advisory only (Class C)
+#     §DSP-Fallback-Guard (v10.0.0): singer_id_dsp_fallback=True → Advisory only (Class C)
 # Klasse C: ADVISORY
 #   - vqi < mode_target (Restoration 0.82 / Studio 0.87)
 #   - singer_identity_cosine < 0.92 bei singer_id_dsp_fallback=True → singer_id_advisory_cosine
@@ -814,7 +814,7 @@ if self._mas_fully_achieved and phase_id not in _NEVER_SKIP:
     continue  # _NEVER_SKIP-Phasen laufen trotz MAS immer durch
 ```
 
-## §GOAL_BASELINE_CHECK [RELEASE_MUST] (v9.12.7) — Garantierter Goal-Recovery-Pfad
+## §GOAL_BASELINE_CHECK [RELEASE_MUST] (v10.0.0) — Garantierter Goal-Recovery-Pfad
 
 **Problem (CAUSE_TO_PHASES-Lücke)**: Wenn DefectScanner keinen Defekt-Cause für ein Musical Goal findet, trägt `CAUSE_TO_PHASES` keine Recovery-Phasen für dieses Goal ein. Der HolisticPerceptualGate-Blend kann Goals nur durch Rollback in Richtung Original bewegen — er kann ein Goal **nicht über das Original-Niveau heben**. Das bedeutet: Goals, die strukturell unter dem materialadaptiven Floor liegen, aber kein erkennbares Defekt-Signal erzeugen, würden nie erreicht.
 
@@ -882,7 +882,7 @@ Reihenfolge nach §2.46-Carrier-Chain: subtraktiv vor additiv, mechanisch vor di
 
 > Kanonische Quelle: `backend/core/calibration_matrix.py` → `get_goal_recovery_phases()` + `_GOAL_TO_RECOVERY_PHASES_RESTORATION`. Studio-2026-Extras in `_GOAL_TO_RECOVERY_PHASES_STUDIO_EXTRAS`. Tests: `tests/unit/test_calibration_matrix.py` (§09.10-Tests, 8 Testfunktionen).
 
-## §2.66 RecordingChainProfiler — Träger-Ketten-Kopplung [RELEASE_MUST v9.13]
+## §2.66 RecordingChainProfiler — Träger-Ketten-Kopplung [RELEASE_MUST v10.0.0]
 
 **Problem**: Aurik behandelt 54 Defekttypen als unabhängige Signale. Physikalisch ist eine historische Aufnahme jedoch eine **kausale Kette** (Mikrofon → Vorstufe → Band → Presswerk → Abspielkette), deren Stufen gekoppelte Degradationen erzeugen. Wenn 8 Symptome aus derselben physikalischen Quelle stammen, aktiviert der CausalDefectReasoner 8 separate Phasen-Cluster — mit Over-Processing und sich überlappenden Korrekturen.
 
@@ -954,7 +954,7 @@ oracle_profile = resolve_phase_strength_oracle(
 
 > Quelle: `backend/core/recording_chain_profiler.py`. Neue Cluster über `_CHAIN_CLUSTERS`-Dict erweiterbar.
 
-## §2.67 Phase-Koalitions-Evaluation — globale Optimierung statt lokaler Gates [RELEASE_MUST v9.13]
+## §2.67 Phase-Koalitions-Evaluation — globale Optimierung statt lokaler Gates [RELEASE_MUST v10.0.0]
 
 **Problem**: §2.45 (Minimal-Intervention) erzwingt `perceptual_delta > 0` **pro Phase**. Das verhindert jede Korrektursequenz, die durch ein lokales Minimum führt. Schwere Restaurierungsfälle (gekoppelte Defekte, tief-analoge Carrier) sind genau die Fälle, die mutige mehrstufige Eingriffe benötigen.
 
@@ -992,7 +992,7 @@ if coalition_id := _get_coalition_for_phase(phase_id):
 - Zeitbudget einer Koalition = Summe der Einzel-Budgets (§ Per-Phase-Zeitbudgets).
 - Koalition wird nur aktiviert wenn `chain_hint.dominant_cluster` die Koalition bestätigt.
 
-## §2.69 TemporalContinuityGuard — Zeitliche Diskontinuität [RELEASE_MUST v9.13]
+## §2.69 TemporalContinuityGuard — Zeitliche Diskontinuität [RELEASE_MUST v10.0.0]
 
 **Problem**: Frame-by-frame-Processing erzeugt Mikro-Diskontinuitäten zwischen Verarbeitungsblöcken. Diese erscheinen in keiner Metrik und in keinem Test (synthetische Signale haben keine natürlichen Phrasengrenzen). Hörer nehmen sie als "da stimmt was nicht" wahr.
 
@@ -1044,7 +1044,7 @@ def check_temporal_continuity(pre, post, phase_id, sr):
 
 > Langfristig: `variance_ratio`-Daten aus `metadata` aggregieren → Era/Material-adaptive Schwellwerte.
 
-## §2.70 RestorationMemory — Persistenter GPOptimizer-Prior [RELEASE_MUST v9.13]
+## §2.70 RestorationMemory — Persistenter GPOptimizer-Prior [RELEASE_MUST v10.0.0]
 
 **Problem**: GPOptimizer startet jeden Lauf mit uniformem Prior — kein Gedächtnis über erfolgreiche Lösungsstrategien aus vergangenen Läufen. Erfahrene Toningenieure haben dieses Gedächtnis; Aurik hat es nicht.
 
@@ -1082,7 +1082,7 @@ if export_hpi > 0 and metadata.get("artifact_freedom", 0) >= 0.95:
 - Write ist atomic (write to `.tmp`, dann `os.replace`).
 - **VERBOTEN**: `RestorationMemory` auf Cloudspeicher oder Netzwerkpfade schreiben — rein lokal.
 
-**Coalition-aware Prior-Invariante (v9.15.4)**:
+**Coalition-aware Prior-Invariante (v10.0.0)**:
 
 - Erfolgreiche Läufe dürfen zusätzlich Koalitions-Lernsignale in `phase_params` persistieren:
     `_coalition_learning_factor`, `_dominant_phase_coalition_ratio`, `_phase_coalition_count`.
@@ -1091,7 +1091,7 @@ if export_hpi > 0 and metadata.get("artifact_freedom", 0) >= 0.95:
 - Beim Laden eines Priors MUSS UV3 den geladenen Prior in `_restoration_context` spiegeln
     (`restoration_memory_prior`), damit Downstream-Module und Telemetrie dieselbe Referenz sehen.
 
-## §2.78b Runtime-Metric-Reliability-Graph [RELEASE_MUST v9.15.5]
+## §2.78b Runtime-Metric-Reliability-Graph [RELEASE_MUST v10.0.0]
 
 **Problem**: PMGG/Phase-Deltas liefern pro Phase reichhaltige Proxy-Telemetrie, aber ohne
 laufzeitnahe Reliability-Kalibrierung bleiben Goal-Konfidenzen in Grenzfällen zu statisch.
@@ -1132,7 +1132,7 @@ blended_conf = base_w * base_conf + runtime_w * runtime_conf
 
 > Datei-Pfad: `~/.aurik/restoration_memory.json`. Konfigurierbar via `AURIK_MEMORY_PATH`-Env-Variable (Desktop-Offline-Pflicht beachten).
 
-## §2.71 Formant-Toleranz-Verscharfäung [RELEASE_MUST v9.5]
+## §2.71 Formant-Toleranz-Verscharfäung [RELEASE_MUST v10.0.0]
 
 Quelle: `[SRC:S08,S09]`
 
@@ -1153,7 +1153,7 @@ _ctx["formant_tolerance_db"] = [1.0, 1.0, 1.5, 1.5]  # F1, F2, F3, F4
 
 > `resolve_formant_tolerance_db()` in `backend/core/musical_goals/era_vocal_profile.py` — gibt era-adaptierte Werte zurück; nutzt `_ctx["formant_tolerance_db"]` als Input-Maximum.
 
-## §2.72 Vibrato-Tiefe-Schutz [RELEASE_MUST v9.5]
+## §2.72 Vibrato-Tiefe-Schutz [RELEASE_MUST v10.0.0]
 
 Quelle: `[SRC:S10,S11]`
 
@@ -1173,7 +1173,7 @@ if _vdp.depth_reduction_pct > 10.0:
 
 **Pflicht-Telemetrie**: `vibrato_depth_preservation` MUSS zusaetzlich ueber `_update_vocal_quality_metrics(...)` in `_restoration_context["vocal_quality_check"]` und `_phase_metadata_accumulator` gespiegelt werden, damit WCS/HTEV/psychoakustische Gates denselben Wert lesen wie der Phasen-Guard.
 
-## §2.73 Pre-Echo-Prevention [RELEASE_MUST v9.5]
+## §2.73 Pre-Echo-Prevention [RELEASE_MUST v10.0.0]
 
 **Regel**: Additive ML-Phasen können Transient-Onsets zeitlich verschieben (≤ 2 ms = tolerierbar; > 2 ms = Blend-Reduction).
 
@@ -1187,7 +1187,7 @@ if phase_id in {"phase_06", "phase_07", "phase_23"}:
         metadata["onset_shift_ms"] = _ts.max_shift_ms
 ```
 
-## §2.74 Spektralfarbe-Erhaltung [RELEASE_MUST v9.5]
+## §2.74 Spektralfarbe-Erhaltung [RELEASE_MUST v10.0.0]
 
 **Regel**: Die charakteristische 1/3-Oktav-Kurve (200–8000 Hz) muss nach EQ/NR-Phasen zu ≥ 0.97 korreliert bleiben.
 
@@ -1201,7 +1201,7 @@ if _scp.correlation < 0.97:
     metadata["spectral_color_corr"] = _scp.correlation
 ```
 
-## §2.75 Mikrodynamik-Korrelation [RELEASE_MUST v9.5]
+## §2.75 Mikrodynamik-Korrelation [RELEASE_MUST v10.0.0]
 
 **Regel**: Frame-Energie-Korrelation (10 ms) auf voiced-Zonen nach NR/Dynamics-Phasen.
 
@@ -1223,7 +1223,7 @@ if panns_singing >= 0.25:
 
 **Pflicht-Telemetrie**: `micro_dynamic_correlation` MUSS ueber `_update_vocal_quality_metrics(...)` in `_restoration_context["vocal_quality_check"]` und `_phase_metadata_accumulator` geschrieben werden. Finale WCS-/Psychoakustik-Gates duerfen nicht auf phasenlokale `metadata` beschraenkt bleiben.
 
-## §2.75a Vocal-Guard-Runtime-Bridge [RELEASE_MUST v9.20.3]
+## §2.75a Vocal-Guard-Runtime-Bridge [RELEASE_MUST v10.0.0]
 
 **Problem**: Phase-lokale Guard-Metadaten sind fuer das End-Gate wertlos, wenn sie nur in `result.metadata` leben. UV3-Final-Gates (WCS, HTEV, Psychoakustik, Spec-Upgrade-Entscheidung) lesen aggregierte Werte aus `_restoration_context["vocal_quality_check"]` und `_phase_metadata_accumulator`.
 
@@ -1252,7 +1252,7 @@ _update_vocal_quality_metrics(
 
 **Strenger Vocal-NTI-Pfad**: Bei `panns_singing ≥ 0.35` gilt fuer `noise_texture_authenticity` der strengere Guard-Schwellenwert `0.18` statt `0.25`.
 
-## §2.76 Wärmeband-Guard [RELEASE_MUST v9.5]
+## §2.76 Wärmeband-Guard [RELEASE_MUST v10.0.0]
 
 **Regel**: Kumulativer 200–800 Hz Verlust über alle Phases > 2.5 dB → Blend-Faktor für alle weiteren Phasen.
 
@@ -1268,7 +1268,7 @@ if _ctx["warmth_band_loss_db"] > 2.5:
     metadata["warmth_band_loss_db"] = _ctx["warmth_band_loss_db"]
 ```
 
-## §2.77 Angriffstransienten-Integrität [RELEASE_MUST v9.5]
+## §2.77 Angriffstransienten-Integrität [RELEASE_MUST v10.0.0]
 
 **Regel**: Onset-Fenster (0–20 ms nach Transient) sind perceptuell sensitivste Frames — max. 1.5 dB Änderung.
 
@@ -1293,7 +1293,7 @@ audio = apply_onset_protection_mask(
 
 > `cassette` → intern immer als `tape` in `_MATERIAL_PRIORITY_PHASES`
 
-## §2.78 AdaptivePhaseRescheduler — Geschlossener Regelkreis [RELEASE_MUST v9.15.3]
+## §2.78 AdaptivePhaseRescheduler — Geschlossener Regelkreis [RELEASE_MUST v10.0.0]
 
 **Funktion**: Nach jeder Phase werden Goal-Lücken (`song_goal_targets[g] − post_snap[g]`) berechnet. Für Goals mit signifikantem Gap injiziert der Rescheduler die Primär-Recovery-Phase (aus `get_goal_recovery_phases()`) ans Ende von `selected_phases`. Python's `for`-Loop besucht neu angehängte Elemente — kein Loop-Refactoring nötig.
 
@@ -1434,7 +1434,7 @@ if panns_singing >= 0.35:
     # singer_identity_cosine-Gate (Resemblyzer-Identitäts-Prüfung):
     # NUR aktiv wenn kein Multi-Singer-Track (Duette/Chorprojekte würden falsch-positiv)
     # UND NUR wenn kein DSP-Fallback (ZCR/Spektral-Proxy zu unzuverlässig für Rollback-Trigger)
-    # §DSP-Fallback-Guard (v9.15.3): singer_id_dsp_fallback=True → Advisory only, kein Rollback
+    # §DSP-Fallback-Guard (v10.0.0): singer_id_dsp_fallback=True → Advisory only, kein Rollback
     if not metadata.get("multi_singer", False):
         sic = result.get("singer_identity_cosine", 0.85)
         _sic_dsp_fb = bool(result.get("singer_id_dsp_fallback", True))

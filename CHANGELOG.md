@@ -240,6 +240,69 @@ ASYMMETRIC_CLIPPING, TRANSIENT_IMD
 
 ---
 
+## 10.17 (2026-07-17) — Naturalness-Selbstkalibrierung
+
+### 🎯 Naturalness
+- **§0 Selbstkalibrierende Naturalness:** Automatische Parameter-Abstimmung ohne manuelle Eingriffe
+- **25 Tests:** Naturalness-Selbstkalibrierung + 4 Bugfix-Regressionen
+
+### 🐛 Bugfixes
+- **5 Bugfixes:** Phase-übergreifende Korrekturen aus Naturalness-Integration
+
+---
+
+## 10.16 (2026-07-16) — Azimuth Coherence-Guard + STCG 4. Schutzebene
+
+### 🎯 Stereo-Imaging
+- **§AP Azimuth Coherence-Guard:** Keine Phasendrehung bei Stereo-Panning
+- **Phase 48 Stereo-Shape-Normalisierung:** Broadcast-Fix für (2,)(576,) Shape-Inkonsistenz
+
+### 🔒 STCG (Stereo Time-Coherence Guard)
+- **4. Schutzebene:** Single-Point-Messung immer skippen als ultimative Sicherung
+- **Stereo-Coherence-Guard:** Vollständige Wiederherstellung aller Bugfixes
+
+---
+
+## 10.15 (2026-07-16) — PipelineBudgetController + Watchdog
+
+### ⏱️ Pipeline-Management
+- **PipelineBudgetController:** Zentrale Budget-Verwaltung mit `get_phase_progress()` für Watchdog-Dialog
+- **Watchdog intelligenter Budget-Dialog:** 36×RT-Formel für realistische Restlaufzeit-Prognose
+- **BatchThread._start_ts:** Präzise Laufzeitanzeige im Watchdog-Dialog
+- **UV3 Cassette Budget:** 4200 → 4800 s (deckt 4365 s non-exempt ab)
+
+### 🧪 Testing
+- **Contract-Tests 15/15:** Korrekte Import-Pfade für PostGate-Komponenten
+
+### 🐛 Bugfixes
+- **6 Bugs aus Abbruch-Log:** Shape-Guards + Contract-Tests gegen Pipeline-Crashs
+
+---
+
+## Bugfixes (2026-07-13) — Post-10.0.8 Stabilitäts-Update
+
+### 🔒 Stereo & Lag
+- **STCG Multi-Point** als PRIMÄRE Lag-Messung (§G13/F2)
+- **Phase 12 STCG Pre-Chunking:** L/R-Alignment VOR M/S-Verarbeitung
+- **Phase 12 xcorr-Fallback** nur bei STCG-Fehlschlag
+- **LAG_PROBE_0B-Korrektur:** np.roll → STCG sub-sample shift
+- **Phase 24 Stereo-Lag Safety:** STCG statt signal.correlate
+- **Phase 25 Azimuth:** np.roll → scipy.ndimage.shift (V31, G62)
+- **G14/G49 StereoDriftState:** Post-Pipeline Multi-Point Retry
+
+### 📐 Architektur-Fixes
+- **Zentraler STFT-Längen-Guard** in `backend/__init__.py`
+- **12kHz-Hardcodes** zentralisiert (cassette/tape)
+- **Phase 23 BW-Ceiling** an zentrale Carrier-Definition delegiert
+- **Kanal-Lag-Korrektur** + Phase-Icon-Registry
+
+### 🎛️ Saturation
+- **SaturationDiscriminator:** SOTA H2/H3/H5 Signal-Analyse
+- **Smart Soft-Saturation-Preserve:** Chain-Depth-Guard (§2.59.15a)
+- **Genre-Saturation-Override** bei tiefer Transfer-Kette deaktiviert
+
+---
+
 ## Vorgängerversionen
 
 Siehe Git-History für 9.20.3 und früher.

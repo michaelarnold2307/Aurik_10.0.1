@@ -1,6 +1,6 @@
 """
 backend/core/era_authentic_perceptual_completion.py
-Aurik 9 -- Spec §2.35: EraAuthenticPerceptualCompletion
+Aurik 10.0.0 -- Spec §2.35: EraAuthenticPerceptualCompletion
 
 Synthetisiert aera-authentische HF-Ergaenzung fuer bandbreitenbegrenzte Quellen.
 """

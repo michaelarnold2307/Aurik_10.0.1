@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Aurik 9 — Vereinfachter Restaurierungs-Monitor
+Aurik 10.0.0 — Vereinfachter Restaurierungs-Monitor
 ===============================================
 
 Direkter Monitor ohne komplexe Orchestrierung.
@@ -292,7 +292,7 @@ class SimpleRestorationMonitor:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Aurik 9 — Vereinfachter Restaurierungs-Monitor",
+        description="Aurik 10.0.0 — Vereinfachter Restaurierungs-Monitor",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Beispiele:

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 """
-Tests für die Musikalische Harmonisierung (v9.10.64)
+Tests für die Musikalische Harmonisierung (v10.0.0)
 =====================================================
 
 Testet:

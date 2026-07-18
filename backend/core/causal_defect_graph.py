@@ -49,7 +49,7 @@ class CausalNode:
 
 class CausalDefectGraph:
     """
-    Kausaler Defektgraph für Aurik 9.0.
+    Kausaler Defektgraph für Aurik 10.0.0.
 
     Analysiert Ursache-Wirkung-Beziehungen zwischen erkannten Defekten und
     liefert eine topologisch geordnete Reparatursequenz: Root causes zuerst,
@@ -263,7 +263,7 @@ class CausalDefectGraph:
         ordered_types = [d.defect_type for d in ordered]
 
         lines = [
-            "=== Kausale Defekt-Analyse (Aurik 9.0 CausalDefectGraph) ===",
+            "=== Kausale Defekt-Analyse (Aurik 10.0.0 CausalDefectGraph) ===",
             f"Erkannte Defekte: {len(detected)}",
             f"Phantomdefekte (reine Symptome): {sum(1 for n in nodes if n.is_phantom)}",
             "",

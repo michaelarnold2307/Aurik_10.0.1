@@ -1,12 +1,12 @@
 """
-denker/exzellenz_denker.py — Exzellenz-Denker für Aurik 9
+denker/exzellenz_denker.py — Exzellenz-Denker für Aurik 10.0.0
 ==========================================================
 
 Verbessert restauriertes Audio bis an die physikalische Qualitätsgrenze:
   • ExcellenceOptimizer: Spectral Continuity, Micro-Dynamics, Harmonic Boost, OLA
     • MusicalGoalsChecker: Messung aller 15 musikalischen Qualitätsziele
 
-Spec §1.2, §2.5, §2.29, §8.1 — v9.10.45
+Spec §1.2, §2.5, §2.29, §8.1 — v10.0.0
 """
 # pylint: disable=import-outside-toplevel
 
@@ -318,7 +318,7 @@ class ExzellenzDenker:
             passed = 0
 
         # Schritt 3 — Musical Goals Re-Pass bei Violations (max. 1 Runde)
-        # v9.10.58: Von 3 auf 1 Re-Pass reduziert — wissenschaftliche Begründung:
+        # v10.0.0: Von 3 auf 1 Re-Pass reduziert — wissenschaftliche Begründung:
         # Kaskadierte identische Verarbeitung akkumuliert STFT-Rundungsfehler
         # (Ephraim & Malah 1984) und verschiebt ML-Modelle in untrainierte Domains.
         # Ein einzelner korrigierender Pass mit degressiver Intensität ist optimal.
@@ -536,8 +536,8 @@ class ExzellenzDenker:
              goals_passed_after ≥ goals_passed_before UND
              kein Ziel um mehr als 0.02 schlechter als vor der Reparatur (§0).
 
-        Warum sicher nach UV3-FeedbackChain (Abgrenzung zu v9.10.72):
-          - v9.10.72 deaktivierte den ExcellenceOptimizer *global* nach UV3, weil alle
+        Warum sicher nach UV3-FeedbackChain (Abgrenzung zu v10.0.0):
+          - v10.0.0 deaktivierte den ExcellenceOptimizer *global* nach UV3, weil alle
             vier Schritte auf STFT-Basis liefen und kaskadieren würden.
           - Hier werden *ausschließlich* Zeit-Domain-Schritte (micro_dynamics, ola_edges)
             verwendet — diese akkumulieren per Definition keine STFT-Rundungsfehler.

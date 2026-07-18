@@ -1,5 +1,5 @@
 """
-Causal Defect Reasoner — Aurik 9.7
+Causal Defect Reasoner — Aurik 10.0.0
 =====================================
 Bayesianische Ursachendiagnose für mangelhafte Tonträger-Aufnahmen.
 Gegeben eine Menge von Fehlermerkmalen (DefectResult + akustische Signalmerkmale)
@@ -47,8 +47,8 @@ logger = logging.getLogger(__name__)
 # Typ-Definitionen
 # ---------------------------------------------------------------------------
 
-# 62 Kausal-Ursachen (Spec §2.4): 10 Magnetband + 4 Vinyl + 2 Elektrik + 9 Digital/Codec + 9 v9.12.9
-# + 2 Spektral + 2 Stereo + 5 Pitch/Dynamik/Vokal + 1 Vintage + 2 Transport + 12 v9.10.98
+# 62 Kausal-Ursachen (Spec §2.4): 10 Magnetband + 4 Vinyl + 2 Elektrik + 9 Digital/Codec + 9 v10.0.0
+# + 2 Spektral + 2 Stereo + 5 Pitch/Dynamik/Vokal + 1 Vintage + 2 Transport + 12 v10.0.0
 CAUSES = [
     # ── Analoge Magnetband-Ursachen ──────────────────────────────────────────
     "tape_dropout",
@@ -93,10 +93,10 @@ CAUSES = [
     "sibilance",  # Zischlautüberbetonung > 6 kHz
     # ── Vintage (Schutz) ────────────────────────────────────────────────────
     "soft_saturation",  # Tube-/Tape-Sättigung — BEWAHREN, P(phases) = leer
-    # ── Transport-Mechanik (v9.10.97) ───────────────────────────────────────
+    # ── Transport-Mechanik (v10.0.0) ───────────────────────────────────────
     "tape_start_instability",  # Cassette head engagement + motor startup (first 20 s)
     "tape_head_contact_instability",  # Gradual level dips from head-tape pressure variation / capstan irregularity
-    # ── v9.10.98: 12 neue Kausal-Ursachen ────────────────────────────────────
+    # ── v10.0.0: 12 neue Kausal-Ursachen ────────────────────────────────────
     "modulation_noise",  # Signal-dependent noise modulation (tape media)
     "inner_groove_distortion",  # IGD: THD increasing with groove radius (vinyl/shellac)
     "groove_echo",  # Pre-echo from adjacent groove deformation (~1.8 s @ 33⅓)
@@ -109,16 +109,16 @@ CAUSES = [
     "multiband_wow_flutter",  # Frequency-dependent speed fluctuations (head gap)
     "generation_loss",  # Cumulative degradation from tape dubbing/transcoding
     "motor_interference",  # Motor harmonics 80–300 Hz from DC/sync motors
-    # ── v9.12.1: Pegelveränderung ────────────────────────────────────────────
+    # ── v10.0.0: Pegelveränderung ────────────────────────────────────────────
     "amplitude_drift",  # Gradual level rise/fall over song duration (AGC, oxide drift, motor temp)
-    # ── v9.12.2: DefectType→CAUSE-Lücken geschlossen ─────────────────────────
+    # ── v10.0.0: DefectType→CAUSE-Lücken geschlossen ─────────────────────────
     "clicks",  # DefectType.CLICKS → phase_01 (impulsartige Einzelstörungen)
     "dolby_nr_mismatch",  # DefectType.DOLBY_NR_MISMATCH → phase_04 HF-Shelf-Korrektur
     # (Dolby B/C/S encode ohne Dekodierung)
     "tape_head_level_dip",  # DefectType.TAPE_HEAD_LEVEL_DIP → phase_12/phase_24 (Bandkopf-Kontaktdruckvariation)
     "scrape_flutter",  # DefectType.SCRAPE_FLUTTER → phase_12/phase_31 (hochfrequente Bandführungsmodulation)
     "tape_head_clog",  # DefectType.TAPE_HEAD_CLOG → phase_56/phase_25 (temporäre HF-Auslöschung)
-    # ── v9.12.9: 9 neue Kausal-Ursachen — Carrier-Lücken geschlossen ─────────
+    # ── v10.0.0: 9 neue Kausal-Ursachen — Carrier-Lücken geschlossen ─────────
     # Nahbesprechungseffekt (Richtmikrofon ≤30 cm) → LF +6–12 dB ≤250 Hz; häufig Vokal 1940–1970.
     "proximity_effect_excess",
     # Raumresonanz-Stehwellen 40–200 Hz ≠ diffuser Hall → schmalbandige Q>8-Peaks.
@@ -139,13 +139,13 @@ CAUSES = [
     # Vokal-Naturalness-Degradierung: VQI-Abfall durch kumulative NR/Kompressor-Eingriffe →
     # DSP-Korrektiv (HNR-Blend + Spektral-Tilt + Formant-Tilt) via phase_65 (§0a-konform).
     "vocal_quality_degradation",
-    # ── v9.15.1: Stem-Targeted NR (phase_66) ────────────────────────────────
+    # ── v10.0.0: Stem-Targeted NR (phase_66) ────────────────────────────────
     # Kombination aus Vokal-Rauschen + Begleitungs-Rauschen, die wideband-NR nicht
     # sauber voneinander trennen kann → stem-spezifische NR via BSRoFormer-Separation.
     "vocal_stem_noise",  # Vokal-Stem + Begleitung haben unterschiedliche Rauschprofile
 ]
 
-# Material-Typen — Priors für alle 34 Kausal-Ursachen (v9.10.77b)
+# Material-Typen — Priors für alle 34 Kausal-Ursachen (v10.0.0b)
 # Priors pro Material nicht zwingend exakt auf 1.0 normiert — _infer() normalisiert Posterioren.
 MATERIAL_PRIORS: dict[str, dict[str, float]] = {
     "tape": {
@@ -161,9 +161,9 @@ MATERIAL_PRIORS: dict[str, dict[str, float]] = {
         "head_wear": 0.04,
         "print_through": 0.02,
         "transport_bump": 0.12,
-        "tape_start_instability": 0.15,  # v9.10.97: cassette head/motor startup (first 20 s)
-        "tape_head_contact_instability": 0.12,  # v9.10.x: gradual level dips from head-tape pressure variation
-        # v9.10.77b: 22 erweiterte Ursachen
+        "tape_start_instability": 0.15,  # v10.0.0: cassette head/motor startup (first 20 s)
+        "tape_head_contact_instability": 0.12,  # v10.0.0.x: gradual level dips from head-tape pressure variation
+        # v10.0.0b: 22 erweiterte Ursachen
         "bandwidth_loss": 0.06,
         "high_freq_noise": 0.03,
         "stereo_imbalance": 0.02,
@@ -186,7 +186,7 @@ MATERIAL_PRIORS: dict[str, dict[str, float]] = {
         "wow": 0.06,
         "flutter": 0.05,
         "wow_flutter": 0.08,
-        # v9.10.98: 12 neue Ursachen
+        # v10.0.0: 12 neue Ursachen
         "modulation_noise": 0.18,  # very common on tape
         "inner_groove_distortion": 0.01,  # N/A for tape
         "groove_echo": 0.01,  # N/A for tape
@@ -237,7 +237,7 @@ MATERIAL_PRIORS: dict[str, dict[str, float]] = {
         "wow_flutter": 0.03,
         "tape_start_instability": 0.001,  # N/A: no tape transport mechanism
         "tape_head_contact_instability": 0.001,  # N/A: no tape head contact
-        # v9.10.98: 12 neue Ursachen
+        # v10.0.0: 12 neue Ursachen
         "modulation_noise": 0.01,
         "inner_groove_distortion": 0.18,
         "groove_echo": 0.15,
@@ -288,7 +288,7 @@ MATERIAL_PRIORS: dict[str, dict[str, float]] = {
         "wow_flutter": 0.02,
         "tape_start_instability": 0.001,  # N/A: no tape transport mechanism
         "tape_head_contact_instability": 0.001,  # N/A: no tape head contact
-        # v9.10.98: 12 neue Ursachen
+        # v10.0.0: 12 neue Ursachen
         "modulation_noise": 0.01,
         "inner_groove_distortion": 0.2,
         "groove_echo": 0.12,
@@ -339,7 +339,7 @@ MATERIAL_PRIORS: dict[str, dict[str, float]] = {
         "wow_flutter": 0.01,
         "tape_start_instability": 0.001,  # N/A: no tape transport mechanism
         "tape_head_contact_instability": 0.001,  # N/A: no tape head contact
-        # v9.10.98: 12 neue Ursachen
+        # v10.0.0: 12 neue Ursachen
         "modulation_noise": 0.01,
         "inner_groove_distortion": 0.01,
         "groove_echo": 0.01,
@@ -390,7 +390,7 @@ MATERIAL_PRIORS: dict[str, dict[str, float]] = {
         "wow_flutter": 0.03,
         "tape_start_instability": 0.001,  # N/A: no tape transport mechanism
         "tape_head_contact_instability": 0.001,  # N/A: no tape head contact
-        # v9.10.98: 12 neue Ursachen
+        # v10.0.0: 12 neue Ursachen
         "modulation_noise": 0.05,
         "inner_groove_distortion": 0.05,
         "groove_echo": 0.04,
@@ -442,7 +442,7 @@ MATERIAL_PRIORS: dict[str, dict[str, float]] = {
         "wow_flutter": 0.01,
         "tape_start_instability": 0.001,  # N/A: no tape transport mechanism
         "tape_head_contact_instability": 0.001,  # N/A: no tape head contact
-        # v9.10.98: 12 neue Ursachen
+        # v10.0.0: 12 neue Ursachen
         "modulation_noise": 0.01,
         "inner_groove_distortion": 0.01,
         "groove_echo": 0.01,
@@ -493,7 +493,7 @@ MATERIAL_PRIORS: dict[str, dict[str, float]] = {
         "wow_flutter": 0.01,
         "tape_start_instability": 0.001,  # N/A: no tape transport mechanism
         "tape_head_contact_instability": 0.001,  # N/A: no tape head contact
-        # v9.10.98: 12 neue Ursachen
+        # v10.0.0: 12 neue Ursachen
         "modulation_noise": 0.01,
         "inner_groove_distortion": 0.01,
         "groove_echo": 0.01,
@@ -544,7 +544,7 @@ MATERIAL_PRIORS: dict[str, dict[str, float]] = {
         "wow_flutter": 0.01,
         "tape_start_instability": 0.001,  # N/A: no tape transport mechanism
         "tape_head_contact_instability": 0.001,  # N/A: no tape head contact
-        # v9.10.98: 12 neue Ursachen
+        # v10.0.0: 12 neue Ursachen
         "modulation_noise": 0.01,
         "inner_groove_distortion": 0.01,
         "groove_echo": 0.01,
@@ -595,7 +595,7 @@ MATERIAL_PRIORS: dict[str, dict[str, float]] = {
         "wow_flutter": 0.01,
         "tape_start_instability": 0.001,  # N/A: no tape transport mechanism
         "tape_head_contact_instability": 0.001,  # N/A: no tape head contact
-        # v9.10.98: 12 neue Ursachen
+        # v10.0.0: 12 neue Ursachen
         "modulation_noise": 0.01,
         "inner_groove_distortion": 0.01,
         "groove_echo": 0.01,
@@ -646,7 +646,7 @@ MATERIAL_PRIORS: dict[str, dict[str, float]] = {
         "wow_flutter": 0.01,
         "tape_start_instability": 0.001,  # N/A: no tape transport mechanism
         "tape_head_contact_instability": 0.001,  # N/A: no tape head contact
-        # v9.10.98: 12 neue Ursachen
+        # v10.0.0: 12 neue Ursachen
         "modulation_noise": 0.01,
         "inner_groove_distortion": 0.01,
         "groove_echo": 0.01,
@@ -697,7 +697,7 @@ MATERIAL_PRIORS: dict[str, dict[str, float]] = {
         "wow_flutter": 0.01,
         "tape_start_instability": 0.001,  # N/A: no tape transport mechanism
         "tape_head_contact_instability": 0.001,  # N/A: no tape head contact
-        # v9.10.98: 12 neue Ursachen
+        # v10.0.0: 12 neue Ursachen
         "modulation_noise": 0.03,
         "inner_groove_distortion": 0.01,
         "groove_echo": 0.01,
@@ -748,7 +748,7 @@ MATERIAL_PRIORS: dict[str, dict[str, float]] = {
         "wow_flutter": 0.01,
         "tape_start_instability": 0.001,  # N/A: no tape transport mechanism
         "tape_head_contact_instability": 0.001,  # N/A: no tape head contact
-        # v9.10.98: 12 neue Ursachen
+        # v10.0.0: 12 neue Ursachen
         "modulation_noise": 0.01,
         "inner_groove_distortion": 0.01,
         "groove_echo": 0.01,
@@ -800,7 +800,7 @@ MATERIAL_PRIORS: dict[str, dict[str, float]] = {
         "wow_flutter": 0.05,
         "tape_start_instability": 0.001,  # N/A: no magnetic tape head
         "tape_head_contact_instability": 0.001,  # N/A: no magnetic tape head
-        # v9.10.98: 12 neue Ursachen
+        # v10.0.0: 12 neue Ursachen
         "modulation_noise": 0.01,
         "inner_groove_distortion": 0.15,
         "groove_echo": 0.08,
@@ -851,7 +851,7 @@ MATERIAL_PRIORS: dict[str, dict[str, float]] = {
         "wow_flutter": 0.02,
         "tape_start_instability": 0.001,  # N/A: no magnetic tape
         "tape_head_contact_instability": 0.001,  # N/A: no magnetic tape
-        # v9.10.98: 12 neue Ursachen
+        # v10.0.0: 12 neue Ursachen
         "modulation_noise": 0.01,
         "inner_groove_distortion": 0.16,
         "groove_echo": 0.12,
@@ -900,9 +900,9 @@ MATERIAL_PRIORS: dict[str, dict[str, float]] = {
         "wow": 0.05,
         "flutter": 0.04,
         "wow_flutter": 0.07,
-        "tape_start_instability": 0.10,  # v9.10.97: wire recording motor startup
-        "tape_head_contact_instability": 0.08,  # v9.10.x: wire head contact less affected
-        # v9.10.98: 12 neue Ursachen
+        "tape_start_instability": 0.10,  # v10.0.0: wire recording motor startup
+        "tape_head_contact_instability": 0.08,  # v10.0.0.x: wire head contact less affected
+        # v10.0.0: 12 neue Ursachen
         "modulation_noise": 0.1,
         "inner_groove_distortion": 0.01,
         "groove_echo": 0.01,
@@ -922,7 +922,7 @@ MATERIAL_PRIORS: dict[str, dict[str, float]] = {
 for _priors in MATERIAL_PRIORS.values():
     _priors.setdefault("vocal_harshness", 0.01)
 
-# v9.12.1: amplitude_drift — per-material priors (AGC/oxide/motor-temperature drift)
+# v10.0.0: amplitude_drift — per-material priors (AGC/oxide/motor-temperature drift)
 _AMPLITUDE_DRIFT_MATERIAL_PRIORS: dict[str, float] = {
     "tape": 0.20,
     "cassette": 0.18,
@@ -948,7 +948,7 @@ for _mat, _ad_prior in _AMPLITUDE_DRIFT_MATERIAL_PRIORS.items():
 for _priors in MATERIAL_PRIORS.values():
     _priors.setdefault("amplitude_drift", 0.03)
 
-# v9.12.2: clicks, dolby_nr_mismatch, tape_head_level_dip — per-material priors
+# v10.0.0: clicks, dolby_nr_mismatch, tape_head_level_dip — per-material priors
 _CLICKS_MATERIAL_PRIORS: dict[str, float] = {
     "shellac": 0.25,
     "vinyl": 0.20,
@@ -1057,7 +1057,7 @@ for _new_cause, _new_priors in [
     for _priors in MATERIAL_PRIORS.values():
         _priors.setdefault(_new_cause, 0.01)
 
-# v9.12.9: 9 neue Kausal-Ursachen — Material-Priors
+# v10.0.0: 9 neue Kausal-Ursachen — Material-Priors
 _PROXIMITY_EFFECT_MATERIAL_PRIORS: dict[str, float] = {
     # Nahbesprechungseffekt: häufig bei Ribbon/Kondensator-Mikrofonen ≤30 cm
     "shellac": 0.15,  # Richtmikrofone 1930–1950 bei Rundfunk
@@ -1255,7 +1255,7 @@ for _new_cause_v9129, _new_priors_v9129 in [
     for _priors in MATERIAL_PRIORS.values():
         _priors.setdefault(_new_cause_v9129, 0.01)
 
-# v9.12.10: vocal_quality_degradation — Vokal-Naturalness-Degradierung durch
+# v10.0.0: vocal_quality_degradation — Vokal-Naturalness-Degradierung durch
 # kumulative NR/Kompressor-Eingriffe. Korrektiv: phase_65 (§0a-konform).
 _VOCAL_QUALITY_DEGRADATION_MATERIAL_PRIORS: dict[str, float] = {
     "mp3_low": 0.13,  # Codec-Artefakte degradieren Stimmqualität stark
@@ -1282,7 +1282,7 @@ for _mat, _prior in _VOCAL_QUALITY_DEGRADATION_MATERIAL_PRIORS.items():
 for _priors in MATERIAL_PRIORS.values():
     _priors.setdefault("vocal_quality_degradation", 0.04)
 
-# v9.15.1: vocal_stem_noise — Vokal-Stem + Begleitung haben unterschiedliche Rauschprofile.
+# v10.0.0: vocal_stem_noise — Vokal-Stem + Begleitung haben unterschiedliche Rauschprofile.
 # Häufig bei Kassette/Tape (Hiss dominant) und MP3 (codec NR ungleichmäßig).
 _VOCAL_STEM_NOISE_MATERIAL_PRIORS: dict[str, float] = {
     "tape": 0.14,  # Tape-Hiss im Begleit-Stem häufig dominanter als im Vokal-Stem
@@ -1466,7 +1466,7 @@ CAUSE_TO_PHASES: dict[str, list[str]] = {
     "bandwidth_loss": [
         "phase_06_frequency_restoration",
         "phase_07_harmonic_restoration",
-        # phase_39_air_band_enhancement ENTFERNT (BUG-FIX v9.12.0 §6.2c):
+        # phase_39_air_band_enhancement ENTFERNT (BUG-FIX v10.0.0 §6.2c):
         # phase_39 erzeugt Halluzinationen über BW-Ceiling analoger Materialien im Restoration-Modus.
     ],
     "high_freq_noise": ["phase_29_tape_hiss_reduction", "phase_03_denoise", "phase_18_noise_gate"],
@@ -1498,7 +1498,7 @@ CAUSE_TO_PHASES: dict[str, list[str]] = {
     "dynamic_compression_excess": [
         "phase_26_dynamic_range_expansion",
         "phase_54_transparent_dynamics",
-        # phase_35_multiband_compression ENTFERNT (BUG-FIX v9.12.0 §0a): Stem-Enhancement VERBOTEN in Restoration
+        # phase_35_multiband_compression ENTFERNT (BUG-FIX v10.0.0 §0a): Stem-Enhancement VERBOTEN in Restoration
     ],
     "head_wear": [
         "phase_56_spectral_band_gap_repair",  # §4.5/§7.2
@@ -1523,8 +1523,12 @@ CAUSE_TO_PHASES: dict[str, list[str]] = {
         "phase_36_transient_shaper",
         "phase_23_spectral_repair",
     ],
-    "clipping": ["phase_23_spectral_repair", "phase_06_frequency_restoration"],  # §7.2 — Alias für DefectType.CLIPPING
-    # ── Entzerrungs- & Digitalisierungsfehler (§6.3, §7.2 v9.10.46) ─────────
+    "clipping": [
+        "phase_07_declipper",
+        "phase_23_spectral_repair",
+        "phase_06_frequency_restoration",
+    ],  # §v10.18: declipper als Primäraktion
+    # ── Entzerrungs- & Digitalisierungsfehler (§6.3, §7.2 v10.0.0) ─────────
     "riaa_curve_error": [
         "phase_04_eq_correction",  # RIAA/AES/NAB/FFRR-Entzerrungs-Fehler
         "phase_06_frequency_restoration",
@@ -1541,20 +1545,20 @@ CAUSE_TO_PHASES: dict[str, list[str]] = {
         "phase_06_frequency_restoration",
         "phase_29_tape_hiss_reduction",
     ],
-    # ── Sibilanten (§6.3 v9.10.57) ──────────────────────────────────────────
+    # ── Sibilanten (§6.3 v10.0.0) ──────────────────────────────────────────
     "sibilance": [
         "phase_19_de_esser",  # Primär: De-Esser (Sibilantenreduktion)
         "phase_43_ml_deesser",  # ML-gestützter De-Esser
-        # phase_42_vocal_enhancement ENTFERNT (BUG-FIX v9.12.0 §0a): Stem-Enhancement VERBOTEN in Restoration
+        # phase_42_vocal_enhancement ENTFERNT (BUG-FIX v10.0.0 §0a): Stem-Enhancement VERBOTEN in Restoration
     ],
-    # ── Transport-Bump (v9.10.57b — Kassetten-Holpern) ───────────────────────
+    # ── Transport-Bump (v10.0.0b — Kassetten-Holpern) ───────────────────────
     "transport_bump": [
         "phase_12_wow_flutter_fix",  # Primär: lokale PSOLA-Korrektur der Pitch-Sprünge
         "phase_08_transient_preservation",  # Amplitude: Attack-Restoration der Pegel-Dips
         "phase_24_dropout_repair",  # Fallback: Amplitude-Reparatur bei tiefem Signal-Einbruch
         "phase_31_speed_pitch_correction",  # Zusätzlich: globale Speed-Stabilisierung
     ],
-    # ── Tape-Start-Instability (v9.10.97 — Kassettenkopf-Einrastfehler) ─────
+    # ── Tape-Start-Instability (v10.0.0 — Kassettenkopf-Einrastfehler) ─────
     # Combined multi-defect cause for the first 20 s of cassette playback:
     # motor spin-up speed ramp, head engagement azimuth drift, tape slack
     # tension equalization.  Requires coordinated WOW+AZIMUTH+SPEED correction.
@@ -1578,14 +1582,14 @@ CAUSE_TO_PHASES: dict[str, list[str]] = {
         "phase_24_dropout_repair",  # Deep dips that cross dropout threshold
         "phase_26_dynamic_range_expansion",  # Restore micro-dynamics after leveling
     ],
-    # ── Vocal-Harshness (v9.10.77 — Vokal-Härte/Übersteuerung/Kratzigkeit) ──
+    # ── Vocal-Harshness (v10.0.0 — Vokal-Härte/Übersteuerung/Kratzigkeit) ──
     "vocal_harshness": [
-        # phase_42_vocal_enhancement ENTFERNT (BUG-FIX v9.12.0 §0a): Stem-Enhancement VERBOTEN in Restoration
+        # phase_42_vocal_enhancement ENTFERNT (BUG-FIX v10.0.0 §0a): Stem-Enhancement VERBOTEN in Restoration
         "phase_19_de_esser",  # De-Esser reduziert auch obere Härte-Frequenzen
         "phase_43_ml_deesser",  # ML-De-Esser (zweiter Pass, Frikativ-Kontrolle)
         "phase_23_spectral_repair",  # Spektrale Reparatur bei starker Verzerrung
     ],
-    # ── v9.10.98: 12 neue Kausal-Ursachen → Phase-Mappings ──────────────────
+    # ── v10.0.0: 12 neue Kausal-Ursachen → Phase-Mappings ──────────────────
     "modulation_noise": [
         "phase_59_modulation_noise_reduction",  # Primary: signal-dependent noise reduction
         "phase_03_denoise",  # OMLSA/ResembleEnhance secondary pass
@@ -1649,12 +1653,12 @@ CAUSE_TO_PHASES: dict[str, list[str]] = {
         "phase_29_tape_hiss_reduction",  # §7.2 Spec 06 — HF-Anteile der Motor-Interferenz
         "phase_04_eq_correction",  # Residual spectral correction
     ],
-    # ── v9.12.1: Pegelveränderung ────────────────────────────────────────────
+    # ── v10.0.0: Pegelveränderung ────────────────────────────────────────────
     "amplitude_drift": [
         "phase_40_loudness_normalization",  # Primary: time-varying inverse gain envelope
         # (amplitude_drift_correction=True)
     ],
-    # ── v9.12.2: DefectType→CAUSE-Lücken ─────────────────────────────────────
+    # ── v10.0.0: DefectType→CAUSE-Lücken ─────────────────────────────────────
     "clicks": [
         "phase_01_click_removal",  # Primary: Bayesian click/impulse detection
         "phase_09_crackle_removal",  # Secondary: handles dense click fields
@@ -1679,7 +1683,7 @@ CAUSE_TO_PHASES: dict[str, list[str]] = {
         "phase_25_azimuth_correction",  # Head geometry / spacing cleanup
         "phase_24_dropout_repair",  # tiefe Clogs können dropout-artig erscheinen
     ],
-    # ── v9.12.9: 9 neue Kausal-Ursachen → Phase-Mappings ────────────────────
+    # ── v10.0.0: 9 neue Kausal-Ursachen → Phase-Mappings ────────────────────
     "proximity_effect_excess": [
         "phase_04_eq_correction",  # Primary: LF-Shelf-Absenkung ~150–250 Hz (−4 bis −8 dB, material-adaptiv)
         "phase_05_rumble_filter",  # Sekundär: Sub-Bass-Begleiterscheinung ausfiltern
@@ -1734,7 +1738,7 @@ CAUSE_TO_PHASES: dict[str, list[str]] = {
         "phase_03_denoise",  # Sekundär: Rausch-Basis absenken → VQI stabilisieren
         "phase_19_de_esser",  # Tertiär: Sibilanten-Harshness als VQI-Treiber dämpfen
     ],
-    # ── v9.15.1: Stem-Targeted NR (phase_66) ─────────────────────────────────
+    # ── v10.0.0: Stem-Targeted NR (phase_66) ─────────────────────────────────
     # Wenn Vokal + Begleitung unterschiedliche Rauschprofile haben, die wideband-NR
     # (phase_03/phase_29) nicht sauber entkoppeln kann. BSRoFormer-Separation erlaubt
     # stem-spezifische NR-Parameter (energy_bias −6 dB Vokal, −9 dB Instrumental).
@@ -1841,7 +1845,7 @@ CAUSE_PARAMS: dict[str, dict[str, Any]] = {
         "bump_psola_crossfade_ms": 15.0,
         "bump_envelope_smooth_ms": 10.0,
     },
-    # v9.10.77b: Erweiterte Ursachen-Parameter
+    # v10.0.0b: Erweiterte Ursachen-Parameter
     "bandwidth_loss": {
         "hf_extension_target_hz": 16000.0,
         "harmonic_boost_db": 2.0,
@@ -1900,7 +1904,7 @@ CAUSE_PARAMS: dict[str, dict[str, Any]] = {
         "spectral_repair_strength": 0.50,
         "transient_preserve_strength": 0.80,
     },
-    # ── v9.10.98: Parameter für 12 neue Ursachen ────────────────────────────
+    # ── v10.0.0: Parameter für 12 neue Ursachen ────────────────────────────
     "modulation_noise": {
         "noise_reduction_strength": 0.60,
         "signal_dependent_gate": True,
@@ -1961,7 +1965,7 @@ CAUSE_PARAMS: dict[str, dict[str, Any]] = {
         "motor_freq_range_hz": [80, 300],
         "sideband_removal": True,
     },
-    # v9.12.1: Parameter für tape-transport-spezifische Ursachen
+    # v10.0.0: Parameter für tape-transport-spezifische Ursachen
     "tape_start_instability": {
         "wow_flutter_filter_hz": 3.0,  # motor spin-up wow rate
         "pitch_correction_semitones": 0.5,
@@ -1975,7 +1979,7 @@ CAUSE_PARAMS: dict[str, dict[str, Any]] = {
         "level_smoothing_ms": 120.0,
         "noise_reduction_strength": 0.40,
     },
-    # ── v9.12.2: DefectType→CAUSE-Lücken ─────────────────────────────────────
+    # ── v10.0.0: DefectType→CAUSE-Lücken ─────────────────────────────────────
     "clicks": {
         "ar_order": 64,  # AR-Prädiktionsordnung für Janssen-Interpolation
         "click_threshold": 0.10,  # Relativ zum Signal-Peak
@@ -2009,7 +2013,7 @@ CAUSE_PARAMS: dict[str, dict[str, Any]] = {
         "azimuth_correction_deg": 0.0,
         "dropout_assist_threshold_db": 6.0,
     },
-    # ── v9.12.9: CAUSE_PARAMS für neue Kausal-Ursachen ───────────────────────
+    # ── v10.0.0: CAUSE_PARAMS für neue Kausal-Ursachen ───────────────────────
     "proximity_effect_excess": {
         "lf_shelf_hz": 250.0,  # Proximty-Übergangsfrequenz (Olson 1948)
         "lf_shelf_gain_db": -6.0,  # Adaptive: −4 bis −8 dB basierend auf Severity
@@ -2449,7 +2453,7 @@ def _likelihood_transport_bump(sf: SpectralFeatures, defect_scores: dict[str, fl
 
 
 # ---------------------------------------------------------------------------
-# Likelihood-Funktionen für die 22 erweiterten Ursachen (v9.10.77b)
+# Likelihood-Funktionen für die 22 erweiterten Ursachen (v10.0.0b)
 # ---------------------------------------------------------------------------
 
 
@@ -2758,7 +2762,7 @@ def _likelihood_tape_head_contact(sf: SpectralFeatures, defect_scores: dict[str,
     return float(np.clip(p, 0.0, 1.0))
 
 
-# ── v9.10.98: 12 neue Likelihood-Funktionen ─────────────────────────────────
+# ── v10.0.0: 12 neue Likelihood-Funktionen ─────────────────────────────────
 
 
 def _likelihood_modulation_noise(sf: SpectralFeatures, defect_scores: dict[str, float]) -> float:
@@ -2910,7 +2914,7 @@ def _likelihood_motor_interference(sf: SpectralFeatures, defect_scores: dict[str
 
 
 def _likelihood_amplitude_drift(sf: SpectralFeatures, defect_scores: dict[str, float]) -> float:
-    """P(features | amplitude_drift) — gradual level rise/fall (AGC, oxide, motor-temp). v9.12.1"""
+    """P(features | amplitude_drift) — gradual level rise/fall (AGC, oxide, motor-temp). v10.0.0"""
     p = 0.0
     # Primary: DefectScanner severity is the strongest signal
     drift_sev = float(defect_scores.get("amplitude_drift", 0.0))
@@ -2923,7 +2927,7 @@ def _likelihood_amplitude_drift(sf: SpectralFeatures, defect_scores: dict[str, f
 
 
 def _likelihood_clicks(sf: SpectralFeatures, defect_scores: dict[str, float]) -> float:
-    """P(features | clicks) — impulsartige Einzelstörungen (Vinyl/Shellac/Band). v9.12.2"""
+    """P(features | clicks) — impulsartige Einzelstörungen (Vinyl/Shellac/Band). v10.0.0"""
     p = 0.0
     # Primary: direct DefectScanner score (DefectType.CLICKS)
     click_sev = float(defect_scores.get("clicks", 0.0))
@@ -2936,7 +2940,7 @@ def _likelihood_clicks(sf: SpectralFeatures, defect_scores: dict[str, float]) ->
 
 
 def _likelihood_dolby_nr_mismatch(sf: SpectralFeatures, defect_scores: dict[str, float]) -> float:
-    """P(features | dolby_nr_mismatch) — Dolby B/C/S encode ohne Dekodierung → +6..20 dB HF. v9.12.2
+    """P(features | dolby_nr_mismatch) — Dolby B/C/S encode ohne Dekodierung → +6..20 dB HF. v10.0.0
 
     Signature: excessive high-frequency energy (spectral_rolloff very high, hf_energy_ratio elevated)
     combined with a DefectScanner DOLBY_NR_MISMATCH score.
@@ -2954,7 +2958,7 @@ def _likelihood_dolby_nr_mismatch(sf: SpectralFeatures, defect_scores: dict[str,
 
 
 def _likelihood_tape_head_level_dip(sf: SpectralFeatures, defect_scores: dict[str, float]) -> float:
-    """P(features | tape_head_level_dip) — graduelle Pegeleinbrüche durch Bandkopf-Kontaktdruckvariation. v9.12.2"""
+    """P(features | tape_head_level_dip) — graduelle Pegeleinbrüche durch Bandkopf-Kontaktdruckvariation. v10.0.0"""
     p = 0.0
     # Primary: direct DefectScanner score (DefectType.TAPE_HEAD_LEVEL_DIP)
     dip_sev = float(defect_scores.get("tape_head_level_dip", 0.0))
@@ -2967,7 +2971,7 @@ def _likelihood_tape_head_level_dip(sf: SpectralFeatures, defect_scores: dict[st
 
 
 def _likelihood_scrape_flutter(sf: SpectralFeatures, defect_scores: dict[str, float]) -> float:
-    """P(features | scrape_flutter) — hochfrequente Bandführungsmodulation. v9.12.9"""
+    """P(features | scrape_flutter) — hochfrequente Bandführungsmodulation. v10.0.0"""
     p = 0.0
     scrape_sev = float(defect_scores.get("scrape_flutter", 0.0))
     p += _sigmoid_score(scrape_sev, k=10, x0=0.20) * 0.60
@@ -2979,7 +2983,7 @@ def _likelihood_scrape_flutter(sf: SpectralFeatures, defect_scores: dict[str, fl
 
 
 def _likelihood_tape_head_clog(sf: SpectralFeatures, defect_scores: dict[str, float]) -> float:
-    """P(features | tape_head_clog) — lokale HF-Auslöschung durch zugesetzten Magnetkopf. v9.12.9"""
+    """P(features | tape_head_clog) — lokale HF-Auslöschung durch zugesetzten Magnetkopf. v10.0.0"""
     p = 0.0
     clog_sev = float(defect_scores.get("tape_head_clog", 0.0))
     p += _sigmoid_score(clog_sev, k=10, x0=0.20) * 0.65
@@ -2990,11 +2994,11 @@ def _likelihood_tape_head_clog(sf: SpectralFeatures, defect_scores: dict[str, fl
     return float(np.clip(p, 0.0, 1.0))
 
 
-# ── v9.12.9: Likelihood-Funktionen für 9 neue Kausal-Ursachen ────────────────
+# ── v10.0.0: Likelihood-Funktionen für 9 neue Kausal-Ursachen ────────────────
 
 
 def _likelihood_proximity_effect_excess(sf: SpectralFeatures, defect_scores: dict[str, float]) -> float:
-    """P(features | proximity_effect_excess) — Nahbesprechungseffekt bei Richtmikrofonen. v9.12.9"""
+    """P(features | proximity_effect_excess) — Nahbesprechungseffekt bei Richtmikrofonen. v10.0.0"""
     p = 0.0
     # Primary: direct DefectScanner score
     prox_sev = float(defect_scores.get("proximity_effect_excess", 0.0))
@@ -3008,7 +3012,7 @@ def _likelihood_proximity_effect_excess(sf: SpectralFeatures, defect_scores: dic
 
 
 def _likelihood_room_mode_resonance(sf: SpectralFeatures, defect_scores: dict[str, float]) -> float:
-    """P(features | room_mode_resonance) — Stehwellen-Resonanzen 40–200 Hz. v9.12.9"""
+    """P(features | room_mode_resonance) — Stehwellen-Resonanzen 40–200 Hz. v10.0.0"""
     p = 0.0
     # Primary: direct DefectScanner score
     mode_sev = float(defect_scores.get("room_mode_resonance", 0.0))
@@ -3021,7 +3025,7 @@ def _likelihood_room_mode_resonance(sf: SpectralFeatures, defect_scores: dict[st
 
 
 def _likelihood_nr_breathing_artifact(sf: SpectralFeatures, defect_scores: dict[str, float]) -> float:
-    """P(features | nr_breathing_artifact) — Dolby/dbx NR Pumpen/Atmen. v9.12.9"""
+    """P(features | nr_breathing_artifact) — Dolby/dbx NR Pumpen/Atmen. v10.0.0"""
     p = 0.0
     # Primary: direct DefectScanner score
     breath_sev = float(defect_scores.get("nr_breathing_artifact", 0.0))
@@ -3035,7 +3039,7 @@ def _likelihood_nr_breathing_artifact(sf: SpectralFeatures, defect_scores: dict[
 
 
 def _likelihood_flutter_spectral_sidebands(sf: SpectralFeatures, defect_scores: dict[str, float]) -> float:
-    """P(features | flutter_spectral_sidebands) — Flutter-Seitenbänder um tonale Peaks. v9.12.9"""
+    """P(features | flutter_spectral_sidebands) — Flutter-Seitenbänder um tonale Peaks. v10.0.0"""
     p = 0.0
     # Primary: direct DefectScanner score
     sb_sev = float(defect_scores.get("flutter_spectral_sidebands", 0.0))
@@ -3049,7 +3053,7 @@ def _likelihood_flutter_spectral_sidebands(sf: SpectralFeatures, defect_scores: 
 
 
 def _likelihood_speed_calibration_error(sf: SpectralFeatures, defect_scores: dict[str, float]) -> float:
-    """P(features | speed_calibration_error) — Konstanter Geschwindigkeitsfehler. v9.12.9"""
+    """P(features | speed_calibration_error) — Konstanter Geschwindigkeitsfehler. v10.0.0"""
     p = 0.0
     # Primary: direct DefectScanner score
     speed_sev = float(defect_scores.get("speed_calibration_error", 0.0))
@@ -3064,7 +3068,7 @@ def _likelihood_speed_calibration_error(sf: SpectralFeatures, defect_scores: dic
 
 
 def _likelihood_overload_distortion(sf: SpectralFeatures, defect_scores: dict[str, float]) -> float:
-    """P(features | overload_distortion) — Analoger Preamp/Console-Klirr H3/H5. v9.12.9"""
+    """P(features | overload_distortion) — Analoger Preamp/Console-Klirr H3/H5. v10.0.0"""
     _ = sf.rms
     p = 0.0
     # Primary: direct DefectScanner score
@@ -3080,7 +3084,7 @@ def _likelihood_overload_distortion(sf: SpectralFeatures, defect_scores: dict[st
 
 
 def _likelihood_lacquer_disc_degradation(sf: SpectralFeatures, defect_scores: dict[str, float]) -> float:
-    """P(features | lacquer_disc_degradation) — Acetat-Zersetzung (LACQUER_DISC). v9.12.9"""
+    """P(features | lacquer_disc_degradation) — Acetat-Zersetzung (LACQUER_DISC). v10.0.0"""
     _ = sf.rms
     p = 0.0
     # Primary: direct DefectScanner score
@@ -3096,7 +3100,7 @@ def _likelihood_lacquer_disc_degradation(sf: SpectralFeatures, defect_scores: di
 
 
 def _likelihood_cassette_azimuth_tolerance(sf: SpectralFeatures, defect_scores: dict[str, float]) -> float:
-    """P(features | cassette_azimuth_tolerance) — Kassetten-Shell-HF-Kammfilterung. v9.12.9"""
+    """P(features | cassette_azimuth_tolerance) — Kassetten-Shell-HF-Kammfilterung. v10.0.0"""
     _ = sf.rms
     p = 0.0
     # Primary: azimuth error (shell tolerance manifests as azimuth-like HF loss)
@@ -3112,7 +3116,7 @@ def _likelihood_cassette_azimuth_tolerance(sf: SpectralFeatures, defect_scores: 
 
 
 def _likelihood_wire_recording_specific(sf: SpectralFeatures, defect_scores: dict[str, float]) -> float:
-    """P(features | wire_recording_specific) — Drahtband: Knoten, Wicklungs-Wow. v9.12.9"""
+    """P(features | wire_recording_specific) — Drahtband: Knoten, Wicklungs-Wow. v10.0.0"""
     p = 0.0
     # Primary: click density (wire knots create impulsive events)
     click_sev = float(defect_scores.get("clicks", 0.0))
@@ -3130,7 +3134,7 @@ def _likelihood_wire_recording_specific(sf: SpectralFeatures, defect_scores: dic
 
 def _likelihood_vocal_quality_degradation(sf: SpectralFeatures, defect_scores: dict[str, float]) -> float:
     """P(Merkmale | vocal_quality_degradation) — Vokal-Qualitätsverlust durch
-    kumulative NR/Kompressor-Eingriffe (VQI-Abfall). Korrektiv: phase_65. v9.12.10"""
+    kumulative NR/Kompressor-Eingriffe (VQI-Abfall). Korrektiv: phase_65. v10.0.0"""
     p = 0.0
     # Primär: Vokalhärte (NR-Überbearbeitung erzeugt Harshness in der Stimme)
     harsh_sev = float(defect_scores.get("vocal_harshness", 0.0))
@@ -3151,7 +3155,7 @@ def _likelihood_vocal_quality_degradation(sf: SpectralFeatures, defect_scores: d
 
 def _likelihood_vocal_stem_noise(sf: SpectralFeatures, defect_scores: dict[str, float]) -> float:
     """P(Merkmale | vocal_stem_noise) — Vokal-Stem und Begleitung haben unterschiedliche
-    Rauschprofile; BSRoFormer-Stem-Trennung + stem-spezifische NR sinnvoll. v9.15.1"""
+    Rauschprofile; BSRoFormer-Stem-Trennung + stem-spezifische NR sinnvoll. v10.0.0"""
     p = 0.0
     # Primär: HF-Rauschen vorhanden (Stem-Trennung bringt Gewinn)
     hf_noise = float(defect_scores.get("high_freq_noise", 0.0))
@@ -3181,7 +3185,7 @@ LIKELIHOOD_FNS = {
     "head_wear": _likelihood_head_wear,
     "print_through": _likelihood_print_through,
     "transport_bump": _likelihood_transport_bump,
-    # ── Erweiterte 22 (v9.10.77b) ───────────────────────────────────────────
+    # ── Erweiterte 22 (v10.0.0b) ───────────────────────────────────────────
     "bandwidth_loss": _likelihood_bandwidth_loss,
     "high_freq_noise": _likelihood_high_freq_noise,
     "stereo_imbalance": _likelihood_stereo_imbalance,
@@ -3207,7 +3211,7 @@ LIKELIHOOD_FNS = {
     "wow_flutter": _likelihood_wow_flutter,
     "tape_start_instability": _likelihood_wow_flutter,  # same transport mechanism
     "tape_head_contact_instability": _likelihood_tape_head_contact,
-    # ── v9.10.98: 12 neue Ursachen ──────────────────────────────────────────
+    # ── v10.0.0: 12 neue Ursachen ──────────────────────────────────────────
     "modulation_noise": _likelihood_modulation_noise,
     "inner_groove_distortion": _likelihood_inner_groove_distortion,
     "groove_echo": _likelihood_groove_echo,
@@ -3220,15 +3224,15 @@ LIKELIHOOD_FNS = {
     "multiband_wow_flutter": _likelihood_multiband_wow_flutter,
     "generation_loss": _likelihood_generation_loss,
     "motor_interference": _likelihood_motor_interference,
-    # ── v9.12.1 ──────────────────────────────────────────────────────────────
+    # ── v10.0.0 ──────────────────────────────────────────────────────────────
     "amplitude_drift": _likelihood_amplitude_drift,
-    # ── v9.12.2: DefectType→CAUSE-Lücken geschlossen ─────────────────────────
+    # ── v10.0.0: DefectType→CAUSE-Lücken geschlossen ─────────────────────────
     "clicks": _likelihood_clicks,
     "dolby_nr_mismatch": _likelihood_dolby_nr_mismatch,
     "tape_head_level_dip": _likelihood_tape_head_level_dip,
     "scrape_flutter": _likelihood_scrape_flutter,
     "tape_head_clog": _likelihood_tape_head_clog,
-    # ── v9.12.9: 9 neue Kausal-Ursachen ──────────────────────────────────────
+    # ── v10.0.0: 9 neue Kausal-Ursachen ──────────────────────────────────────
     "proximity_effect_excess": _likelihood_proximity_effect_excess,
     "room_mode_resonance": _likelihood_room_mode_resonance,
     "nr_breathing_artifact": _likelihood_nr_breathing_artifact,
@@ -3238,9 +3242,9 @@ LIKELIHOOD_FNS = {
     "lacquer_disc_degradation": _likelihood_lacquer_disc_degradation,
     "cassette_azimuth_tolerance": _likelihood_cassette_azimuth_tolerance,
     "wire_recording_specific": _likelihood_wire_recording_specific,
-    # ── v9.12.10: vocal_quality_degradation ──────────────────────────────────
+    # ── v10.0.0: vocal_quality_degradation ──────────────────────────────────
     "vocal_quality_degradation": _likelihood_vocal_quality_degradation,
-    # ── v9.15.1: vocal_stem_noise ─────────────────────────────────────────────
+    # ── v10.0.0: vocal_stem_noise ─────────────────────────────────────────────
     "vocal_stem_noise": _likelihood_vocal_stem_noise,
 }
 

@@ -2,7 +2,7 @@ import pytest
 
 #!/usr/bin/env python3
 """
-v9.10.118 — Kopfhörer-Qualitäts-Fixes: 5 audible Defizite behoben.
+v10.0.0 — Kopfhörer-Qualitäts-Fixes: 5 audible Defizite behoben.
 
 Fix 1: Phase 42 Stereo-Wiener — Wiener-Masking statt Mono-Duplikation
 Fix 2: STFT Wet/Dry-Blend — Phasen-bewahrte Magnitude-Interpolation
@@ -480,7 +480,7 @@ class TestEraAdaptiveDeEsser:
 
 
 class TestIntegrationEdgeCases:
-    """Cross-cutting edge cases for v9.10.118 fixes."""
+    """Cross-cutting edge cases for v10.0.0 fixes."""
 
     def test_34_stft_blend_stereo_signal(self):
         """STFT blend should handle multi-channel gracefully (first channel)."""

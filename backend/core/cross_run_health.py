@@ -31,8 +31,8 @@ def save_run_health(run_id: str, summary: dict[str, Any]) -> None:
         files = sorted(_HEALTH_DIR.glob("*.json"), key=os.path.getmtime)
         for old in files[:-_MAX_HISTORY]:
             old.unlink()
-    except Exception:
-        pass
+    except Exception as _crh_save_exc:
+        logger.debug("cross_run_health: save_run_summary failed (non-critical): %s", _crh_save_exc)
 
 
 def load_run_history(limit: int = 10) -> list[dict[str, Any]]:
@@ -44,10 +44,11 @@ def load_run_history(limit: int = 10) -> list[dict[str, Any]]:
             try:
                 with open(f) as fh:
                     results.append(json.load(fh))
-            except Exception:
-                pass
+            except Exception as _crh_file_exc:
+                logger.debug("cross_run_health: load_run_history file read failed (non-critical): %s", _crh_file_exc)
         return results
-    except Exception:
+    except Exception as _crh_load_exc:
+        logger.debug("cross_run_health: load_run_history failed (non-critical): %s", _crh_load_exc)
         return []
 
 
@@ -66,6 +67,6 @@ def detect_regression(current: dict[str, Any]) -> list[str]:
             warnings.append(f"Retry-Regression: {cur_retries} (avg: {prev_avg_retries:.0f})")
         if cur_dur > prev_avg_dur * 1.5 and cur_dur > 60:
             warnings.append(f"Duration-Regression: {cur_dur:.0f}s (avg: {prev_avg_dur:.0f}s)")
-    except Exception:
-        pass
+    except Exception as _crh_regress_exc:
+        logger.debug("cross_run_health: detect_regression failed (non-critical): %s", _crh_regress_exc)
     return warnings

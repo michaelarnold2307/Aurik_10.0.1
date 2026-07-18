@@ -18,7 +18,7 @@ Algorithm:
 Singleton: thread-safe, Double-Checked Locking (§3.x).
 
 Author: Aurik Development Team
-Version: 9.10.57
+Version: 10.0.0
 """
 
 from __future__ import annotations

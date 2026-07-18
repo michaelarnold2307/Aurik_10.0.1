@@ -1,5 +1,5 @@
 """
-BigVGAN-v2 Plugin — Neuronaler Vocoder für Aurik 9 (NVIDIA 2024)
+BigVGAN-v2 Plugin — Neuronaler Vocoder für Aurik 10.0.0 (NVIDIA 2024)
 
 Finaler Synthese-Schritt nach kompletter Restaurierungspipeline wenn
 PQS-MOS < 4.3 (Studio-2026-Modus) oder nach Stem-Separation + Re-Mix.
@@ -99,7 +99,7 @@ _lock = threading.Lock()
 
 
 class BigVGANv2Plugin:
-    """BigVGAN-v2 Neuronaler Vocoder-Plugin für Aurik 9.
+    """BigVGAN-v2 Neuronaler Vocoder-Plugin für Aurik 10.0.0.
 
     Algorithmus (BigVGAN-v2 Vollpfad):
         1. Mel-Spektrogramm-Extraktion (80 Bänder, 12.5 ms Hop, Hanning 50 ms)

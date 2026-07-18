@@ -1,5 +1,5 @@
 """
-§SVM-1 SingerVoiceModel — singer-specific spectral voice model (v9.12.1).
+§SVM-1 SingerVoiceModel — singer-specific spectral voice model (v10.0.0).
 
 Builds a perceptual voice model from the clean segments of a song and uses it
 for spectral inpainting of heavily damaged vocal passages.
@@ -392,7 +392,7 @@ class SingerVoiceModel:
     """
     Singer-specific spectral voice model for inpainting damaged vocal passages.
 
-    DSP-only. Singleton via get_singer_voice_model(). Spec: §SVM-1 (v9.12.1).
+    DSP-only. Singleton via get_singer_voice_model(). Spec: §SVM-1 (v10.0.0).
     """
 
     # ------------------------------------------------------------------
@@ -533,7 +533,7 @@ class SingerVoiceModel:
             formant_targets = _estimate_formants_lpc(clean_audio, sr)
 
         # Step 7: Vibrato — VFA-Daten bevorzugen, sonst selbst schätzen
-        # §FIX v9.20.3: VocalFocusAnalyzer hat bereits Vibrato aus dem
+        # §FIX v10.0.0: VocalFocusAnalyzer hat bereits Vibrato aus dem
         # Gesamtsignal analysiert (robuster gegen Bandbreitenbegrenzung).
         # Nur wenn VFA keine Daten liefert, DSP-Eigenberechnung nutzen.
         vibrato_rate_hz = 0.0
@@ -717,11 +717,11 @@ def _restore_shape(mono_out: np.ndarray, original_shape: tuple) -> np.ndarray:
 
 
 def get_singer_voice_model() -> SingerVoiceModel:
-    """Gibt the thread-safe singleton SingerVoiceModel (§SVM-1 v9.12.1) zurück."""
+    """Gibt the thread-safe singleton SingerVoiceModel (§SVM-1 v10.0.0) zurück."""
     global _instance  # pylint: disable=global-statement
     if _instance is None:
         with _lock:
             if _instance is None:
                 _instance = SingerVoiceModel()
-                logger.debug("SingerVoiceModel singleton initialised (§SVM-1 v9.12.1)")
+                logger.debug("SingerVoiceModel singleton initialised (§SVM-1 v10.0.0)")
     return _instance

@@ -247,7 +247,7 @@ def _compute_voice_guard_risk(panns_singing: float, vocal_guard_metrics: dict[st
 
 
 # ---------------------------------------------------------------------------
-# §0l Phase-ID-spezifische Strength-Override-Tabelle (Lücke-A-Fix v9.12.9)
+# §0l Phase-ID-spezifische Strength-Override-Tabelle (Lücke-A-Fix v10.0.0)
 # ---------------------------------------------------------------------------
 # Die Family-basierte Orakel-Klasse (O1–O10) gibt grobe Grundparameter vor.
 # Für Phasen mit stark unterschiedlichem physikalischem Eingriff innerhalb

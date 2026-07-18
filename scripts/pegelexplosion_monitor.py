@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Aurik 9 — Echtzeit-Pegelexplosion-Monitor
+Aurik 10.0.0 — Echtzeit-Pegelexplosion-Monitor
 ===========================================
 
 Überwacht kontinuierlich die output_audio/-Verzeichnisse und prüft
@@ -157,7 +157,7 @@ class RealtimePegelexplosionMonitor:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Aurik 9 — Echtzeit-Pegelexplosion-Monitor",
+        description="Aurik 10.0.0 — Echtzeit-Pegelexplosion-Monitor",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Beispiele:

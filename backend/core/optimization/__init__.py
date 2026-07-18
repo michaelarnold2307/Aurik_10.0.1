@@ -1,5 +1,5 @@
 """
-Optimization Package für Aurik 8.0
+Optimization Package für Aurik 10.0.0
 
 Stellt alle Optimierungswerkzeuge bereit:
 - Perceptual Loss Functions

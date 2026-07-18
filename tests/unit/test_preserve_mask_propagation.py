@@ -2,7 +2,7 @@ from __future__ import annotations
 
 """
 tests/unit/test_preserve_mask_propagation.py
-Aurik 9 — §2.44 §4.8a-ii: preserve_mask Erzeugung und Propagation.
+Aurik 10.0.0 — §2.44 §4.8a-ii: preserve_mask Erzeugung und Propagation.
 
 Testet:
 - get_preserve_mask() gibt ndarray zurück (non-None, nie Fehler)

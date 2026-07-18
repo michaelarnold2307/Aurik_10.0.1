@@ -1,7 +1,7 @@
-# UnifiedRestorerV3 Specification - Aurik 9.12.9
+# UnifiedRestorerV3 Specification - Aurik 10.0.0
 
-**Version:** 1.0.1  
-**Status:** ✅ Production-Ready (laufend aktualisiert, Delta-Stand 20. Mai 2026)  
+**Version:** 10.0.8-kompatibel  
+**Status:** ✅ Production-Ready (laufend aktualisiert, Delta-Stand Juli 2026)  
 **Location:** `backend/core/unified_restorer_v3.py`
 
 > **Normativer Einstieg:** Releasepfade laufen ueber Bridge + `AurikDenker.denke(...)`.
@@ -31,9 +31,9 @@ Referenz-Implementierungen:
 
 ## 1. Purpose
 
-The **UnifiedRestorerV3** is the **main orchestrator** for Aurik 9.20.3's audio restoration pipeline. It coordinates:
+The **UnifiedRestorerV3** is the **main orchestrator** for Aurik 10.0.0's audio restoration pipeline. It coordinates:
 
-- **DefectScanner:** Material detection + 11 defect types analysis
+- **DefectScanner:** Material detection + 62 defect types analysis
 - **Adaptive Phase Selection:** Only run phases needed for detected defects
 - **PerformanceGuard:** Enforce 3× RT limit with adaptive skipping
 - **AdaptiveCoreScheduler:** (Future) Parallel multi-core execution
@@ -41,7 +41,7 @@ The **UnifiedRestorerV3** is the **main orchestrator** for Aurik 9.20.3's audio 
 
 ---
 
-## 2. Architecture Migration: v8.0 → v9.0
+## 2. Architecture Migration: v8.0 → v10.0.0
 
 ### 2.1 Old Architecture (Medium-First)
 
@@ -69,7 +69,7 @@ Problems:
 ### 2.2 New Architecture (Defect-First)
 
 ```
-v9.0: DEFECT-FIRST WORKFLOW
+v10.0.0: DEFECT-FIRST WORKFLOW
 ┌──────────────────────────────────────────────┐
 │ 1. DefectScanner.scan()                      │
 │    → material_type + defect_scores (11 types)│
@@ -588,7 +588,7 @@ from core.unified_restorer_v2 import UnifiedRestorer
 restorer = UnifiedRestorer(material="vinyl", preset="balanced")
 result = restorer.restore_audio(audio, sr)
 
-# NEW (v9.0):
+# NEW (v10.0.0):
 from core.unified_restorer_v3 import UnifiedRestorerV3, RestorationConfig, QualityMode
 config = RestorationConfig(mode=QualityMode.BALANCED)  # No material needed!
 restorer = UnifiedRestorerV3(config)
@@ -597,7 +597,7 @@ result = restorer.restore(audio, sr)
 
 ### 10.2 Key Differences
 
-| Aspect               | v8.0 (Medium-First)          | v9.0 (Defect-First)            |
+| Aspect               | v8.0 (Medium-First)          | v10.0.0 (Defect-First)            |
 |----------------------|------------------------------|--------------------------------|
 | **Material Input**   | Required (manual selection)  | Auto-detected by DefectScanner |
 | **Phase Selection**  | Fixed set per material       | Adaptive per detected defects  |
@@ -640,7 +640,7 @@ result = restorer.restore(audio, sr)
 
 ## 12. Change Log
 
-- 1.0.1 (2026-05-20): Delta-Update: PDV goal-aware, UV3 goal handover
+- 10.0.8-kompatibel (2026-05-20): Delta-Update: PDV goal-aware, UV3 goal handover
 - 1.0.0 (2026-02-15): Production release (E2E tested)
 - 0.9.0 (2026-02-14): Beta: All components integrated
 - 0.8.0 (2026-02-13): Alpha: Basic Defect-First workflow

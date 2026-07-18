@@ -1,7 +1,7 @@
 """beats_plugin — BEATs Audio Tokenizer (Microsoft ICML 2023, Best Paper).
 
 BEATs (BERT as Audio Tokenizer for Speech) ersetzt PANNs CNN14 als primären
-Audio-Tagger in Aurik 9 (Stand März 2026).
+Audio-Tagger in Aurik 10.0.0 (Stand März 2026).
 
 Verbesserung gegenüber PANNs CNN14:
     - AudioSet mAP: PANNs 0.439 → BEATs 0.486 (+10,7 %)
@@ -100,7 +100,7 @@ class BeatsResult:
 
 
 class BeatsPlugin:
-    """BEATs Audio Tokenizer — Aurik 9 Primär-Audio-Tagger (§4.4, März 2026).
+    """BEATs Audio Tokenizer — Aurik 10.0.0 Primär-Audio-Tagger (§4.4, März 2026).
 
     Ersetzt PANNs CNN14 als primären Audio-Tagger.
     Fallback auf PANNs CNN14 (panns_plugin) bei fehlendem BEATs-Modell.

@@ -5,7 +5,7 @@ import pytest
 """
 tests/unit/test_team_coordination_telemetry.py
 ===============================================
-Aurik 9.11.7 — Team-Coordination Telemetrie (§2.29e + §2.53)
+Aurik 10.0.0 — Team-Coordination Telemetrie (§2.29e + §2.53)
 
 Abdeckung:
   1. CONFLICT_REGISTRY: get_conflict_phases() korrekte Rückgaben
@@ -515,7 +515,7 @@ class TestHearingPreservation:
         was bedeutet, dass die isolierten HF-Bins KEINE Codec-Spikes sind, sondern
         intentional restaurierte Obertöne. Das Signal darf keine HF-Energie verlieren.
 
-        Da phase_50 bereits den hf_protected_bin_start-Guard implementiert (v9.11.4),
+        Da phase_50 bereits den hf_protected_bin_start-Guard implementiert (v10.0.0),
         prüfen wir hier nur, dass der conflict_with_prior_phases kwarg nicht zu
         einem Energie-Verlust im HF-Band führt (Stellvertreter für das vollständige
         Zusammenspiel).

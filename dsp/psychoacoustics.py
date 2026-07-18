@@ -25,7 +25,7 @@ References:
     - ISO 226:2003 — Equal-loudness-level contours (40-phon reference curve)
     - Stevens (1957): On the psychophysical law (power law exponent 0.3 at constant pressure)
 
-Author: Aurik 9.11 — §4.1b implementation with ISO 532-1 spreading function
+Author: Aurik 10.0.0 — §4.1b implementation with ISO 532-1 spreading function
 """
 
 from __future__ import annotations

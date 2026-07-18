@@ -1,5 +1,5 @@
 """
-Unit-Tests für die 9 Weltklasse-Qualitäts-Guards (v9.5, V19–V26 + §2.72).
+Unit-Tests für die 9 Weltklasse-Qualitäts-Guards (v10.0.0, V19–V26 + §2.72).
 
 Abgedeckte Module:
   - backend/core/dsp/noise_texture_guard.py     (V19 §NTI)
@@ -133,7 +133,7 @@ def _out_of_phase_stereo(audio: np.ndarray) -> np.ndarray:
 
 
 class TestNoiseTextureGuard:
-    """compute_noise_texture_distance — Residual-Defektprofil vs. Materialerwartung (v9.12.9).
+    """compute_noise_texture_distance — Residual-Defektprofil vs. Materialerwartung (v10.0.0).
 
     Das Residual = entfernter Inhalt (pre − post). V19 prüft ob dieser Inhalt zum
     erwarteten Defektprofil des Materials passt.
@@ -672,7 +672,7 @@ class TestOnsetGuard:
 
 
 class TestTemporalContinuityGuardGainStep:
-    """§2.69 v9.5 — gain_step_db muss in TemporalContinuityResult enthalten sein."""
+    """§2.69 v10.0.0 — gain_step_db muss in TemporalContinuityResult enthalten sein."""
 
     def test_result_has_gain_step_db(self):
         """TemporalContinuityResult muss gain_step_db-Feld enthalten."""

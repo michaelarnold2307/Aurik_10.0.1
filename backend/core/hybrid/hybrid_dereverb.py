@@ -20,7 +20,7 @@ Strategy Modes:
 - HYBRID: DSP → ML pipeline
 - ADAPTIVE: Choose based on reverb severity
 
-Author: Aurik 9.0 Development Team
+Author: Aurik 10.0.0 Development Team
 Version: 1.0.0
 Date: 16. Februar 2026
 """

@@ -1,4 +1,4 @@
-"""External singer reference library for Aurik 9.
+"""External singer reference library for Aurik 10.0.0.
 
 Motivation: A human mastering engineer knows the typical sound of many
 well-known artists. When restoring Ella Fitzgerald, they compare the
@@ -21,7 +21,7 @@ Implementation: DSP-only, no ML model required.
   (statistical estimates as proxy; real fingerprints from licensed audio
   would yield better results but are excluded for copyright reasons).
 
-Spec: §SRL-1 Singer-Reference-Library (v9.12.1)
+Spec: §SRL-1 Singer-Reference-Library (v10.0.0)
 """
 
 from __future__ import annotations

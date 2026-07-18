@@ -1,5 +1,5 @@
 """
-Phase 9: Professional Crackle Removal - Aurik 9.0.
+Phase 9: Professional Crackle Removal - Aurik 10.0.0.
 =================================================
 
 Professional-grade crackle removal with texture preservation for analog media.
@@ -64,7 +64,7 @@ BENCHMARK COMPARISON:
 - Click Repair by Brian Davies: Specialized vinyl restoration
 - Aurik v2.0: Professional, texture preserving, <1.0× realtime ✅
 
-Author: Aurik 9.0 Development Team
+Author: Aurik 10.0.0 Development Team
 Version: 2.0.0 (Professional Upgrade + ML-Hybrid BANQUET)
 Date: 2026-02-15
 """
@@ -889,8 +889,8 @@ class CrackleRemovalPhase(PhaseInterface):
                 params["transient_threshold"],
                 _ts09["crest_factor"],
             )
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.debug("backend.core.phases.phase_09_crackle_removal: non-critical exception: %s", _e)
 
         # Locality-aware modulation from UV3.
         # Sparse crackle regions should be treated conservatively to preserve texture.
@@ -923,7 +923,7 @@ class CrackleRemovalPhase(PhaseInterface):
                 _panns_singing_p09,
             )
 
-        # §v9.10.113: Severity-adaptive dry-blend — heavy crackle needs more ML repair (less dry mix).
+        # §v10.0.0: Severity-adaptive dry-blend — heavy crackle needs more ML repair (less dry mix).
         _defect_scores_p09 = kwargs.get("defect_scores", {})
         _crackle_sev_p09 = 0.0
         try:
@@ -1186,7 +1186,7 @@ class CrackleRemovalPhase(PhaseInterface):
             _makeup_09 = float(np.clip(_req_gain_db, 0.0, 6.0))
             if _makeup_09 > 0.0:
                 _gain_09 = float(10.0 ** (_makeup_09 / 20.0))
-                # §2.45a-II: signal-relative gate — CEDAR/iZotope RX approach (v9.12.2)
+                # §2.45a-II: signal-relative gate — CEDAR/iZotope RX approach (v10.0.0)
                 _gate_dbfs_09 = _sig_gate_09(audio, material_key=material_type)
                 restored = _amge_09(
                     restored,

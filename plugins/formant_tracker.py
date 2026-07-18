@@ -1,7 +1,7 @@
 """
 FormantTracker – LPC Burg-basierter Formant-Tracker (§2.8, §4.4).
 
-Algorithm (per Aurik 9.9 spec §4.4):
+Algorithm (per Aurik 10.0.0 spec §4.4):
     LPC mit Burg-Algorithmus (Ordnung 16, 25 ms Frames), Root-Finding via
     np.roots(), Selektion stimmhafter Wurzeln (|r| < 1, angle > 0),
     Konvertierung zu Formant-Frequenzen F_k = angle_k · sr / (2π).

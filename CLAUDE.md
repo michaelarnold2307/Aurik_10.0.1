@@ -20,7 +20,7 @@
 - **Guard-Counter-Lebendigkeit**: Jeder deklarierte Guard-Counter (`_max_measures`, `_timeout_s`) MUSS auch inkrementiert werden. Deklaration ohne `+= 1` ist toter Code — der Guard greift nie.
 - **Messschleifen-Plateau**: Jede Messschleife mit ≥3 Kandidaten MUSS Plateau-Erkennung haben. 3 identische Violation-Sets in Folge → `break`. Verhindert ~30 s Latenz durch blindes Durchmessen aller Varianten.
 
-### v9.20.3 Präzisions-Invarianten
+### v10.0.0 Präzisions-Invarianten
 
 - **Centralized Decision Intelligence (§2.16)**: Alle Stärke-Entscheidungen fließen zentral im Denker.
 - **Section-Strength-Envelope (§2.17)**: Kontinuierliche 48kHz-Hüllkurve, Cosine-Crossfade 200ms.
@@ -95,7 +95,7 @@ Kernmodule [Psychoakustik + DSP]
 Export (backend/exporter.py)
 ```
 
-## 🔗 Chain-Architektur (v9.20.3)
+## 🔗 Chain-Architektur (v10.0.0)
 
 Jeder Tonträger in der Kette treibt spezifische Entscheidungen:
 
@@ -143,7 +143,7 @@ mp3_low  (Physical)       → IQR-Guard, Bandbreiten-Cap, Pre-Echo-Schutz
 - **Formatierung:** Black 120er Zeilenlänge
 - **Namensgebung:** snake_case (PEP8), Math-Variablen (N, X, sr)
 
-## 📝 Dateien-Struktur (v9.20.3)
+## 📝 Dateien-Struktur (v10.0.0)
 
 ```
 backend/
@@ -181,7 +181,7 @@ denker/
 
 Siehe `.github/VERBOTEN.md` — nicht verhandelbarer Sicherheits- & Qualitäts-Katalog.
 
-**v9.20.3 Ergänzung:** Workarounds sind VERBOTEN. Jede Lösung muss die Ursache beheben, nicht das Symptom umgehen. Phasen-Individuelle Schwellwerte sind VERBOTEN — alle Stärke-Entscheidungen fließen zentral über `global_scalar`.
+**v10.0.0 Ergänzung:** Workarounds sind VERBOTEN. Jede Lösung muss die Ursache beheben, nicht das Symptom umgehen. Phasen-Individuelle Schwellwerte sind VERBOTEN — alle Stärke-Entscheidungen fließen zentral über `global_scalar`.
 
 ## 🔗 Externe Ressourcen
 

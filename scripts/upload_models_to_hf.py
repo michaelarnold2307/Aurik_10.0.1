@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Aurik 9 — Upload all custom/converted model files to HuggingFace Hub.
+Aurik 10.0.0 — Upload all custom/converted model files to HuggingFace Hub.
 Skips files that are available from official upstream repos.
 Resumes automatically if interrupted (checks existing files on HF).
 
@@ -59,7 +59,7 @@ UPLOAD_LIST: list[tuple[str, str]] = [
     ("banquet/banquet_vinyl_final.onnx.data", "banquet/banquet_vinyl_final.onnx.data"),
     ("banquet/ev-pre-aug.ckpt", "banquet/ev-pre-aug.ckpt"),
     # ── DCCRN ── VERBOTEN (§4.4: ersetzt durch MP-SENet / DeepFilterNet) ──────
-    # ("dccrn/dccrn.onnx", ...)  # REMOVED — DCCRN ist VERBOTEN in Aurik 9
+    # ("dccrn/dccrn.onnx", ...)  # REMOVED — DCCRN ist VERBOTEN in Aurik 10.0.0
     # ── DiffWave (custom ONNX export) ─────────────────────────────────────
     ("diffwave/diffwave_model.onnx", "diffwave/diffwave_model.onnx"),
     ("diffwave/diffwave_model.onnx.data", "diffwave/diffwave_model.onnx.data"),
@@ -142,7 +142,7 @@ UPLOAD_LIST: list[tuple[str, str]] = [
     ("utmosv2/fold3_s42_best_model.pth", "utmosv2/fold3_s42_best_model.pth"),
     ("utmosv2/fold4_s42_best_model.pth", "utmosv2/fold4_s42_best_model.pth"),
     # ── CDPAM ── VERBOTEN (§4.4: ersetzt durch VERSA MOS-Metrik) ───────────────
-    # ("cdpam/...", ...)  # REMOVED — CDPAM ist VERBOTEN in Aurik 9 (kein Musiktraining)
+    # ("cdpam/...", ...)  # REMOVED — CDPAM ist VERBOTEN in Aurik 10.0.0 (kein Musiktraining)
     # Nachfolger: versa_plugin (VERSA 2024 MOS) + utmos_plugin (Gesangs-MOS)
     # ── Silero EN v5 (custom ONNX) ────────────────────────────────────────
     ("silero/silero_en_v5.onnx", "silero/silero_en_v5.onnx"),

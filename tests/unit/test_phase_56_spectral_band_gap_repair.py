@@ -1,7 +1,7 @@
 """
 tests/unit/test_phase_56_spectral_band_gap_repair.py
 =====================================================
-Aurik 9.9 — SpectralBandGapRepairPhase (§4.5, §7.1)
+Aurik 10.0.0 — SpectralBandGapRepairPhase (§4.5, §7.1)
 
 22 Unit-Tests.
 Alle Tests synthetisch (keine echten Audio-Dateien).

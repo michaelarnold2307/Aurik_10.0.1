@@ -100,7 +100,7 @@ def audio_sample_count(audio: np.ndarray) -> int:
 def compute_gated_rms_linear(sig: np.ndarray, gate_dbfs: float = -50.0) -> float:
     """Berechnet frame-gated RMS in linear scale (stereo-safe via mono energy).
 
-    §2.45a v9.12.1: Adaptive gate (same as _rms_dbfs_gated in UV3).
+    §2.45a v10.0.0: Adaptive gate (same as _rms_dbfs_gated in UV3).
     effective_gate = max(gate_dbfs, P5+10) — excludes vinyl/shellac surface-noise
     frames (-35 to -45 dBFS) so that noise removal is not misread as a music-level drop.
     Old fixed gate (-50 dBFS) included all noise frames → false drop → Pegelexplosion.
@@ -581,7 +581,7 @@ def apply_musical_gain_envelope(  # pylint: disable=too-many-positional-argument
           the old §2.30b hard clamp created sharp gain discontinuities at the
           boundary between quiet and musical frames.
 
-    Adaptive gate (CEDAR/iZotope RX approach, unchanged from v9.12.2):
+    Adaptive gate (CEDAR/iZotope RX approach, unchanged from v10.0.0):
         effective_gate = max(gate_dbfs, compute_signal_relative_gate_dbfs(reference, material_key))
         When reference_for_gate is provided, the gate is estimated from the
         ORIGINAL signal's noise floor.  When None, audio itself is used.

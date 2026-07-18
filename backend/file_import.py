@@ -10,10 +10,9 @@ import soundfile as sf
 def _load_with_sf(filepath, always_2d: bool = False):
     """Wrapper for sf.read — use load_audio_file() for production pipelines.
 
-    §G-SF-READ: Accepts all sf.read() kwargs to prevent signature-drift bugs.
+    §G-SF-READ: Thin wrapper around soundfile.read(); always_2d controls
+    whether mono audio is returned as (samples,) or (samples, 1).
     """
-    import soundfile as sf
-
     return sf.read(filepath, always_2d=always_2d)
 
 
@@ -398,7 +397,8 @@ def load_audio_file(
                 result["duration"] = _info.duration
                 _extra_info = getattr(_info, "extra_info", "") or ""
                 result["meta"] = {"extra_info": str(_extra_info)} if _extra_info else {}
-            except Exception:
+            except Exception as _meta_exc:
+                logger.debug("load_audio_file: sf.info metadata failed (%s) — using extension", _meta_exc)
                 result["format"] = _ext[1:].upper()
         else:
             result["format"] = _ext[1:].upper()
@@ -608,10 +608,7 @@ def load_audio_file(
         _import_lag_after = _import_lag_before
         if abs(_import_lag_before) > 64:
             _lag_ms = (_import_lag_before / float(sr)) * 1000.0
-            _msg = "load_audio_file: detected interchannel lag=%d samples (%.1f ms) before pipeline" % (
-                _import_lag_before,
-                _lag_ms,
-            )
+            _msg = f"load_audio_file: detected interchannel lag={int(_import_lag_before)} samples ({_lag_ms:.1f} ms) before pipeline"
             logger.warning(_msg)
             if sr == 48000:
                 try:

@@ -102,7 +102,7 @@ class TransientShaper(PhaseInterface):
             "attack_window_ms": 10,
             "release_window_ms": 70,
         },
-        MaterialType.CASSETTE: {  # v9.12.9: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
+        MaterialType.CASSETTE: {  # v10.0.0: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
             "attack_gain_db": [4.0, 3.5, 3.0, 2.0],
             "sustain_gain_db": [-2.0, -2.5, -2.0, -0.5],
             "attack_window_ms": 10,
@@ -154,7 +154,7 @@ class TransientShaper(PhaseInterface):
         material: MaterialType | None = None,
         **kwargs: Any,
     ) -> PhaseResult:
-        # §v9.20.3 Fragile-Guard: Kein Transient Shaping auf bandbreiten-begrenztem Material.
+        # §v10.0.0 Fragile-Guard: Kein Transient Shaping auf bandbreiten-begrenztem Material.
         # bw_loss > 0.8 → keine nutzbaren Transienten im HF-Bereich → skip.
         _bw = float(kwargs.get("bandwidth_loss", 0.0))
         if _bw > 0.80:
@@ -187,8 +187,13 @@ class TransientShaper(PhaseInterface):
         _effective_strength = float(np.clip(_pmgg_strength * phase_locality_factor, 0.0, 1.0))
 
         if _effective_strength <= 0.0:
+            logger.info(
+                "Phase 36: skipped — effective_strength=%.3f (no transient shaping applied)", _effective_strength
+            )
             audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
             audio = np.clip(audio, -1.0, 1.0)
+            # §5/5: Echte Peak-Messung auch bei Skip
+            _p_peak = float(20.0 * np.log10(np.percentile(np.abs(audio), 99.9) + 1e-10))
             return PhaseResult(
                 success=True,
                 audio=audio.copy(),

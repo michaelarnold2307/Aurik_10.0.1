@@ -5,7 +5,7 @@ SongStructureAnalyzer — §2.52b [RELEASE_MUST]
 Segment-bewusste Pipeline: Erkennt Intro/Vers/Chorus/Bridge/Outro/Instrumental
 und liefert segment-adaptive Strength-Skalare für jede Phase.
 
-Spec: 02_pipeline_architecture.md §2.52b (v9.12.0)
+Spec: 02_pipeline_architecture.md §2.52b (v10.0.0)
 """
 
 import logging

@@ -151,7 +151,7 @@ class DemucsV5Separator:
             if stem not in self.AVAILABLE_STEMS:
                 raise ValueError(f"Invalid stem '{stem}'. Available: {self.AVAILABLE_STEMS}")
 
-        # SR-Invariante (Aurik 9 nutzt 48000 Hz)
+        # SR-Invariante (Aurik 10.0.0 nutzt 48000 Hz)
         assert sr == 48000 or sr is None or sr == self.sample_rate, f"SR muss 48000 Hz sein, erhalten: {sr}"
         # Resample if needed
         if sr is not None and sr != self.sample_rate:

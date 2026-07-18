@@ -1,7 +1,7 @@
-# KI-Agent Integration Guide — AURIK 9.x.x
+# KI-Agent Integration Guide — AURIK 10.0.8
 
 **Erstellt:** 15. Februar 2026 | **Aktualisiert:** 19. Mai 2026  
-**Version:** 9.20.3  
+**Version:** 10.0.8  
 **Zielgruppe:** KI-Agenten (GitHub Copilot, Claude, GPT) die an AURIK arbeiten  
 **Status:** 🟢 AKTIV — Verbindlich für alle KI-Agenten
 
@@ -19,24 +19,24 @@ Dieses Dokument liefert **praktische Ergänzungen** zu den Richtlinien.
 1. **Anti-Parallelwelten**: Vor jeder Implementierung bestehende Module in `core/`, `plugins/`, `dsp/` prüfen
 2. **14 Musical Goals**: Nach jeder Restaurierung über `MusicalGoalsChecker.measure_all()` prüfen — Regression macht das Feature ungültig
 3. **48 kHz überall**: `assert sample_rate == 48000` in jeder Phase und jedem Plugin
-4. **CPU-only**: Kein CUDA/ROCm — `providers=["CPUExecutionProvider"]`, `model.to("cpu")`
+4. **CPU + optionale AMD-GPU**: Kein CUDA — `providers=["CPUExecutionProvider", "ROCMExecutionProvider"]`, `model.to("cpu")`
 5. **NaN/Inf verboten**: `np.nan_to_num(result, nan=0.0, posinf=0.0, neginf=0.0)` nach jeder numerischen Operation
 
 ---
 
-## 📋 Systemübersicht: AURIK 9.x.x Architektur
+## 📋 Systemübersicht: AURIK 10.0.8 Architektur
 
 ### Kognitive Kernmodule (Pflichtübersicht)
 
 | Modul | Datei | Funktion |
 | --- | --- | --- |
 | `PerceptualEmbedder` | `core/perceptual_embedder.py` | 256-dim L2-normalisierter Einbettungsraum |
-| `CausalDefectReasoner` | `core/causal_defect_reasoner.py` | Bayesianische Kausalinferenz, 34 Kausal-Ursachen |
+| `CausalDefectReasoner` | `core/causal_defect_reasoner.py` | Bayesianische Kausalinferenz, 62 Kausal-Ursachen |
 | `GPParameterOptimizer` | `core/gp_parameter_optimizer.py` | RBF-GP + UCB, lernt dauerhaft pro Material |
 | `PerceptualQualityScorer` | `core/perceptual_quality_scorer.py` | Gammatone-NSIM + MCD + LUFS + MOS |
 | `MusicalGoalsChecker` | `backend/core/musical_goals/musical_goals_metrics.py` | 14 Ziele, `measure_all(audio, sr)` |
-| `DefectScanner` | `core/defect_scanner.py` | 54 DefectTypes, material-adaptive Klassifikation |
-| `UnifiedRestorerV3` | `core/unified_restorer_v3.py` | 64-Phasen-Pipeline-Orchestrator |
+| `DefectScanner` | `core/defect_scanner.py` | 62 DefectTypes, material-adaptive Klassifikation |
+| `UnifiedRestorerV3` | `core/unified_restorer_v3.py` | 68-Phasen-Pipeline-Orchestrator |
 | `VocalAIEnhancement` | `core/vocal_ai_enhancement.py` | `VoiceGender` (MALE/FEMALE/CHILD/ANDROGYNOUS) |
 | `ExcellenceOptimizer` | `core/excellence_optimizer.py` | `optimize_for_excellence()` |
 | `FeedbackChain` | `core/feedback_chain.py` | Iterative PQS-Schleife, max. 5 Iterationen |
@@ -48,7 +48,7 @@ Eingang (beliebige SR, mono/stereo)
     │
     ▼ auf 48 kHz resampeln (Lanczos-4)
     │
-    ▼ [DefectScanner.scan()] → DefectAnalysisResult (54 DefectTypes, material-adaptiv)
+    ▼ [DefectScanner.scan()] → DefectAnalysisResult (62 DefectTypes, material-adaptiv)
     │
     ▼ [CausalDefectReasoner.reason_about_defects()] → RestorationPlan
     │   .primary_cause, .recommended_phases, .phase_parameters, .reasoning
@@ -59,7 +59,7 @@ Eingang (beliebige SR, mono/stereo)
     │
     ▼ [PerceptualEmbedder.embed_audio()] → AudioEmbedding (256-dim, L2-normalisiert)
     │
-    ▼ Phase 01–64 ausführen (core/phases/phase_NN_*.py)
+    ▼ Phase 01–68 ausführen (core/phases/phase_NN_*.py)
     │
     ▼ [FeedbackChain.run()] → iteriert bis MOS konvergiert (|ΔMOS| < 0.02)
     │
@@ -136,7 +136,7 @@ ls core/*.py | grep -i "mein_bereich"
 
 ---
 
-## 🗂️ Phasen-System (64 Phasen, Phase 01–64)
+## 🗂️ Phasen-System (68 Phasen, Phase 01–66 + Vocal Repair + Glue Stage)
 
 Alle Phasen liegen in `core/phases/phase_NN_<beschreibung>.py` (backend/core/phases/).
 
@@ -174,7 +174,7 @@ tape · reel_tape · vinyl · shellac · wax_cylinder · wire_recording · lacqu
 dat · cd_digital · mp3_low · mp3_high · aac · minidisc · streaming · unknown
 ```
 
-**54 DefectTypes (vollständig, Stand v9.12.9):**
+**62 DefectTypes (vollständig, Stand v10.0.8):**
 
 ```
 CLICKS · CRACKLE · HUM · WOW · FLUTTER · LOW_FREQ_RUMBLE · DROPOUTS
@@ -187,7 +187,7 @@ HEAD_WEAR · AZIMUTH_ERROR · TRANSIENT_SMEARING · PRE_ECHO
 RIAA_CURVE_ERROR · ALIASING · BIAS_ERROR · SIBILANCE · TRANSPORT_BUMP · VOCAL_HARSHNESS
 ```
 
-⚠️ **WOW** und **FLUTTER** sind seit v9.10.x getrennte Defekttypen (IEC 60386-konform, nicht mehr WOW_FLUTTER).
+⚠️ **WOW** und **FLUTTER** sind seit v10.0.0.x getrennte Defekttypen (IEC 60386-konform, nicht mehr WOW_FLUTTER).
 
 > **Kritisch:** `SOFT_SATURATION` = Tube-/Tape-Sättigung → **BEWAHREN**, nie reparieren!  
 > `CLIPPING` = Harte Amplitudenbegrenzung → **REPARIEREN** (phase_23). Diskriminierung via `classify_clipping()` (§6.3).
@@ -357,7 +357,7 @@ Backend-Core (core/ · plugins/ · dsp/)
 
 - Direktaufruf von `core/`, `dsp/` oder `plugins/` aus `frontend/`-Code
 - Netzwerkaufruf nach außen — Desktop-only, 100 % offline
-- `torch.cuda` / `CUDAExecutionProvider` — CPU-only
+- `torch.cuda` — CPU + optionale AMD-GPU (ROCM/DirectML)
 - `print()` in Produktionscode
 
 ---
@@ -400,7 +400,7 @@ Jede neue DSP-Funktion MUSS auf mindestens einem dieser Prinzipien basieren:
 | NSIM / SSIM | Strukturelle Ähnlichkeit, Qualitätsbewertung |
 | PGHI (Perraudin 2013) | Phasenkonsistenz nach Spektralmodifikation |
 | GP/UCB + MOO Pareto | Parameteroptimierung (14 Objectives) |
-| Bayesianische Kausalinferenz | Defektursachen-Erkennung (11 Ursachen) |
+| Bayesianische Kausalinferenz | Defektursachen-Erkennung (62 Ursachen) |
 | ISO 226:2003 Equal-Loudness | BrillanzMetric + WaermeMetric-Gewichtung |
 | Virtual Pitch / Missing Fundamental | BassKraftMetric (Moore et al. 2006) |
 
@@ -410,7 +410,7 @@ Jede neue DSP-Funktion MUSS auf mindestens einem dieser Prinzipien basieren:
 
 ---
 
-## 📊 Neue Module seit v9.x.x — Schnellreferenz
+## 📊 Neue Module seit 10.0.8 — Schnellreferenz
 
 | Modul | Position in Pipeline | Messbarer Effekt |
 | --- | --- | --- |
@@ -458,5 +458,5 @@ Jede neue DSP-Funktion MUSS auf mindestens einem dieser Prinzipien basieren:
 
 ---
 
-**KI-Agent Integration Guide — Aurik 9.20.3 — Mai 2026**
+**KI-Agent Integration Guide — Aurik 10.0.8 — Juli 2026**
 **Bindend für: GitHub Copilot, Claude, GPT-Instanzen**

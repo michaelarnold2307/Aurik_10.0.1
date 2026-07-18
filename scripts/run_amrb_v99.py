@@ -1,7 +1,7 @@
-"""AMRB v1.0 Runner — Aurik 9.9.9 Finale Validierung.
+"""AMRB v1.0 Runner — Aurik 10.0.0 Finale Validierung.
 
 Führt den vollständigen Aurik Musical Restoration Benchmark gegen
-Aurik 9.9 UnifiedRestorerV3 aus und prüft OS-Führerschaft.
+Aurik 10.0.0 UnifiedRestorerV3 aus und prüft OS-Führerschaft.
 
 Aufruf:
     python scripts/run_amrb_v99.py [--quick]
@@ -318,7 +318,7 @@ def make_restoration_fn(mode: str = "quality"):
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="AMRB v1.0 — Aurik 9.9 Validierung")
+    parser = argparse.ArgumentParser(description="AMRB v1.0 — Aurik 10.0.0 Validierung")
     parser.add_argument("--quick", action="store_true", help="Schnell-Modus: 2 Items/Szenario statt 5")
     parser.add_argument(
         "--mode",
@@ -334,7 +334,7 @@ def main() -> int:
     report_path.parent.mkdir(parents=True, exist_ok=True)
 
     logger.info("=" * 60)
-    logger.info("AMRB v1.0  —  Aurik 9.9.9  —  Modus: %s", args.mode)
+    logger.info("AMRB v1.0  —  Aurik 10.0.0  —  Modus: %s", args.mode)
     logger.info("Items/Szenario: %d | Bericht: %s", n_items, report_path)
     logger.info("=" * 60)
 
@@ -347,7 +347,7 @@ def main() -> int:
 
     config = BenchmarkConfig(
         restoration_fn=restore_fn,
-        system_name=f"Aurik 9.9.9 ({args.mode})",
+        system_name=f"Aurik 10.0.0 ({args.mode})",
         n_items_per_scenario=n_items,
         sample_rate=48_000,
         report_path=report_path,

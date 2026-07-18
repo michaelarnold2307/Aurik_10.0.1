@@ -1,6 +1,6 @@
 """Remaster-Detektor — erkennt digitale Neuauflagen historischer Aufnahmen.
 
-Aurik 9 — §2.14 EraClassifier-Guard: Verhindert falsche Ära-Zuweisung,
+Aurik 10.0.0 — §2.14 EraClassifier-Guard: Verhindert falsche Ära-Zuweisung,
 wenn eine historische Aufnahme digital neu gemastert wurde (z. B. 1928er
 Shellac mit 22 kHz Bandbreite und −90 dBFS Rauschboden).
 
@@ -11,7 +11,7 @@ Erkennungsmerkmale digitaler Remaster:
 
 Singleton-Pattern §3.2: Thread-sicher via Double-Checked Locking.
 
-Referenz: §2.14 Aurik-9-Spec (v9.10.45)
+Referenz: §2.14 Aurik-9-Spec (v10.0.0)
 Datum: Februar 2026
 """
 

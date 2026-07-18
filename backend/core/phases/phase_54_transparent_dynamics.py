@@ -184,7 +184,7 @@ class TransparentDynamicsV1(PhaseInterface):
             "knee_db": 9,
             "mix": 0.65,  # 65% wet
         },
-        MaterialType.CASSETTE: {  # v9.12.9: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
+        MaterialType.CASSETTE: {  # v10.0.0: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
             "ratio": 2.8,
             "threshold_db": -16,
             "knee_db": 9,
@@ -215,7 +215,7 @@ class TransparentDynamicsV1(PhaseInterface):
         "shellac": MaterialType.SHELLAC,
         "vinyl": MaterialType.VINYL,
         "tape": MaterialType.TAPE,
-        "cassette": MaterialType.CASSETTE,  # v9.12.9: Bug fix — war fälschlicherweise MaterialType.TAPE
+        "cassette": MaterialType.CASSETTE,  # v10.0.0: Bug fix — war fälschlicherweise MaterialType.TAPE
         "cd": MaterialType.CD_DIGITAL,
         "cd_digital": MaterialType.CD_DIGITAL,
         "digital": MaterialType.CD_DIGITAL,

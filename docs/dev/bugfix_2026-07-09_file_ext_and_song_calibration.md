@@ -88,7 +88,7 @@ für Vinyl-Rips und Tape-Transfers genutzt werden (§6.7b).
 | MP3 2005, SNR=35dB, def=0.25 | **0.95** | Leichte Dämpfung, Codec-Artefakte |
 | CD 2010, SNR=55dB, def=0.02 | **0.95** | Nahe neutral, kaum Defekte |
 
-Bereich: `[0.50, 1.50]` gemäß Lücke-G-Fix v9.10.100.
+Bereich: `[0.50, 1.50]` gemäß Lücke-G-Fix v10.0.0.
 
 ## Empfehlungen
 

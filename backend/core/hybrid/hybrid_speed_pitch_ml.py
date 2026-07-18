@@ -36,7 +36,7 @@ Difference from Phase 12 (Wow/Flutter):
 - Phase 12: Time-varying pitch (short segments, wow/flutter detection)
 - Phase 31: Global pitch (full audio average, speed correction)
 
-Author: Aurik 9.0 Development Team
+Author: Aurik 10.0.0 Development Team
 Version: 1.0.0
 Date: 16. Februar 2026
 """

@@ -25,7 +25,7 @@ Referenzen:
     Song et al. (2023): "Consistency Models" (OpenAI)
     Bai et al. (2024): "FlowAudio: Consistent Waveform Generation via Flow Matching"
 
-Referenz: §4.5 Aurik-9-Spec (v9.9.5)
+Referenz: §4.5 Aurik-9-Spec (v10.0.0)
 Autor: Aurik Development Team
 Datum: 20. Februar 2026
 """

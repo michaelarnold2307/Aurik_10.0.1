@@ -114,7 +114,7 @@ class DCOffsetRemoval(PhaseInterface):
             "filter_order": 2,
             "filter_type": "iir",
             "q_factor": 0.7,
-        },  # v9.12.9: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
+        },  # v10.0.0: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
         MaterialType.CD_DIGITAL: {
             "cutoff_hz": 4,
             "filter_order": 2,

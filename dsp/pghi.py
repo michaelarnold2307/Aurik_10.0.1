@@ -1,5 +1,5 @@
 """
-Aurik 9 — PGHI: Phase Gradient Heap Integration
+Aurik 10.0.0 — PGHI: Phase Gradient Heap Integration
 ================================================
 Standalone-Implementierung der phasenkonsistenten Spektral-Rekonstruktion
 nach Perraudin et al. (2013). Pflicht-Modul für alle Phasen und Plugins

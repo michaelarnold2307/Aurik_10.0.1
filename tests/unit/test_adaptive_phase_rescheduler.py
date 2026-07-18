@@ -316,13 +316,13 @@ class TestAdaptiveGapThreshold:
         assert _adaptive_gap_threshold(100.0) == pytest.approx(0.05, abs=1e-6)
 
     def test_zero_restorability_returns_min_threshold(self):
-        """rest=0 → 0.020 (aggressivste Erkennung, v9.12.9: abgesenkt für sensitivere Recovery)."""
+        """rest=0 → 0.020 (aggressivste Erkennung, v10.0.0: abgesenkt für sensitivere Recovery)."""
         from backend.core.adaptive_phase_rescheduler import _adaptive_gap_threshold
 
         assert _adaptive_gap_threshold(0.0) == pytest.approx(0.020, abs=1e-6)
 
     def test_midpoint_restorability(self):
-        """rest=50 → 0.035 (lineare Mitte, v9.12.9: neue Formel 0.020+0.030×rest/100)."""
+        """rest=50 → 0.035 (lineare Mitte, v10.0.0: neue Formel 0.020+0.030×rest/100)."""
         from backend.core.adaptive_phase_rescheduler import _adaptive_gap_threshold
 
         assert _adaptive_gap_threshold(50.0) == pytest.approx(0.035, abs=1e-6)
@@ -331,7 +331,7 @@ class TestAdaptiveGapThreshold:
         """Werte außerhalb [0, 100] werden geclippt."""
         from backend.core.adaptive_phase_rescheduler import _adaptive_gap_threshold
 
-        assert _adaptive_gap_threshold(-50.0) == pytest.approx(0.020, abs=1e-6)  # geclippt auf min 0.020 (v9.12.9)
+        assert _adaptive_gap_threshold(-50.0) == pytest.approx(0.020, abs=1e-6)  # geclippt auf min 0.020 (v10.0.0)
         assert _adaptive_gap_threshold(200.0) == pytest.approx(0.05, abs=1e-6)
 
     def test_monotone_increasing(self):

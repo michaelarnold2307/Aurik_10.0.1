@@ -1,5 +1,5 @@
 """
-core/progressive_quality_mode.py — Aurik 9.9+ (§9.6)
+core/progressive_quality_mode.py — Aurik 10.0.0+ (§9.6)
 
 ProgressiveQualityMode: Zwei-Stufen-Pipeline für schnelle Vorschau
 vor vollständiger Restaurierung.

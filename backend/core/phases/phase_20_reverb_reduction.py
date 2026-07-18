@@ -89,7 +89,7 @@ except ImportError:
     RESOURCE_MANAGER_AVAILABLE = False
     logging.getLogger(__name__).warning("AdaptiveResourceManager not available, no automatic fallback")
 
-# ML-Hybrid Support (Aurik 9.0 - Phase 20 v3.0)
+# ML-Hybrid Support (Aurik 10.0.0 - Phase 20 v3.0)
 try:
     from backend.core.hybrid.hybrid_dereverb import DereverbConfig, DereverbStrategy, HybridDereverb
 
@@ -170,7 +170,7 @@ class ReverbReduction(PhaseInterface):
         MaterialType.SHELLAC: 0.50,  # Moderate (often dry already)
         MaterialType.VINYL: 0.40,  # Light (preserve natural ambience)
         MaterialType.TAPE: 0.65,  # Strong (analog reverb artifacts)
-        MaterialType.CASSETTE: 0.65,  # v9.12.9: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
+        MaterialType.CASSETTE: 0.65,  # v10.0.0: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
         MaterialType.CD_DIGITAL: 0.30,  # Minimal (production choice)
         MaterialType.STREAMING: 0.25,  # Very minimal
     }
@@ -180,7 +180,7 @@ class ReverbReduction(PhaseInterface):
         MaterialType.SHELLAC: 0.70,
         MaterialType.VINYL: 0.60,
         MaterialType.TAPE: 0.80,
-        MaterialType.CASSETTE: 0.80,  # v9.12.9: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
+        MaterialType.CASSETTE: 0.80,  # v10.0.0: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
         MaterialType.CD_DIGITAL: 0.50,
         MaterialType.STREAMING: 0.40,
     }
@@ -799,7 +799,7 @@ class ReverbReduction(PhaseInterface):
             material,
         )
 
-        # §4.5c Early-Reflection-Guard (Spec §4.5c, v9.10.100)
+        # §4.5c Early-Reflection-Guard (Spec §4.5c, v10.0.0)
         # C80 = 10·log10(E_early80ms / E_late) — Kuttruff 2009; ΔC80 ≤ 6 dB
         # D50 = E_early50ms / E_total — ΔD50 ≤ 0.12 (sekundär)
         _c80_guard_triggered = False
@@ -1304,7 +1304,7 @@ class ReverbReduction(PhaseInterface):
                 from backend.core.audio_utils import apply_musical_gain_envelope as _amge_20  # pylint: disable=import-outside-toplevel  # noqa: I001
                 from backend.core.audio_utils import compute_signal_relative_gate_dbfs as _sig_gate_20  # pylint: disable=import-outside-toplevel
 
-                # §2.45a-II: signal-relative gate — CEDAR/iZotope RX approach (v9.12.2)
+                # §2.45a-II: signal-relative gate — CEDAR/iZotope RX approach (v10.0.0)
                 _gate_dbfs_20 = _sig_gate_20(original_audio, material_key=material_key)
                 processed_audio = _amge_20(
                     processed_audio,
@@ -1513,7 +1513,7 @@ class ReverbReduction(PhaseInterface):
                     except Exception as e:
                         logger.warning("phase_20_reverb_reduction.py::unknown fallback: %s", e)
 
-                # §4.8a-ii preserve_mask (§Gap8 v9.12.8): G_eff = mask*0.90 + (1-mask)*G_z
+                # §4.8a-ii preserve_mask (§Gap8 v10.0.0): G_eff = mask*0.90 + (1-mask)*G_z
                 # Bewahrt Shellac-H2/H4-Wärme und Vinyl-Charakter während Nachhall-Reduktion.
                 _pm_p20 = getattr(self, "_preserve_mask_p20", None)
                 if _pm_p20 is not None and _pm_p20.size > 0:
@@ -1609,7 +1609,7 @@ class ReverbReduction(PhaseInterface):
         G_combined[valid, :] = (G_acc[valid, :] / w_acc[valid, np.newaxis]).astype(np.float32)
         G_combined = np.clip(np.nan_to_num(G_combined, nan=1.0), 0.0, 1.0)
 
-        # Late-reverb temporal decay suppression (v9.10.112):
+        # Late-reverb temporal decay suppression (v10.0.0):
         # Room reverberation produces exponentially decaying tails after transients;
         # OMLSA alone treats all time-frames equally and cannot separate the
         # reverberant tail from the direct sound.  We add a time-varying secondary

@@ -374,8 +374,8 @@ class BWReconstructorPlugin:
 
             plm = get_plugin_lifecycle_manager()
             plm.set_active(self._BUDGET_NAME, active)
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.debug("%s: non-critical exception: %s", __name__, _e)
 
     def _estimate_cutoff(self, audio: np.ndarray, sr: int, threshold_db: float = -60.0) -> float:
         """Schätzt die Bandbreitengrenze via FFT-Energie-Abfall."""

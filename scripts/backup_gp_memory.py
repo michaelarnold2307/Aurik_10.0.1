@@ -93,7 +93,7 @@ def restore(archive_path: pathlib.Path) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Aurik 9 GP-Memory Backup/Restore")
+    parser = argparse.ArgumentParser(description="Aurik 10.0.0 GP-Memory Backup/Restore")
     parser.add_argument(
         "--dest",
         default=str(pathlib.Path.home() / "aurik_backups"),

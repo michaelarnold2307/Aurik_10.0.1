@@ -1,5 +1,5 @@
 """
-backend/core/artist_knowledge_base.py — ArtistKnowledgeBase (Aurik 9 §AKB-1)
+backend/core/artist_knowledge_base.py — ArtistKnowledgeBase (Aurik 10.0.0 §AKB-1)
 ==============================================================================
 Persistent cross-session learning database for restoration intelligence.
 

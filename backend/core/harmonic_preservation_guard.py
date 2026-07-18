@@ -1,5 +1,5 @@
 """
-HarmonicPreservationGuard (HPG) — Aurik 9.0 §2.28
+HarmonicPreservationGuard (HPG) — Aurik 10.0.0 §2.28
 ===================================================
 
 Extrahiert den harmonischen Fingerabdruck BEFORE Rauschunterdrückung und
@@ -51,7 +51,7 @@ Fletcher (1964): Normal Vibration Frequencies of a Stiff Piano String
 Mauch & Dixon (2014): pYIN — Fundamental Frequency Estimator
 Perraudin et al. (2013): PGHI — Non-Iterative STFT Phase Reconstruction
 
-Autor: Aurik 9.0 Development Team / v9.9.8
+Autor: Aurik 10.0.0 Development Team / v10.0.0
 """
 
 from __future__ import annotations

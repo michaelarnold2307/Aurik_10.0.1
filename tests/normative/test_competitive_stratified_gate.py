@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""Stratifiziertes Konkurrenz-Gate — [RELEASE_MUST] (§5.6 spec 07 / §2.40) v9.10.79
+"""Stratifiziertes Konkurrenz-Gate — [RELEASE_MUST] (§5.6 spec 07 / §2.40) v10.0.0
 
 Spec §5.6 (copilot-instructions.md, spec 07 §5.6):
     Konkurrenzvergleich wird nicht nur als Gesamtmittel, sondern pro Zelle einer
@@ -423,7 +423,7 @@ class TestReferenceBaselineContract:
 
     def test_aurik_restoration_baseline_exceeds_reference(self):
         """Aurik Restoration-Baseline muss über iZotope RX 11 liegen."""
-        aurik_restore = AMRB_BASELINES["Aurik 9.9 (Restoration Mode)"]["mushra_overall"]
+        aurik_restore = AMRB_BASELINES["Aurik 10.0.0 (Restoration Mode)"]["mushra_overall"]
         assert aurik_restore > _REFERENCE_OQS, (
             f"Aurik Restoration ({aurik_restore}) muss > iZotope baseline ({_REFERENCE_OQS})"
         )

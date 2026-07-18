@@ -1,5 +1,5 @@
 """
-Phase 2: Professional Hum Removal - Aurik 9.0
+Phase 2: Professional Hum Removal - Aurik 10.0.0
 ===============================================
 
 Professional-grade AC hum removal competing with iZotope RX De-hum.
@@ -55,7 +55,7 @@ BENCHMARK COMPARISON:
 - Audacity Notch Filter: Basic, static notches
 - Aurik v2.0: Professional, adaptive tracking, <0.8× realtime ✅
 
-Author: Aurik 9.0 Development Team
+Author: Aurik 10.0.0 Development Team
 Version: 2.0.0 (Professional Upgrade)
 Date: 15. Februar 2026
 """

@@ -1,11 +1,11 @@
 """
-Memory Leak Tests for Aurik 9.0 V3
+Memory Leak Tests for Aurik 10.0.0 V3
 ===================================
 
 Tests für Memory Leaks in UnifiedRestorerV3 und verwandten Komponenten.
 
 Sprint 1, Week 1 - Memory Leak Detection & Prevention
-Author: Aurik 9.0 Development Team
+Author: Aurik 10.0.0 Development Team
 Date: 2026-02-15
 """
 

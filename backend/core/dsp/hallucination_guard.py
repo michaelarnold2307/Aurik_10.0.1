@@ -17,8 +17,8 @@ Threshold semantics (§2.46e normativ):
 
 Thread-safe via module-level functions (no singleton needed — pure DSP).
 
-Author: Aurik 9 Engineering
-Version: 1.0.0 (§2.46e RELEASE_MUST, BUG-FIX v9.12.0)
+Author: Aurik 10.0.0 Engineering
+Version: 1.0.0 (§2.46e RELEASE_MUST, BUG-FIX v10.0.0)
 """
 
 from __future__ import annotations
@@ -152,8 +152,8 @@ def check_hallucination(
             _total = _cumsum[-1] + 1e-12
             _bw_idx = int(np.searchsorted(_cumsum, 0.95 * _total))
             _pre_bw = float(_bw_idx * sr / len(_pre_fft))
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.debug("hallucination_guard: non-critical exception: %s", _e)
     if _pre_bw < 1000.0:
         _ROLLBACK_THRESHOLD = 0.30
     elif _pre_bw < 4000.0:

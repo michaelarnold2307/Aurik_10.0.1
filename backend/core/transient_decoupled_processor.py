@@ -1,6 +1,6 @@
 """
 backend/core/transient_decoupled_processor.py
-Aurik 9 -- Spec §2.27: TransientDecoupledProcessing
+Aurik 10.0.0 -- Spec §2.27: TransientDecoupledProcessing
 
 HPSS-basierte Transient-Separation: Percussive-Anteil nur durch Phase 01/27,
 Harmonic-Anteil durch volle Pipeline; Rekombination via OLA-Crossfade (Hanning 10 ms).

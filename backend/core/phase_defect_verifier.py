@@ -36,7 +36,7 @@ Thread-safety: per-session telemetry is protected by a reentrant lock;
     the verifier singleton is double-checked-locking.
 
 Author: Aurik Development Team
-Version: 1.0.0 (v9.11.1 — Ursache 7)
+Version: 1.0.0 (v10.0.0 — Ursache 7)
 """
 
 from __future__ import annotations

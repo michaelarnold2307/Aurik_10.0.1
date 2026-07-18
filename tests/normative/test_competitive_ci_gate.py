@@ -169,8 +169,8 @@ class _RestoreCallTimeout:
 # ---------------------------------------------------------------------------
 _IZOTOPE_MUSHRA: float = AMRB_BASELINES["iZotope RX 11 (commercial)"]["mushra_overall"]  # 71.0
 _IZOTOPE_PQS_MOS: float = AMRB_BASELINES["iZotope RX 11 (commercial)"]["pqs_mos"]  # 3.9
-_AURIK_STUDIO_MUSHRA: float = AMRB_BASELINES["Aurik 9.9 (Studio 2026 Mode)"]["mushra_overall"]  # 88.0
-_AURIK_RESTORE_MUSHRA: float = AMRB_BASELINES["Aurik 9.9 (Restoration Mode)"]["mushra_overall"]  # 84.0
+_AURIK_STUDIO_MUSHRA: float = AMRB_BASELINES["Aurik 10.0.0 (Studio 2026 Mode)"]["mushra_overall"]  # 88.0
+_AURIK_RESTORE_MUSHRA: float = AMRB_BASELINES["Aurik 10.0.0 (Restoration Mode)"]["mushra_overall"]  # 84.0
 _MIN_SCENARIOS_TO_WIN: int = 7  # §8.2 Punkt 11: ≥ 7/10 Szenarien
 
 
@@ -312,7 +312,7 @@ def _run_competitive(
 ) -> BenchmarkReport:
     config = BenchmarkConfig(
         restoration_fn=_aurik_restoration_fn,
-        system_name="Aurik 9 Competitive",
+        system_name="Aurik 10.0.0 Competitive",
         n_items_per_scenario=n_items,
         scenarios=scenarios if scenarios is not None else _SCENARIOS_SELECTED,
         # Competitive-CI soll den Marktvergleich robust, aber laufzeitstabil prüfen.

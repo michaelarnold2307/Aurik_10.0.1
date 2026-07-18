@@ -455,7 +455,7 @@ class TestAdaptiveThresholds254:
 
 
 # ---------------------------------------------------------------------------
-# Klasse: §2.56 Goal-Weights Bias in FeedbackChain (v9.12.0)
+# Klasse: §2.56 Goal-Weights Bias in FeedbackChain (v10.0.0)
 # ---------------------------------------------------------------------------
 
 

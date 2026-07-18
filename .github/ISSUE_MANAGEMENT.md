@@ -1,6 +1,6 @@
 # Issue Management Guide
 
-**Aurik 9.9 - Issue Tracking & Community Feedback**  
+**Aurik 10.0.0 - Issue Tracking & Community Feedback**  
 Documentation for maintainers and contributors
 
 ---

@@ -1,4 +1,4 @@
-# Aurik 9.10.77 — UAT System Master Index
+# Aurik 10.0.0 — UAT System Master Index
 
 **Complete Documentation & Artifacts Map**  
 **Date:** 2026-03-28  
@@ -42,7 +42,7 @@
 ### Headline
 
 **CONDITIONAL GO** ⚠️  
-Aurik 9.10.77 has passed **code inspection and K.O. gate validation**.  
+Aurik 10.0.0 has passed **code inspection and K.O. gate validation**.  
 Functional audio testing remains for **Phase 2 (2 hours, next)**.
 
 ### Key Numbers
@@ -416,5 +416,5 @@ Phase 3 Complete?
 
 ---
 
-**Thank you for reviewing Aurik 9.10.77 User Acceptance Testing documentation.**  
+**Thank you for reviewing Aurik 10.0.0 User Acceptance Testing documentation.**  
 **Next step: Phase 2 Functional Testing (Schedule this week)**

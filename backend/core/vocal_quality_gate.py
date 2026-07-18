@@ -109,13 +109,22 @@ class VocalDetector:
         mono = mono.astype(np.float32)
 
         # ── PANNS-basierte Erkennung ────────────────────────────────────
+        detection_method = "spectral"
         try:
             # Vereinfachte spektrale Gesangsdetektion (PANNS-Proxy)
             # Echte PANNS-Inferenz via SessionManager wenn verfügbar
             confidence = self._spectral_vocal_proxy(mono, sr)
         except Exception:
-            # Fallback: Energie-basierte Heuristik
-            confidence = self._energy_vocal_proxy(mono, sr)
+            # §5/5: Verbesserte Fallback-Kette: spectral → MFCC → energy
+            logger.warning("VocalDetector: spectral_vocal_proxy failed — trying MFCC-based fallback")
+            try:
+                confidence = self._mfcc_vocal_proxy(mono, sr)
+                detection_method = "mfcc"
+            except Exception:
+                logger.warning("VocalDetector: MFCC fallback failed — falling back to energy heuristic")
+                confidence = self._energy_vocal_proxy(mono, sr)
+                detection_method = "energy"
+        logger.debug("VocalDetector: detection_method=%s confidence=%.3f", detection_method, confidence)
 
         has_vocals = confidence >= self._threshold
 
@@ -179,6 +188,28 @@ class VocalDetector:
         # Kombinierte Confidence
         confidence = 0.6 * voice_ratio + 0.4 * harmonic_score
         return min(1.0, max(0.0, confidence))
+
+    def _mfcc_vocal_proxy(self, mono: np.ndarray, sr: int) -> float:
+        """MFCC-basierte Gesangsdetektion als Fallback zwischen spectral und energy.
+
+        Nutzt die Tatsache, dass Gesang stärkere Energie in den ersten
+        3-5 MFCC-Koeffizienten konzentriert (Grundfrequenz + Formanten),
+        während Rauschen/Instrumente flachere MFCC-Profile haben.
+        """
+        try:
+            import librosa
+
+            _mfcc = librosa.feature.mfcc(y=mono.astype(np.float64), sr=sr, n_mfcc=13)
+            _mfcc_var = np.var(_mfcc, axis=1)
+            # Gesangs-Indikator: hohe Varianz in MFCC 0-4 (Grundfrequenz + Formanten)
+            # vs niedrige Varianz in MFCC 8-12 (Rauschanteil)
+            _voice_energy = float(np.sum(_mfcc_var[:5]))
+            _noise_energy = float(np.sum(_mfcc_var[8:]))
+            _ratio = _voice_energy / max(_noise_energy, 1e-10)
+            # Heuristik: ratio > 2.0 = wahrscheinlich Gesang
+            return float(np.clip((_ratio - 1.0) / 3.0, 0.0, 1.0))
+        except Exception:
+            raise  # Weiterreichen an energy-Fallback
 
     def _energy_vocal_proxy(self, mono: np.ndarray, sr: int) -> float:
         """Minimal-Fallback: Energie-basierte Heuristik."""

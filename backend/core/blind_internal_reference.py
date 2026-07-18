@@ -1,5 +1,5 @@
 """
-BlindInternalReference — §Gap5 Cleanest-Segment Finder (Aurik 9.12.x)
+BlindInternalReference — §Gap5 Cleanest-Segment Finder (Aurik 10.0.0.x)
 =======================================================================
 
 Finds the highest-quality (least degraded) segments within a song

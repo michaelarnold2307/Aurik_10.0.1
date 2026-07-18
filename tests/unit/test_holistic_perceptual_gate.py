@@ -298,7 +298,7 @@ def test_26_restorability_anchor_detail_keys():
 
 
 def test_27_high_restorability_ref_dominant():
-    """Restorability > 70 → input_weight=0.0, ref_weight=1.0 (§2.44 FIX v9.11.2).
+    """Restorability > 70 → input_weight=0.0, ref_weight=1.0 (§2.44 FIX v10.0.0).
 
     Nach dem Referenz-Paradox-Fix wird bei hoher Restorability NICHT mehr die
     Ähnlichkeit zum degradierten Input gemessen, sondern die Referenz/direktionale
@@ -318,7 +318,7 @@ def test_27_high_restorability_ref_dominant():
 
 
 def test_28_mid_restorability_ref_dominant():
-    """Restorability 50–70 → input_weight=0.35, ref_weight=0.65 (§2.44 FIX v9.11.2)."""
+    """Restorability 50–70 → input_weight=0.35, ref_weight=0.65 (§2.44 FIX v10.0.0)."""
     from backend.core.holistic_perceptual_gate import get_holistic_gate
 
     gate = get_holistic_gate()
@@ -333,7 +333,7 @@ def test_28_mid_restorability_ref_dominant():
 
 
 def test_29_low_restorability_ref_dominant():
-    """Restorability ≤ 50 → input_weight=0.2, ref_weight=0.8 (§2.44 FIX v9.11.2)."""
+    """Restorability ≤ 50 → input_weight=0.2, ref_weight=0.8 (§2.44 FIX v10.0.0)."""
     from backend.core.holistic_perceptual_gate import get_holistic_gate
 
     gate = get_holistic_gate()
@@ -348,7 +348,7 @@ def test_29_low_restorability_ref_dominant():
 
 
 def test_30_restorability_50_boundary_blended():
-    """Restorability = 50 (Grenzfall) → blended (50–70 Bereich, §2.44 FIX v9.11.2)."""
+    """Restorability = 50 (Grenzfall) → blended (50–70 Bereich, §2.44 FIX v10.0.0)."""
     from backend.core.holistic_perceptual_gate import get_holistic_gate
 
     gate = get_holistic_gate()
@@ -373,7 +373,7 @@ def test_31_update_reference_memory_method_exists():
 
 
 def test_32_update_rejected_if_hpi_too_low():
-    """Quality-Gate v9.20.0 (V54-aligned): HPI ≤ 0.0 → kein Update; HPI > 0.0 wird akzeptiert."""
+    """Quality-Gate v10.0.0 (V54-aligned): HPI ≤ 0.0 → kein Update; HPI > 0.0 wird akzeptiert."""
     from backend.core.holistic_perceptual_gate import HolisticPerceptualGate
 
     gate = HolisticPerceptualGate()
@@ -438,7 +438,7 @@ def test_34_update_rejected_if_p1_p2_failed():
     gate = HolisticPerceptualGate()
     gate._ref_memory = {}  # Disk-Memory leeren — __init__ lädt ~/.aurik/hpg_reference_memory.json
     audio = _audio(2.0)
-    # p1_p2_passed=False blockiert NICHT mehr (V54-aligned v9.20.0)
+    # p1_p2_passed=False blockiert NICHT mehr (V54-aligned v10.0.0)
     gate.update_reference_memory(
         audio,
         SR,
@@ -804,7 +804,7 @@ def test_50_evaluate_restoration_cassette_passes_bw_ceiling():
 
 
 # ---------------------------------------------------------------------------
-# test_51–53: mel-Embedding BW-Ceiling-Guard (v9.12.10) — _compute_embedding
+# test_51–53: mel-Embedding BW-Ceiling-Guard (v10.0.0) — _compute_embedding
 # §2.44: FlashSR-synthetisierter HF-Content darf timbral_input nicht verfälschen.
 # ---------------------------------------------------------------------------
 
@@ -935,7 +935,7 @@ def test_54_ref_memory_saves_and_loads_from_disk(tmp_path):
 
 
 def test_55_ref_memory_not_saved_below_quality_gate(tmp_path):
-    """update_reference_memory() darf bei HPI ≤ 0.0 NICHT speichern (V54-Gate v9.20.0)."""
+    """update_reference_memory() darf bei HPI ≤ 0.0 NICHT speichern (V54-Gate v10.0.0)."""
     import backend.core.holistic_perceptual_gate as hpg_mod
 
     mem_path = tmp_path / "hpg_reference_memory.json"

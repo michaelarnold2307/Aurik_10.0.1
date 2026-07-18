@@ -2,7 +2,7 @@
 applyTo: "{backend/core/dsp/*.py,plugins/*.py}"
 ---
 
-# DSP / Plugin-Regeln (normativ, Aurik 9.12.x)
+# DSP / Plugin-Regeln (normativ, Aurik 10.0.0.x)
 
 ## ML-Device — IMMER über ml_device_manager
 
@@ -174,7 +174,7 @@ from backend.core.musical_goals.era_vocal_profile import resolve_formant_toleran
 pre_formants = check_formant_integrity(audio_pre, sr)  # F1–F4 via LPC
 post_formants = check_formant_integrity(audio_post, sr)
 
-# §2.71 (v9.5): Per-Formant-Toleranz — F1/F2 ±1 dB, F3/F4 ±1.5 dB
+# §2.71 (v10.0.0): Per-Formant-Toleranz — F1/F2 ±1 dB, F3/F4 ±1.5 dB
 # (war: global ±2 dB — zu grob für Weltklasse-Vokalrestauration)
 _FORMANT_TOLERANCE_DB = [1.0, 1.0, 1.5, 1.5]  # F1, F2, F3, F4
 
@@ -201,7 +201,7 @@ if np.any(vibrato_mask):
     strength = min(strength, 0.20)  # Vibrato ist Naturalness-Marker
     logger.debug("vibrato_guard: strength capped to 0.20 (%d frames)", np.sum(vibrato_mask))
 
-# §2.72 (v9.5) Vibrato-Tiefe — F0-Modulationstiefe darf nicht > ±10 % reduziert werden:
+# §2.72 (v10.0.0) Vibrato-Tiefe — F0-Modulationstiefe darf nicht > ±10 % reduziert werden:
 from backend.core.dsp.vibrato_guard import check_vibrato_depth_preservation
 _vdp = check_vibrato_depth_preservation(audio_pre, audio_post, sr)
 if _vdp.depth_reduction_pct > 10.0:
@@ -343,7 +343,7 @@ peak = np.percentile(np.abs(audio), 99.9)
 
 ---
 
-## §NTI Noise-Textur-Invariante (V19) [RELEASE_MUST v9.5]
+## §NTI Noise-Textur-Invariante (V19) [RELEASE_MUST v10.0.0]
 
 **Regel**: Das durch NR entfernte Material (`residual = pre − post`) muss dem erwarteten
 Defektprofil des Trägers entsprechen — kein Whitening (NR hat Musikinhalt entfernt).
@@ -376,7 +376,7 @@ if _ntd > 0.25:
 # VERBOTEN: NR die reines Stille-Fundament (-100 dBFS) auf analog-Material erzeugt
 ```
 
-## §MKK Mikrodynamik-Korrelation (V20) [RELEASE_MUST v9.5]
+## §MKK Mikrodynamik-Korrelation (V20) [RELEASE_MUST v10.0.0]
 
 **Regel**: Das "Atmen" einer Stimme (10ms-Frame-Energie in voiced-Zonen) muss überlebt jede NR/Dynamics-Phase.
 
@@ -397,7 +397,7 @@ if _corr < 0.97:
 # Kompressor-/NR-bedingte Glättung vernichtet Expressivität.
 ```
 
-## §MNF Mindestrauschboden in Pausen (V21) [RELEASE_MUST v9.5]
+## §MNF Mindestrauschboden in Pausen (V21) [RELEASE_MUST v10.0.0]
 
 **Regel**: Digitale Stille (−∞ dBFS) in Pausenzonen von analog-Material klingt sofort unnatürlich.
 
@@ -419,7 +419,7 @@ audio_post = apply_noise_floor_minimum(
 # VERBOTEN: Pausenzonen auf unter -70 dBFS abfallen lassen bei analog-Material
 ```
 
-## §PEP Pre-Echo-Prevention (V22) [RELEASE_MUST v9.5]
+## §PEP Pre-Echo-Prevention (V22) [RELEASE_MUST v10.0.0]
 
 **Regel**: Additive ML-Phasen (AudioSR, Harmonik-Extrapolation) können Transient-Onsets zeitlich verschieben — das zerstört den "Punch" einer Aufnahme.
 
@@ -437,7 +437,7 @@ if _ts.max_shift_ms > 2.0:
 # Non-blocking: Shift bis 2ms tolerierbar; über 2ms → proportionaler Blend
 ```
 
-## §MKI Mono-Kompatibilität (V23) [RELEASE_MUST v9.5]
+## §MKI Mono-Kompatibilität (V23) [RELEASE_MUST v10.0.0]
 
 **Regel**: Viele Restaurierungen klingen in Stereo gut, kollabieren beim Mono-Sum (Radio, TV, Streaming-Normalisierung).
 
@@ -459,7 +459,7 @@ if audio.ndim == 2 and panns_singing >= 0.25:
 # Non-blocking; niemals Veto
 ```
 
-## §SCK Spektralfarbe (V24) [RELEASE_MUST v9.5]
+## §SCK Spektralfarbe (V24) [RELEASE_MUST v10.0.0]
 
 **Regel**: Der EQ-Charakter einer Aufnahme ist Teil der künstlerischen Substanz. NR whitened subtil.
 
@@ -477,7 +477,7 @@ if _scp.correlation < 0.97:
 # Messung: 1/3-Oktav-Energiekurve 200–8000 Hz, exkl. DefectScanner-Defektfrequenzen
 ```
 
-## §WBG Wärmeband-Guard (V25) [RELEASE_MUST v9.5]
+## §WBG Wärmeband-Guard (V25) [RELEASE_MUST v10.0.0]
 
 **Regel**: 200–800 Hz ist das „Wärme“-Band. Kumulativer Verlust durch mehrere NR/EQ-Phasen macht Aufnahmen „dünn“.
 
@@ -501,7 +501,7 @@ if _ctx["warmth_band_loss_db"] > 2.5:
 # VERBOTEN: Wärme-Verlust > 4 dB akkumuliert → Aufnahme klingt unnatürlich „radiogefärbt“
 ```
 
-## §ATI Angriffstransienten-Integrität (V26) [RELEASE_MUST v9.5]
+## §ATI Angriffstransienten-Integrität (V26) [RELEASE_MUST v10.0.0]
 
 **Regel**: Die ersten 0–20 ms eines Phonem-Onsets sind perceptuell die wichtigsten Frames — sie bestimmen Punch, Klarheit und Artikulation.
 
@@ -522,7 +522,7 @@ audio_post = apply_onset_protection_mask(
 # Non-blocking: Überschreitung blend-reduziert, kein Veto
 ```
 
-## §WLPC Noise-Robuste Formant-Extraktion (V55) [RELEASE_MUST v9.15.3]
+## §WLPC Noise-Robuste Formant-Extraktion (V55) [RELEASE_MUST v10.0.0]
 
 **Regel**: `lpc_formant_enhance()` und `_LPCFormantTracker.enhance()` MÜSSEN `era_decade` übergeben,
 wenn der Aufrufkontext das Era-Jahrzehnt kennt — insbesondere bei `era_decade < 1960`

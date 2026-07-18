@@ -554,7 +554,7 @@ class MusicalQualityAssurance:
             min_quality_level=QualityLevel.GOOD,
             min_overall_score=70.0,
             min_authenticity=0.75,  # Authentizität SEHR wichtig
-            max_processing_intensity=1.0,  # Aurik 9: bis zu 50 Phasen — Intensität durch §2.45+PMGG reguliert
+            max_processing_intensity=1.0,  # Aurik 10.0.0: bis zu 50 Phasen — Intensität durch §2.45+PMGG reguliert
             require_natural_sound=True,
             require_authentic_character=True,
             allow_modern_enhancement=False,
@@ -1163,14 +1163,14 @@ class MusicalQualityAssurance:
         # Calculate processing intensity.
         # Deduplicate module names first: retries/candidate loops can append duplicates
         # and otherwise overstate intensity (false OVERPROCESSED verdicts).
-        # §2.54: Aurik 9 runs 8–50 unique phases per restoration. The original divisor
+        # §2.54: Aurik 10.0.0 runs 8–50 unique phases per restoration. The original divisor
         # of 8.0 was calibrated for a simple 8-module pipeline and always produces
-        # intensity=1.0 for Aurik 9, causing misleading OVERPROCESSED verdicts.
+        # intensity=1.0 for Aurik 10.0.0, causing misleading OVERPROCESSED verdicts.
         # Each phase is already regulated by §2.45 Minimal-Intervention + PMGG;
         # phase count alone is not a meaningful over-processing indicator here.
         _unique_modules = {m for m in modules_applied if isinstance(m, str) and m.strip()}
         _N_MODULES = max(len(_unique_modules), 1)
-        # Normalise to Aurik 9's practical maximum (~50 unique phase IDs per run).
+        # Normalise to Aurik 10.0.0's practical maximum (~50 unique phase IDs per run).
         processing_intensity = min(_N_MODULES / 50.0, 1.0)
 
         # Check mode standards

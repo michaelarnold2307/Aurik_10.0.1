@@ -181,8 +181,8 @@ class CrashRecoveryGuard:
         for path in (json_path, audio_path):
             try:
                 os.remove(path)
-            except OSError:
-                pass
+            except OSError as _crg1_exc:
+                logger.debug("crash_recovery_guard: checkpoint file removal failed (non-critical): %s", _crg1_exc)
 
     def find_pending_checkpoints(self) -> list[dict[str, Any]]:
         """Discover all valid crash checkpoints awaiting recovery.
@@ -317,8 +317,8 @@ class CrashRecoveryGuard:
         ):
             try:
                 os.remove(stem + suffix)
-            except OSError:
-                pass
+            except OSError as _crg2_exc:
+                logger.debug("crash_recovery_guard: suffix file removal failed (non-critical): %s", _crg2_exc)
 
     # ------------------------------------------------------------------
     # SIGTERM integration (§3.9.2 enhancement)

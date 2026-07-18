@@ -1,4 +1,4 @@
-"""Unterbrechungsfreier Audio-Player für Aurik (v9.11.14).
+"""Unterbrechungsfreier Audio-Player für Aurik (v10.0.0).
 
 Verwendet einen persistenten ``sounddevice.OutputStream`` mit Callback-basierter
 Audioausgabe.  Quellwechsel (Original ↔ Restauriert ↔ Live-Preview) erfolgen

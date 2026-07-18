@@ -11,7 +11,7 @@ Konfidenz-Schwellwerte:
     0.50–0.80: GP-Bounds um 20 % konservativer, Nutzer-Hinweis aktivieren
     < 0.50:  konservative Mindest-Parameter, Musical-Goal-Schwellen +0.02
 
-Referenz: §2.15 Aurik-9-Spec (v9.9.5)
+Referenz: §2.15 Aurik-9-Spec (v10.0.0)
 Autor: Aurik Development Team
 Datum: 20. Februar 2026
 """

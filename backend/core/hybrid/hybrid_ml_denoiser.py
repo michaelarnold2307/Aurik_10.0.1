@@ -1,5 +1,5 @@
 """
-Hybrid ML Denoiser - Aurik 9.0
+Hybrid ML Denoiser - Aurik 10.0.0
 ================================
 
 Kombiniert OMLSA (DSP-basiert, schnell) mit Resemble Enhance (ML-basiert, hochwertig)
@@ -30,7 +30,7 @@ Performance:
     - BALANCED: ~1.5× RT (OMLSA + selective Resemble)
     - MAXIMUM: ~3-5× RT (full pipeline)
 
-Author: Aurik 9.0 Development Team
+Author: Aurik 10.0.0 Development Team
 Version: 1.0.0
 Date: 16. Februar 2026
 """

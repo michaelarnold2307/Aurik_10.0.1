@@ -60,12 +60,12 @@ Hinweis: Tests und ausgeschlossene Drittanbieter-/Artefaktpfade wurden nicht ges
 - backend/carrier_forensics.py:23 | deprecated | "backend.carrier_forensics ist veraltet (Aurik 6.0). "
 - backend/carrier_ml_classifier.py:23 | deprecated | "backend.carrier_ml_classifier ist veraltet (Aurik 6.0). "
 - backend/core/ab_test_manager.py:2 | deprecated | Deprecated: ABTestManager → ``core.ab_compare_manager.ABCompareManager``.
-- backend/core/ab_test_manager.py:4 | deprecated | Dieses Modul ist veraltet seit v9.10.45.
+- backend/core/ab_test_manager.py:4 | deprecated | Dieses Modul ist veraltet seit v10.0.0.
 - backend/core/ab_test_manager.py:11 | deprecated | # Alt (veraltet):
 - backend/core/ab_test_manager.py:32 | deprecated | """Deprecated Stub — Nachfolger: :class:`~core.ab_compare_manager.ABCompareManager`.
 - backend/core/ab_test_manager.py:32 | stub | """Deprecated Stub — Nachfolger: :class:`~core.ab_compare_manager.ABCompareManager`.
 - backend/core/ab_test_manager.py:34 | deprecated | .. deprecated:: 9.10.45
-- backend/core/ab_test_manager.py:42 | deprecated | "ABTestManager ist veraltet (seit v9.10.45). "
+- backend/core/ab_test_manager.py:42 | deprecated | "ABTestManager ist veraltet (seit v10.0.0). "
 - backend/core/ab_test_manager.py:52 | stub | """Stub — ohne Funktion. Nutze ``ABCompareManager.compare_audio()``."""
 - backend/core/ab_test_manager.py:55 | stub | """Stub — ohne Funktion. Nutze ``ABCompareManager.store()``."""
 - backend/core/ab_test_manager.py:58 | stub | """Stub — ohne Funktion."""
@@ -162,9 +162,9 @@ Hinweis: Tests und ausgeschlossene Drittanbieter-/Artefaktpfade wurden nicht ges
 - backend/core/unified_restorer_v3.py:5076 | bypass | # nur ein manueller Studio-2026-Modus darf diesen Override aufheben (kein automatischer Bypass).
 - backend/core/unified_restorer_v3.py:9224 | bypass | "action": str(_spd_decision.get("action", "bypass")),
 - backend/core/unified_restorer_v3.py:9684 | stub | logger.debug("✅ DummyModels: %d Stub-Modelle", _dm_result["n_models"])
-- backend/core/unified_restorer_v3.py:11474 | deprecated | # Deprecated v9.10.45: ABTestManager war immer leer (frische Instanz je Aufruf,
+- backend/core/unified_restorer_v3.py:11474 | deprecated | # Deprecated v10.0.0: ABTestManager war immer leer (frische Instanz je Aufruf,
 - backend/defect_detection/treatment_recommender.py:294 | placeholder | """Create a placeholder for defects with no treatment."""
-- backend/error_notifier.py:1 | stub | """error_notifier.py — Minimaler Fehler-Benachrichtigungs-Stub für Aurik 9.
+- backend/error_notifier.py:1 | stub | """error_notifier.py — Minimaler Fehler-Benachrichtigungs-Stub für Aurik 10.0.0.
 - backend/error_notifier.py:19 | stub | Aktuell: stille Stub-Implementierung — alle Fehler gehen über
 - backend/ethics_engine.py:5 | deprecated | .. deprecated::
 - backend/ethics_engine.py:25 | deprecated | "backend.ethics_engine ist veraltet. Bitte 'from backend.core.epistemic_gate.ethics_engine import ...' verwenden.",
@@ -378,12 +378,12 @@ Hinweis: Tests und ausgeschlossene Drittanbieter-/Artefaktpfade wurden nicht ges
 - backend/carrier_forensics.py:23 | deprecated | "backend.carrier_forensics ist veraltet (Aurik 6.0). "
 - backend/carrier_ml_classifier.py:23 | deprecated | "backend.carrier_ml_classifier ist veraltet (Aurik 6.0). "
 - backend/core/ab_test_manager.py:2 | deprecated | Deprecated: ABTestManager → ``core.ab_compare_manager.ABCompareManager``.
-- backend/core/ab_test_manager.py:4 | deprecated | Dieses Modul ist veraltet seit v9.10.45.
+- backend/core/ab_test_manager.py:4 | deprecated | Dieses Modul ist veraltet seit v10.0.0.
 - backend/core/ab_test_manager.py:11 | deprecated | # Alt (veraltet):
 - backend/core/ab_test_manager.py:32 | deprecated | """Deprecated Stub — Nachfolger: :class:`~core.ab_compare_manager.ABCompareManager`.
 - backend/core/ab_test_manager.py:32 | stub | """Deprecated Stub — Nachfolger: :class:`~core.ab_compare_manager.ABCompareManager`.
 - backend/core/ab_test_manager.py:34 | deprecated | .. deprecated:: 9.10.45
-- backend/core/ab_test_manager.py:42 | deprecated | "ABTestManager ist veraltet (seit v9.10.45). "
+- backend/core/ab_test_manager.py:42 | deprecated | "ABTestManager ist veraltet (seit v10.0.0). "
 - backend/core/ab_test_manager.py:52 | stub | """Stub — ohne Funktion. Nutze ``ABCompareManager.compare_audio()``."""
 - backend/core/ab_test_manager.py:55 | stub | """Stub — ohne Funktion. Nutze ``ABCompareManager.store()``."""
 - backend/core/ab_test_manager.py:58 | stub | """Stub — ohne Funktion."""
@@ -590,7 +590,7 @@ Hinweis: Tests und ausgeschlossene Drittanbieter-/Artefaktpfade wurden nicht ges
 - backend/core/unified_restorer_v3.py:9224 | bypass | "action": str(_spd_decision.get("action", "bypass")),
 - backend/core/unified_restorer_v3.py:9684 | stub | logger.debug("✅ DummyModels: %d Stub-Modelle", _dm_result["n_models"])
 - backend/core/unified_restorer_v3.py:9832 | pass | pass
-- backend/core/unified_restorer_v3.py:11474 | deprecated | # Deprecated v9.10.45: ABTestManager war immer leer (frische Instanz je Aufruf,
+- backend/core/unified_restorer_v3.py:11474 | deprecated | # Deprecated v10.0.0: ABTestManager war immer leer (frische Instanz je Aufruf,
 - backend/core/unified_restorer_v3.py:14259 | pass | pass
 - backend/core/unified_restorer_v3.py:14292 | pass | pass
 - backend/core/unified_restorer_v3.py:14333 | pass | pass
@@ -600,7 +600,7 @@ Hinweis: Tests und ausgeschlossene Drittanbieter-/Artefaktpfade wurden nicht ges
 - backend/core/unified_restorer_v3.py:16482 | pass | pass  # non-critical telemetry, never blocks pipeline
 - backend/core/unified_restorer_v3.py:16754 | pass | pass
 - backend/defect_detection/treatment_recommender.py:294 | placeholder | """Create a placeholder for defects with no treatment."""
-- backend/error_notifier.py:1 | stub | """error_notifier.py — Minimaler Fehler-Benachrichtigungs-Stub für Aurik 9.
+- backend/error_notifier.py:1 | stub | """error_notifier.py — Minimaler Fehler-Benachrichtigungs-Stub für Aurik 10.0.0.
 - backend/error_notifier.py:19 | stub | Aktuell: stille Stub-Implementierung — alle Fehler gehen über
 - backend/ethics_engine.py:5 | deprecated | .. deprecated::
 - backend/ethics_engine.py:25 | deprecated | "backend.ethics_engine ist veraltet. Bitte 'from backend.core.epistemic_gate.ethics_engine import ...' verwenden.",

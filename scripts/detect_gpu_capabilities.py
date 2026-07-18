@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import sys
 from dataclasses import asdict
 from pathlib import Path
@@ -24,6 +25,8 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from backend.core.ml.backend_router import MLEngineConfig, detect_gpu_capabilities
+
+logger = logging.getLogger(__name__)
 
 
 def _check_library(name: str, import_path: str) -> dict:
@@ -46,14 +49,10 @@ def _estimate_vram_mb(config: MLEngineConfig) -> int | None:
 
             # CUDA-VRAM via onnxruntime ist begrenzt — Fallback auf Treiber-API
             return None  # onnxruntime exponiert VRAM nicht direkt
-        elif provider == "rocm":
+        if provider in ("rocm", "mps", "directml"):
             return None
-        elif provider == "mps":
-            return None  # Apple Silicon nutzt Unified Memory
-        elif provider == "directml":
-            return None
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.debug("%s: non-critical exception: %s", __name__, _e)
     return None
 
 

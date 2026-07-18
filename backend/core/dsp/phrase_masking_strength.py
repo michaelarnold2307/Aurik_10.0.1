@@ -1,5 +1,5 @@
 """
-Phrase Masking Strength Map — Lücke 3 (v9.12.x)
+Phrase Masking Strength Map — Lücke 3 (v10.0.0.x)
 ================================================
 
 Berechnet eine zeitaufgelöste Stärken-Modulations-Map, die NR/Phase-Stärken
@@ -21,7 +21,7 @@ ALGORITHMUS:
 Ausgabe: PhraseStrengthMap — aufrufbar mit Zeitstempel → gibt Stärken-Modifier.
 
 Author: Aurik Development Team
-Version: 1.0.0 (v9.12.x — Lücke 3)
+Version: 1.0.0 (v10.0.0.x — Lücke 3)
 """
 
 from __future__ import annotations

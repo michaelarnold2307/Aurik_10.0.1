@@ -2,7 +2,7 @@
 denker/perceptual_council.py — PerceptualQualityCouncil
 ========================================================
 
-Zentrale perzeptive Qualitätbewertungsinstanz für Aurik 9.
+Zentrale perzeptive Qualitätbewertungsinstanz für Aurik 10.0.0.
 
 Bisher war die finale Qualitätsschätzung auf 5+ unabhängige Module verteilt:
   - quality_estimate (Spec §8.1) in aurik_denker.py (Formel)
@@ -14,7 +14,7 @@ Bisher war die finale Qualitätsschätzung auf 5+ unabhängige Module verteilt:
 Dieser Council vereint alle perzeptiven Metriken in EINER gewichteten
 Bewertung und gibt eine klare Handlungsempfehlung.
 
-Spec: §8.1 (erweitert), §v10.3 — v9.15.2
+Spec: §8.1 (erweitert), §v10.3 — v10.0.0
 """
 
 from __future__ import annotations

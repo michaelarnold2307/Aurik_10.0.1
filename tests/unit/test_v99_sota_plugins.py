@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 """
-Unit-Tests für die 6 SOTA-Plugins — Aurik 9
+Unit-Tests für die 6 SOTA-Plugins — Aurik 10.0.0
 
 Tests nach §5.1 Anforderungen:
   - Shape / Dtype

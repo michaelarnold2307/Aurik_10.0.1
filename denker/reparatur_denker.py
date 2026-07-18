@@ -131,7 +131,7 @@ class ReparaturDenker:
         }
     )
 
-    # Material-adaptive Schwellwertprofile (§2.41 Klangtreue v9.10.117)
+    # Material-adaptive Schwellwertprofile (§2.41 Klangtreue v10.0.0)
     # Quellen: Copeland 2008 (Manual of Analogue Sound Restoration),
     #          Katz 2007 (Mastering Audio)
     # Shellac/Wax = hoher Grundrausch + viele Clicks → aggressivere Detektion.
@@ -214,7 +214,7 @@ class ReparaturDenker:
         material: str,
         transfer_chain: list[str] | None = None,
     ) -> None:
-        """Apply material-adaptive threshold profile (§2.41 v9.10.117).
+        """Apply material-adaptive threshold profile (§2.41 v10.0.0).
 
         Falls material im ``_MATERIAL_PROFILES``-Dict enthalten ist,
         werden die 4 Schwellwerte überschrieben. Sonst bleiben Defaults.

@@ -6,7 +6,7 @@ Competitive Benchmarking Suite for AURIK v9 (Legacy Suite — eingeschränkte CI
 ⚠️  WICHTIGER HINWEIS — VERBOTENE METRIKEN (spec §3.1, §4.4):
 
     PESQ, SI-SDR, STOI, VISQOL (Speech-Mode), DNSMOS und NISQA sind für
-    Musikqualitäts-Bewertung in Aurik 9 ABSOLUT VERBOTEN. Sie sind auf
+    Musikqualitäts-Bewertung in Aurik 10.0.0 ABSOLUT VERBOTEN. Sie sind auf
     Telefonsprach-Korpora (16 kHz, 300–3400 Hz) trainiert und bewerten
     Musik systematisch falsch.
 
@@ -20,7 +20,7 @@ Competitive Benchmarking Suite for AURIK v9 (Legacy Suite — eingeschränkte CI
     Vgl. FORBIDDEN_METRICS-Konstante weiter unten.
 
 Zweck (Legacy):
-    Manueller Vergleich von Aurik 9 gegen:
+    Manueller Vergleich von Aurik 10.0.0 gegen:
     - iZotope RX 11 (Industry Standard)
     - Accusonus ERA (AI-Powered)
     - Waves Clarity (Professional Grade)

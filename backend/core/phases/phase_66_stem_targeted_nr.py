@@ -1,7 +1,7 @@
 """
 Phase 66 — Stem-Targeted NR (Vokal + Begleitung, getrennte Restaurierung).
 
-Spec §7.11 [RELEASE_MUST] (v9.15.1)
+Spec §7.11 [RELEASE_MUST] (v10.0.0)
 
 Zweck: Qualitätsstufe, die mit einer klassischen wideband-NR auf dem Gesamtmix
 nicht erreichbar ist: Vokal-Stem und Begleitungs-Stem werden getrennt rausch-
@@ -39,7 +39,7 @@ Wissenschaftliche Grundlage:
     - §4.4a Spec: BSRoFormer = Primär, MDX23C = Fallback (Spec 04, SOTA-Matrix)
 
 Author: Aurik Development Team
-Version: 1.0.0 (v9.15.1)
+Version: 1.0.0 (v10.0.0)
 """
 
 from __future__ import annotations

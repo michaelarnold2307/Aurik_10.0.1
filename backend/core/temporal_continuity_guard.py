@@ -1,4 +1,4 @@
-"""TemporalContinuityGuard — Post-Phase-Hook (§2.69, v9.13).
+"""TemporalContinuityGuard — Post-Phase-Hook (§2.69, v10.0.0).
 
 Erkennt Frame-by-Frame-Diskontinuitäten nach jeder Phase anhand des
 Frame-RMS-Varianz-Verhältnisses (pre/post). Kein Veto — ausschließlich
@@ -43,7 +43,7 @@ class TemporalContinuityResult:
         variance_ratio: Frame-RMS-Varianz(post) / Frame-RMS-Varianz(pre).
         phase_id:       ID der geprüften Phase.
         critical:       True wenn variance_ratio > 8.0.
-        gain_step_db:   Abrupter Gain-Sprung an der Phasengrenze (§2.69 v9.5).
+        gain_step_db:   Abrupter Gain-Sprung an der Phasengrenze (§2.69 v10.0.0).
                         > 1.5 dB → WARNING (Mikro-Klick-Risiko). Kein Veto.
     """
 
@@ -103,8 +103,8 @@ def check_temporal_continuity(
         ok = ratio <= _VARIANCE_RATIO_WARN
         critical = ratio > _VARIANCE_RATIO_CRITICAL
 
-        # §2.69 v9.5: Gain-Sprung einer Phase messen (abrupter RMS-Anstieg/-Abfall).
-        # FIX v9.12.9c: Vergleich MITTLERER RMS (pre vs. post) — nicht rms_pre[-N:] vs.
+        # §2.69 v10.0.0: Gain-Sprung einer Phase messen (abrupter RMS-Anstieg/-Abfall).
+        # FIX v10.0.0c: Vergleich MITTLERER RMS (pre vs. post) — nicht rms_pre[-N:] vs.
         # rms_post[:N] (Lied-Ende vs. Lied-Anfang). Bei Fade-out-Material lieferte die
         # alte Logik immer ~120 dB (Near-Stille vs. Vollpegel) → systematisches false-
         # positive für JEDE Phase, doppelter Rescue-Aufruf, nie hilfreich. Korrekte

@@ -1,5 +1,5 @@
 """
-Tube/Tape Harmonic Saturation Fingerprint — §Lücke-B (v9.12.x)
+Tube/Tape Harmonic Saturation Fingerprint — §Lücke-B (v10.0.0.x)
 ================================================================
 Erkennt und schützt die authentische H2/H4-Röhrensignatur in historischen
 Aufnahmen.  Verhindert, dass NR-Phasen diese musikologisch bedeutsame

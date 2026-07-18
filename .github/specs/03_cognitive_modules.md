@@ -41,7 +41,7 @@
 | `CrepePlugin` | `plugins/crepe_plugin.py` | Pitch-Tracking f₀, CNN-basiert |
 | `FormantTracker` | `plugins/formant_tracker.py` | LPC-Formanten F1–F4 |
 
-### §2.1a [RELEASE_MUST] Exzellenz-API-Kompatibilitätsvertrag (v9.11.1)
+### §2.1a [RELEASE_MUST] Exzellenz-API-Kompatibilitätsvertrag (v10.0.0)
 
 Der Orchestrator (`AurikDenker`) MUSS mit beiden Exzellenz-Schnittstellen kompatibel bleiben:
 
@@ -54,7 +54,7 @@ Der Orchestrator (`AurikDenker`) MUSS mit beiden Exzellenz-Schnittstellen kompat
 - Fallback-Pfad muss Stage-Notes eindeutig markieren (`Legacy-Goal-Messpfad`).
 - Bei fehlender Primärmethode darf die Pipeline nicht abbrechen, solange Legacy-Pfad verfügbar ist.
 
-### §2.36b Lyrics-Produktivpfad und Datenschutzvertrag (bindend ab v9.10.100)
+### §2.36b Lyrics-Produktivpfad und Datenschutzvertrag (bindend ab v10.0.0)
 
 - Autoritatives Kernmodul für Lyrics-gestützte Verarbeitung ist ausschließlich `backend/core/lyrics_guided_enhancement.py`.
 - `backend/lyrics_guided/` ist Legacy-/Forschungsbestand. Diese Module dürfen ohne explizite Freigabe nicht als Produktionspfad, nicht als Referenzimplementierung und nicht als normative Architekturquelle behandelt werden.
@@ -85,7 +85,7 @@ sim = embedding.cosine_similarity(other)  # ∈ [-1, 1]
 
 ```python
 # 62 Kausal-Ursachen (≠ 54 DefectTypes des DefectScanners):
-# Hinweis: transport_bump (v9.10.57b) und vocal_harshness (v9.10.77) als
+# Hinweis: transport_bump (v10.0.0b) und vocal_harshness (v10.0.0) als
 # eigenständige Ursachen ergänzt; Gruppe Pitch/Dynamik dadurch 4→5.
 #
 # ── Analoge Magnetband-Ursachen (10) ─────────────────────────────────────
@@ -119,7 +119,7 @@ sim = embedding.cosine_similarity(other)  # ∈ [-1, 1]
 #
 # ── Pitch / Dynamik / Vokal (5) ──────────────────────────────────────────
 #   pitch_drift, reverb_excess, transient_smearing, sibilance,
-#   vocal_harshness  (v9.10.77 — Vokal-Härte/Übersteuerung/Kratzigkeit 2–6 kHz)
+#   vocal_harshness  (v10.0.0 — Vokal-Härte/Übersteuerung/Kratzigkeit 2–6 kHz)
 #
 # ── Vintage (Schutz) (1) ────────────────────────────────────────────────
 #   soft_saturation  (BEWAHREN — P(phases) = leer)
@@ -212,7 +212,7 @@ class VoiceGender:
 | Piano / Keyboard | `phase_52_piano_restoration` | ≥ 0.5 |
 | Singing voice / Vocals | `phase_19` + `phase_42` + `phase_43` + VocalAIEnhancement | Singing ≥ **0.40** (Soft 0.35–0.40: 50 % Strength) |
 
-**[RELEASE_MUST] §2.9a PANNs Soft-Activation-Regel (v9.10.100+):**
+**[RELEASE_MUST] §2.9a PANNs Soft-Activation-Regel (v10.0.0+):**
 Vokale PANNs-Konfidenz im Bereich **0.35–0.40** führt zu 50 % Vocal-Enhancement-Strength
 (kein Hard-Block). Hintergrund: Ensemble-Aufnahmen mit schwächem Vocalkanal liefern
 typischerweise 0.36–0.39 — ein harter Block bei 0.40 unterbindet Enhancement dort, wo
@@ -262,7 +262,7 @@ else:
 #   decade ≤ 1960: noise_reduction_strength ~ N(0.75, 0.08)
 #   decade ≥ 1970: noise_reduction_strength ~ N(0.50, 0.10)
 
-# EraResult hat ab v9.10.45 is_remaster_suspected: bool
+# EraResult hat ab v10.0.0 is_remaster_suspected: bool
 # RemasterDetector: floor_score + bw_score → confidence ≥ 0.35 → is_remaster_suspected=True
 ```
 
@@ -313,7 +313,7 @@ Nutzer-Meldung: „Deutscher Schlager erkannt — Akkordeon-Klangcharakter und S
 
 ---
 
-### §2.19.2 17-Genre-System (Non-Schlager, ab v9.10.103)
+### §2.19.2 17-Genre-System (Non-Schlager, ab v10.0.0)
 
 `_compute_non_schlager_scores()` berechnet für alle 16 Non-Schlager-Genres einen Wert ∈ [0, 1]
 aus 5 akustischen Parametern:
@@ -334,7 +334,7 @@ aus 5 akustischen Parametern:
 
 Andernfalls: `genre_label="Unbekannt"`, `open_set_unknown=True`.
 
-### §2.19.3 Vollständige Genre-Liste (v9.10.103)
+### §2.19.3 Vollständige Genre-Liste (v10.0.0)
 
 | Label | gp_memory_key | Methode |
 | --- | --- | --- |
@@ -356,7 +356,7 @@ Andernfalls: `genre_label="Unbekannt"`, `open_set_unknown=True`.
 | Gospel | `gospel` | `_score_gospel` |
 | Reggae | `reggae` | `_score_reggae` |
 
-### §2.19.4 [RELEASE_MUST] Genre-Diskriminierungs-Regeln (Anti-Falsifikations-Matrix, v9.10.103)
+### §2.19.4 [RELEASE_MUST] Genre-Diskriminierungs-Regeln (Anti-Falsifikations-Matrix, v10.0.0)
 
 **Zweck:** Verhindert, dass akustisch ähnliche Genres sich gegenseitig verdrücken.
 Alle Regeln sind kanonisch im Code-Kommentar jeder `_score_*`-Methode dokumentiert.
@@ -432,7 +432,7 @@ for _method in ("_score_pop", "_score_blues", "_score_soul_rnb", "_score_country
 
 ## §2.20 Genre-Restaurierungsprofile
 
-### [RELEASE_MUST] Aktivierungsregeln (v9.10.102)
+### [RELEASE_MUST] Aktivierungsregeln (v10.0.0)
 
 Jedes Genre-Profil wird NUR aktiviert wenn die zugehörige PANNs-Kategorie den Schwellwert
 überschreitet. Die Erkennung läuft parallel im `_run_genre_classifier`-Thread (§9.7.2 Spec 08).
@@ -468,7 +468,7 @@ DEFAULT_RESTORATION_PROFILE = {
 
 **Hinweis zu den 12 Genres ohne eigenes Profil**: Pop, Blues, Soul/R&B, Country, Folk, Funk, Electronic, Hip-Hop, Metal, Latin, Gospel und Reggae werden zwar klassifiziert (17-Genre-System §2.19.2) und erhalten eigene `gp_memory_key`-Einträge (→ GP lernt genre-spezifisch), verwenden aber `DEFAULT_RESTORATION_PROFILE` als Basis. Das ist **absichtlich konservativ**: ohne validierte akustische Constraints riskiert ein zu spezifisches Profil Artefakte. Sobald > 50 GP-Beobachtungen pro Genre vorliegen, können genre-spezifische Profile nachgerüstet werden.
 
-### [RELEASE_MUST] Genre-Profil-Override-Invariante gegenüber CausalDefectReasoner (v9.10.102)
+### [RELEASE_MUST] Genre-Profil-Override-Invariante gegenüber CausalDefectReasoner (v10.0.0)
 
 **Problem:** CausalDefectReasoner aktiviert `phase_20`/`phase_49` bei erkanntem `REVERB_EXCESS`.
 `KLASSIK_RESTORATION_PROFILE` setzt `phase_20_dereverb_enabled: False` — aber ohne Durchsetzungsregel
@@ -548,8 +548,8 @@ OPER_RESTORATION_PROFILE = {
 ## §2.27 TransientDecoupledProcessing (TDP)
 
 ```python
-HPSS_HARMONIC_KERNEL: int = 17    # Frames (Frequenzachse) — v9.10.119, Fitzgerald 2010
-HPSS_PERCUSSIVE_KERNEL: int = 13  # Frames (Zeitachse) — v9.10.119, perkussive Schärfe
+HPSS_HARMONIC_KERNEL: int = 17    # Frames (Frequenzachse) — v10.0.0, Fitzgerald 2010
+HPSS_PERCUSSIVE_KERNEL: int = 13  # Frames (Zeitachse) — v10.0.0, perkussive Schärfe
 PERCUSSIVE_ONLY_PHASES: list[str] = [
     "phase_01_click_removal", "phase_27_click_pop_removal",
 ]
@@ -598,7 +598,7 @@ MIN_LEVEL_LUFS: float = -60.0     # Stille-Segmente: G[k] = 0
 # True-Peak-Prüfung nach Morphing: −1.0 dBTP zwingend
 ```
 
-**[RELEASE_MUST] MDEM tail-gap-Invariante (v9.10.100):**
+**[RELEASE_MUST] MDEM tail-gap-Invariante (v10.0.0):**
 `gain_envelope` MUSS lückenlos alle Samples bis `n-1` abdecken. Die Standard-Frame-Formel
 `(n - fsize) // hop + 1` lässt bis zu `hop - 1 = 9599` Samples (⋜200 ms) am Songschluss
 unbehandelt (gain = 1.0). Fix:
@@ -894,7 +894,7 @@ COLOR_MAP = {
 # Datenschutz: Lyrics-Text NIEMALS geloggt, NIEMALS in RestorationResult.metadata
 ```
 
-### §2.36a Phonem-spezifische DSP-Algorithmen (v9.10.90, [RELEASE_MUST])
+### §2.36a Phonem-spezifische DSP-Algorithmen (v10.0.0, [RELEASE_MUST])
 
 Einheitlicher SALIENCY_BOOST-Gain reicht nicht — Phonemklassen erfordern
 unterschiedliche Spektral-/Zeit-Behandlung.
@@ -1050,7 +1050,7 @@ assert ergebnis.qualitaet >= 0.55  # PQS-MOS-basiert
 
 Jeder Sub-Denker folgt §3.2 Singleton-Pattern. SR-Invariante `assert sample_rate == 48000` in jedem. `§6.6-Bindung`: TontraegerketteDenker läuft VOR DefektDenker.
 
-### §11.7a [RELEASE_MUST] Denker-Rollendifferenzierung (v9.10.74)
+### §11.7a [RELEASE_MUST] Denker-Rollendifferenzierung (v10.0.0)
 
 Die drei Ausführungs-Denker (Stufen 6–8 in `AurikDenker._orchestriere()`) haben **disjunkte Verantwortungen**. Jeder darf **ausschließlich** seine Domäne bearbeiten.
 
@@ -1124,7 +1124,7 @@ Zusätzliche Pflichtaufgaben:
 
 ---
 
-## §2.44 [RELEASE_MUST] IntentionalArtifactClassifier (v9.12.0)
+## §2.44 [RELEASE_MUST] IntentionalArtifactClassifier (v10.0.0)
 
 > **Konzeptuelle Kernlücke geschlossen**: Ohne diese Klassifikation behandelt Aurik
 > authentischen Epochen-Klangcharakter als Defekt — und repariert ihn weg. Das ist der
@@ -1193,7 +1193,7 @@ _restoration_context["preserve_mask"] = _iac.get_preserve_mask(audio, sr, _artif
 
 ---
 
-## §2.45 [RELEASE_MUST] PhraseStructureAnalyzer (v9.12.0)
+## §2.45 [RELEASE_MUST] PhraseStructureAnalyzer (v10.0.0)
 
 > **Konzeptuelle Kernlücke geschlossen**: Restaurierung ohne Phrasengrenzen-Awareness
 > behandelt Musik als zufälliges Signal. Phrase-Ende ist der natürlichste Punkt für
@@ -1271,7 +1271,7 @@ UV3 MUSS vor `PMGG.wrap_phase()` eine `vocal_zone_strength_policy` erzeugen und 
 
 ---
 
-## §2.46 [RELEASE_MUST] TemporalConsistencyGuard (v9.12.0)
+## §2.46 [RELEASE_MUST] TemporalConsistencyGuard (v10.0.0)
 
 > **Konzeptuelle Kernlücke**: Aurik optimiert lokal pro Segment, nicht temporal über den
 > gesamten Titel. Das führt zu hörbaren Qualitätssprüngen in langen Titeln (> 5 min),

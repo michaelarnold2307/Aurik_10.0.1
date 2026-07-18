@@ -1,7 +1,7 @@
 """
 BreathDetector – ZCR + Energy-based breath segment detection (§2.8).
 
-Algorithm (per Aurik 9.9 spec §2.8):
+Algorithm (per Aurik 10.0.0 spec §2.8):
     Kriterium: ZCR > ZCR_THRESHOLD AND energy < ENERGY_THRESHOLD_DBFS
     1. Short-time RMS energy in 25 ms frames (hop 10 ms)
     2. Zero-crossing rate in the same frames

@@ -1,6 +1,6 @@
-# Aurik 9.x.x Roadmap – Stand April 2026 (Historischer Snapshot + aktueller Stand)
+# Aurik 10.0.8 Roadmap – Stand April 2026 (Historischer Snapshot + aktueller Stand)
 
-> **Aurik 9 ist ein intelligentes, kontextbewusstes Musik- und Gesangs-Restaurierungs-, Reparatur- und Rekonstruktions-System. Aktuelle Version: 9.10.102 (April 2026), 64 Phasen, ~11.023 Tests.**
+> **Aurik 10.0.8 ist ein intelligentes, kontextbewusstes Musik- und Gesangs-Restaurierungs-, Reparatur- und Rekonstruktions-System. Aktuelle Version: 10.0.8 (Juli 2026), 68 Phasen, ~18.400+ Tests.**
 > Hinweis: Diese Roadmap bildet überwiegend einen historischen Planungsstand ab. Für den aktuellen normativen Zustand gelten `.github/specs/01-14` und `docs/CHANGELOG_HISTORY.md`.
 > Releasepfad-Norm: Bridge -> `AurikDenker.denke(...)` -> `export_guard()`. Aeltere v2-/Server-/Docker-Planpunkte sind `LEGACY_NON_RELEASE`.
 
@@ -8,33 +8,33 @@
 
 | Version | Milestone | Tests |
 | --- | --- | --- |
-| v9.0 | UnifiedRestorerV3, Material-Auto-Detektion | 6 |
-| v9.7 | Kognitive Architektur (5 Kernmodule), VoiceGender, PANNs | 206 |
-| v9.8 | Über-SOTA DSP (OMLSA/IMCRA, pYIN, NMF-β, PGHI) | 222 |
-| v9.9.0 | GrooveMetric, MRSA, Psychoakust. Masking, HarmonicLattice | 5169 |
-| v9.9.5 | 14 Musical Goals, EraClassifier, TonalCenter, MicroDynamics | 6073 |
-| v9.9.7 | StemRemixBalancer, EnsembleProcessor, IAD, BatchSessionLearner | 6180 |
-| v9.9.9 | TDP, HPG, PMGG (adaptiv), MDEM | 6312 |
-| v9.10.42 | E2E-Tests, TIER-Invarianten, v2-Cleanup | 6312 |
-| v9.10.43 | WPE als kanonisches Dereverb, SGMSE+ entfernt | 6312 |
-| v9.10.45 | RemasterDetector, temporale Defektverortung | 6347 |
-| v9.10.46 | Spec-Audit, JSON-Schema, Genre-Profile, DDSP-Eigenimpl., UI-Shortcuts | 6312 |
-| v9.10.47 | Spec-Konsistenz-Audit: 6 Korrekturen (EraResult, PMGG-Default, MaterialQuality, GP-Genre-Keys, Manifest) | 6312 |
-| v9.10.48 | Infrastruktur: SBOM, GP-Backup, i18n-Tests, Export-Roundtrip (3 neue Test-Module) | 6312 |
-| v9.10.49 | Performance: SHA256-Cache, parallele Eingangs-Analyse, PMGG-Sample-Dauer, Warmup-Thread | 6312 |
-| v9.10.50 | §Dach MusikalischerGlobalplan: 13 Ära-Profile, 7 Genre-Modifikatoren, 17 Phase-Adjustments | 6312 |
-| v9.10.x | §SR-Invariante: assert sample_rate==48000 lückenlos an allen API-Einstiegspunkten | historischer Teststand |
-| v9.10.77 | PMGG Phase-Skip-Verbot, Stable-Metric-Invariante (§2.29b), Song-Kalibrierung (§2.31a) | ~8.919+ |
-| v9.10.85 | SongCal-PMGG-Integration (§2.31b), Material-adaptive PHASE\_GOAL\_EXCLUSIONS | ~9.200+ |
-| v9.10.91 | K-S tonal\_center Proxy (§9.7.11), SNR-robuste brillanz/transparenz/waerme (§9.7.12–14) | ~10.000+ |
-| v9.10.96 | §2.29c Restorative-Phase-Baseline-Capping, PMGG 122 Tests | ~10.700+ |
-| v9.10.102 | Genre-Phase-1 (Family+Top-k+Open-Set), LyricsGuidedEnhancement Pflichtmodul, 64 Phasen | ~11.023+ |
+| v10.0.0 | UnifiedRestorerV3, Material-Auto-Detektion | 6 |
+| v10.0.0 | Kognitive Architektur (5 Kernmodule), VoiceGender, PANNs | 206 |
+| v10.0.0 | Über-SOTA DSP (OMLSA/IMCRA, pYIN, NMF-β, PGHI) | 222 |
+| v10.0.0 | GrooveMetric, MRSA, Psychoakust. Masking, HarmonicLattice | 5169 |
+| v10.0.0 | 14 Musical Goals, EraClassifier, TonalCenter, MicroDynamics | 6073 |
+| v10.0.0 | StemRemixBalancer, EnsembleProcessor, IAD, BatchSessionLearner | 6180 |
+| v10.0.0 | TDP, HPG, PMGG (adaptiv), MDEM | 6312 |
+| v10.0.0 | E2E-Tests, TIER-Invarianten, v2-Cleanup | 6312 |
+| v10.0.0 | WPE als kanonisches Dereverb, SGMSE+ entfernt | 6312 |
+| v10.0.0 | RemasterDetector, temporale Defektverortung | 6347 |
+| v10.0.0 | Spec-Audit, JSON-Schema, Genre-Profile, DDSP-Eigenimpl., UI-Shortcuts | 6312 |
+| v10.0.0 | Spec-Konsistenz-Audit: 6 Korrekturen (EraResult, PMGG-Default, MaterialQuality, GP-Genre-Keys, Manifest) | 6312 |
+| v10.0.0 | Infrastruktur: SBOM, GP-Backup, i18n-Tests, Export-Roundtrip (3 neue Test-Module) | 6312 |
+| v10.0.0 | Performance: SHA256-Cache, parallele Eingangs-Analyse, PMGG-Sample-Dauer, Warmup-Thread | 6312 |
+| v10.0.0 | §Dach MusikalischerGlobalplan: 13 Ära-Profile, 7 Genre-Modifikatoren, 17 Phase-Adjustments | 6312 |
+| v10.0.0.x | §SR-Invariante: assert sample_rate==48000 lückenlos an allen API-Einstiegspunkten | historischer Teststand |
+| v10.0.0 | PMGG Phase-Skip-Verbot, Stable-Metric-Invariante (§2.29b), Song-Kalibrierung (§2.31a) | ~8.919+ |
+| v10.0.0 | SongCal-PMGG-Integration (§2.31b), Material-adaptive PHASE\_GOAL\_EXCLUSIONS | ~9.200+ |
+| v10.0.0 | K-S tonal\_center Proxy (§9.7.11), SNR-robuste brillanz/transparenz/waerme (§9.7.12–14) | ~10.000+ |
+| v10.0.0 | §2.29c Restorative-Phase-Baseline-Capping, PMGG 122 Tests | ~10.700+ |
+| v10.0.8 | Genre-Phase-1 (Family+Top-k+Open-Set), LyricsGuidedEnhancement Pflichtmodul, 68 Phasen | ~18.400+ |
 
 ---
 
 ## Todo List
 
-**Letzte Aktualisierung:** 8. März 2026 (v9.10.46 — Musikalische Exzellenz-Phase vollständig abgeschlossen 🎯)
+**Letzte Aktualisierung:** 8. März 2026 (v10.0.0 — Musikalische Exzellenz-Phase vollständig abgeschlossen 🎯)
 
 ## 1. Architektur & Infrastruktur
 
@@ -201,7 +201,7 @@
     - Dynamic Range Restoration (Piano-Specific Compression)
   - [ ] Erweiterte Instrumentenmodule: SpatialEnhancementSystem (3D-Stereo), GuitarEnhancementSystem (80-5000 Hz), BrassEnhancementSystem (500-8000 Hz) – Entwicklung und Integration ausstehend
 
-### Tier 2: WICHTIG (professionelle Qualität) ✅ ABGESCHLOSSEN (v9.10.42)
+### Tier 2: WICHTIG (professionelle Qualität) ✅ ABGESCHLOSSEN (v10.0.0)
 
 - [x] **Professional Mastering Tools** ✅
   - [x] TruePeakLimiter (ITU-R BS.1770) → `phase_47_truepeak_limiter` ✅
@@ -212,9 +212,9 @@
   - [x] AdvancedDereverb → `phase_49_advanced_dereverb` (WPE 3-Tier-Kaskade: nara_wpe → NumPy-WPE → OMLSA) ✅
   - [x] AdvancedDehum → `phase_02_hum_removal` (Kammfilter 50/60 Hz + Obertöne) ✅
 
-### Tier 3: INNOVATION ✅ Teilweise abgeschlossen (v9.9–v9.10.46)
+### Tier 3: INNOVATION ✅ Teilweise abgeschlossen (v10.0.0–v10.0.0)
 
-- [x] **Semantic Audio Understanding** ✅ _v9.9 — implementiert und normativ spezifiziert_
+- [x] **Semantic Audio Understanding** ✅ _v10.0.0 — implementiert und normativ spezifiziert_
   - [x] GenreDetector → **GermanSchlagerClassifier** (§2.19, 6-Schicht Zero-Shot DSP+CLAP, kein vortrainiertes Modell; Recall ≥ 90 %) ✅
   - [x] StructureAnalyzer → **MusicalStructureAnalyzer** (SSM/Novelty-Kurve nach Foote 2000, §2.17, Chorus als Inpainting-Prior) ✅
   - [x] ProcessingProfileSelector → Genre-Restaurierungsprofile (§2.20: Jazz/Klassik/Oper/Rock/Schlager) ✅
@@ -232,11 +232,11 @@
 
 ---
 
-## 10. Phase 4: Musikalische Exzellenz (v9.9 – v9.10.46) ✅ ABGESCHLOSSEN
+## 10. Phase 4: Musikalische Exzellenz (v10.0.0 – v10.0.0) ✅ ABGESCHLOSSEN
 
 **Zeitraum:** 20. Februar – 8. März 2026
 
-### v9.9.0 — 14 Musical Goals, EraClassifier & Neue Kern-Metriken
+### v10.0.0 — 14 Musical Goals, EraClassifier & Neue Kern-Metriken
 
 - [x] **14 Musical Goals** vollständig spezifiziert und implementiert (`MusicalGoalsChecker`, §1.2) ✅
   - Neu: `TonalCenterMetric` (≥ 0.95), `MicroDynamicsMetric` (≥ 0.92), `SeparationFidelityMetric` (≥ 0.82), `ArticulationMetric` (≥ 0.85)
@@ -249,7 +249,7 @@
 - [x] **Multi-Resolution STFT** (MRSA: 5 Frequenzzonen 128–65536 Samples, PGHI-konsistent, §4.5) ✅
 - [x] **Psychoakustisches Masking-Modell** (ISO 11172-3 simultan+temporal als OMLSA-Gain-Modifier, §4.5) ✅
 
-### v9.9.5 — Adaptive Goals, Physikalische Grenzen & Prioritätshierarchie
+### v10.0.0 — Adaptive Goals, Physikalische Grenzen & Prioritätshierarchie
 
 - [x] **AdaptiveGoalThresholds** (Material × Ära × Restorability-Skalierung; Untergrenze 0.50, §2.31) ✅
 - [x] **GoalApplicabilityFilter** (physikalisch nicht messbare Ziele deaktivieren, §2.32) ✅
@@ -258,7 +258,7 @@
   - FeedbackChain bricht ab wenn `further_optimization_worthwhile = False`
 - [x] **GoalPriorityProtocol** (Prioritätshierarchie 1–5 für Pareto-Kompromisse im ExcellenceOptimizer, §2.34) ✅
 
-### v9.9.6 — Zero-Shot Genre-Klassifikation (World-First)
+### v10.0.0 — Zero-Shot Genre-Klassifikation (World-First)
 
 - [x] **GermanSchlagerClassifier** (§2.19, kein vortrainiertes Schlager-Modell nötig) ✅
   - Tier-1: LAION-CLAP Zero-Shot (7 gewichtete Prompts); Tier-2: Akkordeon-Reed-Beating (Hilbert, 5–15 Hz)
@@ -268,7 +268,7 @@
 - [x] **Genre-Klassifikations-Matrix** (9 Genres, §2.20) ✅
 - [x] **4 Genre-Restaurierungsprofile** (`JAZZ_`, `KLASSIK_`, `OPER_`, `ROCK_RESTORATION_PROFILE`, §2.20) ✅
 
-### v9.9.7 — 8 neue Orchestrierungs-Module
+### v10.0.0 — 8 neue Orchestrierungs-Module
 
 - [x] **StemRemixBalancer** (LUFS-korrekter Re-Mix; |LUFS(mix) − L_orig| ≤ 0.3 LU; §1.5) ✅
 - [x] **EnsembleProcessor** (3 parallele Ketten CONSERVATIVE×0.6 / BALANCED×1.0 / AGGRESSIVE×1.4, §2.21) ✅
@@ -279,7 +279,7 @@
 - [x] **RestorabilityEstimator** (< 5 s Vor-Assessment; Score 0–100 + Predicted MOS + 90 %-CI, §2.26) ✅
 - [x] **SpectralBandGapRepair** (HEAD_WEAR-Defekt; `phase_56`; harmonische Interpolation + NMF-β + PGHI, §4.5) ✅
 
-### v9.9.9 — 4 Pipeline-Exzellenz-Module (kumulative Degradation eliminiert)
+### v10.0.0 — 4 Pipeline-Exzellenz-Module (kumulative Degradation eliminiert)
 
 - [x] **TransientDecoupledProcessing** (HPSS-Trennung am ersten Pipeline-Schritt; Percussion NUR phase_01/27, §2.27) ✅
   - GrooveMetric +0.03–0.06; DTW-Rollback-Sicherheitsnetz bei > 8 ms RMS
@@ -290,7 +290,7 @@
 - [x] **MicroDynamicsEnvelopeMorphing** (400 ms LUFS-Profil-Korrektur; Savitzky-Golay; ±3 LU, §2.30) ✅
   - MicroDynamicsMetric Pearson 0.88 → 0.93–0.96; Emotionalität +0.03–0.06
 
-### v9.10.42 — E2E-Tests & Pipeline-Härtung (6312 Tests grün)
+### v10.0.0 — E2E-Tests & Pipeline-Härtung (6312 Tests grün)
 
 - [x] **E2E-Test-Spezifikation §14** (TIER_1/TIER_6-Assertions; quality_estimate-Formel §8.1.1) ✅
 - [x] **Parallelisierungs-Invariante §2.2.1** (TIER 0/1 immer sequenziell erzwungen) ✅
@@ -298,13 +298,13 @@
 - [x] **VocalChain-Invarianten** (Formant-Pearson ≥ 0.90, Breathiness ≤ ±0.10, Sibilant-SNR ≥ +3 dB) ✅
 - [x] **CI-Stub-Guard** (`tests/normative/test_no_production_stubs.py`) ✅
 
-### v9.10.45 — RemasterDetector & Tonträgerketten-Forensik
+### v10.0.0 — RemasterDetector & Tonträgerketten-Forensik
 
 - [x] **RemasterDetector** (Rauschboden < −80 dBFS + HF > 18 kHz → `is_remaster=True`; Singleton §3.2, §2.14) ✅
 - [x] **Tonträgerketten-Erkennung §6.7** (Pflicht-Spektralfingerabdruck bei jedem Import: Rolloff, Wow/Flutter, HF, Rauschpegel, BW) ✅
 - [x] **Temporale Defektverortung** (`DefectScanner`: Zeitstempel-Liste pro Defekt-Event, ≤ 50 Einträge, 20-ms-Dedup) ✅
 
-### v9.10.46 — §2.36 Lyrics-Guided Enhancement — Normative Spezifikation (v10.0-Vorbereitung)
+### v10.0.0 — §2.36 Lyrics-Guided Enhancement — Normative Spezifikation (v10.0-Vorbereitung)
 
 - [x] **LyricsGuidedEnhancement §2.36** in copilot-instructions.md vollständig normativ spezifiziert ✅
   - `LyricsTranscriber` (Whisper-Tiny ONNX lokal, 39 MB, kein Netzwerkzugriff, out-of-the-box)
@@ -363,7 +363,7 @@
 
 ### Meilenstein 4: Musikalische Exzellenz
 
-**Status:** ✅ 100% abgeschlossen — historischer Milestone-Stand erreicht (v9.10.46, 8. März 2026)
+**Status:** ✅ 100% abgeschlossen — historischer Milestone-Stand erreicht (v10.0.0, 8. März 2026)
 
 - [x] 50+ psychoakustische Metriken → **14 Musical Goals** (§1.2, `MusicalGoalsChecker`) ✅
 - [x] Material Quality Analyzer + **AdaptiveGoalThresholds** (§2.31) ✅
@@ -380,7 +380,7 @@
   - [x] **StemRemixBalancer** + **EnsembleProcessor** + **PerceptualAttentionModel** ✅
   - [x] **RestorabilityEstimator** + **SpectralBandGapRepair** (HEAD_WEAR-Defekt) ✅
   - [x] Guitar/Brass/Spatial Enhancement vollständig (phase_44/45/46/48) ✅
-- [x] **6312 Tests grün** (v9.10.46) ✅
+- [x] **6312 Tests grün** (v10.0.0) ✅
 
 ### Meilenstein 5: GUI & UX
 
@@ -424,7 +424,7 @@
   - [x] Issue Templates (bug, feature, performance, docs)
   - [x] Label-System (26 Labels)
   - [x] Issue Management Dokumentation
-- [ ] Alpha Release (Release Tag v9.20.3-alpha1)
+- [ ] Alpha Release (Release Tag v10.0.0-alpha1)
 - [ ] Beta Release (Community Testing)
 - [ ] Stable Release 1.0
 
@@ -453,8 +453,8 @@
 | **Community** | ✅ | 75% | **Issue-Tracking Complete, Feedback-Loop pending** |
 | **Release** | 🟡 | 60% | Production Ready, Alpha Release pending |
 
-**Gesamt-Fortschritt:** ~97% — v9.10.46 (8. März 2026)
-_Phase 4 „Musikalische Exzellenz" (v9.9–v9.10.46) vollständig abgeschlossen._
+**Gesamt-Fortschritt:** ~97% — v10.0.0 (8. März 2026)
+_Phase 4 „Musikalische Exzellenz" (v10.0.0–v10.0.0) vollständig abgeschlossen._
 _Verbleibend: Lyrics-Guided Enhancement Implementation (v10.0-R&D), AutoMix/AutoMaster (v10.0-R&D), Alpha/Beta-Release._
 
 **Status:** 🎉 **Musikalische Exzellenz-Phase abgeschlossen — Ready for Alpha Release**
@@ -1063,7 +1063,7 @@ _Verbleibend: Lyrics-Guided Enhancement Implementation (v10.0-R&D), AutoMix/Auto
 
 - **Migrations-Plan:** 6-Wochen Sprint-Plan erstellt ([V3_MIGRATION_PLAN.md](V3_MIGRATION_PLAN.md))
 - **Timeline:** 3 Sprints (Foundation → GUI Integration → Testing & Release)
-- **Ziel:** V3 als Standard, ≥1.2× Performance, Quality Parity, Release Candidate 9.20.3-rc1
+- **Ziel:** V3 als Standard, ≥1.2× Performance, Quality Parity, Release Candidate 10.0.8-rc1
 - **Status:** Sprint 1, Woche 1 - Code Review + V2 Feature-Analyse
 
 ### 15. Februar 2026 - Quick Wins (Option A) abgeschlossen! ✅

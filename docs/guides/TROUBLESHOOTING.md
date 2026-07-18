@@ -1,6 +1,6 @@
-# Aurik 9.x.x — Troubleshooting Guide
+# Aurik 10.0.8 — Troubleshooting Guide
 
-**Version:** 9.20.3  
+**Version:** 10.0.8  
 **Datum:** Mai 2026  
 **Status:** ✅ Production Ready
 
@@ -15,7 +15,7 @@
 - [Schnellhilfe](#schnellhilfe)
 - [Installation & Dependencies](#installation--dependencies)
 - [Audio-Verarbeitung](#audio-verarbeitung)
-- [GPU & CUDA](#gpu--cuda)
+- [GPU & ROCm](#gpu--rocm)
 - [Memory & Performance](#memory--performance)
 - [Audio-Qualität](#audio-qualität)
 - [API & Entwicklung](#api--entwicklung)
@@ -31,8 +31,8 @@
 | Problem | Lösung | Link |
 | --- | --- | --- |
 | **ImportError: No module named 'library'** | `pip install -r requirements.txt` | [#1](#1-importerror-no-module-named-library) |
-| **CUDA not available** | GPU Driver + CUDA Toolkit installieren | [#6](#6-cuda-not-available-gpu-nicht-erkannt) |
-| **RuntimeError: Out of memory (CUDA)** | Batch-Size reduzieren oder CPU-only | [#8](#8-runtimeerror-out-of-memory-cuda) |
+| **ROCm not available** | GPU Driver + ROCm Runtime installieren | [#6](#6-rocm-not-available-gpu-nicht-erkannt) |
+| **RuntimeError: Out of memory (ROCm/VRAM)** | Batch-Size reduzieren oder CPU + optionale AMD-GPU | [#8](#8-runtimeerror-out-of-memory-rocm-vram) |
 | **Audio klingt verzerrt/clipped** | `aggressive` Parameter reduzieren | [#11](#11-audio-klingt-verzerrt-oder-geclippt) |
 | **Langsame Verarbeitung** | GPU aktivieren oder CPU-Cores erhöhen | [#9](#9-verarbeitung-ist-sehr-langsam) |
 
@@ -240,79 +240,77 @@ source .venv_aurik/bin/activate
 
 ---
 
-## GPU & CUDA
+## GPU & ROCm
 
-### #6: CUDA not available (GPU nicht erkannt)
+### #6: ROCm not available (GPU nicht erkannt)
 
 **Symptom:**
 
 ```python
 import torch
-print(torch.cuda.is_available())  # False
+print(torch.cuda.is_available())  # False (ROCm nicht gefunden)
 
 ```
 
 **Diagnose:**
 
 ```bash
-# Check NVIDIA Driver
-nvidia-smi
+# Check AMD GPU
+rocm-smi
 
-# Check CUDA Version
-nvcc --version
+# Check ROCm Version
+/opt/rocm/bin/hipcc --version
 
-# Check PyTorch CUDA
-python -c "import torch; print(torch.version.cuda)"
+# Check PyTorch ROCm
+python -c "import torch; print(torch.version.hip)  # ROCm-Version"
 
 ```
 
-**Ursache 1:** NVIDIA Driver fehlt
+**Ursache 1:** AMD GPU Driver fehlt
 
 **Lösung:**
 
 ```bash
-# Ubuntu/Debian
-sudo apt install nvidia-driver-535  # or latest
+# Ubuntu/Debian – AMDGPU Driver
+sudo apt update
+sudo apt install amdgpu-install
+amdgpu-install -y --usecase=rocm
 
 # Reboot
 sudo reboot
 
 # Verify
-nvidia-smi
+rocm-smi
 
 ```
 
 ---
 
-**Ursache 2:** CUDA Toolkit fehlt
+**Ursache 2:** ROCm Runtime fehlt
 
 **Lösung:**
 
 ```bash
-# Download CUDA 12.8 Toolkit
-# <https://developer.nvidia.com/cuda-downloads>
+# ROCm 6.x Installation (Ubuntu 22.04)
+# https://rocm.docs.amd.com/en/latest/deploy/linux/install.html
 
-# Ubuntu 22.04 Example:
-wget <https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-ubuntu2204.pin>
-sudo mv cuda-ubuntu2204.pin /etc/apt/preferences.d/cuda-repository-pin-600
-wget <https://developer.download.nvidia.com/compute/cuda/12.8.0/local_installers/cuda-repo-ubuntu2204-12-8-local_12.8.0-550.54.15-1_amd64.deb>
-sudo dpkg -i cuda-repo-ubuntu2204-12-8-local_12.8.0-550.54.15-1_amd64.deb
-sudo apt-get update
-sudo apt-get install cuda-toolkit-12-8
+wget https://repo.radeon.com/amdgpu-install/latest/ubuntu/jammy/amdgpu-install_6.x_ubuntu22.04-1_all.deb
+sudo apt install ./amdgpu-install_6.x_ubuntu22.04-1_all.deb
+sudo amdgpu-install -y --usecase=rocm
 
 # Add to PATH
-echo 'export PATH=/usr/local/cuda-12.8/bin:$PATH' >> ~/.bashrc
-echo 'export LD_LIBRARY_PATH=/usr/local/cuda-12.8/lib64:$LD_LIBRARY_PATH' >> ~/.bashrc
+echo 'export PATH=/opt/rocm/bin:$PATH' >> ~/.bashrc
+echo 'export LD_LIBRARY_PATH=/opt/rocm/lib:$LD_LIBRARY_PATH' >> ~/.bashrc
 source ~/.bashrc
 
 # Verify
-nvcc --version
+/opt/rocm/bin/hipcc --version
 
 ```
 
 ---
 
-**Ursache 3:** PyTorch CPU-only installiert
+**Ursache 3:** PyTorch CPU-only (ROCm nicht installiert) installiert
 
 **Lösung:**
 
@@ -320,8 +318,8 @@ nvcc --version
 # Uninstall CPU-only PyTorch
 pip uninstall torch torchvision torchaudio
 
-# Install CUDA-enabled PyTorch 2.10.0
-pip install torch==2.10.0 torchvision==0.19.0 torchaudio==2.10.0 --index-url <https://download.pytorch.org/whl/cu128>
+# Install ROCm-enabled PyTorch
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm6.0
 
 # Verify
 python -c "import torch; print(torch.cuda.is_available())"  # True
@@ -331,40 +329,39 @@ python -c "import torch; print(torch.cuda.get_device_name(0))"  # GPU Name
 
 ---
 
-### #7: CUDA Version Mismatch
+### #7: ROCm Version Mismatch
 
 **Symptom:**
 
 ```text
-RuntimeError: CUDA error: incompatible device
-RuntimeError: The NVIDIA driver on your system is too old (found version 11020).
+RuntimeError: HIP error: incompatible device
+RuntimeError: The AMD driver on your system is too old.
 
 ```
 
-**Ursache:** CUDA Toolkit (12.8) vs. Driver Version mismatch
+**Ursache:** ROCm Runtime vs. Kernel Driver Version mismatch
 
 **Lösung:**
 
 ```bash
 # Check Driver Version
-nvidia-smi
-# Driver Version: 535.xxx (CUDA 12.2+)
+rocm-smi
+# ROCm version: 6.x
 
-# Für CUDA 12.8 benötigt: Driver >= 550.54
-# Update Driver:
-sudo apt install nvidia-driver-550
+# Update ROCm:
+sudo amdgpu-install -y --usecase=rocm
 sudo reboot
 
 # Verify
-nvidia-smi
+rocm-smi
 
 ```
 
-**Alternative:** Downgrade PyTorch zu passendem CUDA
+**Alternative:** Downgrade PyTorch zu passender ROCm-Version
 
 ```bash
-# Wenn Driver nur CUDA 11.8 unterstützt:
-pip install torch==2.0.0 torchvision==0.15.0 torchaudio==2.0.0 --index-url <https://download.pytorch.org/whl/cu118>
+# Wenn nur ROCm 5.7 verfügbar:
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm5.7
 
 ```
 
@@ -372,12 +369,12 @@ pip install torch==2.0.0 torchvision==0.15.0 torchaudio==2.0.0 --index-url <http
 
 ## Memory & Performance
 
-### #8: RuntimeError: Out of memory (CUDA)
+### #8: RuntimeError: Out of memory (ROCm/VRAM)
 
 **Symptom:**
 
 ```text
-RuntimeError: CUDA out of memory. Tried to allocate 2.00 GiB (GPU 0; 23.70 GiB total capacity)
+RuntimeError: HIP out of memory. Tried to allocate 2.00 GiB (GPU 0; 23.70 GiB total capacity)
 
 ```
 
@@ -392,7 +389,7 @@ chunk_size = 30.0  # statt 60.0 Sekunden
 
 ```
 
-**Lösung 2: CPU-only Mode**
+**Lösung 2: CPU + optionale AMD-GPU Mode**
 
 ```bash
 # Setze Environment Variable
@@ -430,19 +427,19 @@ denker = get_aurik_denker_instance()  # Lädt nicht blind alle Modelle vorab
 
 ```python
 import torch
-print(f"CUDA available: {torch.cuda.is_available()}")
+print(f"ROCm available: {torch.cuda.is_available()}")
 print(f"Device: {torch.cuda.get_device_name(0) if torch.cuda.is_available() else 'CPU'}")
 
 ```
 
-**Ursache 1:** CPU-only (keine GPU)
+**Ursache 1:** CPU-only (ROCm/DirectML nicht installiert) (keine GPU erkannt)
 
-**Lösung:** GPU aktivieren (siehe [#6](#6-cuda-not-available-gpu-nicht-erkannt))
+**Lösung:** GPU aktivieren (siehe [#6](#6-rocm-not-available-gpu-nicht-erkannt))
 
 **Erwartete Performance:**
 
 - **CPU (i7-10700K):** ~3-5x Echtzeit (3min Audio → ~45-60s)
-- **GPU (RTX 3090):** ~8-15x Echtzeit (3min Audio → ~12-22s)
+- **GPU (AMD Radeon ROCm):** ~8-15x Echtzeit (3min Audio → ~12-22s)
 
 ---
 

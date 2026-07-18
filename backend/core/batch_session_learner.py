@@ -1,5 +1,5 @@
 """
-core/batch_session_learner.py — Aurik 9.9+ (§2.24)
+core/batch_session_learner.py — Aurik 10.0.0+ (§2.24)
 
 BatchSessionLearner: Persistiert und überträgt GP-Learnings innerhalb einer
 Batch-Session. Bei mehreren Dateien lernt Aurik progressiv: Die optimalen

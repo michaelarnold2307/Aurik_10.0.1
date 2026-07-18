@@ -3,7 +3,7 @@ import pytest
 """
 §2.55 PMGG-CIG-Synchronisations-Invariante — CI-Regression-Test
 =================================================================
-Normative Invariante (instructions_version 7.1, v9.11.3):
+Normative Invariante (instructions_version 7.1, v10.0.0):
 
     CIG._PHASE_SPECIFIC_DRIFT_EXCLUSIONS[phase] ⊇ PMGG.PHASE_GOAL_EXCLUSIONS[phase] ∩ P1P2
     PMGG.PHASE_GOAL_EXCLUSIONS[phase] ⊇ CIG._PHASE_SPECIFIC_DRIFT_EXCLUSIONS[phase] ∩ P1P2

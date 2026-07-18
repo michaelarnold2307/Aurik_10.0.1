@@ -1,5 +1,5 @@
 """
-Training Script für Aurik 8.0 End-to-End Optimization
+Training Script für Aurik 10.0.0 End-to-End Optimization
 
 Trainiert die differenzierbaren DSP-Module und optimiert Hyperparameter.
 
@@ -292,7 +292,7 @@ def train_all_materials(dataset_path: Path, output_path: Path, n_trials: int = 1
 
 def main() -> None:
     """Haupt-training script."""
-    parser = argparse.ArgumentParser(description="Train Aurik 8.0 End-to-End Optimization")
+    parser = argparse.ArgumentParser(description="Train Aurik 10.0.0 End-to-End Optimization")
 
     parser.add_argument(
         "--mode",

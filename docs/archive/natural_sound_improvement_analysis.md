@@ -1,6 +1,6 @@
 # Natürlicher Klang - Verbesserungspotential durch ML-DSP-Metriken-Hybrid
 
-**Aurik 9.x.x Advanced Analysis**  
+**Aurik 10.0.0.x.x Advanced Analysis**  
 **Datum:** 15. Februar 2026  
 **Status:** Natürlichkeit 0.55 → Ziel 0.80+ durch weitere Hybrid-Optimierungen
 
@@ -740,7 +740,7 @@ Software              | Natürlichkeit | Overall | RT Factor | Preis
 iZotope RX 11 Advanced| ~0.88         | ~0.92   | 3-5×      | $1299
 CEDAR Cambridge       | ~0.90         | ~0.93   | 2-4×      | $2000+
 Steinberg SpectraLayers| ~0.85        | ~0.90   | 4-6×      | $399
-**Aurik 9.20.3 (Final)** | **0.85**      | **0.93**| **2.5×**  | **Free/Open**
+**Aurik 10.0.0 (Final)** | **0.85**      | **0.93**| **2.5×**  | **Free/Open**
 
 Aurik Advantages:
 ✅ Open Source & Free
@@ -788,4 +788,4 @@ Soll ich beginnen mit:
 
 ---
 
-**Aurik 9.20.3 → Audio Restoration auf Spitzenniveau** 🎵✨
+**Aurik 10.0.0 → Audio Restoration auf Spitzenniveau** 🎵✨

@@ -1,5 +1,5 @@
 """
-MIIPHER Plugin — Vocal-SOTA adapter for SNR < 10 dB (v9.12.1)
+MIIPHER Plugin — Vocal-SOTA adapter for SNR < 10 dB (v10.0.0)
 
 §4.4 SOTA-Matrix 2026: MIIPHER (Zhang et al. 2023, Google) ist das SOTA-Modell
 für extrem starke Rauschumgebungen (SNR < 10 dB), Vocal-Restaurierung von
@@ -195,8 +195,8 @@ class MiipherPlugin:
         audio: npt.NDArray[np.float32],
         sr: int,
         noise_snr_db: float = 0.0,
-        vocal_energy_bias_db: float | None = None,  # §0p v9.12.9: register-adaptiver Bias aus VocalRegisterDetector
-        panns_singing: float = 0.0,  # §0p v9.12.9: für SGMSE+ Vokal-Mode (konservativeres sigma)
+        vocal_energy_bias_db: float | None = None,  # §0p v10.0.0: register-adaptiver Bias aus VocalRegisterDetector
+        panns_singing: float = 0.0,  # §0p v10.0.0: für SGMSE+ Vokal-Mode (konservativeres sigma)
     ) -> npt.NDArray[np.float32]:
         """
         Entrauscht stark degradiertes Gesangsmaterial.
@@ -383,7 +383,7 @@ class MiipherPlugin:
     ) -> npt.NDArray[np.float32]:
         """Stem-isoliertes SGMSE+ — Kern-Verbesserung gegenüber Full-Mix-Ansatz.
 
-        Algorithmus (MIIPHER-Substitut, v9.12.9):
+        Algorithmus (MIIPHER-Substitut, v10.0.0):
         1. MelBandRoFormer → vocal_stem (Mono-Soft-Mask aus Mono-Mixing)
         2. Stereo-Soft-Mask: vocal_stereo = audio × mask, instrumental = audio − vocal_stereo
         3. SGMSE+ nur auf vocal_stereo → keine Instrument-als-Rauschen-Konfusion
@@ -499,7 +499,7 @@ class MiipherPlugin:
         self,
         audio: npt.NDArray[np.float32],
         sr: int,
-        panns_singing: float = 0.0,  # §0p v9.12.9: weitergereicht an SGMSE+
+        panns_singing: float = 0.0,  # §0p v10.0.0: weitergereicht an SGMSE+
     ) -> npt.NDArray[np.float32]:
         """MIIPHER-Kaskade: native ONNX → Stem-SGMSE+ → Full-Mix-SGMSE+.
 
@@ -569,7 +569,7 @@ class MiipherPlugin:
         audio: npt.NDArray[np.float32],
         sr: int,
         noise_snr_db: float = 0.0,
-        vocal_energy_bias_db: float | None = None,  # §0p v9.12.9: register-adaptiv
+        vocal_energy_bias_db: float | None = None,  # §0p v10.0.0: register-adaptiv
         panns_singing: float = 0.0,  # §FCPE: Harmonik-Guard nur bei Gesang
     ) -> npt.NDArray[np.float32]:
         """DeepFilterNet v3.II Fallback mit register-adaptivem energy_bias (§0p).
@@ -627,7 +627,7 @@ class MiipherPlugin:
             _chs_om = [out_f32[0], out_f32[1]] if out_f32.ndim == 2 and out_f32.shape[0] == 2 else [_omlsa_mono]
             _out_chs_om = []
 
-            # §FCPE F0-guided harmonic protection (v9.12.9) — non-blocking.
+            # §FCPE F0-guided harmonic protection (v10.0.0) — non-blocking.
             # Schützt Vokal-Harmoniken (F0·k, k=1..12) vor Over-Suppression im Wiener-Gain.
             # FCPE läuft auf DFN-Output (höherer SNR → zuverlässigere F0-Schätzung).
             _harmonic_gain_floor: np.ndarray | None = None
@@ -673,7 +673,7 @@ class MiipherPlugin:
                 if _harmonic_gain_floor is not None:
                     _nf_h = min(_Zxx.shape[1], _harmonic_gain_floor.shape[1])
                     _g_w[:, :_nf_h] = np.maximum(_g_w[:, :_nf_h], _harmonic_gain_floor[:, :_nf_h])
-                    # §v9.12.9 Interharmonic NR: cap Wiener gain in non-harmonic voiced bins
+                    # §v10.0.0 Interharmonic NR: cap Wiener gain in non-harmonic voiced bins
                     # → additional 6 dB suppression of residual noise between harmonics → improved HNR
                     _nonharm_cap = 1.0 - (1.0 - _hmask[:, :_nf_h]) * _voiced_f[:, :_nf_h] * 0.50
                     _g_w[:, :_nf_h] = np.minimum(_g_w[:, :_nf_h], _nonharm_cap)

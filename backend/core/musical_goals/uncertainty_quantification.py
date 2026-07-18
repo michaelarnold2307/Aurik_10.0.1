@@ -2,7 +2,7 @@
 backend/core/musical_goals/uncertainty_quantification.py
 =========================================================
 
-Uncertainty Quantification for Musical Goals (Aurik 9.10.x).
+Uncertainty Quantification for Musical Goals (Aurik 10.0.0.x).
 
 Provides bootstrap-based confidence estimation for individual goal calculators.
 Used by UnifiedRestorerV3 to detect unreliable goal measurements before acting

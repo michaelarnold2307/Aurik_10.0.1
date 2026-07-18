@@ -1,4 +1,4 @@
-# ModelManager für Aurik 9.0
+# ModelManager für Aurik 10.0.0
 # Dynamische, kontextbewusste Modellverwaltung mit Voice-Profil, Feedback, Multi-Stage Enhancement, Authentizitäts-Check
 
 from __future__ import annotations

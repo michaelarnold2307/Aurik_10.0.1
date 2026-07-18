@@ -74,7 +74,7 @@ class MeinPlugin(AurikPlugin):
 
 - **SemVer**: MAJOR.MINOR.PATCH
 - **Deprecation-Window**: 2 Major-Versionen
-- **Bridge-API**: Stabil seit Aurik 9.x
+- **Bridge-API**: Stabil seit Aurik 10.0.0.x
 - **Breaking Changes**: Nur mit MAJOR-Bump, angekündigt im Changelog
 
 ## Testing

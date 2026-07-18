@@ -1,7 +1,7 @@
 """
 tests/unit/test_frisson_candidate_detector.py
 =============================================
-Aurik 9.11.14 — FrissonCandidateDetector + MDEM Frisson-Integration
+Aurik 10.0.0 — FrissonCandidateDetector + MDEM Frisson-Integration
 
 13 Unit-Tests:
   TestFrissonCandidateDetector  (test_01 – test_09)

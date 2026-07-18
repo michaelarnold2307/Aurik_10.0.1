@@ -1,5 +1,5 @@
 """
-Aurik 9 — DTW-basierte Groove-Messung
+Aurik 10.0.0 — DTW-basierte Groove-Messung
 ======================================
 DTW (Dynamic Time Warping) für präzise Onset-Alignierung und Groove-Metrik
 gemäß §4.4 und MusicalGoalsChecker.GrooveMetric (§1.2, §8.2-6).

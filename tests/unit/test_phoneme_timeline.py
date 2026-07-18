@@ -2,7 +2,7 @@ from __future__ import annotations
 
 """
 tests/unit/test_phoneme_timeline.py
-Aurik 9 — §2.36a PhonemeTimeline unit tests
+Aurik 10.0.0 — §2.36a PhonemeTimeline unit tests
 
 Coverage:
   - PhonemeTimelineSegment basics

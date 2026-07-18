@@ -1,13 +1,13 @@
 """
-Comprehensive Audio Quality Metrics for Aurik 9.0
+Comprehensive Audio Quality Metrics for Aurik 10.0.0
 ==================================================
 
 Vollständiges System für psychoakustische, musikalische und emotionale Metriken.
 
 Phase: Entwicklung psychoakustischer, musikalischer und emotionaler Metriken
-Author: Aurik 9.0 Development Team
+Author: Aurik 10.0.0 Development Team
 Date: 15. Februar 2026
-Version: 9.0.0
+Version: 10.0.0
 
 Metrik-Kategorien:
 1. PSYCHOAKUSTISCHE METRIKEN: SNR, THD, Dynamikbereich, LUFS, Maskierung, etc.
@@ -19,6 +19,7 @@ Keine Dummys/Mocks - nur reale, wissenschaftlich fundierte Implementierungen.
 
 import logging
 from dataclasses import asdict, dataclass
+from typing import Any
 
 import numpy as np
 from scipy import fft, signal
@@ -71,9 +72,13 @@ except ImportError:
 # ============================================================
 
 
-@dataclass
 class PsychoAcousticMetrics:
-    """Psychoakustische Metriken (objektiv messbar, perzeptuell relevant)."""
+    """Psychoakustische Metriken (objektiv messbar, perzeptuell relevant).
+
+    §5/5: Dient sowohl als Datencontainer als auch als Calculator.
+    Methoden wie calculate_roughness() werden an den internen
+    ComprehensiveMetricsCalculator delegiert.
+    """
 
     # Signal Quality
     snr_db: float  # Signal-to-Noise Ratio
@@ -101,6 +106,36 @@ class PsychoAcousticMetrics:
     pre_echo_score: float  # Pre-echo artifacts (0-1, 1=clean)
     click_detection: int  # Number of detected clicks
     clipping_percent: float  # % of clipped samples
+
+    def __init__(self, sample_rate: int = 48000, **kwargs: Any) -> None:
+        self.sample_rate = sample_rate
+        # Alle übergebenen Felder als Attribute setzen (Rückwärtskompatibilität)
+        for k, v in kwargs.items():
+            setattr(self, k, v)
+        # Lazy-init: Calculator wird erst bei Bedarf erstellt
+        self._calculator: Any = None
+
+    def _get_calculator(self) -> Any:
+        if self._calculator is None:
+            self._calculator = ComprehensiveMetricsCalculator(sample_rate=self.sample_rate)
+        return self._calculator
+
+    def calculate_roughness(self, audio: np.ndarray) -> float:
+        return float(self._get_calculator()._compute_roughness(audio))
+
+    def calculate_sharpness(self, audio: np.ndarray) -> float:
+        return float(self._get_calculator()._compute_sharpness(audio))
+
+    def calculate_spectral_flatness(self, audio: np.ndarray) -> float:
+        flatness, _centroid, _rolloff, _flux = self._get_calculator()._compute_spectral_features(audio)
+        return float(flatness)
+
+    def calculate_harmonic_coherence(self, audio: np.ndarray) -> float:
+        return float(self._get_calculator()._compute_tonality(audio))
+
+    def calculate_naturalness_score(self, audio: np.ndarray, reference: np.ndarray | None = None) -> dict[str, float]:
+        result = self._get_calculator().compute_all(audio, reference)
+        return result.to_dict()
 
 
 @dataclass
@@ -1404,7 +1439,7 @@ def generate_metrics_report(result: ComprehensiveMetricsResult) -> str:
     report.append(f"\n🏆 AURIK QUALITY SCORE: {result.aurik_quality_score:.1f} / 100")
 
     if result.passes_aurik_standards():
-        report.append("\n✅ WELTKLASSE - Meets Aurik 9.0 Standards!")
+        report.append("\n✅ WELTKLASSE - Meets Aurik 10.0.0 Standards!")
     else:
         report.append("\n⚠️  Below Weltklasse standards")
 
@@ -1419,7 +1454,7 @@ def generate_metrics_report(result: ComprehensiveMetricsResult) -> str:
 
 if __name__ == "__main__":
     """Test comprehensive metrics with synthetic audio."""
-    logger.debug("Testing Aurik 9.0 Comprehensive Metrics System...")
+    logger.debug("Testing Aurik 10.0.0 Comprehensive Metrics System...")
     logger.debug("=" * 70)
 
     # Generate test audio

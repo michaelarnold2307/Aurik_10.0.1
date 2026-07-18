@@ -83,7 +83,7 @@ Erlaubte Musikmetriken: **PEAQ, FAD, PQS-MOS, ViSQOL v3 (`--audio` Mode), Musica
 | Good (B) | ≥ 80 | **[RELEASE_MUST] Pflicht für jede neue Phase / Plugin** |
 | Fair (C) | ≥ 60 | — |
 
-### §8.1.1a [RELEASE_MUST] Studio-2026 OQS-Gate (v9.10.130)
+### §8.1.1a [RELEASE_MUST] Studio-2026 OQS-Gate (v10.0.0)
 
 Für `mode="studio2026"` gilt ein dediziertes End-Gate:
 
@@ -95,7 +95,7 @@ Für `mode="studio2026"` gilt ein dediziertes End-Gate:
 **Rationale:** Studio-2026 ist ein Qualitätsversprechen („modern, frisch, kräftig").
 Ein optionales Roadmap-Ziel ist dafür normativ zu weich.
 
-### §8.1.1b [RELEASE_MUST] Restoration OQS-Gate (v9.11.14)
+### §8.1.1b [RELEASE_MUST] Restoration OQS-Gate (v10.0.0)
 
 Für `mode="restoration"` gilt ein materialadaptives End-Gate:
 
@@ -111,7 +111,7 @@ Für `mode="restoration"` gilt ein materialadaptives End-Gate:
 
 **Invariante**: Restoration-Modus darf Audio nie verschlechtern — wenn OQS(output) < OQS(input), MUSS Rollback auf Input erfolgen.
 
-### §8.1.1c [RELEASE_MUST] MUSHRA-Referenz-Wahl bei CCR Reference-Shift (v9.11.14)
+### §8.1.1c [RELEASE_MUST] MUSHRA-Referenz-Wahl bei CCR Reference-Shift (v10.0.0)
 
 Wenn `§0d carrier_chain_recovery_ratio > 0.05` aktiv ist, wurde `original_audio_for_goals`
 auf `best_carrier_checkpoint` (z. B. post-phase_23) verschoben. MUSHRA misst dann die Ähnlichkeit
@@ -171,7 +171,7 @@ report = run_benchmark(config)
 assert report.passes_os_leadership_threshold(), f"Score: {report.overall_score}"
 ```
 
-### [RELEASE_MUST] AMRB Seeding-Invariante (v9.10.80 — deterministisch, MD5)
+### [RELEASE_MUST] AMRB Seeding-Invariante (v10.0.0 — deterministisch, MD5)
 
 `item_seed` für AMRB-Items MUSS via `_sid_offset(sid)` berechnet werden — **niemals** `hash(sid)`.
 Python's eingebautes `hash()` ist pro-Prozess randomisiert (PYTHONHASHSEED) → nicht reproduzierbar.
@@ -274,7 +274,7 @@ ohne Qualitätsversagen zu verschleiern.
 - Variationen in Tonträgerketten/Material/Defektbildern müssen zu unterschiedlichen, aber deterministischen Profilen führen.
 - Pflichtartefakt für Tests/Analysen: `RestorationResult.metadata["song_calibration"]`.
 
-### §8.3.2 [RELEASE_MUST] Experience-Propagation-Testpflicht (v9.11.1)
+### §8.3.2 [RELEASE_MUST] Experience-Propagation-Testpflicht (v10.0.0)
 
 Zusätzlich zur Song-Selbstkalibrierung sind folgende Tests verpflichtend:
 
@@ -323,7 +323,7 @@ Jede Änderung an Vokal-Gates, VFA-Zonen, GP-Priors oder RecordingChainProfiler-
 - UV3/VFA: `vocal_zone_strength_policy` wird vor `wrap_phase()` gebildet und an Phasen-kwargs weitergereicht.
 - Formant-Gates: neue Vokalphasen dürfen keinen fixen `threshold_db=2.0` verwenden, wenn Era-Kontext verfügbar ist.
 
-### §8.3.3 [RELEASE_MUST] Edge-Peak- und Stereo-Lag-Regressionstestpflicht (v9.12.0)
+### §8.3.3 [RELEASE_MUST] Edge-Peak- und Stereo-Lag-Regressionstestpflicht (v10.0.0)
 
 Änderungen an Boundary-anfälligen Phasen (insb. `phase_03`, `phase_23`, STFT/ISTFT-, Chunk- oder ML-Routen)
 müssen zusätzlich folgende Nachweise liefern:
@@ -387,7 +387,7 @@ automatisch geprüft werden.
 > **Kanonische Quelle für RT-Limits:** copilot-instructions.md §2.37 (LIMIT_BALANCED = 32.0× RT).
 > Die nachstehenden Werte gelten **pro Minute Audio** und sind mit PerformanceGuard-Toleranzen kalibriert.
 > VERBOTEN: niedrigere Limits aus Vorgängerversionen (DefectScanner ≤ 2 s, Pipeline ≤ 120 s) verwenden —
-> diese wurden mit v9.10.80 (Quality-First-Hauptlauf) auf die untenstehenden Werte angehoben.
+> diese wurden mit v10.0.0 (Quality-First-Hauptlauf) auf die untenstehenden Werte angehoben.
 > **GPU-Beschleunigung** (ROCm/DirectML) reduziert Heavy-Plugin-Inferenz erheblich; die Limits gelten für CPU-only als Worst Case.
 
 | Operation | Limit / Minute Audio |
@@ -402,7 +402,7 @@ automatisch geprüft werden.
 **Absolutes Zeitlimit Stufe 1:** `_MAX_TOTAL_SECONDS = 14400.0` (240 Minuten, §K 64×RT-aligned)
 Nach Überschreitung: KMV Stufe 2 (`MLRefinementThread`) übernimmt automatisch.
 
-**FeedbackChain-Abbruch (Fix M, v9.10.100 — MOS-Metrik präzisiert, harmonisiert v9.12.0):**
+**FeedbackChain-Abbruch (Fix M, v10.0.0 — MOS-Metrik präzisiert, harmonisiert v10.0.0):**
 
 ```python
 MAX_ITERATIONS = 5
@@ -433,7 +433,7 @@ REGRESSION_DELTA  = 0.05  # PQS-MOS-Schwelle für sofortigen Rollback
 # §8.5 enthält die kanonischen Schwellwerte — kein Widerspruch, unterschiedliche Ebenen).
 ```
 
-### §9.1a [RELEASE_MUST] Stationäre vs. nicht-stationäre Defekt-Analyse (v9.10.73)
+### §9.1a [RELEASE_MUST] Stationäre vs. nicht-stationäre Defekt-Analyse (v10.0.0)
 
 Der DefectScanner verwendet einen 60 s Center-Crop (`_DETECTOR_CAP_S`) für Performance-Optimierung. Nicht-stationäre Defekttypen MÜSSEN jedoch auf dem **vollständigen Audio** analysiert werden:
 
@@ -456,7 +456,7 @@ scores[DefectType.DROPOUTS] = self._detect_dropouts(_audio_mono_full)  # volles 
 
 **Location-Offset**: Nicht-stationäre Detektoren erzeugen absolute Positionen → `_FULL_AUDIO_DETECTORS`-Set in der Offset-Korrektur ausschließen.
 
-### §9.1b [RELEASE_MUST] Intro-Salienz-Gewichtung (v9.10.73)
+### §9.1b [RELEASE_MUST] Intro-Salienz-Gewichtung (v10.0.0)
 
 Die ersten 5 Sekunden eines Audiosignals bestimmen das Gesamtqualitätsurteil des Hörers (Zacharov & Koivuniemi 2001, Bech & Zacharov 2006). Defekte in dieser „Intro-Zone" MÜSSEN stärker gewichtet werden.
 
@@ -468,7 +468,7 @@ Die ersten 5 Sekunden eines Audiosignals bestimmen das Gesamtqualitätsurteil de
 
 **Begründung**: Tape-Leader-Artefakte, Einlaufschwankungen und Splice-Dropouts treten gehäuft in den ersten Sekunden auf. Ohne Intro-Gewichtung kann die Pipeline diese als „statistisch irrelevant" einstufen, obwohl sie den ersten Höreindruck zerstören.
 
-### §9.1c [RELEASE_MUST] Perceptual-Salience-Annotation (v9.10.74)
+### §9.1c [RELEASE_MUST] Perceptual-Salience-Annotation (v10.0.0)
 
 Jeder erkannte Defekt wird mit einem **psychoakustischen Salienz-Score** (0.0–1.0) annotiert. Defekte, die durch lautere Umgebung **maskiert** werden (Fastl & Zwicker 2007 „Psychoacoustics: Facts and Models"), erhalten einen niedrigeren Severity-Wert; exponierte (hörbare) Defekte behalten volle Severity.
 
@@ -505,9 +505,9 @@ Jeder erkannte Defekt wird mit einem **psychoakustischen Salienz-Score** (0.0–
 
 > **Hinweis**: Die normativen Performance-Limits sind ausschließlich in §9 (oben) definiert.
 > VERBOTEN: Alte Limits (DefectScanner ≤ 2 s, Pipeline ≤ 120 s, FeedbackChain ≤ 60 s) —
-> diese wurden mit v9.10.80 (Quality-First-Hauptlauf, Fix I) angehoben und gelten nicht mehr.
+> diese wurden mit v10.0.0 (Quality-First-Hauptlauf, Fix I) angehoben und gelten nicht mehr.
 
-### §8.3 [RELEASE_MUST] Psychoakustik & Gänsehaut-Prinzipien (v9.10.75)
+### §8.3 [RELEASE_MUST] Psychoakustik & Gänsehaut-Prinzipien (v10.0.0)
 
 **Oberstes Ziel**: Das Restaurierungsergebnis muss beim Hörer **emotionale Wirkung** erzeugen — nicht nur technische Korrektheit. Die Psychoakustik steht über der technischen Perfektion.
 
@@ -550,7 +550,7 @@ Jeder erkannte Defekt wird mit einem **psychoakustischen Salienz-Score** (0.0–
 - ML-Modelle aktiv max.: 16 GB gesamt
 - Großmodelle (MERT 3,9 GB / AudioSR 5,9 GB): nur bei Bedarf (lazy load)
 
-**Device-Policy (§GPU-Mixed-Mode, v9.11.10):**
+**Device-Policy (§GPU-Mixed-Mode, v10.0.0):**
 
 ```python
 # Heavy ML Plugins (>200 MB): GPU wenn verfügbar, CPU-Fallback transparent
@@ -565,7 +565,7 @@ torch.set_num_threads(os.cpu_count())         # alle CPU-Kerne nutzen
 
 ---
 
-### §8.3.1 [RELEASE_MUST] Tiefen-Immersions-Prinzip — „Ohr in die Musik legen" (v9.10.79)
+### §8.3.1 [RELEASE_MUST] Tiefen-Immersions-Prinzip — „Ohr in die Musik legen" (v10.0.0)
 
 **Konzept**: Das Restaurierungsergebnis muss dem Hörer ermöglichen, in die Musik hineinzutauchen —
 nicht nur zuzuhören, sondern sich von der Aufführung umgeben zu fühlen. Gänsehaut entsteht,
@@ -658,7 +658,7 @@ Wenn alle Stellen gleich laut klingen, ist die Spannungs-Mechanik zerstört und 
 
 ---
 
-## §8.1.3 [RELEASE_MUST] FAD (Fréchet Audio Distance) — interner Spitzenqualitäts-Indikator (v9.12.0)
+## §8.1.3 [RELEASE_MUST] FAD (Fréchet Audio Distance) — interner Spitzenqualitäts-Indikator (v10.0.0)
 
 **Motivation**: OQS und AMRB messen Ähnlichkeit zum Original. FAD misst **Verteilungsähnlichkeit zum Studio-Audio-Referenzset** — d.h. ob restauriertes Audio klingt wie professionelles Studio-Material, unabhängig vom konkreten Original.
 
@@ -689,7 +689,7 @@ score = fad.score("benchmarks/fad_reference_set/", "output/test_batch/")
 
 ---
 
-## §8.1.4 [RELEASE_MUST] VERSA-Konfidenz-Modell (v9.12.0)
+## §8.1.4 [RELEASE_MUST] VERSA-Konfidenz-Modell (v10.0.0)
 
 **Problem**: VERSA liefert für stark degradiertes Material (SNR < 10 dB, Shellac) unzuverlässige MOS-Werte, weil es auf modernen Daten trainiert wurde. Ein niedriger VERSA-Score auf Shellac bedeutet vielleicht nur „unbekannter Klangtyp", nicht „schlechte Qualität".
 
@@ -745,7 +745,7 @@ mos_composite = versa_score * versa_confidence + mert_score * mert_weight
 
 ---
 
-## §8.1.6 [RELEASE_MUST] AMRB-Regressions-Benchmark — Historisches Score-Tracking (v9.12.0)
+## §8.1.6 [RELEASE_MUST] AMRB-Regressions-Benchmark — Historisches Score-Tracking (v10.0.0)
 
 **Problem**: Es gibt keinen strukturierten Nachweis, dass Aurik über Versionen besser wird und nicht schlechter. Einzelne Fixes könnten andere Metriken verschlechtern.
 
@@ -845,7 +845,7 @@ np.array([...], rtol=1e-5, atol=1e-8)  # np.array() kennt keine Toleranzen
 **CI-Gate:** Kein Test darf durch diesen Fehler brechen. Pattern-Check via
 `grep -rPn '(?<=np\.(abs|tanh|zeros|array|ones|full|arange))\(' tests/ | grep rtol` als Pre-Commit.
 
-### §5.7a [RELEASE_MUST] Modusgetrennte Hörvalidierungs-Checkliste (v9.10.130)
+### §5.7a [RELEASE_MUST] Modusgetrennte Hörvalidierungs-Checkliste (v10.0.0)
 
 Die externe Hörvalidierung MUSS beide Modi getrennt ausweisen. Ein kombinierter
 Gesamtwert ohne Modus-Trennung ist unzulässig.
@@ -935,7 +935,7 @@ addopts = --timeout=30 --import-mode=importlib -p no:warnings
 - Alle Tests mit **synthetischen Signalen** (`np.random.seed(42)`)
 - Keine realen Audio-Dateien in Tests
 
-### §5.8 [RELEASE_MUST] Pytest-Teardown-Stabilität für große Suiten (v9.10.129)
+### §5.8 [RELEASE_MUST] Pytest-Teardown-Stabilität für große Suiten (v10.0.0)
 
 **Problem**: Unbedingtes `gc.collect()` nach jedem Test kann in Suiten mit tausenden Tests sporadische `pytest-timeout`-Fehler im Teardown auslösen. Zusätzlich können lang lebige Monitor-Threads (z. B. Plugin-/RAM-Manager) nach Testende weiterlaufen und den Teardown verfälschen.
 
@@ -975,7 +975,7 @@ def pytest_sessionfinish(session, exitstatus):
 
 ---
 
-## §14 E2E-Test-Spezifikation (Pflicht ab v9.10.42)
+## §14 E2E-Test-Spezifikation (Pflicht ab v10.0.0)
 
 ### §14.1 Pflicht-Assertions (`_validate_restoration_result`)
 
@@ -1013,7 +1013,7 @@ assert all("action" in e for e in (result.phase_gate_log or []))
 
 ---
 
-## §5.9 [RELEASE_MUST] QualityGate Early-Exit-Optimierung (v9.11.14)
+## §5.9 [RELEASE_MUST] QualityGate Early-Exit-Optimierung (v10.0.0)
 
 `check_dsp()` und `check_ml()` in `backend/core/quality_gate.py` dürfen teure STFT/SNR-Analysen
 (`_check_audio_array`) **erst nach** einer positiven Musical-Goals-Prüfung ausführen.
@@ -1034,7 +1034,7 @@ Frühes Return spart STFT-Berechnungszeit (50–200 ms je Messung).
 **Testpflicht**: `tests/unit/test_quality_gate_early_exit.py` — verifiziert,
 dass `_check_audio_array` nach Musical-Goal-Failure nicht aufgerufen wird.
 
-## §5.10 [RELEASE_MUST] TFS-Guard Hilbert-After-Voiced-Gate (v9.11.14)
+## §5.10 [RELEASE_MUST] TFS-Guard Hilbert-After-Voiced-Gate (v10.0.0)
 
 `backend/core/tfs_preservation_guard.py` darf teure Analytic-Transforms (Hilbert-Phasenextraktion + `filtfilt` Band-Filterung) **erst nach** dem Voice-Energy-Gate ausführen.
 
@@ -1084,7 +1084,7 @@ Admissibility-Gate platzieren.
 
 `conftest.py` markiert automatisch `ml`/`slow` basierend auf Testinhalten.
 
-### §8.4b [RELEASE_MUST] Host-Crash-Safety für Heavy-ML-Tests (v9.12.0)
+### §8.4b [RELEASE_MUST] Host-Crash-Safety für Heavy-ML-Tests (v10.0.0)
 
 Tests dürfen den Host nicht destabilisieren. Für potenziell hostgefährdende ML-Pfade
 (hoher RAM/VRAM-Verbrauch, große ONNX/Torch-Modelle, lange Audiosegmente) gilt bindend:

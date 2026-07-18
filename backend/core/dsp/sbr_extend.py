@@ -50,7 +50,7 @@ def _sbr_extend(audio: np.ndarray, sr: int) -> np.ndarray:
         if len(above) == 0:
             return audio
         effective_bw_bin = int(above[-1])
-        effective_bw_hz = effective_bw_bin * freq_per_bin
+        _effective_bw_hz = effective_bw_bin * freq_per_bin
 
         # Source: lower half of effective bandwidth (where real energy lives)
         src_lo = int(max(1, effective_bw_bin * 0.25))

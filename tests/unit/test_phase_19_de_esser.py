@@ -1,7 +1,7 @@
 """
 tests/unit/test_phase_19_de_esser.py
 ======================================
-Aurik 9.10 — Phase 19 De-Esser
+Aurik 10.0.0 — Phase 19 De-Esser
   * §4.4 Breathiness-Guard: _estimate_breathiness()
   * Dynamische max_reduction_db-Skalierung
   * Mono + Stereo Input

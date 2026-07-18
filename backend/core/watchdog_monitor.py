@@ -394,8 +394,8 @@ class WatchdogMonitor:
                 }
                 for f in failed:
                     report.warnings.append(f"Spec-Goal: {f}")
-            except Exception:
-                pass
+            except Exception as _e:
+                logger.debug("watchdog_monitor: non-critical exception: %s", _e)
             # Continuous Improvement Loop
             try:
                 from backend.core.spec_improvement_loop import get_improvement_loop
@@ -412,8 +412,8 @@ class WatchdogMonitor:
                     report.recommendations.append("📈 Spec-Upgrade verfügbar: Code besser als Specs")
                 if imp.get("audit") and imp["audit"]["health"] != "healthy":
                     report.warnings.append(f"⚠️ Spec-Audit: {imp['audit']['health']}")
-            except Exception:
-                pass
+            except Exception as _e:
+                logger.debug("watchdog_monitor: non-critical exception: %s", _e)
         except Exception as exc:
             logger.debug("Watchdog spec constitution check non-blocking: %s", exc)
 

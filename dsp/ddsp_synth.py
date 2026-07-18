@@ -1,5 +1,5 @@
 """
-Aurik 9 — DDSP-Synthesizer (Differentiable DSP, Eigenimplementierung)
+Aurik 10.0.0 — DDSP-Synthesizer (Differentiable DSP, Eigenimplementierung)
 ======================================================================
 Leichtgewichtige NumPy/SciPy-Eigenimplementierung des DDSP-Prinzips nach
 Engel et al. (ICLR 2020). Kein Google-``ddsp``-PyPI-Paket, kein TensorFlow.

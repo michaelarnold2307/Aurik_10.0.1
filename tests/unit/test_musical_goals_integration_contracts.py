@@ -52,7 +52,7 @@ class TestUnifiedRestorerWiringContracts:
     def test_03_feedback_chain_wiring_uses_max_iterations(self) -> None:
         """UnifiedRestorer muss kompatibel mit FeedbackChain-Signatur bleiben."""
         src = Path("backend/core/unified_restorer_v3.py").read_text(encoding="utf-8")
-        # v9.10.76: max_iterations ist jetzt material-adaptiv (_fc_max_iter)
+        # v10.0.0: max_iterations ist jetzt material-adaptiv (_fc_max_iter)
         assert "max_iterations=_fc_max_iter" in src
         assert "max_retries=5" not in src
 

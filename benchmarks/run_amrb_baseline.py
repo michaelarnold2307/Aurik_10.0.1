@@ -1,4 +1,4 @@
-"""AMRB Baseline Runner — Aurik 9.10.x
+"""AMRB Baseline Runner — Aurik 10.0.0.x
 
 Führt den Musical Restoration Benchmark mit der echten AurikDenker-Pipeline
 durch und speichert den JSON-Bericht unter benchmarks/amrb_baseline_<mode>.json.
@@ -340,7 +340,7 @@ def _run(args: argparse.Namespace) -> int:
         duration_s=args.duration,
         scenarios=scenario_filter,
         report_path=report_path,
-        system_name=f"Aurik 9.10.x ({args.mode})",
+        system_name=f"Aurik 10.0.0.x ({args.mode})",
         verbose=args.verbose,
     )
 

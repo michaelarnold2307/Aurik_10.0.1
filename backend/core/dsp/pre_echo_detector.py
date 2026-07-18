@@ -11,7 +11,7 @@ Transient zu grob — bei niedrigen Bitraten entsteht ein wahrnehmbares
 Konventionelle NR-Algorithmen versagen: Pre-Echo ist kein stationäres Rauschen,
 kein Klick, keine spektrale Lücke — zeitlich-energetisch lokalisiertes Vorartefakt.
 
-Spec: 04_dsp_standards.md §4.11 (v9.12.0)
+Spec: 04_dsp_standards.md §4.11 (v10.0.0)
 Fastl & Zwicker 2007, „Psychoacoustics", §7.2 (Temporal Masking Decay).
 """
 

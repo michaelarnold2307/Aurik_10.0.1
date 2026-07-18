@@ -83,7 +83,7 @@ def compute_specific_loudness_zwicker(audio: np.ndarray, sr: int) -> float:
 
 **Mapping sone → phon** für Diagnose: `phon = 40 + 33.2 × log10(max(N, 0.001) / 1.0)` (gültig für N ≥ 1 sone)
 
-**Implementierung** (aktiv seit v9.11.x):
+**Implementierung** (aktiv seit v10.0.0.x):
 
 - Modul: `backend/core/dsp/psychoacoustics.py` (**implementiert und aktiv** — `compute_specific_loudness_zwicker()`, `evaluate_mid_pipeline_loudness_delta()`)
 - Aufruf: `backend/core/unified_restorer_v3.py` — ZwickerGuard in `_profiled_phase_call` nach breitbandigen subtraktiven Phasen; Dry/Wet-Rescue: ΔN > 2.0 sone → `_rescue_wet` ∈ [0.35, 0.90]
@@ -212,7 +212,7 @@ def hz_to_mel(f_hz: float) -> float:
 
 ---
 
-## §4.4a [RELEASE_MUST] SOTA-Evaluations-Protokoll (v9.12.0)
+## §4.4a [RELEASE_MUST] SOTA-Evaluations-Protokoll (v10.0.0)
 
 **Problem**: Die SOTA-Matrix (§4.4) veraltete unbemerkt. Modelle aus 2023/2024 wurden nicht systematisch evaluiert; der Stand „2025/2026" war nicht durch einen definierten Prozess gedeckt.
 
@@ -249,7 +249,7 @@ def evaluate_candidate(model_name, candidate_plugin, amrb_subset="all"):
 
 **VERBOTEN**: Manuelle Matrix-Aktualisierung ohne durchlaufenen Evaluations-Check.
 
-## §4.4b [RELEASE_MUST] Phase-Bindung der SOTA-Matrix (v9.12.9)
+## §4.4b [RELEASE_MUST] Phase-Bindung der SOTA-Matrix (v10.0.0)
 
 Die Tabellen in §4.4 definieren die familienweite Modell-Praeferenz. Die **bindende Zuordnung
 zu den einzelnen Phasen 01-64** steht in Spec 06 §7.1d.
@@ -267,7 +267,7 @@ Spec 06 §7.1d und das Evaluationsprotokoll §4.4a gemeinsam zu aktualisieren.
 
 ## §4.5 Pflicht-Algorithmus-Spezifikationen
 
-### §4.5g [RELEASE_MUST] WLPC — Noise-Robuste Formant-Extraktion (v9.15.3)
+### §4.5g [RELEASE_MUST] WLPC — Noise-Robuste Formant-Extraktion (v10.0.0)
 
 **Problem**: Standard-Burg-LPC erkennt Rauschspitzen als Formanten wenn SNR < 15 dB oder
 era < 1960 (Shellac, frühe elektrische Aufnahmen). Das erzeugt falsche Formant-Korrekturen
@@ -359,7 +359,7 @@ Kritische Architekturnotiz (Stand April 2026):
 
 ```text
 Kurze Lücken < 50 ms: NMF mit β-Divergenz (β=0, Itakura-Saito) + PGHI
-    β-Wert-Referenz (normativ, Lücke-F-Fix v9.10.100):
+    β-Wert-Referenz (normativ, Lücke-F-Fix v10.0.0):
         β=0 → Itakura-Saito-Divergenz (IS): minimiert relative Energiefehler,
                gewichtet kleine Energieunterschiede stark → OPTIMAL für impulsive
                Lücken (Klicks < 50 ms) und Transienten (Attack-Bins).
@@ -547,7 +547,7 @@ INVARIANTE: NatuerlichkeitMetric darf nach phase_49 nicht sinken
 VERBOTEN: Aggressives Dereverb ohne Early-Reflection-Guard (klingt klinisch/steril).
 ```
 
-### §4.5d [RELEASE_MUST] Psychoakustischer Masking-Guard für NR-Algorithmen (v9.12.0)
+### §4.5d [RELEASE_MUST] Psychoakustischer Masking-Guard für NR-Algorithmen (v10.0.0)
 
 Ergänzt §4.1 (ISO 11172-3) mit einer **bindenden Gain-Floor-Invariante** für alle NR-Algorithmen.
 
@@ -592,7 +592,7 @@ assert G_floor[band] >= 0.10 for band where signal_energy_db[band] > -60.0
 
 > Kreuzreferenz: §4.1 (Psychoacoustic Masking), §4.1b (ISO 532-1 Loudness), §4.5 NR-Routing; Spec 02 §2.62
 
-### §4.5e [RELEASE_MUST] Hallucination-Guard-Referenz für additive DSP-Phasen (v9.12.0)
+### §4.5e [RELEASE_MUST] Hallucination-Guard-Referenz für additive DSP-Phasen (v10.0.0)
 
 Jede additive DSP-Phase in Spec 04 MUSS `hallucination_guard.py` (`§2.46e`) aufrufen.
 Insbesondere betroffen: Bandbreiten-Extension (phase_06), Harmonik-Synthese (phase_07), FlashSR (phase_23).
@@ -627,7 +627,7 @@ Direkte STFT→iSTFT-Rekonstruktion ist ausschließlich für den
 Phasen mit PGHI-Rekonstruktion: `phase_03`, `phase_06`, `phase_20`, `phase_23`, `phase_24`, `phase_28`, `phase_29`, `phase_31`.
 Alle anderen STFT-nutzenden Phasen verwenden kein modifiziertes Betragsspektrum (nur Analyse-STFT ohne Rücktransformation).
 
-**[RELEASE_MUST] PGHI STFT/iSTFT-boundary-Invariante (v9.10.100):**
+**[RELEASE_MUST] PGHI STFT/iSTFT-boundary-Invariante (v10.0.0):**
 Jeder PGHI-Rekonstruktionsaufruf nach einer STFT-Modifikation MUSS `boundary`-konsistent sein:
 
 ```python
@@ -663,7 +663,7 @@ VERBOTEN: CBR für Restaurierungsausgaben — CBR erzeugt Pre-Echo auf restaurie
           Transienten (TDP §7.x, MDEM §8.3)
 ```
 
-### Head-Bump Kompensation (Phase 04, Tape-Material) v9.10.128
+### Head-Bump Kompensation (Phase 04, Tape-Material) v10.0.0
 
 Tape-Transport-Köpfe erzeugen eine LF-Resonanz, deren Mittenfrequenz umgekehrt proportional zur Aufnahmegeschwindigkeit ist (physik: Wellenlänge = Spaltlänge · 2 bei Resonanzfrequenz).
 
@@ -681,7 +681,7 @@ AKTIVIERUNG: Via kwargs["tape_speed_ips"] in phase_04.process() — optional, nu
 FALLBACK: Keine Kompensation (kein crash); unbekannte Geschwindigkeit (>150% Abweichung) = bypass.
 ```
 
-### Intermodulation Distortion — Bispektrum-Analyse (Phase 63) v9.10.128
+### Intermodulation Distortion — Bispektrum-Analyse (Phase 63) v10.0.0
 
 Bispektrum-Kohärenz bestätigt IMD-Produkte kausal (Wishart 2013; Kim & Powers 1979):
 
@@ -697,7 +697,7 @@ Schwellwert: b_coherence > 0.15 → IMD-Produkt bestätigt (vs. Rauschen/Harmoni
 symmetrisch auf Mid (100%) und Side (30%) angewendet. Kein unabhängiges L/R-Processing.
 ```
 
-### Tonträgerketten-Charakteristika — BW-Grenzen (Phase 55) v9.10.128
+### Tonträgerketten-Charakteristika — BW-Grenzen (Phase 55) v10.0.0
 
 ```text
 MATERIAL-SPEZIFISCHE INPAINTING-BANDBREITENBEGRENZUNG (§0 Primum non nocere):
@@ -713,7 +713,7 @@ IMPLEMENTATION: Butterworth 4th-Order Tiefpass (sosfiltfilt, zero-phase) nach
 
 ---
 
-## §4.7 [RELEASE_MUST] Noise-Texture-Coherence-Guard (v9.11.14)
+## §4.7 [RELEASE_MUST] Noise-Texture-Coherence-Guard (v10.0.0)
 
 **Problem**: Denoising-Phasen (phase_03, phase_29) können die spektrale Form des Restrauschens verändern. Ein Vinyl-Song, der nach Denoising weißen Rauschboden zeigt, klingt „falsch" — auch wenn der Rauschpegel niedrig ist. Die Rauschtextur ist Teil des Trägerprofils und muss kohärent bleiben (§0a).
 
@@ -757,7 +757,7 @@ def compute_noise_texture_coherence(
   Kohärenz < 0.60 → Strength-Reduktion (−30 % Wet, `wet_mult = 0.70`), kein Rollback.
   Kohärenz ∈ [0.60, 0.80) → milde Reduktion (−15 % Wet, `wet_mult = 0.85`) **und** Telemetrie-Warning.
   Kohärenz ≥ 0.80 → OK (`wet_mult = 1.0`).
-  **Rationale**: Kohärenz 0.60–0.80 ist für sensible Hörer bereits hörbar inkohärent (Vinyl klingt „digital-flach"). Eine milde Wet-Dämpfung erzwingt mehr Retention des Carrier-Profils ohne die subtraktive Wirkung zu neutralisieren. `wet_mult = 1.0` bei 0.60–0.80 ist ein normatives Defizit (v9.11.15).
+  **Rationale**: Kohärenz 0.60–0.80 ist für sensible Hörer bereits hörbar inkohärent (Vinyl klingt „digital-flach"). Eine milde Wet-Dämpfung erzwingt mehr Retention des Carrier-Profils ohne die subtraktive Wirkung zu neutralisieren. `wet_mult = 1.0` bei 0.60–0.80 ist ein normatives Defizit (v10.0.0).
 - **End-of-Pipeline**: `metadata["noise_texture_coherence"]` als Pflichtfeld.
   Restoration-Modus: Kohärenz < 0.80 → Warning im Export, Empfehlung in `auto_improvement_recommendations`.
   Studio 2026: Kein Kohärenz-Zwang (Ziel ist minimaler Rauschboden).
@@ -768,7 +768,7 @@ def compute_noise_texture_coherence(
 
 ---
 
-## §4.8 [RELEASE_MUST] Generation-Loss-Kompensationsformel (v9.11.14)
+## §4.8 [RELEASE_MUST] Generation-Loss-Kompensationsformel (v10.0.0)
 
 **Problem**: Mehrgenerations-Übertragungsketten (z. B. Shellac → Reel-Tape → Cassette → CD → MP3) verursachen kumulative, physikalisch modellierbare Verluste. Ohne explizite Formel schätzt jede Komponente den Gesamtverlust anders, was zu inkonsistenter Restaurierungsstärke führt.
 
@@ -846,7 +846,7 @@ def compute_cumulative_generation_loss(transfer_chain: list[str]) -> dict:
 
 ---
 
-## §4.8a [RELEASE_MUST] DSP-PRESERVE-Taxonomie — Was niemals repariert werden darf (v9.12.0)
+## §4.8a [RELEASE_MUST] DSP-PRESERVE-Taxonomie — Was niemals repariert werden darf (v10.0.0)
 
 > **Normative Querverbindung**: §6.5 (Spec 05) definiert die vollständige Authentic Character
 > Taxonomy pro Materialtyp. §4.8a spezifiziert die **DSP-seitige Durchsetzung** — wie jede
@@ -897,7 +897,7 @@ if _preserve_mask is not None:
 
 ---
 
-## §4.11 [RELEASE_MUST] Pre-Echo-Detektionsalgorithmus — Temporal Masking Artifact (v9.12.0)
+## §4.11 [RELEASE_MUST] Pre-Echo-Detektionsalgorithmus — Temporal Masking Artifact (v10.0.0)
 
 > **Kontext**: Pre-Echo ist das diagnostisch schwierigste Codec-Artefakt. Es entsteht, wenn
 > Transform-Codecs (MP3, AAC, Opus) die zeitliche Vorwärts-Maskierung des menschlichen Gehörs
@@ -1048,7 +1048,7 @@ In `CAUSE_TO_PHASES` in Spec 06 §7.2:
 
 ---
 
-## §4.9 [RELEASE_MUST] FlashSR Wall-Time-Budget (v9.11.14)
+## §4.9 [RELEASE_MUST] FlashSR Wall-Time-Budget (v10.0.0)
 
 FlashSR-Zonen-Schleifen (BWE in phase_06, phase_23, phase_24) können bei extremen Songstrukturen (>180 s, komplexe Texturen) zeitlich unbegrenzt laufen → Pipeline-Hänger.
 
@@ -1068,7 +1068,7 @@ _AUDIOSR_WALL_BUDGET_S = 900.0  # 15 min maximal für FlashSR-Zonenschleife
 
 ---
 
-## §4.10 [RELEASE_MUST] Pitch-Tracking-Kaskade — Tier-Reihenfolge (v9.11.14)
+## §4.10 [RELEASE_MUST] Pitch-Tracking-Kaskade — Tier-Reihenfolge (v10.0.0)
 
 Die SOTA-Matrix (§4.4) definiert die Pitch-Tracking-Kaskade als:
 
@@ -1085,7 +1085,7 @@ FCPE (Tier-0, primär) → RMVPE (Tier-1, Fallback) → PESTO (Tier-2) → pYIN 
 | 2 | PESTO | ML (light) | Schnell, weniger genau |
 | 3 | pYIN | DSP | Ultimativer Fallback, kein ML nötig |
 
-**VERBOTEN**: CREPE als Tier in der Produktionskaskade (deprecated seit v9.10). CREPE bleibt nur in `_PHASE_REQUIRED_MODELS` für Legacy-Kompatibilität.
+**VERBOTEN**: CREPE als Tier in der Produktionskaskade (deprecated seit v10.0.0). CREPE bleibt nur in `_PHASE_REQUIRED_MODELS` für Legacy-Kompatibilität.
 
 **Betroffene Phasen**: phase_12 (Wow/Flutter), phase_56 (Spectral Band Gap), hybrid_wow_flutter, hybrid_speed_pitch_ml.
 
@@ -1118,7 +1118,7 @@ FCPE (Tier-0, primär) → RMVPE (Tier-1, Fallback) → PESTO (Tier-2) → pYIN 
 
 ---
 
-## §4.6 [RELEASE_MUST] Loudness-Guard DSP-Invarianten (v9.11.5)
+## §4.6 [RELEASE_MUST] Loudness-Guard DSP-Invarianten (v10.0.0)
 
 DSP-Pflichtregeln für alle Loudness-Drift-Guards in der Pipeline (§2.45a).
 
@@ -1187,7 +1187,7 @@ Diese drei Invarianten verhindern das Silence-Amplification-Problem: Subtraktive
 
 ---
 
-## §4.7 [RELEASE_MUST] Literaturbasierte Gap-Interpolation (v9.11.13)
+## §4.7 [RELEASE_MUST] Literaturbasierte Gap-Interpolation (v10.0.0)
 
 ### §4.7a Phase-09 LPC/AR-Lücken-Interpolation
 
@@ -1241,7 +1241,7 @@ Für Time-Axis-Dropout-Reparatur (Pass-2) in Phase 50:
 
 ---
 
-### §4.7c Phase-23 POCS — STFT-Konsistenz-Projektion vor PGHI (v9.11.14)
+### §4.7c Phase-23 POCS — STFT-Konsistenz-Projektion vor PGHI (v10.0.0)
 
 Bei Spectral-Repair (phase_23) Single-STFT-Fallback (`_repair_channel`): Interpolierte/Inpainting-Spektren sind STFT-inkonsistent → PGHI rekonstruiert Phase aus widersprüchlichen Magnitudes → Aliasing an Defektgrenzen.
 
@@ -1310,7 +1310,7 @@ except Exception:
 
 **Auto-Budget-Formel**: `max(4.0, min(12.0, RAM_GB / 3))`. Budget-Einheit: **immer GB (float)**, nie MB.
 
-### §4.6b [RELEASE_MUST] PLM-Inferenz-Schutz — Active-Guard-Pflicht (v9.11.14)
+### §4.6b [RELEASE_MUST] PLM-Inferenz-Schutz — Active-Guard-Pflicht (v10.0.0)
 
 **Problem**: Emergency-Eviction (`evict_if_needed` bei RAM > 78 %) entlädt registrierte Plugins nach LRU-Alter. Wenn ein Plugin gerade in einer Phase aktiv ist, aber `entry.active == False`, wird es evictiert → Inferenz-Crash → OOM-Eskalation → Kernel-Kill.
 
@@ -1334,7 +1334,7 @@ finally:
 
 **VERBOTEN**: ML-Inferenz ohne `set_active()`-Guard; Emergency-Eviction von `entry.active`-Plugins; `_PHASE_REQUIRED_MODELS`-Eintrag, der nur den Primärpfad listet.
 
-### §4.6c [RELEASE_MUST] Phase-zu-Modell-Mapping — Bidirektionale Sync-Invariante (v9.11.14)
+### §4.6c [RELEASE_MUST] Phase-zu-Modell-Mapping — Bidirektionale Sync-Invariante (v10.0.0)
 
 **`_PHASE_REQUIRED_MODELS`** in `backend/core/plugin_lifecycle_manager.py` ist die **Single Source of Truth** für das Phase→ML-Mapping. Es MUSS **alle** Modelle enthalten, die eine Phase laden kann:
 
@@ -1421,22 +1421,22 @@ Jeder Fallback in `metadata["ml_fallbacks_used"]` protokollieren.
 
 | Phase | Modell | `set_active()` Guard | Status |
 | --- | --- | --- | --- |
-| phase_03 | SGMSE+ | ✅ | v9.11.0 |
-| phase_03 | ResembleEnhance | ✅ | v9.10.x |
-| phase_03 | DeepFilterNetV3 | ✅ | v9.10.x |
+| phase_03 | SGMSE+ | ✅ | v10.0.0 |
+| phase_03 | ResembleEnhance | ✅ | v10.0.0.x |
+| phase_03 | DeepFilterNetV3 | ✅ | v10.0.0.x |
 | phase_09 | BANQUET | ⬜ TODO | — |
 | phase_12 | FCPE/RMVPE/CREPE | ⬜ TODO | — |
 | phase_18 | SileroVAD | ⬜ leicht (CPU) | nicht nötig (<100 MB) |
-| phase_20 | SGMSE+ | ✅ | v9.11.0 |
-| phase_23 | Apollo | ✅ | v9.11.14 |
+| phase_20 | SGMSE+ | ✅ | v10.0.0 |
+| phase_23 | Apollo | ✅ | v10.0.0 |
 | phase_24 | FlashSR | ⬜ TODO | — |
-| phase_29 | DeepFilterNetV3 | ✅ | v9.10.x |
+| phase_29 | DeepFilterNetV3 | ✅ | v10.0.0.x |
 | phase_42 | BSRoFormer/MDX23C | ⬜ TODO | — |
 | phase_43 | MP-SENet | ⬜ TODO | — |
-| phase_49 | SGMSE+ | ✅ | v9.11.0 |
+| phase_49 | SGMSE+ | ✅ | v10.0.0 |
 | phase_55 | CQTdiff/FlowMatching | ⬜ TODO | — |
 
-**Invariante**: Jede Phase mit ⬜ MUSS vor Release v9.12.0 den `set_active()`-Guard implementieren.
+**Invariante**: Jede Phase mit ⬜ MUSS vor Release v10.0.0 den `set_active()`-Guard implementieren.
 Leichte CPU-Modelle (< 200 MB) sind ausgenommen, da Emergency-Eviction sie nicht targetiert.
 
 ### Checkliste neues ML-Plugin

@@ -2,7 +2,7 @@
 """§0a Crossfire-Guard — CAUSE_TO_PHASES darf keine Restoration-verbotenen Phasen enthalten.
 
 Verhindert Regression: phase_21_exciter, phase_35_multiband_compression, phase_42_vocal_enhancement
-wurden in BUG-FIX v9.12.0 aus CAUSE_TO_PHASES entfernt. Dieser Guard stellt sicher, dass sie
+wurden in BUG-FIX v10.0.0 aus CAUSE_TO_PHASES entfernt. Dieser Guard stellt sicher, dass sie
 nicht wieder eingebaut werden.
 
 Wird von pre-commit auf backend/core/causal_defect_reasoner.py ausgeführt.
@@ -114,7 +114,7 @@ def main() -> int:
             file=sys.stderr,
         )
         print(
-            "           (Restoration-verbotene Phase; BUG-FIX v9.12.0 §0a Crossfire-Invariante)",
+            "           (Restoration-verbotene Phase; BUG-FIX v10.0.0 §0a Crossfire-Invariante)",
             file=sys.stderr,
         )
     print("─" * 70, file=sys.stderr)

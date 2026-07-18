@@ -1,4 +1,4 @@
-"""Consensus-Balance-Synthesizer (CBS) — §DGWCS, v9.15.1.
+"""Consensus-Balance-Synthesizer (CBS) — §DGWCS, v10.0.0.
 
 Dimension-Gap-Weighted Consensus Synthesis: Kombiniert bestehende Checkpoint-Referenzen
 analytisch-optimal in einem einzigen, mathematisch begründeten globalen Alpha,
@@ -338,7 +338,10 @@ def _build_silence_mask(
             i_end = min(n_samples, int(end_s * sr))
             if i_end > i_start:
                 mask[i_start:i_end] = 0.0
-        except Exception:
+        except Exception as _cbs_zone_exc:
+            logger.debug(
+                "consensus_balance_synthesizer: zone mask computation failed (non-critical): %s", _cbs_zone_exc
+            )
             continue
 
     if float(mask.min()) > 0.999:

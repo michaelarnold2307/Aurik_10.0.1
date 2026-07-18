@@ -1,6 +1,6 @@
-# Aurik 9.x.x — Configuration Guide
+# Aurik 10.0.8 — Configuration Guide
 
-**Version:** 9.20.3  
+**Version:** 10.0.8  
 **Datum:** 19. Mai 2026  
 **Status:** ✅ Production Ready
 
@@ -23,7 +23,7 @@
 
 ## Überblick
 
-Aurik bietet **5 vordefinierte Processing Modes** plus **Custom Configuration** für maximale Kontrolle.
+Aurik bietet **2 Processing Modes** plus **Custom Configuration** für maximale Kontrolle.
 
 ### Configuration-Hierarchie
 

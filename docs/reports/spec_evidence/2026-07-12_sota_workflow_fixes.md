@@ -5,7 +5,7 @@
 - **Spec-Datei**: `.github/specs/02_pipeline_architecture.md`
 - **Abschnitte**: §2.46c (Phase 12 Pitch-Span), §2.46d (FlashSR Recovery), §2.35c (LPC AA-Filter)
 - **Änderungstyp**: SOTA-Härtung — keine Workarounds, echte Lösungen
-- **Alte Regel**: Starre Thresholds, stille Degrade-Pfade, CPU-only ML
+- **Alte Regel**: Starre Thresholds, stille Degrade-Pfade, CPU + optionale AMD-GPU ML
 - **Neue Regel**: Adaptive Thresholds, Recovery-Ketten, GPU-DDIM + CPU-Vocoder
 
 ### 1. §2.46c: Phase 12 Material-Adaptiver Pitch-Span

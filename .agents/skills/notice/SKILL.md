@@ -1,4 +1,4 @@
-# NOTICE — Aurik 9
+# NOTICE — Aurik 10.0.8
 
 Copyright 2026 Michael Arnold
 

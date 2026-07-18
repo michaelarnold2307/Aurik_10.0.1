@@ -127,10 +127,10 @@ class AirBandEnhancement(PhaseInterface):
             "saturation_drive": 0.20,
         },
         MaterialType.TAPE: {
-            "shelf_gain_db": 5.0,  # v9.10.114: ↑3.0→5.0 — Tape-HF nach Rauschreduktion sicher erweiterbar
+            "shelf_gain_db": 5.0,  # v10.0.0: ↑3.0→5.0 — Tape-HF nach Rauschreduktion sicher erweiterbar
             "shelf_freq_hz": 13000,
-            "exciter_mix": 0.28,  # v9.10.114: ↑0.20→0.28
-            "saturation_drive": 0.20,  # v9.10.114: ↑0.15→0.20
+            "exciter_mix": 0.28,  # v10.0.0: ↑0.20→0.28
+            "saturation_drive": 0.20,  # v10.0.0: ↑0.15→0.20
         },
         MaterialType.CASSETTE: {  # §6.2c BW-Ceiling 14 kHz (central definition) — konservativ
             "shelf_gain_db": 3.0,  # ≤ 0.35 Stärke — kein HF über 14 kHz synthetisieren
@@ -139,16 +139,16 @@ class AirBandEnhancement(PhaseInterface):
             "saturation_drive": 0.15,
         },
         MaterialType.CD_DIGITAL: {
-            "shelf_gain_db": 5.0,  # v9.10.114: ↑3.5→5.0 — CD hat klare HF-Basis
+            "shelf_gain_db": 5.0,  # v10.0.0: ↑3.5→5.0 — CD hat klare HF-Basis
             "shelf_freq_hz": 12000,
-            "exciter_mix": 0.30,  # v9.10.114: ↑0.25→0.30
+            "exciter_mix": 0.30,  # v10.0.0: ↑0.25→0.30
             "saturation_drive": 0.25,
         },
         MaterialType.STREAMING: {
-            "shelf_gain_db": 4.5,  # v9.10.114: ↑4.0→4.5
+            "shelf_gain_db": 4.5,  # v10.0.0: ↑4.0→4.5
             "shelf_freq_hz": 11000,
-            "exciter_mix": 0.32,  # v9.10.114: ↑0.30→0.32
-            "saturation_drive": 0.22,  # v9.10.114: ↑0.20→0.22
+            "exciter_mix": 0.32,  # v10.0.0: ↑0.30→0.32
+            "saturation_drive": 0.22,  # v10.0.0: ↑0.20→0.22
         },
     }
 
@@ -228,8 +228,13 @@ class AirBandEnhancement(PhaseInterface):
                 logger.debug("Phase39 §V41 ForwardMaskingGuard non-blocking: %s", _fmg_exc_39)
 
         if _effective_strength <= 0.0:
+            logger.info(
+                "Phase 39: skipped — effective_strength=%.3f (no air band enhancement applied)", _effective_strength
+            )
             audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
             audio = np.clip(audio, -1.0, 1.0)
+            # §5/5: Echte Peak-Messung auch bei Skip
+            _p_peak = float(20.0 * np.log10(np.percentile(np.abs(audio), 99.9) + 1e-10))
             return PhaseResult(
                 success=True,
                 audio=audio.copy(),
@@ -245,7 +250,7 @@ class AirBandEnhancement(PhaseInterface):
                 warnings=[],
             )
 
-        # §0a §2.46e BUG-FIX v9.12.0 (Bug 6): Air-Band-Enhancement in Restoration-Mode
+        # §0a §2.46e BUG-FIX v10.0.0 (Bug 6): Air-Band-Enhancement in Restoration-Mode
         # ist VERBOTEN fuer analoge Materialien (vinyl, shellac, tape) —
         # Air-Band-Enhancement ist ein Harmonic Exciter (§0a) und eine additive
         # Halluzination (§2.46e): es fuegt Energie ueber das physikalische BW-Ceiling hinzu,
@@ -344,7 +349,7 @@ class AirBandEnhancement(PhaseInterface):
             config["exciter_mix"] *= 0.70
             config["saturation_drive"] *= 0.75
 
-        # §2.41 (v9.10.116) SOTA: Ära-bewusste Air-Band-Deckelung aus SourceFidelityTarget.
+        # §2.41 (v10.0.0) SOTA: Ära-bewusste Air-Band-Deckelung aus SourceFidelityTarget.
         # Physikalische Invariante (Klangtreue §2.41): Luft-Anhebung nie ÜBER der ären-
         # typischen Original-Bandbreite — was das Original nicht enthalten konnte,
         # darf nicht synthetisiert werden (falsche Helligkeit).
@@ -355,7 +360,7 @@ class AirBandEnhancement(PhaseInterface):
         _sfr_conf_39 = float(_sfr_cal_39.get("source_fidelity_confidence", 0.5))
         if _sfr_bw_39 > 0.0 and _sfr_conf_39 >= 0.30:
             # Shelf-Frequenz-Deckelung: nie höher als 85% der Original-Bandbreite
-            _air_bw_ceil = float(np.clip(_sfr_bw_39 * 0.85, 6000.0, 20000.0))
+            _air_bw_ceil = float(np.clip(_sfr_bw_39 * 0.85, 6000.0, self.AIR_BAND_HZ[1]))
             if _air_bw_ceil < config["shelf_freq_hz"]:
                 config["shelf_freq_hz"] = _air_bw_ceil
                 logger.debug(

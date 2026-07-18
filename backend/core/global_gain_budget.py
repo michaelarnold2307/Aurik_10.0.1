@@ -32,6 +32,38 @@ class GlobalGainBudget:
         self._lock = threading.Lock()
         self._cumulative_db: float = 0.0
         self._phase_gains: dict[str, float] = {}
+        # §v10.18: Chain-depth-adaptive scaling. Multi-generation recordings
+        # (e.g. reel_tape→vinyl→cassette→mp3_low, depth=4) accumulate
+        # frequency-dependent gain loss at each generation. A 6 dB cap is
+        # sufficient for single-generation sources but too restrictive for
+        # 4-generation chains where cumulative headroom loss exceeds 12 dB.
+        self._total_budget_db: float = self._TOTAL_BUDGET_DB
+
+    def configure_for_chain_depth(self, transfer_depth: int) -> None:
+        """Scale the total gain budget based on transfer chain depth.
+
+        Each generation adds ~3 dB of cumulative gain loss:
+          depth=1 (single source):  6.0 dB (default)
+          depth=2:                   8.0 dB
+          depth=3:                  10.0 dB
+          depth≥4:                  12.0 dB
+
+        Called once per pipeline run from UV3/Denker after chain detection.
+        """
+        depth = max(1, int(transfer_depth))
+        if depth >= 4:
+            self._total_budget_db = 12.0
+        elif depth >= 3:
+            self._total_budget_db = 10.0
+        elif depth >= 2:
+            self._total_budget_db = 8.0
+        else:
+            self._total_budget_db = 6.0
+        logger.info(
+            "§GGB-1: chain-depth=%d → total budget = %.1f dB",
+            depth,
+            self._total_budget_db,
+        )
 
     def request(self, phase_id: str, requested_db: float, priority: str = "normal") -> float:
         """Request gain budget for a phase. Returns approved gain in dB.
@@ -59,7 +91,7 @@ class GlobalGainBudget:
                 requested = min(requested, self._MAX_PER_PHASE_DB)
 
             # Global cap
-            remaining = max(0.0, self._TOTAL_BUDGET_DB - self._cumulative_db)
+            remaining = max(0.0, self._total_budget_db - self._cumulative_db)
             approved = min(requested, remaining)
 
             self._cumulative_db += approved

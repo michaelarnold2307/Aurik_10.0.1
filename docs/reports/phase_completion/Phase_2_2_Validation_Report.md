@@ -213,7 +213,7 @@ Air (10-20 kHz)      | Baseline | -18.79 dB | De-Esser effect
 
 **Competitive Advantage:**
 
-- **Harmonic-aware filling (ML-inspired, CPU-only)**
+- **Harmonic-aware filling (ML-inspired, CPU + optionale AMD-GPU)**
 - iZotope RX10 Spectral Repair: Manual selection required
 - Adobe Audition Spectral Frequency Display: Visual only
 - AURIK: Automatic harmonic-aware gap detection + filling
@@ -622,7 +622,7 @@ except Exception as e:
 4. ✅ **Seamless historical restorer integration** (lazy-loading, graceful degradation)
 5. ✅ **3 world-first features** (genre-aware breath, singer's formant, harmonic inpainting)
 6. ✅ **Beyond industry leaders** (exceeds iZotope + Waves + Antares combined)
-7. ✅ **CPU-only, accessible to all** (no GPU barriers)
+7. ✅ **CPU + optionale AMD-GPU, accessible to all** (no GPU barriers)
 8. ✅ **Real-time capable** (4.6× faster than real-time)
 9. ✅ **Spectral validation** (+21.84 dB presence boost confirmed)
 10. ✅ **Production-ready robustness** (comprehensive error handling)
@@ -641,7 +641,7 @@ except Exception as e:
 - **Features no competitor has** (genre-aware breath, singer's formant, harmonic inpainting)
 - **Unified 6-stage processing** (one command, professional results)
 - **Broadcast/mastering studio quality** (90-95% Weltspitze)
-- **Accessible to all users** (CPU-only, no specialized hardware)
+- **Accessible to all users** (CPU + optionale AMD-GPU, no specialized hardware)
 
 ### Next Steps
 

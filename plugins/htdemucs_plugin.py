@@ -6,7 +6,7 @@ Delegates to ``plugins.mdx23c_plugin.get_mdx23c_plugin()``.
 §4.4: MDX23C (Kim_Vocal_2) ersetzt HTDemucs 6s als Primär-Separator.
 
 Author: Aurik Development Team
-Version: 9.10.57
+Version: 10.0.0
 """
 
 from __future__ import annotations

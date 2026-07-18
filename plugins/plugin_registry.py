@@ -1,4 +1,4 @@
-"""plugins/plugin_registry.py — Lazy Plugin-Registry für Aurik 9.
+"""plugins/plugin_registry.py — Lazy Plugin-Registry für Aurik 10.0.0.
 
 Alle Plugins werden NUR bei erstem Zugriff importiert (kein Eager-Loading
 beim Start). Damit werden beim Programmstart 0 MB ML-Modell-RAM belegt.

@@ -1,6 +1,6 @@
 """
 backend/core/intentional_artifact_classifier.py
-Aurik 9 — Spec §6.5 (v9.12.0): Authentischer Klangcharakter vs. Defekt — Taxonomy.
+Aurik 10.0.0 — Spec §6.5 (v10.0.0): Authentischer Klangcharakter vs. Defekt — Taxonomy.
 
 Klassifiziert Signal-Merkmale als PRESERVE (authentischer Epochen-Charakter) oder
 REPAIR (echter Defekt). Wird VOR DefectScanner-Auswahl in CAUSE_TO_PHASES ausgeführt,

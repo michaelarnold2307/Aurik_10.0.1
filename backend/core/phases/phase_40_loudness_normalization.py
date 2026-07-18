@@ -99,7 +99,7 @@ class LoudnessNormalizationPhase(PhaseInterface):
         MaterialType.SHELLAC: -18.0,  # Gentle (historical preservation)
         MaterialType.VINYL: -16.0,  # Moderate (vinyl warmth)
         MaterialType.TAPE: -15.0,  # Balanced
-        MaterialType.CASSETTE: -15.0,  # v9.12.9: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
+        MaterialType.CASSETTE: -15.0,  # v10.0.0: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
         MaterialType.CD_DIGITAL: -14.0,  # Modern CD standard
         MaterialType.STREAMING: -14.0,  # Default streaming
     }
@@ -155,7 +155,8 @@ class LoudnessNormalizationPhase(PhaseInterface):
                     end_s = float(getattr(zone, "end_s", None) or zone[1])
                     if end_s > start_s:
                         zones.append((start_s, end_s, cap))
-                except Exception:
+                except Exception as _p40_zone_exc:
+                    logger.debug("Phase 40: zone parse failed (non-critical): %s", _p40_zone_exc)
                     continue
         return zones
 
@@ -182,7 +183,8 @@ class LoudnessNormalizationPhase(PhaseInterface):
             for loc in locations or []:
                 try:
                     start_s, end_s = float(loc[0]), float(loc[1])
-                except Exception:
+                except Exception as _p40_loc_exc:
+                    logger.debug("Phase 40: location parse failed (non-critical): %s", _p40_loc_exc)
                     continue
                 s = int(max(0.0, start_s) * sample_rate)
                 e = int(max(0.0, end_s) * sample_rate)
@@ -267,9 +269,20 @@ class LoudnessNormalizationPhase(PhaseInterface):
                 logger.debug("Phase40 §ISO-226 non-blocking: %s", _iso_exc)
 
         if _effective_strength <= 0.0:
+            logger.info(
+                "Phase 40: skipped — effective_strength=%.3f (no normalization applied; measuring actual LUFS)",
+                _effective_strength,
+            )
             audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
             audio = np.clip(audio, -1.0, 1.0)
             peak_db = float(20.0 * np.log10(np.percentile(np.abs(audio), 99.9) + 1e-10))
+            # §5/5 §G-5/5: Echte LUFS-Messung auch bei Skip — keine Dummy-Werte mehr
+            try:
+                _actual_lufs, _actual_lra, _actual_momentary, _actual_st = self._measure_full_loudness(
+                    audio, sample_rate
+                )
+            except Exception:
+                _actual_lufs, _actual_lra, _actual_momentary, _actual_st = -70.0, 0.0, -70.0, -70.0
             return PhaseResult(
                 success=True,
                 audio=restore_layout(audio.copy(), _p40_transposed),
@@ -283,17 +296,17 @@ class LoudnessNormalizationPhase(PhaseInterface):
                     "loudness_makeup_db": 0.0,
                 },
                 metrics={
-                    "integrated_lufs_before": -70.0,
-                    "integrated_lufs_after": -70.0,
-                    "lra_before": 0.0,
-                    "lra_after": 0.0,
+                    "integrated_lufs_before": float(_actual_lufs),
+                    "integrated_lufs_after": float(_actual_lufs),
+                    "lra_before": float(_actual_lra),
+                    "lra_after": float(_actual_lra),
                     "gain_applied_db": 0.0,
                     "true_peak_before_db": peak_db,
                     "true_peak_after_db": peak_db,
                     "lufs_tolerance": 0.0,
                     "peak_compliance": True,
-                    "momentary_max_lufs": -70.0,
-                    "short_term_max_lufs": -70.0,
+                    "momentary_max_lufs": float(_actual_momentary),
+                    "short_term_max_lufs": float(_actual_st),
                 },
                 modifications={"algorithm": "skipped_zero_strength"},
             )
@@ -312,7 +325,7 @@ class LoudnessNormalizationPhase(PhaseInterface):
         quality_mode = str(kwargs.get("quality_mode", "balanced")).lower()
         output_guard_enabled = quality_mode in ("quality", "maximum", "studio2026")
 
-        # §v9.10.113: Studio 2026 → -14 LUFS EBU R128 unconditional (all materials, §Spec Studio 2026)
+        # §v10.0.0: Studio 2026 → -14 LUFS EBU R128 unconditional (all materials, §Spec Studio 2026)
         # Shellac/Vinyl/Tape material targets are archive-mode only; Studio 2026 always → -14 LUFS.
         if quality_mode in ("maximum", "studio2026"):
             target_lufs = -14.0
@@ -400,7 +413,7 @@ class LoudnessNormalizationPhase(PhaseInterface):
         integrated_lufs, lra, momentary_max, short_term_max = self._measure_loudness_full(audio, sample_rate)
 
         # Calculate gain adjustment
-        # §v9.20.3 Genre-adaptive LUFS: Schlager/Klassik brauchen unterschiedliche Targets
+        # §v10.0.0 Genre-adaptive LUFS: Schlager/Klassik brauchen unterschiedliche Targets
         _genre_lufs = str(kwargs.get("genre_label", "")).strip().lower()
         _genre_targets = {
             "klassik": -23.0,
@@ -417,8 +430,8 @@ class LoudnessNormalizationPhase(PhaseInterface):
             logger.debug("Phase 40: genre=%s → LUFS target=%.0f", _genre_lufs, target_lufs)
         gain_db = (target_lufs - integrated_lufs) * _effective_strength
 
-        # §v9.10.113: §8.2 Restoration/balanced — LUFS-Δ ≤ 1 LU (archive material retains original loudness)
-        # §FIX v9.20.3: Analoges Material + Vocals braucht mehr Gain-Headroom. Die Einschränkung
+        # §v10.0.0: §8.2 Restoration/balanced — LUFS-Δ ≤ 1 LU (archive material retains original loudness)
+        # §FIX v10.0.0: Analoges Material + Vocals braucht mehr Gain-Headroom. Die Einschränkung
         # auf ±1 dB führt zu -9 dBFS Peaks. Für analoges Vokalmaterial: ±8 dB erlauben,
         # aber uniformen Gain ohne Gate-Envelope anwenden (verhindert Jump-Artefakte).
         _is_analog_vocal = (
@@ -442,7 +455,7 @@ class LoudnessNormalizationPhase(PhaseInterface):
         # distorts the spectrum (changes MFCC / spectral centroid), causing
         # PMGG to roll back the normalization entirely.
         # Solution: cap gain so the True Peak Limiter needs ≤2 dB of attenuation.
-        # §v9.10.125: Use 99.9th-percentile peak instead of np.max() so that a single
+        # §v10.0.0: Use 99.9th-percentile peak instead of np.max() so that a single
         # impulsive artefact (crackle/click at near-full scale) cannot suppress LUFS
         # gain for the much quieter actual music content.
         current_peak = float(np.percentile(np.abs(audio), 99.9) + 1e-12)
@@ -464,7 +477,7 @@ class LoudnessNormalizationPhase(PhaseInterface):
         # Uniform `audio * gain_linear` amplifies "silent" sections with vinyl/shellac
         # surface noise (at -35 to -45 dBFS) by the full target-LUFS correction (+16 to
         # +31 dB in Studio 2026 mode) → Pegelexplosion in fade-out / silence sections.
-        # §FIX v9.20.3: Für analoges Vokalmaterial uniformen Gain verwenden. Die Gate-
+        # §FIX v10.0.0: Für analoges Vokalmaterial uniformen Gain verwenden. Die Gate-
         # Envelope erzeugt bei hohem Rauschflor (SNR < 20 dB) Sprünge an den
         # Gate-Grenzen, weil Rausch-Passagen fälschlich als „Stille" erkannt werden.
         if gain_linear > 1.0005:
@@ -473,7 +486,7 @@ class LoudnessNormalizationPhase(PhaseInterface):
                 normalized = audio * gain_linear
                 logger.debug("Phase 40: uniform gain applied (analog+vocal, no gate envelope)")
             else:
-                # §2.45a-II v9.12.2: reference_for_gate=audio → signal-relative gate (P15+9 dB)
+                # §2.45a-II v10.0.0: reference_for_gate=audio → signal-relative gate (P15+9 dB)
                 normalized = apply_musical_gain_envelope(
                     audio,
                     gain_linear,

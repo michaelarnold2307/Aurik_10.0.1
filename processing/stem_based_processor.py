@@ -1,6 +1,6 @@
 """processing/stem_based_processor.py
 
-Stem-basierter DSP-Prozessor für Aurik 9.
+Stem-basierter DSP-Prozessor für Aurik 10.0.0.
 
 Bietet private DSP-Methoden für Transient-Enhancement,
 intelligenten Click-Removal, Bass-Enhancement und sanfte

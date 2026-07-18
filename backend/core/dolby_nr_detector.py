@@ -1,5 +1,5 @@
 """
-Dolby NR Detector & Approximate Inverse — Aurik 9 Core Module
+Dolby NR Detector & Approximate Inverse — Aurik 10.0.0 Core Module
 ==============================================================
 
 Detects whether a cassette / reel-tape signal was encoded with Dolby B, C or S
@@ -56,7 +56,7 @@ dynamic compander inverse would be required; users with audibly mis-decoded
 material should be advised to re-digitise with correct playback chain.
 
 Author: Aurik Development Team
-Version: 1.0.0 (v9.10.128)
+Version: 1.0.0 (v10.0.0)
 """
 
 from __future__ import annotations

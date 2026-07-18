@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 """
-tests/unit/test_hypothesis_fuzzing.py — Property-Based Tests für Aurik 9 (§5.1).
+tests/unit/test_hypothesis_fuzzing.py — Property-Based Tests für Aurik 10.0.0 (§5.1).
 
 Nutzt Hypothesis für automatisiertes Fuzzing der DSP-Kernfunktionen.
 Ziel: NaN/Inf-Safety, Bounds-Invarianten und Konsistenz bei beliebigen Eingaben.

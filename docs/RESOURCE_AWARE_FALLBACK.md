@@ -1,4 +1,4 @@
-# Resource-Aware Fallback System - Aurik 9.20.3
+# Resource-Aware Fallback System - Aurik 10.0.0
 
 ## Überblick
 
@@ -183,6 +183,6 @@ adaptive_resource_manager = AdaptiveResourceManager(
 
 ---
 
-**Autor:** Aurik 9.20.3 Development Team  
+**Autor:** Aurik 10.0.0 Development Team  
 **Version:** 1.0.0  
 **Datum:** 16. Februar 2026

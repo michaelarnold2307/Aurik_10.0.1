@@ -1,5 +1,5 @@
 """
-CQTdiff+ Plugin — Diffusions-basiertes Long-Gap-Inpainting für Aurik 9
+CQTdiff+ Plugin — Diffusions-basiertes Long-Gap-Inpainting für Aurik 10.0.0
 
 Primäres Inpainting-Modell für Lücken ≥ 50 ms (Tape-Dropout, Bandaussetzer).
 CQTdiff+ konditioniert eine Score-basierte Diffusion auf CQT-Domäne und
@@ -84,7 +84,7 @@ _lock = threading.Lock()
 
 
 class CQTdiffPlusPlugin:
-    """CQTdiff+ Diffusions-basiertes Audio-Inpainting für Aurik 9.
+    """CQTdiff+ Diffusions-basiertes Audio-Inpainting für Aurik 10.0.0.
 
     Algorithmus (CQTdiff+ Vollpfad):
         1. CQT-Darstellung des vollständigen Audios berechnen

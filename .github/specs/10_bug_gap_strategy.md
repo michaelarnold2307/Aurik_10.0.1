@@ -1,4 +1,4 @@
-# Spec 10 — Bug & Gap Detection Strategy (v9.20.0) | §v10 Pleasantness-First
+# Spec 10 — Bug & Gap Detection Strategy (v10.0.0) | §v10 Pleasantness-First
 
 > **Scope**: Systematische Erkennung und Eliminierung aller Bugs und Gaps über alle Ebenen —
 > Frontend, Bridge/CLI, Denker, UV3-Pipeline, Phasen/DSP/Plugins, Tests.
@@ -59,7 +59,7 @@ Für jede `phase_*.py` mit additiver oder NR-Funktion prüfen:
 | V21–V30 | V21 Rauschboden, V22 Pre-Echo, V23 Mono-Kompatibilität, V24 Spektralfarbe, V25 Wärmeband, V26 Onset-Guard, V27–V31 Cause-Mapping-Inversionen | ✅ Linter aktiv |
 | V31–V40 | V32 PMGG-Exclusion, V33 MaterialType-Vollständigkeit, V34–V35 Strict-Conflict, V36–V37 AdaptiveRescheduler, V38 per-Event-Oracle, V39/V40 NMR/FeedbackChain | ✅ Linter aktiv |
 | V41–V50 | V41 ForwardMasking, V42 Roughness, V43 JND, V44 IACC, V45 VAT, V46 dBFS-Multiplikation, V47 Sub-Ceiling, V48–V50 GAF/Denker-Kette | ✅ Linter aktiv |
-| V51–V58 | V51 goal_applicability-Propagation, V52 separation_fidelity-Codec, V53 Singer-ID-DSP-Fallback, V54 HPG-update, V55 WLPC-era, V56 Frontend-Version, V57 ForwardMasking-Pflicht, V58 no-any-return | ✅ neu v9.19.0 |
+| V51–V58 | V51 goal_applicability-Propagation, V52 separation_fidelity-Codec, V53 Singer-ID-DSP-Fallback, V54 HPG-update, V55 WLPC-era, V56 Frontend-Version, V57 ForwardMasking-Pflicht, V58 no-any-return | ✅ neu v10.0.0 |
 
 ---
 
@@ -116,7 +116,7 @@ P3 (Backlog): TYPE-SAFETY, Linter-Coverage, Dokumentation
 
 ---
 
-## §10.6 Bekannte offene Gaps (Stand v9.20.0 / Update 2026-06-26)
+## §10.6 Bekannte offene Gaps (Stand v10.0.0 / Update 2026-06-26)
 
 ### §10.6a P3: mypy no-any-return Boilerplate (Massenlage)
 
@@ -162,7 +162,7 @@ Dateien mit echten Typ-Bugs (keine Boilerplate) nach Fehleranzahl:
 
 `backend/core/unified_restorer_v3.py` → 0 Fehler nach `# type: ignore`-Massenpatch via Python-Skript.
 
-### §10.6d ~~P1: V41 ForwardMaskingGuard additiv~~ — ERLEDIGT (v9.19.1, commit 0c9a069)
+### §10.6d ~~P1: V41 ForwardMaskingGuard additiv~~ — ERLEDIGT (v10.0.0, commit 0c9a069)
 
 14 additive Phasen erledigt. V41-Gap-Scan: 0 verbleibend.
 
@@ -246,7 +246,7 @@ Export-Policy `input_or_best_safe_checkpoint`.
 
 ---
 
-## §10.9 Vollständige Bug-Eliminierungs-Strategie (v9.21.0)
+## §10.9 Vollständige Bug-Eliminierungs-Strategie (v10.0.0)
 
 Ziel: **Vollständige Beseitigung aller ~1850 mypy-Fehler + aller Linter-Gaps** in allen Layern.
 Strategiehorizont: Mehrstufig, präzise priorisiert, systemisch wo ≥5 Stellen betroffen.
@@ -340,7 +340,7 @@ Neue Anti-Patterns aus dieser Session → neue VERBOTEN-Einträge:
 | `# type: ignore` nach erklärendem Inline-Kommentar | mypy 2.1.0 ignoriert den Ignore, Fehler bleibt trotz Annotation bestehen | `scripts/check_type_ignore_order.py` + Pre-commit Hook `aurik-type-ignore-order` |
 | Pre-commit-mypy deaktiviert reale Fehlercodes | Staged-Hook kann regressionsblind werden, obwohl Fullscan Fehler sieht | `scripts/check_mypy_real_bugs.py` + Pre-commit Hook `aurik-mypy-real-bug-gate` |
 
-### §10.9f.1 Pre-commit Gates ab v9.21.0
+### §10.9f.1 Pre-commit Gates ab v10.0.0
 
 Neue lokale Pflicht-Hooks:
 
@@ -386,4 +386,4 @@ Offen:
 
 ---
 
-_Stand: v9.21.2, 2026-06-26 — automatisch gepflegt, Änderungen per Commit §10-konform_
+_Stand: v10.0.0, 2026-06-26 — automatisch gepflegt, Änderungen per Commit §10-konform_

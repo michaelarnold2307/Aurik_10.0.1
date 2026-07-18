@@ -191,8 +191,8 @@ class MasteringPolishPhase(PhaseInterface):
             "bass": (70, +2.5, 0.8),
             "low_mid": (450, -0.5, 1.2),
             "mid_high": (4000, +1.0, 1.5),
-            "high": (8000, +1.0, 1.0),  # v9.12.9: BW-Ceiling 12 kHz
-        },  # v9.12.9: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
+            "high": (8000, +1.0, 1.0),  # v10.0.0: BW-Ceiling 12 kHz
+        },  # v10.0.0: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
         MaterialType.CD_DIGITAL: {
             "bass": (50, +1.0, 0.8),  # Moderater Bass
             "low_mid": (600, -0.5, 1.2),
@@ -224,7 +224,7 @@ class MasteringPolishPhase(PhaseInterface):
         MaterialType.CASSETTE: {
             "attack": [1.10, 1.15, 1.20, 1.10],
             "sustain": [1.10, 1.10, 1.10, 1.10],
-        },  # v9.12.9: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
+        },  # v10.0.0: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
         MaterialType.CD_DIGITAL: {
             "attack": [1.25, 1.30, 1.35, 1.25],  # Sehr punchig
             "sustain": [1.05, 1.05, 1.05, 1.05],
@@ -240,7 +240,7 @@ class MasteringPolishPhase(PhaseInterface):
         MaterialType.SHELLAC: 0.35,  # Viel Coloration (Vintage)
         MaterialType.VINYL: 0.25,  # Moderat
         MaterialType.TAPE: 0.40,  # Starke Tape Saturation
-        MaterialType.CASSETTE: 0.35,  # v9.12.9: IEC 60094-1 — BW-Ceiling 12 kHz (leicht konservativer)
+        MaterialType.CASSETTE: 0.35,  # v10.0.0: IEC 60094-1 — BW-Ceiling 12 kHz (leicht konservativer)
         MaterialType.CD_DIGITAL: 0.15,  # Minimal (Transparent)
         MaterialType.STREAMING: 0.20,  # Leicht
     }
@@ -250,7 +250,7 @@ class MasteringPolishPhase(PhaseInterface):
         MaterialType.SHELLAC: 1.15,  # Leicht breiter (Vintage Stereo)
         MaterialType.VINYL: 1.20,  # Breiter
         MaterialType.TAPE: 1.10,  # Konservativ (Mono-Kompatibilität)
-        MaterialType.CASSETTE: 1.10,  # v9.12.9: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
+        MaterialType.CASSETTE: 1.10,  # v10.0.0: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
         MaterialType.CD_DIGITAL: 1.25,  # Sehr breit (Modern)
         MaterialType.STREAMING: 1.20,  # Breit
     }
@@ -260,7 +260,7 @@ class MasteringPolishPhase(PhaseInterface):
         MaterialType.SHELLAC: -1.0,
         MaterialType.VINYL: -0.5,
         MaterialType.TAPE: -0.5,
-        MaterialType.CASSETTE: -0.5,  # v9.12.9: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
+        MaterialType.CASSETTE: -0.5,  # v10.0.0: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
         MaterialType.CD_DIGITAL: -0.1,
         MaterialType.STREAMING: -1.5,
     }
@@ -373,7 +373,7 @@ class MasteringPolishPhase(PhaseInterface):
         mastered, eq_metrics = self._apply_mastering_eq(mastered, sample_rate, material, _strength)
         pipeline_metrics["eq"] = eq_metrics
 
-        # §0p v9.12.9: panns_singing aus kwargs lesen — wird via UV3-Injection automatisch
+        # §0p v10.0.0: panns_singing aus kwargs lesen — wird via UV3-Injection automatisch
         # aus _restoration_context["panns_singing"] befüllt (setdefault-Block). Fallback 0.0
         # deaktiviert alle Vokal-Guards sicher, ohne das Phasen-Verhalten für Nicht-Vokal-Material
         # zu verändern.
@@ -440,8 +440,8 @@ class MasteringPolishPhase(PhaseInterface):
                 else:
                     mastered[0, :] = _lo
                     mastered[1, :] = _ro
-            except Exception:
-                pass
+            except Exception as _e:
+                logger.debug("phase_phase_17_mastering_polish: non-critical exception: %s", _e)
 
         return PhaseResult(
             success=True,
@@ -604,7 +604,7 @@ class MasteringPolishPhase(PhaseInterface):
             # Scale multipliers towards 1.0 (neutral) by strength
             attack_mult = 1.0 + (attack_mult - 1.0) * strength
             sustain_mult = 1.0 + (sustain_mult - 1.0) * strength
-            # §0p v9.12.9: Trill-Guard — Band-Index 2 (800–5000 Hz) ist das Haupt-Energieband
+            # §0p v10.0.0: Trill-Guard — Band-Index 2 (800–5000 Hz) ist das Haupt-Energieband
             # des deutschen "R"-Trill (Trill-Frequenz ~20–30 Hz, Periode ~38 ms).
             # Der kausal-rekursive lfilter (τ≈2 ms) erkennt jeden Trill-Zyklus als neue
             # "Transiente" → attack_mult 1.20 erzeugt periodische Pegelspitzen (~38 ms Periode)
@@ -684,7 +684,7 @@ class MasteringPolishPhase(PhaseInterface):
         # Tanh fügt Odd+Even Harmonics hinzu
         saturation_drive = 1.0 + strength * 2.0  # 1.0-3.0 Range
 
-        # §0p v9.12.9: Vocal-Saturation-Cap — verhindert hörbare Verzerrung auf laut
+        # §0p v10.0.0: Vocal-Saturation-Cap — verhindert hörbare Verzerrung auf laut
         # gesungenen Konsonanten (bes. deutsches "R"-Trill, Amplituden 0.7–0.9).
         # Ohne Cap: tanh(0.8 × 1.70) erzeugt −3.8 dB Amplitude-Kompression auf Peaks
         # → markante Odd-Harmonics im 2–6 kHz-Band → klingt als Rauheit/Buzzing.
@@ -720,7 +720,7 @@ class MasteringPolishPhase(PhaseInterface):
             _comp_ratio = float(rms_before / rms_after)
             _comp_ratio = float(np.clip(_comp_ratio, 0.5, 1.585))  # cap: max +4 dB (1.585×)
             if _comp_ratio > 1.0005:
-                # §2.45a-II v9.12.2: reference_for_gate=audio (pre-enhancement) → signal-relative gate
+                # §2.45a-II v10.0.0: reference_for_gate=audio (pre-enhancement) → signal-relative gate
                 enhanced = _amge_17(
                     enhanced, _comp_ratio, gate_dbfs=-36.0, crossfade_ms=10.0, sr=48000, reference_for_gate=audio
                 )

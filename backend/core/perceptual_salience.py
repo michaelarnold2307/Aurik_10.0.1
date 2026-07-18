@@ -312,7 +312,7 @@ class PerceptualSalienceEstimator:
 
             # Timing-Defekte sind Lautstärken-unabhängig: Loudness-Masking gilt NICHT für
             # Pitch-/Zeitmodulationen (Houtsma et al. 1980; Hartmann 1991 — JND für
-            # Frequenzmodulation ist signalpegel-unabhängig). v9.15.1
+            # Frequenzmodulation ist signalpegel-unabhängig). v10.0.0
             _TIMING_DEFECTS_NO_SALIENCE_SCALE = frozenset(
                 {
                     DefectType.WOW,

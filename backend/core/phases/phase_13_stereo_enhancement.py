@@ -95,7 +95,7 @@ class StereoEnhancementPhaseV2(PhaseInterface):
         MaterialType.SHELLAC: [0.7, 1.0, 1.2, 1.3],  # Bass reduced, conservative HF
         MaterialType.VINYL: [0.7, 1.1, 1.4, 1.5],  # Bass reduced, full mid-width
         MaterialType.TAPE: [0.8, 1.2, 1.4, 1.5],  # Full-range width
-        MaterialType.CASSETTE: [0.8, 1.2, 1.4, 1.5],  # v9.12.9: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
+        MaterialType.CASSETTE: [0.8, 1.2, 1.4, 1.5],  # v10.0.0: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
         MaterialType.CD_DIGITAL: [0.9, 1.3, 1.5, 1.8],  # Maximum width
         MaterialType.STREAMING: [0.7, 1.0, 1.2, 1.3],  # Conservative (already optimized)
     }
@@ -106,7 +106,7 @@ class StereoEnhancementPhaseV2(PhaseInterface):
         MaterialType.SHELLAC: [0.75, 0.65, 0.55, 0.50],  # Conservative
         MaterialType.VINYL: [0.70, 0.60, 0.50, 0.45],  # Moderate
         MaterialType.TAPE: [0.65, 0.55, 0.45, 0.40],  # Aggressive
-        MaterialType.CASSETTE: [0.65, 0.55, 0.45, 0.40],  # v9.12.9: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
+        MaterialType.CASSETTE: [0.65, 0.55, 0.45, 0.40],  # v10.0.0: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
         MaterialType.CD_DIGITAL: [0.60, 0.50, 0.40, 0.35],  # Maximum
         MaterialType.STREAMING: [0.70, 0.60, 0.50, 0.45],
     }
@@ -116,7 +116,7 @@ class StereoEnhancementPhaseV2(PhaseInterface):
         MaterialType.SHELLAC: [0, 5, 10, 15],  # Conservative
         MaterialType.VINYL: [0, 8, 15, 20],  # Moderate
         MaterialType.TAPE: [0, 10, 18, 25],  # Aggressive
-        MaterialType.CASSETTE: [0, 10, 18, 25],  # v9.12.9: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
+        MaterialType.CASSETTE: [0, 10, 18, 25],  # v10.0.0: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
         MaterialType.CD_DIGITAL: [0, 12, 20, 30],  # Maximum
         MaterialType.STREAMING: [0, 5, 10, 15],
     }
@@ -126,7 +126,7 @@ class StereoEnhancementPhaseV2(PhaseInterface):
         MaterialType.SHELLAC: [0, 2, 4, 6],  # Conservative
         MaterialType.VINYL: [0, 4, 6, 8],  # Moderate
         MaterialType.TAPE: [0, 4, 6, 8],  # Aggressive
-        MaterialType.CASSETTE: [0, 4, 6, 8],  # v9.12.9: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
+        MaterialType.CASSETTE: [0, 4, 6, 8],  # v10.0.0: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
         MaterialType.CD_DIGITAL: [0, 6, 8, 10],  # Maximum
         MaterialType.STREAMING: [0, 2, 4, 6],
     }

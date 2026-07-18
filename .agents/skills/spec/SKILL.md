@@ -76,7 +76,7 @@
 | `§6.2a` | Carrier-Chain-Invariante (Tape-Stufe in mp3-Chain) | UV3 |
 | `§6.2c` | Dolby-NR-Erkennung | MD |
 | `§6.3` | DefectScanner: 54+ DefectTypes | DS |
-| `§6.7` | Medium-Detector: Bayesian-Fusion (v9.10.97) | MD |
+| `§6.7` | Medium-Detector: Bayesian-Fusion (v10.0.0) | MD |
 | `§6.7b` | File-Extension-Prior (Digital vs Analog) | MD |
 | `§6.8` | Era-Precursor (reel_tape-Injektion) | UV3 |
 

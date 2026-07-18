@@ -4,7 +4,7 @@ Aurik – Hauptpipeline
 
 Zwei Einstiegspunkte:
 
-1. AurikAutonomousPipeline (PRIMÄR / empfohlen ab v9.0)
+1. AurikAutonomousPipeline (PRIMÄR / empfohlen ab v10.0.0)
    Vollautomatisch. Nutzer wählt NUR den Modus:
      - ProcessingMode.RESTORATION  → Authentizität, Originalcharakter erhalten
      - ProcessingMode.STUDIO_2026  → Moderner Streaming-Sound, maximale Brillanz
@@ -14,7 +14,7 @@ Zwei Einstiegspunkte:
    Verknüpft ImportPipeline + UnifiedRestorerV2 wie in Aurik 6.0.
 
 Author: Aurik Development Team
-Version: 9.0.0 "Zero-Intervention Excellence"
+Version: 10.0.0 "Zero-Intervention Excellence"
 """
 
 import json
@@ -36,7 +36,7 @@ _AUDIT_LOG_PATH = "logs/pipeline_audit_log.ndjson"
 
 
 # ---------------------------------------------------------------------------
-# PRIMÄRE PIPELINE (ab Aurik 9.0)
+# PRIMÄRE PIPELINE (ab Aurik 10.0.0)
 # ---------------------------------------------------------------------------
 
 

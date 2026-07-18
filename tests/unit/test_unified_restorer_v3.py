@@ -1141,7 +1141,7 @@ class TestPreventFirstQuietEdges:
         assert confidence >= 0.35
 
     def test_40j3_vocal_presence_floor_with_is_schlager_true_regardless_of_panns(self):
-        # §0p v9.12.12: is_schlager=True (Klassifizierer-Ergebnis) aktiviert den 0.35-Floor
+        # §0p v10.0.0: is_schlager=True (Klassifizierer-Ergebnis) aktiviert den 0.35-Floor
         # OHNE Mindestschwelle auf PANNs-Vocals. Auf degradiertem Cassette/Tape-Material
         # liefert PANNs systematisch 0.0-0.08 auch bei 80-90% Vokalanteil (Intro-Segment,
         # SNR < 15 dB). is_schlager=True ist zuverlässiger als rohes PANNs-Singing.
@@ -1157,7 +1157,7 @@ class TestPreventFirstQuietEdges:
         )
 
     def test_40j3b_vocal_presence_no_floor_for_keyword_only_with_zero_panns(self):
-        # §0p v9.12.12: Reine Genre-Keyword-Treffer (ohne is_schlager=True) behalten die
+        # §0p v10.0.0: Reine Genre-Keyword-Treffer (ohne is_schlager=True) behalten die
         # 0.10-Schwelle als False-Positive-Schutz bei falschem Genre-Label.
         confidence = UnifiedRestorerV3._compute_vocal_presence_confidence(
             {"Singing voice": 0.0, "Vocals": 0.02, "Music": 0.88},
@@ -1170,7 +1170,7 @@ class TestPreventFirstQuietEdges:
         )
 
     def test_40j4_vocal_presence_music_vocal_heuristic_reaches_vqi_threshold(self):
-        # §0p v9.12.9: PANNs Vocals=0.17, Music=0.60, no genre detected
+        # §0p v10.0.0: PANNs Vocals=0.17, Music=0.60, no genre detected
         # → Music+Vocal heuristic should directly reach VQI-gate threshold (0.35)
         confidence = UnifiedRestorerV3._compute_vocal_presence_confidence(
             {"Vocals": 0.17, "Music": 0.60},
@@ -2403,7 +2403,7 @@ class TestSongCalibrationProfile:
         assert material == MaterialType.TAPE
 
     def test_69_song_calibration_global_scalar_is_bounded(self):
-        """[RELEASE_MUST] Lücke-G-Fix v9.10.100: global_scalar ∈ [0.50, 1.50]."""
+        """[RELEASE_MUST] Lücke-G-Fix v10.0.0: global_scalar ∈ [0.50, 1.50]."""
         profile = UnifiedRestorerV3()._build_song_calibration_profile(
             material_type=MaterialType.VINYL,
             mode=QualityMode.MAXIMUM,
@@ -2413,7 +2413,7 @@ class TestSongCalibrationProfile:
             pipeline_confidence=0.0,
         )
 
-        # Lücke-G-Fix v9.10.100: bounds [0.50, 1.50] statt [0.70, 1.10]
+        # Lücke-G-Fix v10.0.0: bounds [0.50, 1.50] statt [0.70, 1.10]
         assert 0.50 <= float(profile["global_scalar"]) <= 1.50
 
     def test_69b_song_calibration_global_scalar_lower_bound(self):
@@ -2486,7 +2486,7 @@ class TestSongCalibrationProfile:
         assert scalar_high <= 1.80, f"scalar={scalar_high} must be ≤ 1.80"
 
     def test_69f_dc_offset_reel_tape_uses_filtfilt(self):
-        """[RELEASE_MUST] Lücke-H-Fix v9.10.100: reel_tape DCOffsetPreRemoval verwendet filtfilt (zero-phase, fc≈3.8 Hz).
+        """[RELEASE_MUST] Lücke-H-Fix v10.0.0: reel_tape DCOffsetPreRemoval verwendet filtfilt (zero-phase, fc≈3.8 Hz).
 
         Überprüft, dass für reel_tape scipy.signal.filtfilt mit Pol 0.9995
         statt lfilter mit Pol 0.9999 aufgerufen wird.
@@ -2678,7 +2678,7 @@ class TestMidPipelineCalibrationStep:
         assert result["family_scalars"]["dynamics_eq"] > 1.0
 
     def test_83_all_scalars_clamped_to_1_80_max(self):
-        """[RELEASE_MUST] Lücke-G-Fix v9.10.100: family_scalars niemals über 1.80."""
+        """[RELEASE_MUST] Lücke-G-Fix v10.0.0: family_scalars niemals über 1.80."""
         # Extreme deficit → clamp must prevent going above 1.80
         profile = self._base_profile()
         profile["family_scalars"]["reconstruction"] = 1.75  # already high
@@ -2689,7 +2689,7 @@ class TestMidPipelineCalibrationStep:
                 assert float(v) <= 1.80 + 1e-9, f"{k}={v} exceeds 1.80 clamp (Lücke-G-Fix)"
 
     def test_84_all_scalars_clamped_to_0_30_min(self):
-        """[RELEASE_MUST] Lücke-G-Fix v9.10.100: family_scalars niemals unter 0.30."""
+        """[RELEASE_MUST] Lücke-G-Fix v10.0.0: family_scalars niemals unter 0.30."""
         # Low tonal_center causes dynamics_eq to be de-boosted; verify new floor 0.30
         profile = self._base_profile()
         profile["family_scalars"]["dynamics_eq"] = 0.35  # near new floor
@@ -3966,7 +3966,7 @@ class TestMaterialPriorityPhasesNoDuplicateKeys:
 
 
 class TestVocalGenreKeysChoir:
-    """§M1 (v9.12.9) Choir-Vinyl Gap — _VOCAL_GENRE_KEYS muss Chor-Genres enthalten.
+    """§M1 (v10.0.0) Choir-Vinyl Gap — _VOCAL_GENRE_KEYS muss Chor-Genres enthalten.
 
     Regressions-Guard: Wenn 'choir', 'choral' oder 'chormusik' fehlen, aktiviert
     _compute_vocal_presence_confidence() den 0.35-PANNs-Floor für Chor-Vinyl-Material
@@ -3974,7 +3974,7 @@ class TestVocalGenreKeysChoir:
     """
 
     def test_choir_terms_in_vocal_genre_keys(self) -> None:
-        """_VOCAL_GENRE_KEYS enthält alle Chor-Genrebezeichnungen (§M1 v9.12.9)."""
+        """_VOCAL_GENRE_KEYS enthält alle Chor-Genrebezeichnungen (§M1 v10.0.0)."""
         from backend.core.unified_restorer_v3 import UnifiedRestorerV3
 
         keys = UnifiedRestorerV3._VOCAL_GENRE_KEYS
@@ -4020,11 +4020,11 @@ class TestVocalGenreKeysChoir:
 
 
 class TestPhase65VqiRecoveryTrigger:
-    """§H4 (v9.12.9) Phase_65 VQI-Recovery-Trigger in UV3.
+    """§H4 (v10.0.0) Phase_65 VQI-Recovery-Trigger in UV3.
 
     Regressions-Guard: Phase_65 (HNR-Blend + Spektral-Tilt + Formant-Tilt) MUSS
     in UV3 als DSP-Korrektiv für VQI < 0.74 + panns ≥ 0.25 + Restoration verfügbar sein.
-    Vor v9.12.9 war Phase_65 in calibration_matrix referenziert, aber nie in UV3 aufgerufen.
+    Vor v10.0.0 war Phase_65 in calibration_matrix referenziert, aber nie in UV3 aufgerufen.
     """
 
     def test_phase_65_module_importable(self) -> None:
@@ -4045,7 +4045,7 @@ class TestPhase65VqiRecoveryTrigger:
         assert hasattr(p65, "process"), "§H4: Phase_65 hat keine process()-Methode"
 
     def test_uv3_source_contains_phase_65_vqi_recovery(self) -> None:
-        """UV3-Quellcode enthält Phase_65-VQI-Recovery-Block (§H4 v9.12.9 Regression-Guard)."""
+        """UV3-Quellcode enthält Phase_65-VQI-Recovery-Block (§H4 v10.0.0 Regression-Guard)."""
         import pathlib
 
         src = (pathlib.Path(__file__).parents[2] / "backend" / "core" / "unified_restorer_v3.py").read_text()
@@ -4069,16 +4069,16 @@ class TestPhase65VqiRecoveryTrigger:
 
 
 class TestChoirVqiGateZeroPanns:
-    """§0p v9.12.11 — Chor-VQI-Gate auch bei PANNs-Gesamtconfidence = 0.
+    """§0p v10.0.0 — Chor-VQI-Gate auch bei PANNs-Gesamtconfidence = 0.
 
     Regressions-Guard: Wenn PANNs für eine Choraufnahme gar keine Vokal-Tags
     zurückgibt (confidence = 0.0), darf der VQI-Gate NICHT still deaktiviert
     bleiben. Chor ist definitional Vokalmusik — die Schwelle '≥ 0.10' aus §M1
-    (v9.12.9) war zu hoch und ließ Fälle ohne jeglichen PANNs-Hinweis durch.
+    (v10.0.0) war zu hoch und ließ Fälle ohne jeglichen PANNs-Hinweis durch.
     """
 
     def test_choir_genre_zero_panns_activates_floor(self) -> None:
-        """genre_label='choir' + PANNs-Confidence = 0.0 → floor 0.35 (§0p v9.12.11)."""
+        """genre_label='choir' + PANNs-Confidence = 0.0 → floor 0.35 (§0p v10.0.0)."""
         from backend.core.unified_restorer_v3 import UnifiedRestorerV3
 
         conf = UnifiedRestorerV3._compute_vocal_presence_confidence(
@@ -4087,7 +4087,7 @@ class TestChoirVqiGateZeroPanns:
             genre_label="choir",
         )
         assert conf >= 0.35, (
-            f"§0p v9.12.11: genre_label='choir' + keine PANNs-Tags muss floor 0.35 aktivieren, "
+            f"§0p v10.0.0: genre_label='choir' + keine PANNs-Tags muss floor 0.35 aktivieren, "
             f"bekommen: {conf:.3f}. VQI-Gate würde für Chor-Material stumm bleiben."
         )
 
@@ -4133,11 +4133,11 @@ class TestChoirVqiGateZeroPanns:
             panns_vocals_confidence=0.12,
             genre_label="choir",
         )
-        assert conf >= 0.35, f"Regressions-Guard §M1 fehlgeschlagen nach §0p v9.12.11-Patch: {conf:.3f}"
+        assert conf >= 0.35, f"Regressions-Guard §M1 fehlgeschlagen nach §0p v10.0.0-Patch: {conf:.3f}"
 
 
 class TestStrictVocalGenreZeroPanns:
-    """§0p v9.12.13 — exakte definitionsgemäß vokale Genres aktivieren den Vocal-Floor.
+    """§0p v10.0.0 — exakte definitionsgemäß vokale Genres aktivieren den Vocal-Floor.
 
     Regressions-Guard: Opera/Chanson/Vocal-Jazz können bei schwachen oder fehlenden
     PANNs-Tags sonst unter die 0.35-Schwelle fallen, obwohl das Genre bereits klar
@@ -4176,7 +4176,7 @@ class TestStrictVocalGenreZeroPanns:
 
 
 class TestSection0aRestCauseGuards:
-    """§0a v9.12.11 — CAUSE_TO_PHASES Restoration-Pfad: verbotene Phasen nicht vorschlagen.
+    """§0a v10.0.0 — CAUSE_TO_PHASES Restoration-Pfad: verbotene Phasen nicht vorschlagen.
 
     Regressions-Guard: phase_42_vocal_enhancement, phase_35_multiband_compression
     dürfen in UV3 nie in selected_phases landen wenn is_studio_mode()=False —
@@ -4267,7 +4267,7 @@ class TestPhaseIdValidationGuards:
 
 
 # ---------------------------------------------------------------------------
-# §GOAL_EXPORT_COMPLIANCE — Finale Ziel-Compliance-Prüfung (v9.12.9)
+# §GOAL_EXPORT_COMPLIANCE — Finale Ziel-Compliance-Prüfung (v10.0.0)
 # ---------------------------------------------------------------------------
 
 

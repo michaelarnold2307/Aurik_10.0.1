@@ -1,6 +1,6 @@
 import pytest
 
-"""Tests für v9.10.112-Features: Phase-12-Qualität, UV3-Reihenfolge, Queue-Drag&Drop,
+"""Tests für v10.0.0-Features: Phase-12-Qualität, UV3-Reihenfolge, Queue-Drag&Drop,
 Phase-06/20/42 DSP-Qualitätsverbesserungen.
 
 Abgedeckt:
@@ -202,7 +202,7 @@ class TestQueueManagerReorder:
 
 
 # ---------------------------------------------------------------------------
-# Phase 06 — Adaptive AudioSR-Blend-Alpha (v9.10.112)
+# Phase 06 — Adaptive AudioSR-Blend-Alpha (v10.0.0)
 # ---------------------------------------------------------------------------
 
 
@@ -256,7 +256,7 @@ class TestPhase06AdaptiveAlpha:
 
 
 # ---------------------------------------------------------------------------
-# Phase 42 — Multi-Formant Bell-EQ Fallback (v9.10.112)
+# Phase 42 — Multi-Formant Bell-EQ Fallback (v10.0.0)
 # ---------------------------------------------------------------------------
 
 
@@ -352,7 +352,7 @@ class TestPhase42MultiFormantFallback:
 
 
 # ---------------------------------------------------------------------------
-# Phase 20 — Late-Reverb Decay-Suppression (v9.10.112)
+# Phase 20 — Late-Reverb Decay-Suppression (v10.0.0)
 # ---------------------------------------------------------------------------
 
 

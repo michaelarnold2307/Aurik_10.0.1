@@ -100,7 +100,7 @@ except ImportError:
     RESOURCE_MANAGER_AVAILABLE = False
     logging.getLogger(__name__).warning("AdaptiveResourceManager not available, no automatic fallback")
 
-# ML-Hybrid Support (Aurik 9.0 - Phase 12 v3.0)
+# ML-Hybrid Support (Aurik 10.0.0 - Phase 12 v3.0)
 try:
     from backend.core.hybrid.hybrid_wow_flutter import HybridWowFlutter, PitchDetectionStrategy, WowFlutterConfig
 
@@ -111,14 +111,23 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+# §G-PYIN-CACHE: Per-Session pYIN-Resultat-Cache
+_PYIN_CACHE: dict[tuple[int, ...], Any] = {}
+_PYIN_CACHE_MAX: int = 8
+
 # ── §C3 Circuit-Breaker: Polyphonic consensus degradation ────────────
 # When polyphonic estimation fails with consensus=0 on N consecutive
 # chunks, skip the expensive polyphonic estimator for the remainder of
 # the run.  Cassette/tape material with insufficient polyphonic content
 # (T=1–14, no voiced voices) triggers identical pYIN fallback every time,
 # wasting CPU on a known-lost cause.
+# §v10.18: Increased from 3→8. Narrow-bandwidth MP3-encoded material
+# often produces zero-consensus on initial chunks (coding artifacts
+# confuse BasicPitch) but recovers on later passages with more harmonic
+# density. 3 chunks was too aggressive — legitimate polyphonic content
+# was permanently disabled before it had a chance to succeed.
 _POLYPHONIC_CONSECUTIVE_ZERO_CONSENSUS: int = 0
-_POLYPHONIC_CB_MAX_FAILURES: int = 3  # Max consecutive zero-consensus chunks before skipping
+_POLYPHONIC_CB_MAX_FAILURES: int = 8  # Max consecutive zero-consensus chunks before skipping
 _POLYPHONIC_CB_ACTIVE: bool = False  # True = polyphonic estimator permanently skipped for this run
 
 
@@ -135,11 +144,11 @@ class WowFlutterFix(PhaseInterface):
 
     # Material-adaptive correction strength (0.0-1.0)
     CORRECTION_STRENGTH = {
-        MaterialType.TAPE: 0.80,  # v9.10.97: raised from 0.65 — tonal_center PMGG-excluded (§2.29b);
+        MaterialType.TAPE: 0.80,  # v10.0.0: raised from 0.65 — tonal_center PMGG-excluded (§2.29b);
         #   cassette head-settling wow/flutter requires stronger correction.
-        #   Was reduced in v9.10.77 due to tonal_center regression, but K-S proxy
+        #   Was reduced in v10.0.0 due to tonal_center regression, but K-S proxy
         #   (§9.7.11) now excludes tonal_center from PMGG delta-checks for phase_12.
-        MaterialType.CASSETTE: 0.80,  # v9.12.9: same as TAPE — compact cassette uses identical
+        MaterialType.CASSETTE: 0.80,  # v10.0.0: same as TAPE — compact cassette uses identical
         #   capstan/pinch-roller transport (IEC 60094-1); head-settling wow/flutter same physics.
         #   Previous fallback to 0.7 (default) was too conservative for cassette transport bumps.
         MaterialType.VINYL: 0.70,  # Moderate (turntable speed variations, belt/motor issues)
@@ -151,7 +160,7 @@ class WowFlutterFix(PhaseInterface):
     # Detection sensitivity (minimum pitch deviation to correct, in %)
     DETECTION_THRESHOLD = {
         MaterialType.TAPE: 0.3,  # 0.3% pitch deviation (high sensitivity)
-        MaterialType.CASSETTE: 0.3,  # v9.12.9: same as TAPE — compact cassette transport bumps
+        MaterialType.CASSETTE: 0.3,  # v10.0.0: same as TAPE — compact cassette transport bumps
         #   (Bandhopser) cause local pitch deviations of 0.3-0.8%; the previous 0.5% default
         #   missed borderline transport bumps. IEC 60094-1 cassette flutter spec: ≤ 0.2% WRMS
         #   at 4.75 cm/s → any detected deviation ≥ 0.3% is above spec → correct it.
@@ -164,16 +173,16 @@ class WowFlutterFix(PhaseInterface):
     # YIN algorithm parameters
     YIN_THRESHOLD = 0.15  # Confidence threshold for pitch detection
     PITCH_WINDOW_MS = 100  # Larger window for stability (was 50ms)
-    # v9.10.111: Restored to 75 % overlap (factor=4, was 2=50 %) for 4× better
+    # v10.0.0: Restored to 75 % overlap (factor=4, was 2=50 %) for 4× better
     # temporal resolution in pYIN flutter detection. At 48 kHz and 100 ms window:
     #   factor=2 → hop=50 ms — insufficient for 4–20 Hz flutter (20–250 ms periods)
     #   factor=4 → hop=25 ms — 2+ samples per flutter cycle (Nyquist-safe)
     # librosa.pyin fast-path ≪ 200 ms even for 20-min files. §9.10.80
     # Quality-first: no RT sacrifice in main path.
-    PITCH_HOP_FACTOR = 4  # 75 % overlap — restored from 2 (v9.10.111)
+    PITCH_HOP_FACTOR = 4  # 75 % overlap — restored from 2 (v10.0.0)
 
     # Phase Vocoder / STFT parameters
-    STFT_WINDOW_SIZE = 2048  # 23 Hz/bin @ 48 kHz — restored from 1024 (v9.10.111)
+    STFT_WINDOW_SIZE = 2048  # 23 Hz/bin @ 48 kHz — restored from 1024 (v10.0.0)
     STFT_HOP_SIZE = 512  # 75 % overlap with 2048 window — restored from 256
 
     # Formant preservation (prevent "chipmunk" effect)
@@ -684,7 +693,7 @@ class WowFlutterFix(PhaseInterface):
         # erzeugt Artefakte (0.09 PMGG-Regression im E2E) ohne tatsächlichen Nutzen.
         # Timing-Phasen haben keine Wet/Dry-Retries, daher frühes Bail-out.
         #
-        # v9.10.97: Tape-Start Confidence Adaptation.
+        # v10.0.0: Tape-Start Confidence Adaptation.
         # Cassette motor startup (0–20 s) produces low-confidence pitch regions because
         # the signal is genuinely unstable (speed ramp-up).  The confidence guard must
         # NOT skip the ENTIRE phase just because the first few seconds have low confidence.
@@ -1028,7 +1037,7 @@ class WowFlutterFix(PhaseInterface):
             # 3. Makeup-Gain wird auf alle Frames ausgelöst, inkl. Intro-Vinyl-Rauschen
             #    und Outro-Fadeout → Pegelexplosion in Nicht-Musik-Bereichen
             #
-            # FIX (v9.11.17): Phase-Vocoder für BEIDE M/S-Kanäle erzwingen.
+            # FIX (v10.0.0): Phase-Vocoder für BEIDE M/S-Kanäle erzwingen.
             #   Mid = (L+R)/2 → Phase-Vocoder (sample-genaue Zeitkorrektur)
             #   Side = (L-R)/2 → Phase-Vocoder (identisches src_pos-Mapping wie Mid!)
             #   L_out = Mid_out + Side_out = L_in[src_pos[t]]  (mathematisch exakt)
@@ -1043,7 +1052,7 @@ class WowFlutterFix(PhaseInterface):
             _left_ch, _right_ch = stereo_channel_view(audio)
             _mid_ch = (_left_ch.astype(np.float32) + _right_ch.astype(np.float32)) * 0.5
             _side_ch = (_left_ch.astype(np.float32) - _right_ch.astype(np.float32)) * 0.5
-            # §2.51 L/R-Timing-Invariante (v9.11.17): BEIDE M/S-Kanäle MÜSSEN denselben
+            # §2.51 L/R-Timing-Invariante (v10.0.0): BEIDE M/S-Kanäle MÜSSEN denselben
             # Algorithmus verwenden.  PSOLA (OLA-Grain-Grenzen, pYIN-Perioden) und
             # Phase-Vocoder (np.interp-Sample-Remapping) haben verschiedene effektive
             # Zeitauflösungen → L = Mid+Side und R = Mid-Side erhalten zeitlich inkohärente
@@ -1361,8 +1370,8 @@ class WowFlutterFix(PhaseInterface):
                     restored = restored * _scale + _original_audio * (1.0 - _scale)
                     restored = np.clip(restored, -1.0, 1.0)
                     _makeup_db = _approved
-            except Exception:
-                pass
+            except Exception as _e:
+                logger.debug("%s: non-critical exception: %s", __name__, _e)
         if abs(_makeup_db) > 0.01:
             logger.info(
                 "Phase 12 loudness-preservation: material=%s rms_drop=%+.2f dB via makeup %+.2f dB",

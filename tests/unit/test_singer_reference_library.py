@@ -2,7 +2,7 @@ import pytest
 
 """Tests für SingerReferenceLibrary (§SRL-1).
 
-Spec: §SRL-1 Singer-Reference-Library (v9.12.1)
+Spec: §SRL-1 Singer-Reference-Library (v10.0.0)
 """
 
 import numpy as np

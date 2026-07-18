@@ -392,3 +392,26 @@ class TestUniversalPlausibilityGuard:
                     f"STCG [{phase_id}] corrupted clean zero-lag stereo — false positive correction on lag-free input"
                 ),
             )
+
+    def test_single_point_fallback_with_real_lag(self):
+        """When multi-point gets only 1 point (narrow-bandwidth material),
+        the single-full-length fallback with stricter guards (corr ≥ 0.60,
+        lag < 10 ms) should still detect and correct a genuine small lag."""
+        rng = np.random.default_rng(42)
+        n = SR * 30  # 30 seconds
+        mono = rng.standard_normal(n).astype(np.float32) * 0.3
+        # 2-sample real lag — small enough to pass single-fallback guard (< 10 ms)
+        lag = 2
+        l = mono.copy()
+        r = np.zeros_like(mono)
+        r[lag:] = mono[: n - lag]
+        audio_in = np.vstack([l[np.newaxis, :], r[np.newaxis, :]])
+        audio_out = self.guard.correct_interchannel_delay(audio_in, SR, phase_id="phase_12_wow_flutter_fix")
+        # Should NOT be identical to input (correction applied)
+        # Verify R channel was shifted to reduce lag
+        ch_l_out = audio_out[0, :]
+        ch_r_out = audio_out[1, :]
+        # L channel should be unchanged
+        np.testing.assert_array_equal(ch_l_out, l, err_msg="STCG must not modify L channel")
+        # R channel should be different (lag corrected)
+        assert not np.array_equal(ch_r_out, r), "STCG single-point fallback should have corrected the 2-sample lag"

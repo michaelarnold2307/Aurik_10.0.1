@@ -2,7 +2,7 @@
 End-to-End Test Suite for Full 42-Phase ML-Hybrid Workflow
 ===========================================================
 
-Tests the complete Aurik 9.0 processing chain with all ML-Hybrid phases active.
+Tests the complete Aurik 10.0.0 processing chain with all ML-Hybrid phases active.
 Validates:
 - Full restoration pipeline (UnifiedRestorerV3)
 - ML-Hybrid integration (phases 1, 2, 9, 18, 23, 24, 29)
@@ -32,7 +32,7 @@ import soundfile as sf
 
 from backend.core.defect_scanner import MaterialType
 
-# Import Aurik 9.0 Core
+# Import Aurik 10.0.0 Core
 from backend.core.unified_restorer_v3 import QualityMode, RestorationConfig, UnifiedRestorerV3
 
 

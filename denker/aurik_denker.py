@@ -17,7 +17,7 @@ Reihenfolge (Spec §2.2):
 
 8×RT-Invariante: rt_factor im Endergebnis ist IMMER ≤ 8.0.
 
-Spec §2.1, §2.2, §9.5 — v9.10.45
+Spec §2.1, §2.2, §9.5 — v10.0.0
 """
 
 from __future__ import annotations
@@ -95,7 +95,7 @@ _HISTORICAL_OR_FRAGILE_MATERIALS: frozenset[str] = frozenset(
         "vinyl",
         "tape",
         "reel_tape",
-        # v9.15.1: Kassette ist analoges Träger-Material — fehle bisher (Bug G1)
+        # v10.0.0: Kassette ist analoges Träger-Material — fehle bisher (Bug G1)
         "cassette",
         "cassette_dolby_b",
         "cassette_dolby_c",
@@ -509,7 +509,7 @@ class AurikDenker:
     def _resolve_excellence_material(material: str, chain_info: dict[str, Any] | None) -> str:
         """Gibt das restaurierungsrelevante Material zurück (Ursprungs-Träger bevorzugt).
 
-        v9.15.1 Fix G2: Bei Transfer-Ketten (z.B. cassette→mp3_low) wird das erste
+        v10.0.0 Fix G2: Bei Transfer-Ketten (z.B. cassette→mp3_low) wird das erste
         analoge Träger-Material zurückgegeben, nicht das finale Dateiformat.
         Begründung: Oracle-, Budget- und Stärken-Entscheidungen müssen auf den
         Original-Träger kalibriert sein (§0l, §2.47a), nicht auf das Dateiformat.
@@ -1309,7 +1309,7 @@ class AurikDenker:
                 stage_notes["tontraeger"] = f"{material} (Konfidenz: {toni.confidence:.2f})"
                 phases_executed.append("tontraeger_erkennung")
                 logger.info("AurikDenker [1/10] Träger: %s (%.2f)", material, toni.confidence)
-                # §6.7 v9.10.97: Bayesian ClassificationResult aus Stufe 1 als cached_medium_result
+                # §6.7 v10.0.0: Bayesian ClassificationResult aus Stufe 1 als cached_medium_result
                 # für UV3 übernehmen — eliminiert redundante MediumClassifier-Aufrufe.
                 if getattr(toni, "classification_result", None) is not None:
                     cached_medium_result = toni.classification_result
@@ -1848,7 +1848,7 @@ class AurikDenker:
                             _label = _dsp_op_names.get(op_key, op_key)
                             _emit(13, f"DSP-Reparatur — {op_key}: {_label}")
 
-                        # §2.41 v9.10.117: Defect-Locations + Scores aus cached_defect_result extrahieren,
+                        # §2.41 v10.0.0: Defect-Locations + Scores aus cached_defect_result extrahieren,
                         # damit ReparaturDenker chirurgische (lokalisierte) Reparaturen durchführen kann.
                         _repair_defect_scores: dict[str, float] = {}
                         _repair_defect_locations: dict[str, list[tuple[float, float]]] = {}
@@ -2162,10 +2162,10 @@ class AurikDenker:
                 _skip_metrics,
             )
         elif _budget_ok():
-            # v9.10.72: STFT-basierte ExcellenceOptimizer-Passe nach UV3+FeedbackChain
+            # v10.0.0: STFT-basierte ExcellenceOptimizer-Passe nach UV3+FeedbackChain
             # deaktiviert (Ephraim & Malah 1984: kaskadierte STFT-Modifikation akkumuliert
             # Rundungsfehler; ML-Modelle nicht auf eigenen Output trainiert → Domain Shift).
-            # v9.11.1: messe_und_repariere() ersetzt messe_ziele() — nutzt ausschließlich
+            # v10.0.0: messe_und_repariere() ersetzt messe_ziele() — nutzt ausschließlich
             # Zeit-Domain-Operationen (micro_dynamics, ola_edges) und linearen Blend mit
             # Original-Audio für P3-P5-Verletzungen. Kein STFT-Roundtrip → Ephraim-sicher.
             try:
@@ -2595,7 +2595,7 @@ class AurikDenker:
         }
         _mos_gate_target = _MATERIAL_MOS_GATE.get(_exz_material, 4.0)
         if 0.0 < _versa_mos < _mos_gate_target:
-            # v9.10.58: 2. ExzellenzDenker-Aufruf entfernt — wissenschaftlich nicht gerechtfertigt.
+            # v10.0.0: 2. ExzellenzDenker-Aufruf entfernt — wissenschaftlich nicht gerechtfertigt.
             # Der ExzellenzDenker (Stufe 7) hat bereits 1× ExcellenceOptimizer + 1× Re-Pass
             # ausgeführt. Ein erneuter identischer Durchlauf auf demselben Audio erzeugt
             # kumulative STFT-Artefakte und Domain-Shift bei ML-Modellen.

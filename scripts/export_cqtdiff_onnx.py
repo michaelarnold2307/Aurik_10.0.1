@@ -1,5 +1,5 @@
 """
-CQTdiff Score-Network → TorchScript Exporter für Aurik 9
+CQTdiff Score-Network → TorchScript Exporter für Aurik 10.0.0
 =========================================================
 Exportiert das Score-Netzwerk (UNet-CQT) des CQTdiff-Modells als TorchScript (.pt),
 sodass es von cqtdiff_plus_plugin.py mit torch.jit.load geladen werden kann.

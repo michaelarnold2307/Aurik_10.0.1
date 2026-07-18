@@ -1,4 +1,4 @@
-"""§ArcPlan EmotionalArcPlanner — Dramaturgie-getriebene Schutz-Gewicht-Planung (v9.12.1).
+"""§ArcPlan EmotionalArcPlanner — Dramaturgie-getriebene Schutz-Gewicht-Planung (v10.0.0).
 
 Computes a time-indexed protection-weight vector BEFORE phase execution.
 Unlike EmotionalArcPreservationMetric (which measures arc AFTER the pipeline),

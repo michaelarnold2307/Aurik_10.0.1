@@ -1,5 +1,5 @@
 """
-Multi-Objective Optimization für Aurik 8.0
+Multi-Objective Optimization für Aurik 10.0.0
 
 Implementiert Multi-Objective Optimization mit Pareto-Front-Berechnung:
 - NSGA-II (Non-dominated Sorting Genetic Algorithm II)

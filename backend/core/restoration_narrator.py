@@ -1,5 +1,5 @@
 """
-core/restoration_narrator.py — RestorationNarrator v1.0 (Aurik 9.9.6)
+core/restoration_narrator.py — RestorationNarrator v1.0 (Aurik 10.0.0)
 
 Übersetzt die technischen Restaurierungsergebnisse von UnifiedRestorerV3 in
 laienverständliche, emotional ansprechende Sprache.

@@ -1,5 +1,5 @@
 """
-UTMOS Plugin — MOS-Schätzung ohne Referenz für Aurik 9 (Musik-orientiert)
+UTMOS Plugin — MOS-Schätzung ohne Referenz für Aurik 10.0.0 (Musik-orientiert)
 
 UTMOS (UTokyo-SaruLab MOS Estimator) schätzt MOS-Scores ohne Referenzsignal.
 Für Aurik wird UTMOS ausschließlich im Audio-Modus eingesetzt — kein Sprach-Bias.
@@ -100,7 +100,7 @@ def _mos_to_grade(mos: float) -> str:
 
 
 class UTMOSPlugin:
-    """UTMOS MOS-Schätzung ohne Referenz für Aurik 9 (Musik-orientiert).
+    """UTMOS MOS-Schätzung ohne Referenz für Aurik 10.0.0 (Musik-orientiert).
 
     Algorithmus (UTMOS ONNX-Pfad):
         1. Mel-Spektrogramm-Extraktion (80 Bänder, 16 kHz intern für UTMOS-Kompatibilität,

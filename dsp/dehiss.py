@@ -1,5 +1,5 @@
 """
-dehiss.py — OMLSA/MMSE-LSA-Rauschunterdrückung für Aurik 9.x
+dehiss.py — OMLSA/MMSE-LSA-Rauschunterdrückung für Aurik 10.0.0.x
 
 Entfernt Bandrauschen/Hiss via echtem IMCRA-inspirierten Minimum-Statistik-Schätzer
 (Cohen 2002/2003) + MMSE-LSA-Gain (Ephraim & Malah 1985).

@@ -1,5 +1,5 @@
 """
-PerPhaseMusicalGoalsGate (PMGG) — Aurik 9.0 §2.29.
+PerPhaseMusicalGoalsGate (PMGG) — Aurik 10.0.0 §2.29.
 
 Prüft Musical Goals nach JEDER Phase via 5-s-Stichprobe.
 Verhindert kumulative Degradation über 64 Phasen.
@@ -22,7 +22,7 @@ Pro Phase (wrap_phase()):
     4. Δ = score_after − score_before für jedes Ziel
        Falls Δ < −REGRESSION_THRESHOLD (adaptiv je nach Restorability):
          Retry-1: Phase mit strength × 0.65
-         Retry-2: Phase mit strength × 0.50  (v9.15-B3: sanfterer Gradient)
+         Retry-2: Phase mit strength × 0.50  (v10.0.0-B3: sanfterer Gradient)
          Retry-3: Phase mit strength × 0.35
          Retry-4: Phase mit strength × 0.20
          Retry-5 (Last-Resort): Phase mit strength × 0.10
@@ -42,7 +42,7 @@ KONSTANTEN:
 REGRESSION_THRESHOLD = 0.025  (adaptiv: 0.012 / 0.040 / 0.060 je Restorability)
 HPE_SKIP_THRESHOLD   = -0.02  (§v10: HPE-Delta unter diesem Wert → Phase überspringen)
 SAMPLE_DURATION_S    = 5.0
-MAX_RETRIES          = 5  (v9.15-B3: 5 Retries mit sanftem Stärkegradienten)
+MAX_RETRIES          = 5  (v10.0.0-B3: 5 Retries mit sanftem Stärkegradienten)
 
 OVERHEAD: max. 56 × 200 ms = 11.2 s pro Verarbeitungsdurchlauf (alle 15 Ziele DSP-only)
 DEAKTIVIERUNG: --no-phase-gate (Debugging/Benchmarking)
@@ -50,7 +50,7 @@ DEAKTIVIERUNG: --no-phase-gate (Debugging/Benchmarking)
 WICHTIG: MERT wird im Schnell-Check NICHT verwendet (zu langsam: 800 ms)
 Vollständige 15-Ziele-Prüfung bleibt am Pipeline-Ende (MusicalGoalsChecker)
 
-Autor: Aurik 9.0 Development Team / v9.15
+Autor: Aurik 10.0.0 Development Team / v10.0.0
 """
 # pylint: disable=import-outside-toplevel
 
@@ -82,7 +82,7 @@ logger = logging.getLogger(__name__)
 _PRECISE_METRICS_LOCK = threading.Lock()
 _PRECISE_METRICS: dict[str, Any] | None = None
 _PRECISE_OVERRIDE_WARN_MS: float = (
-    500.0  # v9.12: ArticulationMetric added MFCC per-onset (16 windows); 3 metrics × ~100ms/metric is normal.
+    500.0  # v10.0.0: ArticulationMetric added MFCC per-onset (16 windows); 3 metrics × ~100ms/metric is normal.
 )
 _VOCAL_GUARD_TRIGGER = 0.45
 
@@ -94,8 +94,8 @@ _VOCAL_GUARD_TRIGGER = 0.45
 REGRESSION_THRESHOLD: float = 0.025
 
 # Restorability-adaptive Schwellwerte (§2.29 Spec)
-# v9.10.76: 0.012 → 0.030 (DSP-Proxy-Messrauschen 0.01–0.05).
-# v9.10.77: 0.030 → 0.020 — §9.7.5 Reference-Aware Preservation Corrections
+# v10.0.0: 0.012 → 0.030 (DSP-Proxy-Messrauschen 0.01–0.05).
+# v10.0.0: 0.030 → 0.020 — §9.7.5 Reference-Aware Preservation Corrections
 # eliminieren den größten Teil des Messrauschens; engere Schwellwerte fangen
 # nun echte Regressionen zuverlässiger ab ohne False-Positives.
 REGRESSION_THRESHOLD_GOOD: float = 0.020  # restorability ≥ 70
@@ -245,7 +245,7 @@ GOAL_ANTI_CORRELATIONS: dict[frozenset, float] = {
 }
 
 # ---------------------------------------------------------------------------
-# §2.29 v9.10.77: Priority-aware Retry-Budget
+# §2.29 v10.0.0: Priority-aware Retry-Budget
 # ---------------------------------------------------------------------------
 # P1/P2 regressions trigger full retry cascade (4 Retries + Emergency).
 # P3 regressions trigger max 2 retries with 1.5× relaxed threshold.
@@ -259,7 +259,7 @@ GOAL_ANTI_CORRELATIONS: dict[frozenset, float] = {
 _PRIORITY_MAX_RETRIES: dict[int, int] = {
     1: 4,  # P1: Natürlichkeit, Authentizität — volle Retry-Kaskade
     2: 4,  # P2: TonalCenter, Timbre, Artikulation — volle Retry-Kaskade
-    3: 3,  # P3: Emotionalität, MicroDynamics, Groove — max 3 Retries (erhöht v9.11.14)
+    3: 3,  # P3: Emotionalität, MicroDynamics, Groove — max 3 Retries (erhöht v10.0.0)
     4: 1,  # P4: Transparenz, Wärme, Bass-Kraft, SepFidelity — Recovery-Lite: 1 Retry (§0c)
     5: 1,  # P5: Brillanz, SpatialDepth — Recovery-Lite: 1 Retry (§0c)
 }
@@ -352,7 +352,7 @@ JND_MIN_DELTA: dict[str, float] = {
 }
 
 SAMPLE_DURATION_S: float = 5.0
-MAX_RETRIES: int = 5  # v9.15-B3: 5 Retries mit sanftem Stärkegradienten (0.65→0.50→0.35→0.20→0.10)
+MAX_RETRIES: int = 5  # v10.0.0-B3: 5 Retries mit sanftem Stärkegradienten (0.65→0.50→0.35→0.20→0.10)
 
 # ---------------------------------------------------------------------------
 # §9.7.3 Phasen-adaptive Sample-Dauer — triviale Phasen brauchen < 5 s
@@ -372,7 +372,7 @@ PHASE_SAMPLE_DURATIONS: dict[str, float] = {
 # Goals whose DSP proxy is structurally unreliable for a given processing type.
 # These goals are NOT checked for regression when the phase matches.
 #
-# v9.10.77: Exclusions significantly reduced thanks to §9.7.5 reference-aware
+# v10.0.0: Exclusions significantly reduced thanks to §9.7.5 reference-aware
 # preservation corrections.  Goals with spectral/temporal correlation support
 # are now checked even for phases that previously triggered false positives.
 # Only goals where processing FUNDAMENTALLY changes the measured quantity
@@ -500,7 +500,7 @@ PHASE_GOAL_EXCLUSIONS: dict[str, set[str]] = {
     # logs (2026-03-28): worst_goal=artikulation, before=0.665, after=0.126.
     # brillanz excluded: broadband denoising removes HF noise energy → brillanz DSP
     # proxy drops from ~0.9 (noise-inflated) to ~0.1 (clean).
-    # authentizitaet excluded (P1 root cause, v9.10.79): broadband noise raises the
+    # authentizitaet excluded (P1 root cause, v10.0.0): broadband noise raises the
     # spectral noise-floor uniformly → log-spectrum valleys are filled → roughness
     # proxy scores HIGH before denoising.  After denoising the true spectral valleys
     # are revealed → roughness INCREASES → authentizitaet drops ~0.75 → false P1
@@ -514,7 +514,7 @@ PHASE_GOAL_EXCLUSIONS: dict[str, set[str]] = {
     # hiss. The PMGG short-window timbre proxy can overreact on tape material and
     # report false catastrophic P2 regressions (~0.09 > 0.08) despite improved
     # perceptual clarity.
-    # tonal_center excluded (§9.7.11 extension, v9.10.93): K-S is invariant to ADDITIVE
+    # tonal_center excluded (§9.7.11 extension, v10.0.0): K-S is invariant to ADDITIVE
     # white noise (uniform spectral floor lifts all chroma bins equally → ratios preserved).
     # OMLSA/ResembleEnhance apply FREQUENCY-SELECTIVE suppression (gain G(f) varies per
     # frequency band) which effectively acts as a noise-adaptive EQ → chroma energy
@@ -528,12 +528,12 @@ PHASE_GOAL_EXCLUSIONS: dict[str, set[str]] = {
         "authentizitaet",
         "tonal_center",
         "timbre_authentizitaet",
-        # §V36 transient_energie (v9.13): OMLSA/DFN entfernt Rauschimpulse, die im
+        # §V36 transient_energie (v10.0.0): OMLSA/DFN entfernt Rauschimpulse, die im
         # TransientEnergieProxy als Onsets gewertet wurden. Nach NR: Rauschspitzen weg →
         # Proxy zeigt weniger Onsets → false P3. Realer Endwert: 0.805 (über Boden 0.746).
         # Bestätigt: Δ=−0.13 in Run 1779217698 → PMGG best_effort_r1 → NR zu schwach.
         "transient_energie",
-    },  # OMLSA/ResembleEnhance: CREPE-Load-State + transient-shape mismatch + K-S NOT invariant for shaped NR §9.7.11 ext + MFCC-Pearson/Centroid-CV disturbed by spectral-envelope change after NR (v9.10.96 canonical — groove/emotionalitaet entfernt: P3-Quick-Proxy-Robustheit hinreichend) + §V36 transient_energie (v9.13)
+    },  # OMLSA/ResembleEnhance: CREPE-Load-State + transient-shape mismatch + K-S NOT invariant for shaped NR §9.7.11 ext + MFCC-Pearson/Centroid-CV disturbed by spectral-envelope change after NR (v10.0.0 canonical — groove/emotionalitaet entfernt: P3-Quick-Proxy-Robustheit hinreichend) + §V36 transient_energie (v10.0.0)
     # DeepFilterNet HF-removal intentionally reduces HF energy → brillanz drops.
     # artikulation excluded for same reason as phase_03: reference=hissy_tape vs
     # denoised output gives misleadingly low transient-correlation score.
@@ -545,7 +545,7 @@ PHASE_GOAL_EXCLUSIONS: dict[str, set[str]] = {
     # after hiss removal → false P4 regression triggering unnecessary retries.
     # natuerlichkeit excluded: MFCC-smoothness DSP proxy unreliable during HF-removal
     # (same root cause as phase_02 and phase_03).
-    # tonal_center excluded (§9.7.11 extension, v9.10.93): DeepFilterNet v3 II is a
+    # tonal_center excluded (§9.7.11 extension, v10.0.0): DeepFilterNet v3 II is a
     # learned frequency-selective filter — identical mechanism to OMLSA (see phase_03).
     # HF-targeted tape-hiss removal reduces energy in high-register chroma bins
     # (C5-B7) while leaving low-register bins less affected → K-S correlation shifts
@@ -564,17 +564,17 @@ PHASE_GOAL_EXCLUSIONS: dict[str, set[str]] = {
         # §V32 [RELEASE_MUST]: Breitbandige HF-Rausch-Energie (Tape-Hiss) inflationiert
         # den HF-Crest-Proxy (transparenz) künstlich. Nach Hiss-Entfernung sinkt der
         # Proxy auf den physikalisch realen Träger-Wert → CIG feuert false-positive
-        # Rollback (Drift −0.284, Threshold −0.04 bestätigt v9.12.9).
+        # Rollback (Drift −0.284, Threshold −0.04 bestätigt v10.0.0).
         # Analogie: tonal_center-Exclusion für phase_03 (Reference-Paradox §2.44).
         "transparenz",
-        # §V36 waerme (v9.13): OMLSA/DFN v3 wendet breitbandige Gain-Suppression an,
+        # §V36 waerme (v10.0.0): OMLSA/DFN v3 wendet breitbandige Gain-Suppression an,
         # auch im Wärmeband (200–2000 Hz). Tape-Hiss-Rauschboden trägt zur absoluten
         # Wärmeband-Energie bei; nach Entfernung sinkt der Proxy (E_warmth/E_total ×3.5)
         # auf den physikalisch realen Trägerwert → false P4 Regression.
         # Realer Endwert: 0.792 (über Canonical-Boden 0.75). Bestätigt: 0.91→0.74
         # (Δ=−0.17) in Run 1779217698 → PMGG best_effort_r1 → NR zu schwach.
         "waerme",
-    },  # DeepFilterNet Tape-Hiss — gleiche Root-Causes wie phase_03: MFCC-Pearson + centroid-CV + K-S shaped-NR-instabilität (v9.10.96 canonical — groove/emotionalitaet entfernt) + §V32 transparenz (HF-Crest false-positive Rollback) + §V36 waerme (v9.13)
+    },  # DeepFilterNet Tape-Hiss — gleiche Root-Causes wie phase_03: MFCC-Pearson + centroid-CV + K-S shaped-NR-instabilität (v10.0.0 canonical — groove/emotionalitaet entfernt) + §V32 transparenz (HF-Crest false-positive Rollback) + §V36 waerme (v10.0.0)
     # Phases with RADICAL spectral changes where even correlation can't help:
     # phase_04 EQ: redistributes the entire spectrum — brillanz (HF cut/boost)
     # and waerme (mid cut/boost) are intentional outcomes, not regressions.
@@ -616,7 +616,12 @@ PHASE_GOAL_EXCLUSIONS: dict[str, set[str]] = {
     "phase_07": {
         "artikulation",
         "timbre_authentizitaet",
-    },  # Harmonic restoration: H2-H4 waveshaping adds new harmonic partials → onset-sharpness proxy saturates at 1.0 pre-phase (mean_peaks/0.01 clips) then drops after harmonic addition (new spectral energy reshapes attack envelope) → false P2 artikulation catastrophic regression (0.2532 observed, 2026-04-02). timbre_authentizitaet: harmonic synthesis intentionally changes MFCC-Pearson + spectral-centroid-CV.
+        # §v10.18 Declipper: Rekonstruierte Wellenform-Peaks ändern das
+        # Roughness-Profil vs. Clipping-Referenz (§2.44 Reference-Paradox).
+        # Die geclippten Samples erzeugen künstlich glatte Spektraltäler →
+        # nach PCHIP-Rekonstruktion erscheinen echte Täler → false P1.
+        "authentizitaet",
+    },  # Harmonic restoration + Declipper: H2-H4 waveshaping adds new harmonic partials → onset-sharpness proxy saturates at 1.0 pre-phase (mean_peaks/0.01 clips) then drops after harmonic addition (new spectral energy reshapes attack envelope) → false P2 artikulation catastrophic regression (0.2532 observed, 2026-04-02). timbre_authentizitaet: harmonic synthesis + declipping intentionally changes MFCC-Pearson + spectral-centroid-CV. authentizitaet: Wellenform-Rekonstruktion ändert Roughness-Profil (§v10.18).
     # Click removal: replaces impulse artifacts with interpolated audio.
     # artikulation excluded: clicks are high-amplitude transients in the damaged
     # signal — ArticulationMetric sees them as "transients". After removal they're
@@ -736,14 +741,14 @@ PHASE_GOAL_EXCLUSIONS: dict[str, set[str]] = {
         "timbre_authentizitaet",
         "artikulation",
         "emotionalitaet",
-        # §V32-Analogie Sibilanz (§2.55-Sync v9.13): Sibilant-Energie (4–8 kHz) inflationiert
+        # §V32-Analogie Sibilanz (§2.55-Sync v10.0.0): Sibilant-Energie (4–8 kHz) inflationiert
         # den HF-Crest-Proxy (brillanz) und HF-Rolloff-Proxy (transparenz) auf Kassetten-/
         # Vinyl-Vokal-Material. Nach De-Essing sinken beide auf reale Trägerwerte →
         # false P4/P5 Regression (Reference-Paradox §2.44). Identischer Mechanismus
         # wie phase_29/transparenz (V32). Bestätigt: PMGG best_effort bei strength<0.15.
         "brillanz",
         "transparenz",
-    },  # De-esser: 4-8 kHz sibilant attenuation → artikulation (fricative transients attenuated) + timbre (centroid-CV + MFCC) + emotionalitaet (crest-factor drop) + brillanz/transparenz (§V32-Analogie Sibilanz v9.13) false regressions
+    },  # De-esser: 4-8 kHz sibilant attenuation → artikulation (fricative transients attenuated) + timbre (centroid-CV + MFCC) + emotionalitaet (crest-factor drop) + brillanz/transparenz (§V32-Analogie Sibilanz v10.0.0) false regressions
     # Guitar enhancement: spectral shaping for guitar timbre (distortion, presence).
     # timbre_authentizitaet: guitar-specific spectral shaping intentionally changes
     # the MFCC-Pearson + centroid-CV profile → false P2 vs. pre-enhancement.
@@ -936,7 +941,7 @@ PHASE_GOAL_EXCLUSIONS: dict[str, set[str]] = {
         "emotionalitaet",
     },  # Psychoacoustic compression: genre-adaptive envelope modification → crest-factor drops + groove autocorr[lag_05] disrupted → false P3 regressions (identical mechanism to phase_17 + phase_35)
     # Mastering: intentional dynamics compression + spectral shaping.
-    # tonal_center excluded (§9.7.11 ext, v9.10.93): multiband compression +
+    # tonal_center excluded (§9.7.11 ext, v10.0.0): multiband compression +
     # presence/air EQ redistribute chroma energy → K-S detects apparent key shift.
     # artikulation excluded: multiband compression is designed to change attack
     # envelopes (faster attack → softer onset, slower release → sustain boost);
@@ -959,12 +964,18 @@ PHASE_GOAL_EXCLUSIONS: dict[str, set[str]] = {
         "micro_dynamics",
         "groove",
         "emotionalitaet",
-        # §V32-Analogie Sibilanz (§2.55-Sync v9.13): identischer Mechanismus wie phase_43.
+        # §V32-Analogie Sibilanz (§2.55-Sync v10.0.0): identischer Mechanismus wie phase_43.
         # Sibilant-HF (4–8 kHz) inflationiert brillanz + transparenz auf Kassetten-/
         # Vinyl-Vokal-Material → nach De-Essing false P4/P5 Regression (Reference-Paradox §2.44).
         "brillanz",
         "transparenz",
-    },  # Vocal enhancement: Stage 6 micro-compression shifts crest-factor + Stage 2 breath-gating changes inter-beat RMS periodicity → false P3 regressions (same mechanisms as phase_17/phase_18) + brillanz/transparenz (§V32-Analogie Sibilanz v9.13)
+        # §2.55-Sync (2026-07-18): De-Esser redistribuiert spektrale Energie im
+        # Sibilanzbereich (4–10 kHz) → K-S-Chroma-Verteilung verschiebt sich um
+        # bis zu 3 Halbtöne → false P2 catastrophic regression auf tonal_center
+        # (0.9978 bestätigt, cassette+schlager, Phase hatte 0 Sibilanten + 0 dB
+        # Reduktion → Regression ist reiner Messartefakt).
+        "tonal_center",
+    },  # Vocal enhancement: Stage 6 micro-compression shifts crest-factor + Stage 2 breath-gating changes inter-beat RMS periodicity → false P3 regressions (same mechanisms as phase_17/phase_18) + brillanz/transparenz (§V32-Analogie Sibilanz v10.0.0) + tonal_center (§2.55 K-S-chroma-shift durch Sibilanz-Redistribution)
     # BSRoFormer vocal stem separation + vocal enhancement with micro-compression
     # (syllable-level, ratio 1.8–2.5) + envelope shaping + FormantSystem enhancement.
     # Mechanistically similar to phase_19 (compression/breathing) + phase_23 (synthesis).
@@ -1751,7 +1762,7 @@ FAST_GOALS_SUBSET: list[str] = [
     "natuerlichkeit",
     "timbre_authentizitaet",
     "transient_energie",
-    # 8 neu (DSP-Proxies, v9.10.57):
+    # 8 neu (DSP-Proxies, v10.0.0):
     "bass_kraft",
     "authentizitaet",
     "emotionalitaet",
@@ -1884,7 +1895,7 @@ def _get_precise_metric_instances() -> dict[str, Any]:
                         # The canonical NatuerlichkeitMetric still runs in the final
                         # export quality gate (MusicalGoalsChecker).
                         #
-                        # tonal_center intentionally omitted (§2.29b, v9.10.93):
+                        # tonal_center intentionally omitted (§2.29b, v10.0.0):
                         # TonalCenterMetric uses librosa.feature.chroma_stft and applies a
                         # binary key-shift penalty (1 semitone → score ≤ 0.50; ≥2 → 0.0).
                         # This causes systematic catastrophic false P2 regressions in phases
@@ -2150,7 +2161,7 @@ def _measure_quick(
     """
     Misst alle 15 Musical Goals auf einer 5-s-Stichprobe in ≤ 200 ms.
 
-    §9.7.5 (v9.10.77): Referenz-aware Preservation-Korrekturen.
+    §9.7.5 (v10.0.0): Referenz-aware Preservation-Korrekturen.
     Wenn ``reference`` übergeben wird, erhalten anfällige Goals einen
     Preservation-Bonus basierend auf spektraler Korrelation.  Dies beseitigt
     False-Positive-Regressionen bei Noise-Removal, EQ, Dynamics-Phasen
@@ -2185,7 +2196,7 @@ def _measure_quick(
     #    If FFT fails every dependent metric gracefully falls back to 0.5 via its
     #    own try/except; the shared variables are always defined.
     #
-    # §9.7.18 Fix (v9.12.2): frame-averaged STFT replaces full-signal FFT.
+    # §9.7.18 Fix (v10.0.0): frame-averaged STFT replaces full-signal FFT.
     # Root-cause: np.fft.rfft(mono) on a 5-min song creates 7.2M bins at 0.011 Hz
     # resolution. In each spectral band (e.g., 250–500 Hz), harmonic peaks occupy
     # 1–2 bins out of 1250+ → p95/p50 crest dominated by noise-floor distribution,
@@ -2285,7 +2296,7 @@ def _measure_quick(
             _hf_bins_b = fft_mag[_hf_mask_b]
             _mid_bins_b = fft_mag[_mid_mask_b]
             if len(_hf_bins_b) > 20 and len(_mid_bins_b) > 5:
-                # §9.7.24 Fix (v9.12.2): HF-crest mit STFT-Averaging zu niedrig (Peaks geglättet).
+                # §9.7.24 Fix (v10.0.0): HF-crest mit STFT-Averaging zu niedrig (Peaks geglättet).
                 # Root-cause: frame-averaged STFT mittelt Transienten-Peaks → p95/p50 sinkt.
                 # Fix: HF-Energie-Ratio E(2-16kHz) / E(500-16kHz) als Brillanz-Proxy.
                 # Musik mit Becken/Streicher/Brillanz: ratio ~ 0.15–0.40 → score 0.5–1.0
@@ -2341,7 +2352,7 @@ def _measure_quick(
         _wm = fft_mag * _w  # perceptually weighted magnitude
         _e_low_mid = float(np.mean(_wm[(freqs >= 200) & (freqs < 800)] ** 2)) + 1e-9
         _e_upper_mid = float(np.mean(_wm[(freqs >= 800) & (freqs < 3000)] ** 2)) + 1e-9
-        # Soft-sigmoid normalization (§9.7.14 fix v9.11.15):
+        # Soft-sigmoid normalization (§9.7.14 fix v10.0.0):
         # With ISO-226 weighting, warm Schlager has ratio ~6 → hard /4.0 clips to 1.0 always
         # → delta never detectable → PMGG blind for waerme regressions.
         # Soft norm: ratio/(ratio+0.70) → neutral=0.59, warm(~2.5)=0.78, Schlager(~6)=0.90,
@@ -2591,7 +2602,7 @@ def _measure_quick(
 
     # ── Natürlichkeit (Log-Mel Tonal Dominance + Spectral Smoothness) ────
     # Canonical key "natuerlichkeit" — aligned with GoalApplicabilityFilter §2.32.
-    # Fix §9.7.15 (v9.12.1): Krimphoff FFT-bin irregularity scored all real music
+    # Fix §9.7.15 (v10.0.0): Krimphoff FFT-bin irregularity scored all real music
     # near-zero because harmonic peaks at FFT resolution are inherently "irregular".
     # New proxy uses 24 mel bands with two orthogonal components:
     #   1) Tonal Dominance: top-4 mel bands carry > 15–60% of energy (music vs noise)
@@ -2627,7 +2638,7 @@ def _measure_quick(
             _top4_ratio = float(np.sum(_mel_sorted_nat[:4])) / _mel_total_nat
             _tonal_score = float(np.clip((_top4_ratio - 0.15) / 0.45, 0.0, 1.0))
             # Component 2: Mel-log smoothness (NR artifact detection)
-            # §9.7.22 Fix (v9.12.2): Normierung NUR auf aktive Bänder (> 1% des Max-Bands).
+            # §9.7.22 Fix (v10.0.0): Normierung NUR auf aktive Bänder (> 1% des Max-Bands).
             # Root-cause: Inaktive Bänder (Energie ~ 1e-12) haben log ~ -27.6,
             # während aktive Bänder log ~ 10+ haben. Die riesige Spannweite in _irr_den
             # dominiert die Normierung → fast alle echten Irregularitäten erscheinen klein.
@@ -2678,7 +2689,7 @@ def _measure_quick(
             w_freqs = np.fft.rfftfreq(len(w), d=1.0 / sr)
             centroid = float(np.sum(w_freqs * w_fft) / (np.sum(w_fft) + 1e-12))
             centroids.append(centroid)
-        # §9.7.23 Fix (v9.12.2): Centroid-CV-Ansatz ist invertiert für Rauschen.
+        # §9.7.23 Fix (v10.0.0): Centroid-CV-Ansatz ist invertiert für Rauschen.
         # Root-cause: Weißes Rauschen hat konstanten Spectral Centroid (~sr/4)
         # → niedrige CV → hoher Score (FALSCH). Echte Musik hat variierende
         # Centroide (Instrumental wechsel, Dynamik) → höhere CV → niedrigerer Score.
@@ -2759,9 +2770,9 @@ def _measure_quick(
     except Exception:
         scores["bass_kraft"] = 0.5
 
-    # ── Authentizität (Mel-Band-Flatness — §9.7.19 Fix v9.12.2) ──────
-    # §2.29b Root-Fix (v9.10.79): Der frühere Proxy maß spektrale Rauheit — invertiert.
-    # §9.7.19 Fix (v9.12.2): Full-FFT-Flatness = geom(|X|)/arith(|X|) über N//2+1 Bins.
+    # ── Authentizität (Mel-Band-Flatness — §9.7.19 Fix v10.0.0) ──────
+    # §2.29b Root-Fix (v10.0.0): Der frühere Proxy maß spektrale Rauheit — invertiert.
+    # §9.7.19 Fix (v10.0.0): Full-FFT-Flatness = geom(|X|)/arith(|X|) über N//2+1 Bins.
     # Root-cause: Rausch-Bins nahe Null dominieren den Logarithmus-Mittelwert →
     # geom_mean → near-zero für Musik → flatness ≈ 0 sowohl für Musik als auch Rauschen
     # → Score = 0 für alle Eingaben (Proxy blind).
@@ -2786,7 +2797,7 @@ def _measure_quick(
                 _geom_auth = float(np.exp(np.mean(np.log(_mp_auth))))
                 _arith_auth = float(np.mean(_mp_auth))
                 _flatness_auth = float(np.clip(_geom_auth / (_arith_auth + 1e-12), 0.0, 1.0))
-                # Calibration (v9.12.2): flatness 0.35+ → score 0 (noisy/codec),
+                # Calibration (v10.0.0): flatness 0.35+ → score 0 (noisy/codec),
                 # flatness 0.05 → score 0.86 (tonal Schlager), 0.01 → 0.97 (clean)
                 scores["authentizitaet"] = float(np.clip(1.0 - _flatness_auth / 0.35, 0.0, 1.0))
             else:
@@ -2828,7 +2839,7 @@ def _measure_quick(
             _env_crest = _env_peak / _env_mean
             # 1.0 (flat/noise) → 0.0; 3.0 (moderate dynamics) → 0.67; 5.0 (expressive) → 1.0
             crest_score = float(np.clip((_env_crest - 1.0) / 4.0, 0.0, 1.0))
-            # §9.7.20 Fix (v9.12.2): dB-Domain-Bereich ersetzt lineare Varianz.
+            # §9.7.20 Fix (v10.0.0): dB-Domain-Bereich ersetzt lineare Varianz.
             # Root-cause: np.var(rms_frames)*1000 ≈ 0 für steady-state Musik
             # (z.B. lineare RMS-Varianz = 0.0003 → Score 0.30; bei 10ms-Frames fast
             # immer nahe 0 für Musik mit konstantem Signalpegel).
@@ -2888,7 +2899,7 @@ def _measure_quick(
         if _rms_trp < 1e-5:
             scores["transparenz"] = 0.5  # near-silence: neutral (band crests → 0.0 is misleading)
         else:
-            # §9.7.25 Fix (v9.12.2): Multi-Band-Crest durch STFT-Averaging zu niedrig.
+            # §9.7.25 Fix (v10.0.0): Multi-Band-Crest durch STFT-Averaging zu niedrig.
             # Root-cause: frame-averaged STFT glättet harmonische Peaks → p95/p50 ≈ 1.
             # Fix: Vergleiche mittlere Band-Energie gegen die Gesamtenergie — Transparenz
             # bedeutet, dass Mitten und Höhen klar definiert sind (hohe Band-SNR pro Oktave).
@@ -2921,7 +2932,7 @@ def _measure_quick(
 
     # ── Spatial Depth (M/S-Korrelation bei Stereo, 0.5 bei Mono) ──────
     try:
-        # §2.51/§2.63 Stereo-Orientierungs-Fix (v9.12.3): UV3 übergibt (2,N) channels-first.
+        # §2.51/§2.63 Stereo-Orientierungs-Fix (v10.0.0): UV3 übergibt (2,N) channels-first.
         # audio.shape[1] >= 2 war bei (2,N) True (N >> 2), aber audio[:,0] = 2-Sample-Spalte ≠ Kanal.
         # Folge: left/right = 2-Sample-Array → near-silence RMS → score = 0.5 (konstant).
         # Fix: orientierungs-adaptives L/R-Splitting — analog zur mono-Konvertierung oben.
@@ -2975,7 +2986,7 @@ def _measure_quick(
     except Exception:
         scores["micro_dynamics"] = 0.5
 
-    # ── Separation-Treue (Mel-Band-Flatness, §9.7.21 Fix v9.12.2) ────
+    # ── Separation-Treue (Mel-Band-Flatness, §9.7.21 Fix v10.0.0) ────
     # Root-cause: Identischer Bug wie authentizitaet — full-FFT-Flatness auf Leistungs-
     # spektrum ist immer nahe 0 für Musik weil leere Bins den Geom-Mittelwert dominieren.
     # Fix: 24 Mel-Bänder aggregieren Energie korrekt → Flatness unterscheidet tonal/Rauschen:
@@ -3925,7 +3936,7 @@ class PerPhaseMusicalGoalsGate:
         for _pfx, _excl in PHASE_GOAL_EXCLUSIONS.items():
             if phase_id.startswith(_pfx):
                 _excluded_goals |= _excl
-        # §2.31b Material-adaptive exclusion relaxation (v9.10.85):
+        # §2.31b Material-adaptive exclusion relaxation (v10.0.0):
         # High-quality digital sources (cd_digital, dat) have no broadband hiss.
         # Noise-derived false-regression root-causes (brillanz/authentizitaet/
         # transparenz/tonal_center) do not apply to these materials.
@@ -4768,7 +4779,7 @@ class PerPhaseMusicalGoalsGate:
                 "uncertainty_budget": 1.0,
             }
 
-        # §2.29 v9.10.77: Priority-aware regression check.
+        # §2.29 v10.0.0: Priority-aware regression check.
         # Determine worst priority among regressed goals to set retry budget.
         _reg_pa, _worst_prio = self._max_regression_priority_aware(
             effective_scores_before, scores_after, _goals_for_regression, threshold, goal_weights=goal_weights
@@ -4793,7 +4804,7 @@ class PerPhaseMusicalGoalsGate:
             scores_after.get(_worst_goal, 0.5),
         )
 
-        # §2.29 v9.10.77 / §0c Recovery-Lite: If priority-adjusted regression is fully
+        # §2.29 v10.0.0 / §0c Recovery-Lite: If priority-adjusted regression is fully
         # within tolerance (worst_prio==99 → no goal exceeded its priority-band threshold),
         # accept as tolerated without retry.
         # P4/P5 with regression ABOVE 2.0×/2.5× threshold → _worst_prio=4or5 → 1 Recovery-Retry.
@@ -4834,7 +4845,7 @@ class PerPhaseMusicalGoalsGate:
                 )
                 return audio_out, scores_after, "passed_team_balanced", initial_strength
 
-        # Priority-based max retries (§2.29 v9.10.77):
+        # Priority-based max retries (§2.29 v10.0.0):
         _max_retries_for_prio = _PRIORITY_MAX_RETRIES.get(_worst_prio, 4)
 
         # §2.31a SongCal P3-Retry-Feinjustage: restorability_tier moduliert den
@@ -4955,6 +4966,8 @@ class PerPhaseMusicalGoalsGate:
         _prev_regression = regression
         _retry_t0 = time.time()
         # ── §v10.16 Binary Search Loop ────────────────────────────────
+        # §F821-Fix: retry_strengths was referenced but never defined
+        retry_strengths = [round(float(initial_strength) * s, 3) for s in (0.75, 0.50, 0.30, 0.15)]
         _binary_active = _USE_BINARY and len(retry_strengths) > 0
         _bs_attempt = 0
         _bs_max = _BINARY_SEARCH_MAX_ITERS if _binary_active else len(retry_strengths)
@@ -5081,7 +5094,7 @@ class PerPhaseMusicalGoalsGate:
             _prev_regression = regression_retry
             _prev_team_net = _net_retry
 
-        # §2.31b Dynamic catastrophic threshold (v9.10.85):
+        # §2.31b Dynamic catastrophic threshold (v10.0.0):
         # Proportional to adaptive threshold so Good material (0.020) triggers
         # emergency retries at 0.08 — earlier quality protection. Poor material
         # (0.055) produces 0.22, matching the old hard-coded value.
@@ -5245,11 +5258,11 @@ class PerPhaseMusicalGoalsGate:
                         get_error_registry().record(
                             phase_id, "lag_introduced", f"lag delta={_lag_delta} samples", retries=0, severity="error"
                         )
-                    except Exception:
-                        pass
+                    except Exception as _e:
+                        logger.debug("per_phase_musical_goals_gate: non-critical exception: %s", _e)
                     return audio, effective_scores_before, "lag_rejected", 0.0
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.debug("per_phase_musical_goals_gate: non-critical exception: %s", _e)
 
         # §v10.17 PSS-Gate: Perceptual Similarity gegen Original
         try:
@@ -5261,8 +5274,8 @@ class PerPhaseMusicalGoalsGate:
                 if not _pss_r.accepted:
                     logger.warning("§v10.17 PSS-Gate [%s]: PSS=%.4f rejected", phase_id, _pss_r.perceptual_similarity)
                     return audio, effective_scores_before, "pss_rejected", 0.0
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.debug("per_phase_musical_goals_gate: non-critical exception: %s", _e)
 
         return best_audio, best_scores, best_action, best_strength
 
@@ -5275,7 +5288,7 @@ class PerPhaseMusicalGoalsGate:
     ) -> np.ndarray:
         """Führt Phase aus mit Wet/Dry-Modulation; nutzt bei Fehlern sicheren Audio-Fallback.
 
-        CRITICAL FIX (v9.10.64): Ruft phase.process() statt phase() auf.
+        CRITICAL FIX (v10.0.0): Ruft phase.process() statt phase() auf.
         PhaseInterface definiert kein __call__; der vorherige Code erzeugte
         TypeError, das still gefangen wurde — ALLE Phasen waren No-Ops.
 

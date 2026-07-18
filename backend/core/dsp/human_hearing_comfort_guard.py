@@ -79,7 +79,7 @@ def apply_human_hearing_comfort_guard(
     hf_lift = 0.0
     noise_floor_lift = 0.0
 
-    # v9.20.3-Fix: Second peak overshoot attenuation moved BEFORE HF lift.
+    # v10.0.0-Fix: Second peak overshoot attenuation moved BEFORE HF lift.
     # Previously the second _attenuate_peak_overshoot ran after _boost_candidate_hf,
     # undoing the HF enhancement because peak energy gained in 6-16 kHz was treated
     # as overshoot. Now overshoot is fully resolved before the deliberate HF lift,

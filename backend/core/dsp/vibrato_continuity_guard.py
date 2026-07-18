@@ -1,5 +1,5 @@
 """
-§2.46f [RELEASE_MUST] Vibrato-Continuity-Guard (v9.12.0)
+§2.46f [RELEASE_MUST] Vibrato-Continuity-Guard (v10.0.0)
 
 Schützt natürliches Vibrato (4–7 Hz F0-Modulation, ≤ ±50 Cent) vor Diskontinuität
 an Chunk-Grenzen. Wird in UV3 nach jeder Pitch-Phase aufgerufen, die chunked verarbeitet.

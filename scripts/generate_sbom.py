@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-scripts/generate_sbom.py — Software Bill of Materials (SBOM) Generator für Aurik 9.
+scripts/generate_sbom.py — Software Bill of Materials (SBOM) Generator für Aurik 10.0.0.
 
 Erzeugt ein maschinenlesbares SBOM im SPDX-ähnlichen JSON-Format aus:
   - pip-installierten Paketen (pip list --format=json)
@@ -103,7 +103,7 @@ def generate_sbom(output_path: pathlib.Path) -> dict[str, Any]:
         "spdx_version": "SPDX-2.3",
         "created": datetime.now(timezone.utc).isoformat(),
         "tool": "scripts/generate_sbom.py",
-        "project": "Aurik 9",
+        "project": "Aurik 10.0.0",
         "version": "9.10.46",
         "components": pip_pkgs + models,
         "summary": {
@@ -120,7 +120,7 @@ def generate_sbom(output_path: pathlib.Path) -> dict[str, Any]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Aurik 9 SBOM Generator")
+    parser = argparse.ArgumentParser(description="Aurik 10.0.0 SBOM Generator")
     parser.add_argument("--output", default="sbom.json", help="Ausgabepfad für SBOM-JSON")
     args = parser.parse_args()
     generate_sbom(pathlib.Path(args.output))

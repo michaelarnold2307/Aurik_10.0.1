@@ -1,12 +1,12 @@
-# Aurik 9.x.x — Installation Guide
+# Aurik 10.0.8 — Installation Guide
 
-**Version:** 9.20.3  
+**Version:** 10.0.8  
 **Datum:** Mai 2026  
 **Status:** ✅ Production Ready
 
 > **Normativer Hinweis (Release):** Endnutzer-Standard ist Desktop-Distribution (AppImage/.exe) mit One-Button-Workflow.
 > Entwicklerpfade mit manuellen Paket- und Python-Schritten sind keine produktive Laufzeitvorgabe.
-> **Hinweis**: Aurik 9.x.x ist eine **Desktop-App** für **Linux** (AppImage) und **Windows 10/11** (.exe).
+> **Hinweis**: Aurik 10.0.8 ist eine **Desktop-App** für **Linux** (AppImage) und **Windows 10/11** (.exe).
 > Es wird kein Python, kein Terminal und keine Internetverbindung benötigt.
 > macOS wird **nicht** unterstützt.
 
@@ -53,7 +53,7 @@
 - **Linux:** `libsndfile1`, `ffmpeg`
 - **Windows:** Keine zusätzlichen Bibliotheken erforderlich
 
-> **macOS wird nicht unterstützt.** Aurik 9 ist ausschließlich für Linux und Windows 10/11 konzipiert.
+> **macOS wird nicht unterstützt.** Aurik 10.0.0 ist ausschließlich für Linux und Windows 10/11 konzipiert.
 
 ---
 

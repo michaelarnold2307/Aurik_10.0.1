@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 """
-Tests für VocalFocusAnalyzer (§0p — v9.12.1).
+Tests für VocalFocusAnalyzer (§0p — v10.0.0).
 """
 
 

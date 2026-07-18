@@ -1,5 +1,5 @@
 """
-Aurik 9.11.14 — Fix-Verifikations-Diagnostik
+Aurik 10.0.0 — Fix-Verifikations-Diagnostik
 =============================================
 Testet die 5 Fixes dieser Session mit gezielten pathologischen Inputs,
 die die jeweiligen Bugs exakt reproduzieren.
@@ -10,7 +10,7 @@ Ausgabe: PASS/FAIL pro Fix + numerische Evidenz.
 Aufruf:
     .venv_aurik/bin/python scripts/diag_fix_verification.py
 
-v9.11.68  22.04.2026
+v10.0.0  22.04.2026
 """
 
 import sys
@@ -462,7 +462,7 @@ def test_fix5b_wall_time_budget_fires() -> None:
 
 def main() -> int:
     print("=" * 65)
-    print("  Aurik 9.11.14 — Fix-Verifikations-Diagnostik  (v9.11.68)")
+    print("  Aurik 10.0.0 — Fix-Verifikations-Diagnostik  (v10.0.0)")
     print("=" * 65)
     print()
 

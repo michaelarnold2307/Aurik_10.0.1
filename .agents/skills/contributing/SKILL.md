@@ -1,6 +1,6 @@
-# Contributing to Aurik 9.12.8
+# Contributing to Aurik 10.0.8
 
-Thank you for your interest in contributing to Aurik 9! This document provides guidelines and instructions for contributing to this project.
+Thank you for your interest in contributing to Aurik 10.0.8! This document provides guidelines and instructions for contributing to this project.
 
 ## Table of Contents
 
@@ -17,7 +17,7 @@ Thank you for your interest in contributing to Aurik 9! This document provides g
 
 ## Getting Started
 
-Aurik 9 is a professional-grade audio restoration and enhancement software with a hybrid DSP + ML architecture. Before contributing, please:
+Aurik 10.0.8 is a professional-grade audio restoration and enhancement software with a hybrid DSP + ML architecture. Before contributing, please:
 
 1. Read the [README.md](README.md)
 2. Review the [Roadmap](docs/aurik9_roadmap.md)
@@ -60,7 +60,7 @@ Aurik_Standalone/
 ├── core/                    # Core processing engine
 │   ├── phases/             # 64 processing phases (Phase 01–64)
 │   ├── unified_restorer_v3.py  # Main pipeline orchestrator
-│   ├── defect_scanner.py   # Defect detection (46 DefectTypes)
+│   ├── defect_scanner.py   # Defect detection (62 DefectTypes)
 │   └── musical_goals/      # 14 perceptual quality goals
 ├── dsp/                     # DSP algorithms (OMLSA, NMF-β, PGHI, …)
 ├── plugins/                 # ML plugins (ONNX/local, all with DSP fallback)
@@ -503,8 +503,8 @@ We are committed to providing a welcoming and inclusive environment. Please:
 
 ### Release Process
 
-- **Semantic Versioning:** MAJOR.MINOR.PATCH (e.g., 9.0.0)
-- **Release Candidates:** 9.0.0-rc1, 9.0.0-rc2
+- **Semantic Versioning:** MAJOR.MINOR.PATCH (e.g., 10.0.0)
+- **Release Candidates:** 10.0.0-rc1, 10.0.0-rc2
 - **Changelog:** Updated in `docs/aurik9_roadmap.md`
 
 ---
@@ -545,7 +545,7 @@ Contributors will be recognized in:
 - Release notes
 - Project documentation
 
-Thank you for contributing to Aurik 9.0! 🎵✨
+Thank you for contributing to Aurik 10.0.8! 🎵✨
 
 ---
 

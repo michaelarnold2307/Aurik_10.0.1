@@ -1,5 +1,5 @@
-# Aurik 9.10.77 — UAT Scorecard
-**Generated:** 2026-04-14 20:51:06 UTC
+# Aurik 10.0.0 — UAT Scorecard
+**Generated:** 2026-04-12 15:01:20 UTC
 **Version:** 9.10.77
 
 ---
@@ -7,7 +7,7 @@
 ## Restoration Criteria (15 Tests)
 
 | ID | Criterion | Category | Severity | Result | Evidence |
-| --- | --- | --- | --- | --- | --- |
+|----|-----------| ---------|----------|--------|----------|
 | R1 | Einstiegs-Nachricht klar und hilfreich | UI/UX | MUST | ✅ PASS | tests/test_uat_acceptance_criteria.py::test_restor... |
 | R2 | Defekt-Scanning transparent gemacht | UI/UX | MUST | ✅ PASS | tests/test_uat_acceptance_criteria.py::test_restor... |
 | R3 | Zweistufige Progress Bars funktionieren | UI/UX | MUST | ✅ PASS | tests/test_uat_acceptance_criteria.py::test_restor... |
@@ -18,7 +18,7 @@
 | R8 | Keine stillen Defekte eingeführt | Audio Quality | MUST | ✅ PASS | tests/test_uat_acceptance_criteria.py::test_restor... |
 | R9 | Reversing funktioniert | UI/UX | SHOULD | ✅ PASS | tests/test_uat_acceptance_criteria.py::test_restor... |
 | R10 | Export mit korrekten LUFS | Audio Quality | MUST | ✅ PASS | tests/test_uat_acceptance_criteria.py::test_restor... |
-| R11 | Musikalische Ziele nicht verschlechtert | Audio Quality | MUST | ❌ FAIL | tests/test_uat_acceptance_criteria.py::test_restor... |
+| R11 | Musikalische Ziele nicht verschlechtert | Audio Quality | MUST | ✅ PASS | tests/test_uat_acceptance_criteria.py::test_restor... |
 | R12 | Keine NaN/Inf-Werte im Audio | Code Quality | MUST | ✅ PASS | tests/test_uat_acceptance_criteria.py::test_restor... |
 | R13 | Mono/Stereo korrekt detektiert | Audio Quality | MUST | ✅ PASS | tests/test_uat_acceptance_criteria.py::test_restor... |
 | R14 | Material-Klassifikation funktioniert | Audio Analysis | MUST | ✅ PASS | tests/test_uat_acceptance_criteria.py::test_restor... |
@@ -27,7 +27,7 @@
 ## Studio 2026 Criteria (15 Tests)
 
 | ID | Criterion | Category | Severity | Result | Evidence |
-| --- | --- | --- | --- | --- | --- |
+|----|-----------| ---------|----------|--------|----------|
 | S1 | Studio 2026 Modusmeldung | UI/UX | MUST | ✅ PASS | tests/test_uat_acceptance_criteria.py::test_studio... |
 | S2 | Stem-Separation aktiv | Audio Processing | MUST | ✅ PASS | tests/test_uat_acceptance_criteria.py::test_studio... |
 | S3 | Vocal-Enhancement aktiv | Audio Processing | MUST | ✅ PASS | tests/test_uat_acceptance_criteria.py::test_studio... |
@@ -47,7 +47,7 @@
 ## Release Gates (7 Critical Tests)
 
 | ID | Gate name | K.O. | Result |
-| --- | --- | --- | --- |
+|----|-----------| ----|--------|
 | G1 | Kein Docker in Production-Pfaden | 🔴 | ✅ PASS |
 | G2 | KMV batch audio aus Originaludio | 🔴 | ✅ PASS |
 | G3 | Keine silent refinement cancellations | 🔴 | ✅ PASS |
@@ -59,7 +59,7 @@
 ## Summary
 
 ### Acceptance Criteria Results
-- **Restoration:** 14/15 passed (1 failed, 0 skipped)
+- **Restoration:** 15/15 passed (0 failed, 0 skipped)
 - **Studio 2026:** 15/15 passed (0 failed, 0 skipped)
 
 ### Release Gate Status
@@ -69,4 +69,4 @@
 ### Test Suite Health
 - **Regression Status:** 0 regressions
 - **Overall Recommendation:** **GO**
-- **Rationale:** All acceptance criteria met (29/30); 7/7 gates passed
+- **Rationale:** All acceptance criteria met (30/30); 7/7 gates passed

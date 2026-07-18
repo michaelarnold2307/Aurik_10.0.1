@@ -1,5 +1,5 @@
 """
-Performance Guard for Aurik 9.0 - adaptive Real-Time Enforcement
+Performance Guard for Aurik 10.0.0 - adaptive Real-Time Enforcement
 ============================================================
 
 Überwacht Processing-Performance und stellt sicher, dass das mode-adaptive
@@ -13,8 +13,8 @@ Key Features:
 - Adaptive Phase Skipping
 - Detailed Performance Logging
 
-Author: Aurik 9.0 Development Team
-Version: 9.0.0
+Author: Aurik 10.0.0 Development Team
+Version: 10.0.0
 Date: 2026-02-15
 """
 

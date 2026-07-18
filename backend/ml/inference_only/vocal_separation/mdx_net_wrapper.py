@@ -54,7 +54,7 @@ class MDXNetSeparator:
         """
         self.sample_rate = sample_rate
 
-        # Device selection — §9.5 Aurik 9 nutzt ausschließlich CPU. Kein CUDA.
+        # Device selection — §9.5 Aurik 10.0.0 nutzt ausschließlich CPU. Kein CUDA.
         self.device = "cpu"
 
         logger.info("MDXNetSeparator initialized on %s", self.device)
@@ -123,7 +123,7 @@ class MDXNetSeparator:
         - Tracks nebenwirkungen (phase, stereo width)
         - Preserves original for reversibility check
         """
-        # SR-Invariante (Aurik 9 nutzt 48000 Hz)
+        # SR-Invariante (Aurik 10.0.0 nutzt 48000 Hz)
         assert sr == 48000 or sr is None or sr == self.sample_rate, f"SR muss 48000 Hz sein, erhalten: {sr}"
         # Resample if needed
         if sr is not None and sr != self.sample_rate:

@@ -286,7 +286,7 @@ def _inpaint_gap_dsp(
     right_ctx = audio[end : min(len(audio), end + context_samples)].copy()
     right_ctx_rev = right_ctx[::-1]
 
-    # §v9.10.113: Adaptive AR order — order 64 diverges for gaps > 50 ms (2 400 samples).
+    # §v10.0.0: Adaptive AR order — order 64 diverges for gaps > 50 ms (2 400 samples).
     # AR(192) covers 3× more spectral modes; safe as long as context length > order.
     _AR_ORDER_ADAPTIVE = min(192, max(16, len(left_ctx) - 1)) if gap_len > 2400 else _AR_ORDER
 

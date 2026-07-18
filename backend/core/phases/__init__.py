@@ -112,7 +112,7 @@ except ImportError as _p57_err:
     _PHASE57_OK = False
     PrintThroughReductionPhase = None  # type: ignore[assignment,misc]
 
-# Phase 56: HEAD_WEAR Spectral Band Gap Repair (v9.9.8)
+# Phase 56: HEAD_WEAR Spectral Band Gap Repair (v10.0.0)
 try:
     from .phase_56_spectral_band_gap_repair import SpectralBandGapRepairPhase
 
@@ -122,7 +122,7 @@ except ImportError as _p56_err:
     _PHASE56_OK = False
     SpectralBandGapRepairPhase = None  # type: ignore[assignment,misc]
 
-# Phase 58: Lyrics-Guided Enhancement (§2.36 PFLICHT, v9.10.x)
+# Phase 58: Lyrics-Guided Enhancement (§2.36 PFLICHT, v10.0.0.x)
 try:
     from .phase_58_lyrics_guided_enhancement import Phase58LyricsGuidedEnhancement
 

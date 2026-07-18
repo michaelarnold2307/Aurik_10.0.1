@@ -1,5 +1,5 @@
 """
-PANNs Plugin — Direkte ONNX-Inferenz auf Audio-Array (§4.4 Aurik Spec v9.10.45).
+PANNs Plugin — Direkte ONNX-Inferenz auf Audio-Array (§4.4 Aurik Spec v10.0.0).
 
 Dieses Plugin ersetzt die dateibasierte panns_inference.AudioTagging durch
 vollständige ONNX-basierte Inferenz auf np.ndarray-Signalen (kein Datei-I/O

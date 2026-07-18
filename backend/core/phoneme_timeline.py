@@ -1,6 +1,6 @@
 """
 backend/core/phoneme_timeline.py
-Aurik 9 — §2.36a PhonemeTimeline
+Aurik 10.0.0 — §2.36a PhonemeTimeline
 
 Pipeline-Datenstruktur für phoneme-aware Restaurierung.
 Bietet zeitlich aufgelöste Phonemklassen-Information an alle konsumierenden Phasen.

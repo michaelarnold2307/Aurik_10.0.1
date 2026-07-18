@@ -72,7 +72,7 @@ class RekonstruktionsErgebnis:
     phases_applied: list[str] = field(default_factory=list)
     """Liste der angewandten Phasen-IDs."""
 
-    # §11.7a ReconstructionContext fields (v9.10.74)
+    # §11.7a ReconstructionContext fields (v10.0.0)
     bandwidth_limited: bool = False
     """True if BANDWIDTH_LOSS was detected in defect analysis."""
 
@@ -283,7 +283,7 @@ class RekonstruktionsDenker:
     # Interne Hilfsmethoden
     # ------------------------------------------------------------------
 
-    # Material-adaptive GapReconstructor-Konfigurationen (§2.41 v9.10.117)
+    # Material-adaptive GapReconstructor-Konfigurationen (§2.41 v10.0.0)
     # Copeland 2008: Shellac-Dropouts kürzer (0.3 ms) und lauter als Tape-Dropouts.
     # Tape-Dropouts sind typischerweise länger (bis 2 s) und gradueller.
     _MATERIAL_GAP_CONFIGS: dict[str, dict[str, float]] = {

@@ -1,9 +1,9 @@
 """
-Aurik 9 — Denker-Architektur
+Aurik 10.0.0 — Denker-Architektur
 ============================
 
 Sieben spezialisierte Denker + ein Orchestrator (AurikDenker) bilden das
-Fundament der kognitiven Restaurierungs-Intelligenz von Aurik 9.
+Fundament der kognitiven Restaurierungs-Intelligenz von Aurik 10.0.0.
 
 Jeder Denker kapselt eine Wissensdomäne und stellt eine klare,
 NaN-sichere API bereit.  Der AurikDenker koordiniert alle Denker

@@ -1,6 +1,6 @@
 """mp_senet_plugin — MP-SENet: Multi-path Sub-band Enhanced Network (INTERSPEECH 2023).
 
-MP-SENet ersetzt DCCRN und FullSubNet+ als spektrales Enhancement-Modell in Aurik 9.
+MP-SENet ersetzt DCCRN und FullSubNet+ als spektrales Enhancement-Modell in Aurik 10.0.0.
 Verarbeitet mehrpfadige Sub-Band-Repräsentationen für breitbandige Musikrestaurierung.
 
 Verbesserung gegenüber DCCRN (2020) / FullSubNet+ (2022):

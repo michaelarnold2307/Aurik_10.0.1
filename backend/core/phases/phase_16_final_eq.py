@@ -175,8 +175,8 @@ class FinalEQ(PhaseInterface):
             "low": {"type": "shelf", "freq": 80, "gain_db": 1.0, "q": 0.7},
             "low_mid": {"type": "bell", "freq": 300, "gain_db": 0.5, "q": 0.9},
             "high_mid": {"type": "bell", "freq": 3500, "gain_db": 1.5, "q": 1.0},
-            "high": {"type": "shelf", "freq": 8000, "gain_db": 1.5, "q": 0.7},  # v9.12.9: BW-Ceiling 12 kHz
-        },  # v9.12.9: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
+            "high": {"type": "shelf", "freq": 8000, "gain_db": 1.5, "q": 0.7},  # v10.0.0: BW-Ceiling 12 kHz
+        },  # v10.0.0: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
         MaterialType.CD_DIGITAL: {
             "low": {"type": "shelf", "freq": 50, "gain_db": 0.5, "q": 0.7},
             "low_mid": {"type": "bell", "freq": 200, "gain_db": 0.0, "q": 1.0},
@@ -392,8 +392,8 @@ class FinalEQ(PhaseInterface):
                 audio = signal.sosfiltfilt(
                     signal.butter(2, 100, "lowshelf", fs=sample_rate, output="sos"), audio, axis=0
                 )
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.debug("%s: non-critical exception: %s", __name__, _e)
 
         return PhaseResult(
             success=True,

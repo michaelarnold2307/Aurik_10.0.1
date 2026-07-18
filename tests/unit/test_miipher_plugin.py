@@ -134,7 +134,7 @@ def test_miipher_adapter_falls_back_to_dfn_when_sgmse_unloaded(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# Stem-based SGMSE+ (v9.12.9)
+# Stem-based SGMSE+ (v10.0.0)
 # ---------------------------------------------------------------------------
 
 
@@ -374,7 +374,7 @@ def test_fcpe_harmonic_guard_skipped_when_panns_singing_low(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# Option 1: Interharmonische Dämpfung (v9.12.9)
+# Option 1: Interharmonische Dämpfung (v10.0.0)
 # ---------------------------------------------------------------------------
 
 

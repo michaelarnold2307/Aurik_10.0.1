@@ -10,7 +10,7 @@ Tests:
 3. Conservative mode: Verify fewer phases skipped
 4. Performance improvement: Measure RT factor reduction
 
-Author: Aurik 9.0 Development Team
+Author: Aurik 10.0.0 Development Team
 Date: 16.02.2026
 """
 

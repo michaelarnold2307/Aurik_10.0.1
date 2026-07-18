@@ -5,7 +5,7 @@ import pytest
 """
 tests/unit/test_v99_backend_modules_3537.py
 ============================================
-Unit-Tests für die in v9.10.35–37 verdrahteten Backend-Module.
+Unit-Tests für die in v10.0.0–37 verdrahteten Backend-Module.
 Alle Tests arbeiten ausschließlich mit synthetischen Audiosignalen
 (numpy, ohne echte Audio-Dateien).
 
@@ -70,7 +70,7 @@ AUDIO_STEREO = _stereo(AUDIO_SINE)
 
 @pytest.mark.unit
 class TestListeningFatigueAnalyzer:
-    """v9.10.35 — analyze_listening_fatigue()"""
+    """v10.0.0 — analyze_listening_fatigue()"""
 
     def _analyze(self, audio):
         from backend.core.musical_goals.listening_fatigue_analyzer import (
@@ -118,7 +118,7 @@ class TestListeningFatigueAnalyzer:
 
 
 class TestEmotionalResonanceAnalyzer:
-    """v9.10.35 — analyze_and_enhance_emotional_resonance()"""
+    """v10.0.0 — analyze_and_enhance_emotional_resonance()"""
 
     def _analyze(self, audio):
         from backend.core.musical_goals.emotional_resonance_analyzer import (
@@ -145,7 +145,7 @@ class TestEmotionalResonanceAnalyzer:
 
 
 class TestHarmonicCharacterAnalyzer:
-    """v9.10.35 — analyze_harmonic_character()"""
+    """v10.0.0 — analyze_harmonic_character()"""
 
     def _analyze(self, audio):
         from backend.core.musical_goals.harmonic_character_analyzer import (
@@ -175,7 +175,7 @@ class TestHarmonicCharacterAnalyzer:
 
 
 class TestKIQualityModel:
-    """v9.10.35 — KIQualityAnalyzer.analyze_audio_quality()"""
+    """v10.0.0 — KIQualityAnalyzer.analyze_audio_quality()"""
 
     def _analyze(self, audio):
         from backend.core.musical_goals.ki_quality_model import KIQualityAnalyzer
@@ -204,7 +204,7 @@ class TestKIQualityModel:
 
 
 class TestMicrodynamicsAnalyzer:
-    """v9.10.35 — analyze_microdynamics()"""
+    """v10.0.0 — analyze_microdynamics()"""
 
     def _analyze(self, audio):
         from backend.core.musical_goals.microdynamics_analyzer import analyze_microdynamics
@@ -237,7 +237,7 @@ class TestMicrodynamicsAnalyzer:
 
 
 class TestPerceptualValidator:
-    """v9.10.35 — PerceptualValidator.validate_all_goals()"""
+    """v10.0.0 — PerceptualValidator.validate_all_goals()"""
 
     def _validate(self, audio):
         from backend.core.musical_goals.perceptual_validator import PerceptualValidator
@@ -272,7 +272,7 @@ class TestPerceptualValidator:
 
 
 class TestEpistemicGate:
-    """v9.10.35 — EpistemicGate.check_responsibility()"""
+    """v10.0.0 — EpistemicGate.check_responsibility()"""
 
     def test_01_no_crash_sine(self):
         from backend.core.epistemic_gate.epistemic_gate import EpistemicGate
@@ -288,7 +288,7 @@ class TestEpistemicGate:
 
 
 class TestRollbackManager:
-    """v9.10.35 — RollbackManager.create_snapshot()"""
+    """v10.0.0 — RollbackManager.create_snapshot()"""
 
     def test_01_create_snapshot(self):
         from backend.core.rollback.rollback_manager import RollbackManager
@@ -324,7 +324,7 @@ class TestRollbackManager:
 
 
 class TestSessionManager:
-    """v9.10.35 — SessionManager.create_session()"""
+    """v10.0.0 — SessionManager.create_session()"""
 
     def test_01_create_session(self):
         from backend.core.session.session_manager import SessionManager
@@ -341,7 +341,7 @@ class TestSessionManager:
 
 
 class TestQualityControl:
-    """v9.10.35 — QualityControl.check_non_destructive()"""
+    """v10.0.0 — QualityControl.check_non_destructive()"""
 
     def test_01_check_no_crash(self):
         from backend.core.evaluation.quality_control import QualityControl
@@ -357,13 +357,13 @@ class TestQualityControl:
 
 
 # ===========================================================================
-# Gruppe 3: v9.10.36 — Adaptive, Convergence, EdgeCase, GoalExplainer,
+# Gruppe 3: v10.0.0 — Adaptive, Convergence, EdgeCase, GoalExplainer,
 #            KIHörbarkeit, ONNX, Parallel, MultiObjective
 # ===========================================================================
 
 
 class TestAdaptiveGoalEngine:
-    """v9.10.36 — AdaptiveGoalEngine"""
+    """v10.0.0 — AdaptiveGoalEngine"""
 
     def test_01_instantiate(self):
         from backend.core.conduct_enforcer.adaptive_goal import AdaptiveGoalEngine
@@ -385,7 +385,7 @@ class TestAdaptiveGoalEngine:
 
 
 class TestConvergenceDetector:
-    """v9.10.36 — MusicalGoalsConvergenceDetector"""
+    """v10.0.0 — MusicalGoalsConvergenceDetector"""
 
     @staticmethod
     def _make_detector():
@@ -408,7 +408,7 @@ class TestConvergenceDetector:
 
 
 class TestEdgeCaseHandler:
-    """v9.10.36 — EdgeCaseHandler.assess_edge_cases()"""
+    """v10.0.0 — EdgeCaseHandler.assess_edge_cases()"""
 
     def test_01_sine(self):
         from backend.core.musical_goals.edge_case_handler import EdgeCaseHandler
@@ -433,7 +433,7 @@ class TestEdgeCaseHandler:
 
 
 class TestGoalExplainer:
-    """v9.10.36 — GoalExplainer"""
+    """v10.0.0 — GoalExplainer"""
 
     def test_01_explain_simple_audio(self):
         from backend.core.musical_goals.explainability import GoalExplainer
@@ -474,7 +474,7 @@ class TestGoalExplainer:
 
 
 class TestAdaptiveGoalsCalculator:
-    """v9.10.36 — AdaptiveGoalsCalculator"""
+    """v10.0.0 — AdaptiveGoalsCalculator"""
 
     def test_01_instantiate(self):
         from backend.core.musical_goals.adaptive_goals_system import AdaptiveGoalsCalculator
@@ -492,7 +492,7 @@ class TestAdaptiveGoalsCalculator:
 
 
 class TestBatchParallelProcessor:
-    """v9.10.36 — BatchParallelProcessor"""
+    """v10.0.0 — BatchParallelProcessor"""
 
     def test_01_instantiate(self):
         from backend.core.parallel.batch_parallel import BatchParallelProcessor
@@ -519,7 +519,7 @@ class TestBatchParallelProcessor:
 
 
 class TestChannelType:
-    """v9.10.36 — stereo_parallel.ChannelType"""
+    """v10.0.0 — stereo_parallel.ChannelType"""
 
     def test_01_enum_importable(self):
         from backend.core.parallel.stereo_parallel import ChannelType
@@ -533,13 +533,13 @@ class TestChannelType:
 
 
 # ===========================================================================
-# Gruppe 4: v9.10.37 — Audit, MusicalGoalsFeedbackLoop, GoalOptimizer,
+# Gruppe 4: v10.0.0 — Audit, MusicalGoalsFeedbackLoop, GoalOptimizer,
 #            ProcessingMode, Regulator, ZoneEngine, QualityGate
 # ===========================================================================
 
 
 class TestAuditLog:
-    """v9.10.37 — AuditLog"""
+    """v10.0.0 — AuditLog"""
 
     def test_01_instantiate(self):
         from backend.core.audit_log.audit_log import AuditLog
@@ -555,7 +555,7 @@ class TestAuditLog:
 
 
 class TestMusicalGoalsFeedbackLoop:
-    """v9.10.37 — MusicalGoalsFeedbackLoop"""
+    """v10.0.0 — MusicalGoalsFeedbackLoop"""
 
     def test_01_instantiate(self):
         from backend.core.musical_goals.feedback_loop import MusicalGoalsFeedbackLoop
@@ -580,7 +580,7 @@ class TestMusicalGoalsFeedbackLoop:
 
 
 class TestMusicalGoalsOptimizer:
-    """v9.10.37 — MusicalGoalsOptimizer"""
+    """v10.0.0 — MusicalGoalsOptimizer"""
 
     def test_01_instantiate(self):
         from backend.core.musical_goals.goal_optimizer import MusicalGoalsOptimizer
@@ -599,7 +599,7 @@ class TestMusicalGoalsOptimizer:
 
 
 class TestProcessingMode:
-    """v9.10.37 — ProcessingMode Enum"""
+    """v10.0.0 — ProcessingMode Enum"""
 
     def test_01_importable(self):
         from backend.core.musical_goals.processing_modes import ProcessingMode
@@ -613,7 +613,7 @@ class TestProcessingMode:
 
 
 class TestONNXFallback:
-    """v9.10.37 — onnx.fallback.FallbackEvent"""
+    """v10.0.0 — onnx.fallback.FallbackEvent"""
 
     def test_01_importable(self):
         from backend.core.onnx.fallback import FallbackEvent
@@ -622,7 +622,7 @@ class TestONNXFallback:
 
 
 class TestONNXQuantizer:
-    """v9.10.37 — onnx.quantizer.ModelQuantizer"""
+    """v10.0.0 — onnx.quantizer.ModelQuantizer"""
 
     def test_01_importable(self):
         from backend.core.onnx.quantizer import ModelQuantizer
@@ -631,7 +631,7 @@ class TestONNXQuantizer:
 
 
 class TestRegulator:
-    """v9.10.37 — regulator.Regulator"""
+    """v10.0.0 — regulator.Regulator"""
 
     def test_01_instantiate(self):
         from backend.core.regulator.regulator import Regulator
@@ -648,7 +648,7 @@ class TestRegulator:
 
 
 class TestRegulatorV8:
-    """v9.10.37 — regulator.DecisionType"""
+    """v10.0.0 — regulator.DecisionType"""
 
     def test_01_enum_importable(self):
         from backend.core.regulator.regulator_v8 import DecisionType
@@ -662,7 +662,7 @@ class TestRegulatorV8:
 
 
 class TestSOTAMaximumAnalyzer:
-    """v9.10.37 — regulator.SOTAMaximumAnalyzer"""
+    """v10.0.0 — regulator.SOTAMaximumAnalyzer"""
 
     def test_01_instantiate(self):
         from backend.core.regulator.sota_maximum_analyzer import SOTAMaximumAnalyzer
@@ -672,7 +672,7 @@ class TestSOTAMaximumAnalyzer:
 
 
 class TestZoneEngine:
-    """v9.10.37 — zone_engine.Zone"""
+    """v10.0.0 — zone_engine.Zone"""
 
     def test_01_importable(self):
         from backend.core.zone_engine.zone_engine import Zone
@@ -686,7 +686,7 @@ class TestZoneEngine:
 
 
 class TestQualityGateTopLevel:
-    """v9.10.37 — backend.core.quality_gate.QualityGate"""
+    """v10.0.0 — backend.core.quality_gate.QualityGate"""
 
     def test_01_instantiate(self):
         from backend.core.quality_gate import QualityGate

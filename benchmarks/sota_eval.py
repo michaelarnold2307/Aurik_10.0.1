@@ -1,5 +1,5 @@
 """
-§4.4a [RELEASE_MUST] SOTA-Evaluationsprotokoll — Aurik 9.12.0
+§4.4a [RELEASE_MUST] SOTA-Evaluationsprotokoll — Aurik 10.0.0
 
 Evaliert SOTA-Denoising- und Enhancement-Modelle auf dem AMRB-Testset.
 Pflicht-Aufnahmekriterien für SOTA-Matrix-Updates (§4.4a Spec 04):
@@ -83,7 +83,7 @@ CRITERION_NAMES = [
 ]
 
 # ---------------------------------------------------------------------------
-# Bekannte SOTA-Modelle in Aurik 9.12.0
+# Bekannte SOTA-Modelle in Aurik 10.0.0
 # ---------------------------------------------------------------------------
 
 SUPPORTED_MODELS: dict[str, str] = {
@@ -561,7 +561,7 @@ def _print_criteria_summary(report: EvalReport) -> None:
 
 def _build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        description="§4.4a SOTA-Evaluationsprotokoll für Aurik 9.12.0",
+        description="§4.4a SOTA-Evaluationsprotokoll für Aurik 10.0.0",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )

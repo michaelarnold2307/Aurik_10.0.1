@@ -325,7 +325,7 @@ class TestMediumDetector:
         audio = np.random.randn(48000).astype(np.float32) * 0.1
         result = detector.detect(audio, sr=48000)
 
-        # §6.1 v9.12.5: 'cassette' is a first-class material (12 kHz BW ceiling);
+        # §6.1 v10.0.0: 'cassette' is a first-class material (12 kHz BW ceiling);
         # _normalize_material_key() preserves it as-is (no longer aliases to 'tape').
         assert result.primary_material in (
             "tape",
@@ -459,7 +459,7 @@ class TestMediumDetector:
         audio = np.random.randn(48000).astype(np.float32) * 0.1
         result = detector.detect(audio, sr=48000, file_ext=".mp3")
 
-        # §6.1 v9.12.5: cassette is a first-class material; _infer_analog_source_from_fingerprint
+        # §6.1 v10.0.0: cassette is a first-class material; _infer_analog_source_from_fingerprint
         # mock returns ("cassette", 0.58) → chain reflects cassette (not normalized to tape anymore).
         assert result.transfer_chain[:4] == ["vinyl", "cassette", "cd_digital", "mp3_low"]
         assert len(result.medium_confidences) == len(result.transfer_chain)
@@ -654,7 +654,7 @@ class TestMediumDetector:
         audio = np.random.randn(48000).astype(np.float32) * 0.1
         result = detector.detect(audio, sr=48000, file_ext=".mp3")
 
-        # §6.1 v9.12.5: cassette is a first-class material; mock returns ("cassette", 0.58)
+        # §6.1 v10.0.0: cassette is a first-class material; mock returns ("cassette", 0.58)
         # → chain reflects cassette (not normalized to tape anymore).
         assert result.transfer_chain[:2] == ["vinyl", "cassette"]
         assert result.transfer_chain[-1] == "mp3_low", (

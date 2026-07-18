@@ -6,7 +6,7 @@
 
 ---
 
-## IMPLEMENTIERT (v9.20.3) [RELEASE_MUST]
+## IMPLEMENTIERT (v10.0.0) [RELEASE_MUST]
 
 ## §INV-1 [RELEASE_MUST]: Zentrale Entscheidungsintelligenz im Denker
 
@@ -91,7 +91,7 @@ Physical-Detektion schlägt statistischen Prior. Era-Information bleibt als Prec
 
 ---
 
-## ROADMAP (v9.15+)
+## ROADMAP (v10.0.0+)
 
 ## §ROADMAP-1 [RELEASE_MUST]: Cross-Phase Consensus (§3.0)
 

@@ -1,5 +1,5 @@
 """
-Perceptual Audio Embedder — Aurik 9.7
+Perceptual Audio Embedder — Aurik 10.0.0
 ======================================
 Erzeugt einen L2-normierten 256-dimensionalen Embedding-Vektor der die
 musikalisch-perzeptuelle Charakteristik einer Aufnahme in einem normierten

@@ -1,5 +1,5 @@
 """
-Adaptive Wiener Filter DSP-Modul für Aurik 9.10 (SOTA-Maximum)
+Adaptive Wiener Filter DSP-Modul für Aurik 10.0.0 (SOTA-Maximum)
 
 Implements an MMSE-LSA-inspired Wiener filter with:
 - Decision-directed a-priori SNR estimation (Ephraim & Malah 1984)

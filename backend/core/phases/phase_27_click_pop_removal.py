@@ -119,11 +119,11 @@ class ClickPopRemoval(PhaseInterface):
         },
         MaterialType.CASSETTE: {
             "ar_orders": [16, 24],
-            "z_score_threshold": 3.8,  # v9.12.9: leicht sensitiver als TAPE (Bandrisse häufiger)
-            "energy_threshold_db": -43,  # v9.12.9: etwas höher (Kassette häufigere kurze Aussetzer)
-            "max_click_duration_samples": 18,  # v9.12.9: etwas längere Reparaturfenster
+            "z_score_threshold": 3.8,  # v10.0.0: leicht sensitiver als TAPE (Bandrisse häufiger)
+            "energy_threshold_db": -43,  # v10.0.0: etwas höher (Kassette häufigere kurze Aussetzer)
+            "max_click_duration_samples": 18,  # v10.0.0: etwas längere Reparaturfenster
             "repair_strength": 0.92,
-        },  # v9.12.9: IEC 60094-1 — Cassette-Hiss/Bandriss-Profil angepasst
+        },  # v10.0.0: IEC 60094-1 — Cassette-Hiss/Bandriss-Profil angepasst
         MaterialType.CD_DIGITAL: {
             "ar_orders": [16, 24],
             "z_score_threshold": 5.0,  # Sehr konservativ

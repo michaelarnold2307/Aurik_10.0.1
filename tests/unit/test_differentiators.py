@@ -3,7 +3,7 @@ from __future__ import annotations
 """
 tests/unit/test_differentiators.py
 ===================================
-Unit-Tests für die 7 Weltspitzen-Differenzierer von Aurik 9.0.
+Unit-Tests für die 7 Weltspitzen-Differenzierer von Aurik 10.0.0.
 
 Testet:
   1. CausalDefectGraph  — Kausale Reparaturreihenfolge

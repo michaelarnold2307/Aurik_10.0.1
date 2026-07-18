@@ -1,4 +1,4 @@
-"""§Gap6 ReferenceAnchorMatcher — Perceptual Reference Anchor Modul (v9.12.8).
+"""§Gap6 ReferenceAnchorMatcher — Perceptual Reference Anchor Modul (v10.0.0).
 
 Kalibriert Musical-Goal-Schwellwerte gegen era- und genre-spezifische Referenzprofile.
 Verhindert, dass Aurik eine Schlager-MP3-Restaurierung gegen CD-Maßstäbe misst.

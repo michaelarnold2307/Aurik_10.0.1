@@ -374,8 +374,8 @@ def audit_all_specs(
             content = full_path.read_text(encoding="utf-8")
             incs = _check_spec_internal_consistency(content, spec_file)
             result.inconsistencies.extend(incs)
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.debug("spec_improvement_loop: non-critical exception: %s", _e)
 
     # ── 5. Gap-Erkennung: Code-Features ohne Spec-Abdeckung ──────────────
     result.gaps.extend(_detect_spec_gaps(root))
@@ -550,7 +550,6 @@ def _extract_metrics_from_spec(content: str) -> dict[str, dict[str, Any]]:
         "spectral_novelty",
         "hpi",
         "w_crepe",
-        "int",
         "f_bump",
         "wet_mult",
         "gate",
@@ -662,8 +661,8 @@ def _detect_spec_gaps(repo_root: Path) -> list[str]:
             missing = verboten_ids - constitution_ids
             if missing:
                 gaps.append(f"VERBOTEN-Regeln nicht in Constitution: {sorted(missing)}")
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.debug("spec_improvement_loop: non-critical exception: %s", _e)
 
     return gaps
 

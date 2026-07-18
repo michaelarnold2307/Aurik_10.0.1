@@ -1,6 +1,6 @@
-# Aurik 9.x.x - Dokumentationsindex
+# Aurik 10.0.8 - Dokumentationsindex
 
-Offizielle Dokumentation fuer Aurik 9.20.3.
+Offizielle Dokumentation fuer Aurik 10.0.0.
 
 ## Normativer Vorrang
 
@@ -11,9 +11,9 @@ Bei Abweichungen zwischen Einzel-Dokumenten und Spezifikation gilt immer:
 
 ## Kernfakten
 
-- Phasen: 64 (01-64)
+- Phasen: 68 (Phase 01–66 + Vocal Repair + Glue Stage)
 - Musical Goals: 14
-- DetectionTypes: 54
+- DetectionTypes: 62
 - Kausal-Ursachen: 62
 - Tests: ~18.400
 

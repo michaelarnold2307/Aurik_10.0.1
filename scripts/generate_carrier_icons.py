@@ -1,5 +1,5 @@
 """
-Generates premium 128×128 px photorealistic carrier-medium icons for Aurik 9.
+Generates premium 128×128 px photorealistic carrier-medium icons for Aurik 10.0.0.
 Output: Aurik10/resources/carrier_icons/<medium>.png
 
 Design: Photorealistic 3D look with material gradients, specular highlights,

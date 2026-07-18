@@ -1,5 +1,5 @@
 """
-backend/core/medium_classifier.py  — Aurik 9 Spec §2.1
+backend/core/medium_classifier.py  — Aurik 10.0.0 Spec §2.1
 Automatische Trägermedien-Erkennung (17 Materialtypen).
 """
 

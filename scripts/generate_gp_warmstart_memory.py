@@ -1,5 +1,5 @@
 """
-Aurik 9 — GP Warm-Start Memory Generator
+Aurik 10.0.0 — GP Warm-Start Memory Generator
 ==========================================
 Generiert synthetische, aber fundierte GP-Memory-Dateien für alle Materialtypen.
 Diese werden als vortrainierte Priors mit der Distribution ausgeliefert und beim

@@ -153,8 +153,8 @@ class OneTakeExport:
                     corrections_this_round.append(
                         f"hf_cut({_FATIGUE_HF_CUT_DB:+.0f}dB@{_FATIGUE_HF_CUT_FREQ}Hz, fatigue={check.fatigue_score:.2f})"
                     )
-                except Exception:
-                    pass
+                except Exception as _e:
+                    logger.debug("one_take_export: non-critical exception: %s", _e)
 
             current = np.clip(np.nan_to_num(current, nan=0.0, posinf=0.0, neginf=0.0), -1.0, 1.0)
             result.corrections.extend(corrections_this_round)
@@ -191,7 +191,6 @@ class OneTakeExport:
             lookahead = int(sr * 0.002)  # 2 ms
             release_coeff = np.exp(-1.0 / (sr * 0.050))  # 50 ms release
 
-            envelope = 1.0
             if arr.ndim == 2:
                 for ch in range(min(arr.shape[0], 2)):
                     arr[ch] = OneTakeExport._limit_channel(arr[ch], ceiling_linear, lookahead, release_coeff)

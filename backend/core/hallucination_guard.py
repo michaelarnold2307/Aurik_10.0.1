@@ -7,14 +7,14 @@ Drei Kategorien halluzinierten Materials (alle verboten in Restoration):
 2. Raum-Halluzination: Raumklang/Reverb/Stereobreite nicht im degradierten Signal
 3. Textur-Halluzination: Spektrale Texturen von ML-Modellen ohne physikalisches Gegenstück
 
-BUG-FIX v9.12.0: check_harmonic_ceiling_violation nutzt jetzt eine band-relative Delta-Metrik.
+BUG-FIX v10.0.0: check_harmonic_ceiling_violation nutzt jetzt eine band-relative Delta-Metrik.
 Die alte Metrik (energy_above_ceiling / total_energy) war für Air-Band-Halluzinationen blind:
 Air-Band-Energie ist typisch < 0.1% der Gesamt-Energie => Threshold 3% war nie erreichbar.
 
 Neue Metrik: (energy_above_after / energy_above_before) > 8.0
 Ein 8-facher Anstieg (+9 dB) im Ceiling-Band = Violation.
 
-BUG-FIX v9.12.0: spectral_novelty Rollback-Threshold 0.25 => 0.15 (Spec §2.46e).
+BUG-FIX v10.0.0: spectral_novelty Rollback-Threshold 0.25 => 0.15 (Spec §2.46e).
 """
 
 import logging
@@ -80,7 +80,7 @@ def check_harmonic_ceiling_violation(
     n_fft: int = 4096,
 ) -> tuple[bool, dict]:
     """
-    §2.46e BUG-FIX v9.12.0: Band-relative Delta-Metrik statt ratio-zur-Gesamt-Energie.
+    §2.46e BUG-FIX v10.0.0: Band-relative Delta-Metrik statt ratio-zur-Gesamt-Energie.
 
     Die alte Metrik (energy_above_ceiling / total_energy) war fuer Air-Band-Halluzinationen
     blind: Air-Band-Energie ist < 0.1% der Gesamt-Energie => Threshold 3% nie erreichbar.

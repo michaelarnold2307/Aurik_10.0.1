@@ -1,5 +1,5 @@
 """
-SongCoherenceMonitor — §Gap2 Song-Wide Timbral Coherence (Aurik 9.12.x)
+SongCoherenceMonitor — §Gap2 Song-Wide Timbral Coherence (Aurik 10.0.0.x)
 ========================================================================
 
 Tracks timbral consistency across song sections to detect processing

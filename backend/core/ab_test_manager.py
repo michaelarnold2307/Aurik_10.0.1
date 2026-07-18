@@ -1,7 +1,7 @@
 """
 Deprecated: ABTestManager → ``core.ab_compare_manager.ABCompareManager``.
 
-Dieses Modul ist veraltet seit v9.10.45.
+Dieses Modul ist veraltet seit v10.0.0.
 Alle Fähigkeiten sind in :class:`~core.ab_compare_manager.ABCompareManager`
 enthalten, der Thread-sicher, persistent (JSON-Sidecar) und mit vollständiger
 Metrik-Unterstützung ausgestattet ist.
@@ -39,7 +39,7 @@ class ABTestManager:
 
     def __init__(self) -> None:
         warnings.warn(
-            "ABTestManager ist veraltet (seit v9.10.45). "
+            "ABTestManager ist veraltet (seit v10.0.0). "
             "Bitte 'from backend.core.ab_compare_manager import get_ab_manager' verwenden.",
             DeprecationWarning,
             stacklevel=2,

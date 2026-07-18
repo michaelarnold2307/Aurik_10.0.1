@@ -20,8 +20,8 @@ REFERENZ-SCORES (aus Literatur + eigenen Messungen):
   | iZotope RX 10   | 4.0  | 3.8  | 3.0× |
   | CEDAR Cambridge | 4.5  | 4.2  | 4.5× |
   | SpectraLayers   | 3.8  | 3.5  | 2.5× |
-  | Aurik 9.0 (Ziel)| 4.0  | 3.8  | 1.0× |
-  | Aurik 9.5 (Ziel)| 4.3  | 4.0  | 0.5× |
+  | Aurik 10.0.0 (Ziel)| 4.0  | 3.8  | 1.0× |
+  | Aurik 10.0.0 (Ziel)| 4.3  | 4.0  | 0.5× |
 
 TESTMATERIAL-KATEGORIEN:
   - shellac_heavy: Starkes Oberflächenrauschen, Klicks, Mono
@@ -76,7 +76,7 @@ REFERENCE_SCORES: dict[str, dict[str, float]] = {
         "CLICK_DENSITY_ppm": 8.0,
         "RT_FACTOR": 2.5,
     },
-    "Aurik 9.5 (Ziel)": {
+    "Aurik 10.0.0 (Ziel)": {
         "MUSIC_OVR": 4.3,
         "MUSIC_NAT": 4.0,
         "NOISE_FLOOR_dBFS": -60.0,
@@ -380,9 +380,9 @@ class RestorationBenchmark:
     def compare_to_reference(self, report: BenchmarkReport) -> bool:
         """
         Prüft ob Aurik mind. einen Referenz-Wert des Ziel-Systems erreicht.
-        Returns True wenn Aurik den Ziel-Score (v9.5) in ≥50% der Metriken erreicht.
+        Returns True wenn Aurik den Ziel-Score (v10.0.0) in ≥50% der Metriken erreicht.
         """
-        target = REFERENCE_SCORES.get("Aurik 9.5 (Ziel)", {})
+        target = REFERENCE_SCORES.get("Aurik 10.0.0 (Ziel)", {})
         if not target or not report.summary:
             return False
 

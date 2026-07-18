@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-"""[RELEASE_MUST] §8.5 Globales Parameterregister — automatischer CI-Gate-Test (v9.11.14)
+"""[RELEASE_MUST] §8.5 Globales Parameterregister — automatischer CI-Gate-Test (v10.0.0)
 
 Spec reference:  .github/specs/07_quality_and_tests.md §8.5
 Purpose:         Verifiziert, dass alle in §8.5A (OPTIMAL) dokumentierten Parameterwerte

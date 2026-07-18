@@ -87,27 +87,27 @@ class BassEnhancement(PhaseInterface):
     # Enhancement parameters (material-adaptive)
     ENHANCEMENT_CONFIG = {
         MaterialType.SHELLAC: {
-            "harmonic_2_gain": 0.55,  # Strong (restore missing bass) — v9.10.114: ↑0.50→0.55
+            "harmonic_2_gain": 0.55,  # Strong (restore missing bass) — v10.0.0: ↑0.50→0.55
             "harmonic_3_gain": 0.35,
             "sub_harmonic_gain": 0.25,
             "saturation_drive": 0.40,
-            "mix": 0.65,  # v9.10.114: ↑0.50→0.65 — Shellac-Bass deutlich stärken
+            "mix": 0.65,  # v10.0.0: ↑0.50→0.65 — Shellac-Bass deutlich stärken
         },
         MaterialType.VINYL: {
             "harmonic_2_gain": 0.45,
             "harmonic_3_gain": 0.28,
             "sub_harmonic_gain": 0.32,
             "saturation_drive": 0.35,
-            "mix": 0.60,  # v9.10.114: ↑0.45→0.60
+            "mix": 0.60,  # v10.0.0: ↑0.45→0.60
         },
         MaterialType.TAPE: {
-            "harmonic_2_gain": 0.35,  # v9.10.114: ↑0.30→0.35
+            "harmonic_2_gain": 0.35,  # v10.0.0: ↑0.30→0.35
             "harmonic_3_gain": 0.22,
             "sub_harmonic_gain": 0.18,
             "saturation_drive": 0.28,
-            "mix": 0.50,  # v9.10.114: ↑0.35→0.50
+            "mix": 0.50,  # v10.0.0: ↑0.35→0.50
         },
-        MaterialType.CASSETTE: {  # v9.12.9: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
+        MaterialType.CASSETTE: {  # v10.0.0: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
             "harmonic_2_gain": 0.35,
             "harmonic_3_gain": 0.22,
             "sub_harmonic_gain": 0.18,
@@ -115,18 +115,18 @@ class BassEnhancement(PhaseInterface):
             "mix": 0.50,
         },
         MaterialType.CD_DIGITAL: {
-            "harmonic_2_gain": 0.50,  # Restore life from over-limiting  v9.10.114: ↑0.45→0.50
+            "harmonic_2_gain": 0.50,  # Restore life from over-limiting  v10.0.0: ↑0.45→0.50
             "harmonic_3_gain": 0.32,
             "sub_harmonic_gain": 0.28,
             "saturation_drive": 0.45,
-            "mix": 0.65,  # v9.10.114: ↑0.50→0.65
+            "mix": 0.65,  # v10.0.0: ↑0.50→0.65
         },
         MaterialType.STREAMING: {
             "harmonic_2_gain": 0.42,
             "harmonic_3_gain": 0.28,
             "sub_harmonic_gain": 0.22,
             "saturation_drive": 0.40,
-            "mix": 0.58,  # v9.10.114: ↑0.45→0.58
+            "mix": 0.58,  # v10.0.0: ↑0.45→0.58
         },
     }
 
@@ -180,7 +180,7 @@ class BassEnhancement(PhaseInterface):
         _effective_strength = float(np.clip(_pmgg_strength * phase_locality_factor, 0.0, 1.0))
 
         # §V41 ForwardMaskingGuard: Stärke in post-transienten Masking-Fenstern erhöhen.
-        # Optimierung v9.12.9: UV3 berechnet Zonen vor der Phase und übergibt sie via kwargs;
+        # Optimierung v10.0.0: UV3 berechnet Zonen vor der Phase und übergibt sie via kwargs;
         # nur wenn keine pre-computed Zonen vorhanden, werden sie neu berechnet (spart CPU).
         _panns_s_37 = float(kwargs.get("panns_singing", 0.0))
         if _panns_s_37 >= 0.25 and _effective_strength > 0.0:
@@ -206,8 +206,13 @@ class BassEnhancement(PhaseInterface):
                 logger.debug("Phase37 §V41 ForwardMaskingGuard non-blocking: %s", _fmg_exc_37)
 
         if _effective_strength <= 0.0:
+            logger.info(
+                "Phase 37: skipped — effective_strength=%.3f (no bass enhancement applied)", _effective_strength
+            )
             audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
             audio = np.clip(audio, -1.0, 1.0)
+            # §5/5: Echte Peak-Messung auch bei Skip
+            _p_peak = float(20.0 * np.log10(np.percentile(np.abs(audio), 99.9) + 1e-10))
             return PhaseResult(
                 success=True,
                 audio=audio.copy(),

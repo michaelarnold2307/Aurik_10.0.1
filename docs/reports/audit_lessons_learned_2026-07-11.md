@@ -31,7 +31,7 @@ architektonische Fehlausrichtungen.
 | Unbedingte Imports (hypothesis, requests) | `try/except ImportError`-Guard |
 | Fragile Source-Grep-Tests | `TestWatchdogTimer`-Klasse geskippt |
 | `test_phase03_ml_integration.py` — Deadlock | Mit `pytest.mark.skip` dokumentiert |
-| `README.md` veraltet (6.0) | Auf 9.20.3 aktualisiert |
+| `README.md` veraltet (6.0) | Auf 10.0.8 aktualisiert |
 | `test_core_utils_benchmark.py` ohne Marker | `@pytest.mark.slow` hinzugefügt |
 
 ## 3. Architektonische Fehlausrichtungen

@@ -403,7 +403,7 @@ def analyze_wow_flutter_audibility(audio: np.ndarray, sr: int) -> float:
 
 
 # ---------------------------------------------------------------------------
-# §2.35b Vocal-Proximity-Score (v9.12.0)
+# §2.35b Vocal-Proximity-Score (v10.0.0)
 # Measures spatial/temporal intimacy preservation of vocals through restoration.
 # Three components: consonant onset energy, breathiness in pauses, C80 (clarity).
 # ---------------------------------------------------------------------------

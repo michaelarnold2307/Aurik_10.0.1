@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-"""Tests für temporale locations in DefectScanner (§C — Aurik v9.10.45).
+"""Tests für temporale locations in DefectScanner (§C — Aurik v10.0.0).
 
 ≥ 17 Unit-Tests: synthetische Signale, kein echtes Audio, np.random.seed(42).
 Prüft zeitliche Verortung aller location-fähigen Detektoren:

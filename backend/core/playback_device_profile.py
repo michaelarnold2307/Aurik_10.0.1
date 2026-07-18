@@ -10,7 +10,7 @@ Usage:
     profile = get_playback_device_profile("consumer_headphone_avg")
     audio_out = apply_translation_eq(audio, sr, profile)
 
-Spec: §PDV-1 Playback-Device-Awareness (v9.12.1)
+Spec: §PDV-1 Playback-Device-Awareness (v10.0.0)
 """
 
 from __future__ import annotations

@@ -1,6 +1,6 @@
 """
 backend/core/temporal_quality_coherence.py
-Aurik 9 -- Spec §2.16: TemporalQualityCoherenceMetric
+Aurik 10.0.0 -- Spec §2.16: TemporalQualityCoherenceMetric
 
 PQS-MOS-Konsistenz ueber Zeitachse gemaess Spec §2.16.
 MOS-Spanne <= 0.30, sigma(MOS) <= 0.15.

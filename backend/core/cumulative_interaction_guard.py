@@ -1,5 +1,5 @@
 """
-Aurik 9 — Kumulative-Phasen-Interaktions-Guard §2.48 [RELEASE_MUST]
+Aurik 10.0.0 — Kumulative-Phasen-Interaktions-Guard §2.48 [RELEASE_MUST]
 ====================================================================
 Guards against destructive cumulative effects of multiple phases:
 - P1/P2 cumulative drift monitoring with material-adaptive rollback (§2.54)
@@ -175,7 +175,7 @@ _PHASE_SPECIFIC_DRIFT_EXCLUSIONS: dict[str, frozenset[str]] = {
     # Surface noise profiling/reduction changes broadband energy floor → spectral
     # fingerprint shifts vs. noisy reference (same as tonal_center inflation §2.29c):
     # natuerlichkeit: uniform noise-floor → metric sees "broadband = natural"; clean audio scores lower (Reference Paradox §2.44)
-    # transparenz (§V32 v9.12.10): Oberflächenrauschen-Entfernung reduziert breitbandige HF-Energie intentional →
+    # transparenz (§V32 v10.0.0): Oberflächenrauschen-Entfernung reduziert breitbandige HF-Energie intentional →
     #   HF-Crest-Proxy (transparenz) sinkt auf physikalisch realen Träger-Wert — Reference Paradox §2.44 (identisch phase_29).
     #   PMGG prüft transparenz bereits per-Phase; CIG-Pair-Exclusion verhindert redundanten false-positive Rollback (§2.55).
     "phase_28": frozenset({"authentizitaet", "artikulation", "timbre_authentizitaet", "natuerlichkeit", "transparenz"}),
@@ -185,7 +185,7 @@ _PHASE_SPECIFIC_DRIFT_EXCLUSIONS: dict[str, frozenset[str]] = {
     # natuerlichkeit: same Reference Paradox as phase_28 — noise floor artificially inflates natuerlichkeit proxy.
     # tonal_center: broadband tape hiss adds uniform chroma-bin energy → K-S correlation vs. hissy checkpoint elevated;
     #   after hiss reduction K-S converges to clean key estimate (same mechanism as phase_03).
-    # transparenz (§0d/§2.44 v9.12.9): tape hiss is broadband HF noise — it inflates the HF crest-factor
+    # transparenz (§0d/§2.44 v10.0.0): tape hiss is broadband HF noise — it inflates the HF crest-factor
     #   proxy (transparenz) artificially. After hiss removal the true (lower) HF crest is revealed.
     #   This is always a Reference Paradox false positive on analog/cassette material:
     #   the CRITICAL_PAIRS (phase_29 + phase_03) + transparenz check fires even when hiss removal
@@ -199,7 +199,7 @@ _PHASE_SPECIFIC_DRIFT_EXCLUSIONS: dict[str, frozenset[str]] = {
             "natuerlichkeit",
             "tonal_center",
             "transparenz",
-            # §V36 waerme (§2.55-Sync v9.13): OMLSA/DFN breitbandige Gain-Suppression
+            # §V36 waerme (§2.55-Sync v10.0.0): OMLSA/DFN breitbandige Gain-Suppression
             # reduziert Rauschboden im Wärmeband (200–2000 Hz) → Wärme-Proxy sinkt
             # auf physikalisch realen Trägerwert → false P4 CIG-Drift (Reference-Paradox §2.44).
             # Gespiegelt aus PMGG-Exclusion (§2.55-Sync).
@@ -211,7 +211,7 @@ _PHASE_SPECIFIC_DRIFT_EXCLUSIONS: dict[str, frozenset[str]] = {
     # natuerlichkeit: broadband noise creates artificially uniform spectrum → metric scores it as "natural" (Reference Paradox §2.44).
     # tonal_center: broadband noise adds uniform energy across chroma bins → K-S template correlation
     #   vs. noisy checkpoint artificially elevated; after denoising chromagram converges to clean key estimate.
-    # transparenz (§V32-Komplement v9.12.10): CRITICAL_PAIR {phase_29, phase_03} + transparenz feuert
+    # transparenz (§V32-Komplement v10.0.0): CRITICAL_PAIR {phase_29, phase_03} + transparenz feuert
     #   auch wenn phase_03 NACH phase_29 läuft — _check_critical_pairs() nutzt Exclusions des aktuellen
     #   phase_id. Ohne transparenz hier würde der HF-Crest-Proxy-Abfall nach phase_29→phase_03 als
     #   false-positive Pair-Rollback klassifiziert (Reference Paradox §2.44 symmetrisch für beide
@@ -225,7 +225,7 @@ _PHASE_SPECIFIC_DRIFT_EXCLUSIONS: dict[str, frozenset[str]] = {
             "natuerlichkeit",
             "tonal_center",
             "transparenz",
-            # §V36 transient_energie (§2.55-Sync v9.13): OMLSA/DFN entfernt Rauschimpulse,
+            # §V36 transient_energie (§2.55-Sync v10.0.0): OMLSA/DFN entfernt Rauschimpulse,
             # die im TransientEnergieProxy als Onsets gezählt wurden. Nach NR: Proxy sinkt
             # auf physikalisch realen Wert → false P3 CIG-Drift (Reference-Paradox §2.44).
             # Gespiegelt aus PMGG-Exclusion (§2.55-Sync).
@@ -242,7 +242,7 @@ _PHASE_SPECIFIC_DRIFT_EXCLUSIONS: dict[str, frozenset[str]] = {
     # artikulation: note decay envelope shortened intentionally (reverb tails removed).
     # natuerlichkeit: room-air / early reflections in degraded recording score as "natural" before dereverb (Reference Paradox §2.44).
     # tonal_center: reverb smears chroma bins → K-S template inflated vs. reverberant checkpoint; after derev key estimate sharpens.
-    # transparenz (§V32 v9.12.10): SGMSE+ Deconvolution entfernt breitbandige Hallfahne → HF-Crest-Proxy
+    # transparenz (§V32 v10.0.0): SGMSE+ Deconvolution entfernt breitbandige Hallfahne → HF-Crest-Proxy
     #   (transparenz) sinkt intentional auf den physikalisch realen Wert des Trägers. Ohne diese Exclusion
     #   feuert CRITICAL_PAIR phase_20 + transparenz als false-positive Rollback — analoge Mechanik wie
     #   phase_29 Tape-Hiss (§V32). PMGG prüft transparenz bereits per-phase; CIG-Exclusion verhindert
@@ -252,7 +252,7 @@ _PHASE_SPECIFIC_DRIFT_EXCLUSIONS: dict[str, frozenset[str]] = {
     ),
     # Noise gate (Silero VAD) removes low-energy carrier noise between phrases —
     # silence insertion shifts chroma/energy fingerprint vs. noisy-floor reference.
-    # §2.55-Sync: full match with PMGG PHASE_GOAL_EXCLUSIONS (v9.11.14 — added micro_dynamics +
+    # §2.55-Sync: full match with PMGG PHASE_GOAL_EXCLUSIONS (v10.0.0 — added micro_dynamics +
     # emotionalitaet): VAD-Gate insertion changes inter-beat RMS contrast (micro_dynamics P3)
     # and Arousal proxy ZCR+RMS (emotionalitaet P3); both are intentional gate side-effects,
     # not regressions. Without this exclusion CIG accumulates P3 drift from phase_18 and may
@@ -265,7 +265,7 @@ _PHASE_SPECIFIC_DRIFT_EXCLUSIONS: dict[str, frozenset[str]] = {
             "groove",
             "micro_dynamics",
             "emotionalitaet",
-            # transparenz (§V32 v9.12.10): VAD-Gate/Noise-Gate entfernt HF-Rauschboden zwischen Phrasen →
+            # transparenz (§V32 v10.0.0): VAD-Gate/Noise-Gate entfernt HF-Rauschboden zwischen Phrasen →
             # HF-Crest-Proxy (transparenz) sinkt intentional — Reference Paradox §2.44 (identisch phase_28/29).
             "transparenz",
         }
@@ -314,7 +314,7 @@ _PHASE_SPECIFIC_DRIFT_EXCLUSIONS: dict[str, frozenset[str]] = {
     # Modulation noise reduction (phase_59) — same carrier-noise class as phase_29 (tape hiss):
     # signal-adaptive spectral gating G(f)=max(G_floor, 1−α·N(f)/S(f)) changes all P1/P2 spectral proxies
     # identically to broadband NR (OMLSA/DeepFilterNet) — same §2.44 Reference-Paradoxon mechanisms.
-    # transparenz (§V32 v9.12.10): Modulationsrauschen-Entfernung reduziert HF-Modulationsenergie intentional →
+    # transparenz (§V32 v10.0.0): Modulationsrauschen-Entfernung reduziert HF-Modulationsenergie intentional →
     #   HF-Crest-Proxy (transparenz) sinkt auf physikalisch realen Wert — Reference Paradox §2.44 (identisch phase_29).
     #   PMGG prüft transparenz bereits per-Phase; CIG-Pair-Exclusion verhindert redundanten false-positive Rollback (§2.55).
     "phase_59": frozenset(
@@ -328,7 +328,7 @@ _PHASE_SPECIFIC_DRIFT_EXCLUSIONS: dict[str, frozenset[str]] = {
     "phase_63": frozenset({"authentizitaet", "timbre_authentizitaet"}),
     # ── §2.54 PMGG→CIG SYNCHRONISATION BLOCK ──────────────────────────────────────────────
     # Architectural invariant: CIG._PHASE_SPECIFIC_DRIFT_EXCLUSIONS[phase] ⊇ PMGG.PHASE_GOAL_EXCLUSIONS[phase] ∩ P1P2
-    # All entries below were added in v9.11.3 to close the CIG-PMGG mismatch gap.
+    # All entries below were added in v10.0.0 to close the CIG-PMGG mismatch gap.
     # timbre_authentizitaet is the most common false-positive: spectral centroid/MFCC-Pearson
     # correlation changes any time a phase modifies the spectral envelope (EQ, BW-restoration,
     # enhancement) vs. the degraded checkpoint — this is §2.44 Reference-Paradoxon.
@@ -374,13 +374,13 @@ _PHASE_SPECIFIC_DRIFT_EXCLUSIONS: dict[str, frozenset[str]] = {
             "micro_dynamics",
             "groove",
             "emotionalitaet",
-            # §V32-Analogie Sibilanz (§2.55-Sync v9.13): identischer Mechanismus wie phase_43.
+            # §V32-Analogie Sibilanz (§2.55-Sync v10.0.0): identischer Mechanismus wie phase_43.
             # Sibilant-HF inflationiert brillanz + transparenz → nach De-Essing false P4/P5
             # CIG-Drift-Rollback (Reference-Paradox §2.44).
             "brillanz",
             "transparenz",
         }
-    ),  # §2.55 sync (2026-04-26): vocal enhancement Stage 6 micro-compression → crest-factor + RMS periodicity false P3 regressions + brillanz/transparenz §V32-Analogie Sibilanz v9.13
+    ),  # §2.55 sync (2026-04-26): vocal enhancement Stage 6 micro-compression → crest-factor + RMS periodicity false P3 regressions + brillanz/transparenz §V32-Analogie Sibilanz v10.0.0
     # Harmonic exciter: adds synthetic harmonics → spectral shape diverges from pre-exciter reference.
     "phase_21": frozenset({"timbre_authentizitaet"}),
     # Presence / air band EQ: HF shelving shifts spectral centroid and MFCC.
@@ -443,7 +443,7 @@ _PHASE_SPECIFIC_DRIFT_EXCLUSIONS: dict[str, frozenset[str]] = {
             "artikulation",
             "timbre_authentizitaet",
             "emotionalitaet",
-            # §V32-Analogie Sibilanz (§2.55-Sync v9.13): Sibilant-Energie (4–8 kHz)
+            # §V32-Analogie Sibilanz (§2.55-Sync v10.0.0): Sibilant-Energie (4–8 kHz)
             # inflationiert brillanz (HF-Crest-Proxy) und transparenz (HF-Rolloff-Proxy)
             # auf Kassetten-/Vinyl-Vokal-Material. Nach De-Essing sinken beide auf
             # physikalisch reale Trägerwerte → false P4/P5 CIG-Drift-Rollback
@@ -451,7 +451,7 @@ _PHASE_SPECIFIC_DRIFT_EXCLUSIONS: dict[str, frozenset[str]] = {
             "brillanz",
             "transparenz",
         }
-    ),  # §2.55 sync (2026-04-26): de-esser 4-8 kHz sibilant attenuation → local crest-factor drop at fricative peaks → false P3 emotionalitaet regression + brillanz/transparenz §V32-Analogie Sibilanz v9.13
+    ),  # §2.55 sync (2026-04-26): de-esser 4-8 kHz sibilant attenuation → local crest-factor drop at fricative peaks → false P3 emotionalitaet regression + brillanz/transparenz §V32-Analogie Sibilanz v10.0.0
     # Stereo enhancement / Haas effect: stereo imaging changes spectral balance per-channel.
     "phase_44": frozenset({"timbre_authentizitaet"}),
     # Mono compatibility / mid enhancement: M/S recombination shifts spectral shape.
@@ -650,7 +650,7 @@ STFT_PHASES = frozenset(
         # Phase intentional (das IS die Hallentfernung, kein Fehler).  GDD-Messung würde
         # immer ~35 ms anzeigen und Phase 49 stets rollbacken → keine Hallentfernung.
         # Selbe Begründung wie phase_20 (SGMSE+): WPE-Ausgang nicht STFT-phasenkohärent
-        # im Sinne von §2.48.  Aus STFT_PHASES ausgenommen (v9.11.14, 2026-04-26).
+        # im Sinne von §2.48.  Aus STFT_PHASES ausgenommen (v10.0.0, 2026-04-26).
         # "phase_49_advanced_dereverb",
     }
 )
@@ -1065,7 +1065,7 @@ class CumulativeInteractionGuard:
                         rolled_back_to=state.best_checkpoint.phase_id if state.best_checkpoint else "pre_pipeline",
                     )
                 )
-                # §2.48 v9.11.3: Carrier-Repair-Rollbacks nie zählen — gilt auch für GDD-Rollbacks.
+                # §2.48 v10.0.0: Carrier-Repair-Rollbacks nie zählen — gilt auch für GDD-Rollbacks.
                 # phase_29 (tape hiss), phase_49 (dereverb) etc. erzeugen erwartungsgemäß hohe
                 # GDD-Werte (noise-dominated bins verändern Phase nach NR — kein echter Fehler).
                 _is_carrier_repair_gdd = any(phase_id.startswith(p) for p in _CARRIER_REPAIR_PHASE_PREFIXES)

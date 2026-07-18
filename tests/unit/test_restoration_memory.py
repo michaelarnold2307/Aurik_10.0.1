@@ -1,4 +1,4 @@
-"""Unit-Tests für RestorationMemory (§2.70, v9.13)."""
+"""Unit-Tests für RestorationMemory (§2.70, v10.0.0)."""
 
 import pytest
 
@@ -104,7 +104,7 @@ class TestRestorationMemorySingleton:
 
 class TestRestorationMemoryVocalSaveGuard:
     """§2.70 Guard: RestorationMemory-Save darf Vocal-Material (panns_singing ≥ 0.35)
-    NICHT blockieren. BUG-Fix v9.13: _panns_singing_for_hpi < 0.35 aus UV3-Save-Bedingung
+    NICHT blockieren. BUG-Fix v10.0.0: _panns_singing_for_hpi < 0.35 aus UV3-Save-Bedingung
     entfernt — andernfalls wird JEDER Vokal-Run nie gespeichert → timbral_fidelity bleibt
     dauerhaft auf cold-start-Niveau (≈0.747).
     """
@@ -127,7 +127,7 @@ class TestRestorationMemoryVocalSaveGuard:
         assert "_panns_singing_for_hpi < 0.35" not in save_block_snippet, (
             "§2.70 BUG REINTRODUCED: _panns_singing_for_hpi < 0.35 in Save-Bedingung! "
             "Vocal-Material (panns_singing ≥ 0.35) wird NIE in RestorationMemory gespeichert. "
-            "Fix: Bedingung entfernen (v9.13 §2.70)."
+            "Fix: Bedingung entfernen (v10.0.0 §2.70)."
         )
 
     def test_vocal_material_save_works_normally(self, mem):
@@ -142,7 +142,7 @@ class TestRestorationMemoryVocalSaveGuard:
         """§2.44 Linter-Guard: _arc_result muss nach _emotional_arc_result propagiert werden.
 
         Bug: _emotional_arc_result war nie zugewiesen → HPI verwendete immer 1.0 (arc nie gemessen).
-        Fix (v9.13): Assignment-Block nach post-MDEM EmotionalArc-Block.
+        Fix (v10.0.0): Assignment-Block nach post-MDEM EmotionalArc-Block.
         """
         import pathlib
 
@@ -153,7 +153,7 @@ class TestRestorationMemoryVocalSaveGuard:
         assert "_emotional_arc_result = _arc_result" in source, (
             "§2.44 BUG REINTRODUCED: _arc_result wird nicht nach _emotional_arc_result propagiert! "
             "Emotional-Arc-Score ist für den HPI immer 1.0 (nie gemessen). "
-            "Fix: Assignment nach post-MDEM EmotionalArc-Block einfügen (v9.13 §2.44)."
+            "Fix: Assignment nach post-MDEM EmotionalArc-Block einfügen (v10.0.0 §2.44)."
         )
         # Prüfe, dass Floor-Guard vorhanden ist (verhindert HPI-Null-Kollaps)
         assert "max(\n            0.25," in source or "max(0.25," in source, (
@@ -164,7 +164,7 @@ class TestRestorationMemoryVocalSaveGuard:
     def test_uv3_studio_mode_uses_method_not_attribute(self):
         """§UV3-Crash-Guard: self._is_studio_mode darf in UV3 nicht existieren.
 
-        Bug (v9.13): UV3.restore() rief self._is_studio_mode (Attribut) statt
+        Bug (v10.0.0): UV3.restore() rief self._is_studio_mode (Attribut) statt
         self.is_studio_mode() (Methode) auf → AttributeError am Ende von restore() →
         gesamte UV3-Restaurierung (42 Phasen, ~96 min) wurde weggeworfen;
         RestaurierDenker-Fallback exportierte Original-Audio.
@@ -187,7 +187,7 @@ class TestRestorationMemoryVocalSaveGuard:
     def test_vqi_formant_stability_uses_bandpass_not_full_spectrum(self):
         """§VQI-Formant-Guard: LPC-Bandpass 200-3400 Hz und Order 14 Pflicht.
 
-        Bug (v9.13): _compute_formant_stability() verwendete LPC-Order=50 (sr/1000+2 bei
+        Bug (v10.0.0): _compute_formant_stability() verwendete LPC-Order=50 (sr/1000+2 bei
         48 kHz) auf dem vollen Mix ohne Bandpass-Filter → formant=0.139 als Messartefakt
         bei HF-Boost durch Restaurierung (Centroid-Shift 1664→4101 Hz).
         Fix: Bandpass 200-3400 Hz vor LPC, Order=14.
@@ -220,7 +220,7 @@ class TestFixAbcCassetteHissNoveltyFlutter:
     """Linter-Guard-Tests für Fix A (Phase 29 Kassette+MP3), Fix B (SFT NOVELTY_CRIT
     Restoration-Rollback) und Fix C (Phase 12 Kassette confidence-Threshold).
 
-    Root Causes (Elke Best Restoration, v9.13):
+    Root Causes (Elke Best Restoration, v10.0.0):
     - Fix A: Phase 29 Bypass mit falschem 22.0 dB Threshold und 8kHz+ Hiss-Band.
       Kassetten-Hiss liegt in 4-8 kHz (MP3 schneidet 8kHz+ weg) → immer bypass.
     - Fix B: SFT ArtifactRescue setzte wet=0.30 auch bei NOVELTY_CRIT=0.551

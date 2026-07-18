@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-"""Anti-False-Positive-Tests für DefectScanner (§6.3 — Aurik v9.10.57).
+"""Anti-False-Positive-Tests für DefectScanner (§6.3 — Aurik v10.0.0).
 
 Validates that the three hardened detectors (_detect_clicks,
 _detect_crackle, _detect_compression_artifacts) do NOT produce false

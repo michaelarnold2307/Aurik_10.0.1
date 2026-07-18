@@ -52,7 +52,7 @@ class TontraegerInfo:
     """Menschenlesbare Begründung der Erkennung (Deutsch)."""
 
     classification_result: Any = None
-    """ClassificationResult-Objekt für Passthrough an UV3 (§6.7 v9.10.97)."""
+    """ClassificationResult-Objekt für Passthrough an UV3 (§6.7 v10.0.0)."""
 
     bayesian_scores: dict[str, float] = field(default_factory=dict)
     """Posterior-Wahrscheinlichkeiten aller 16 Materialtypen."""
@@ -188,7 +188,7 @@ class TontraegerDenker:
 
         try:
             raw_result = detector.detect(audio, sr, file_ext=_file_ext)
-            # Preserve classification_result + bayesian_scores for passthrough (§6.7 v9.10.97)
+            # Preserve classification_result + bayesian_scores for passthrough (§6.7 v10.0.0)
             _classification_result = getattr(raw_result, "classification_result", None)
             _bayesian_scores = getattr(raw_result, "bayesian_scores", {}) or {}
             # MediumDetectionResult (dataclass) → dict für _struktur()

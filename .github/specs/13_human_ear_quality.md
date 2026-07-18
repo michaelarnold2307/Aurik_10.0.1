@@ -1,6 +1,6 @@
 # Spec 13: Klangqualität für das menschliche Ohr | §v10 Pleasantness-First
 
-> **Version:** Aurik 9.20.3 · **Scope:** Perceptual Audio Quality, ISO 226, Listening Modes, Fatigue Prevention
+> **Version:** Aurik 10.0.0 · **Scope:** Perceptual Audio Quality, ISO 226, Listening Modes, Fatigue Prevention
 
 ## §13.0 [RELEASE_MUST] Oberstes Prinzip: Natürlicher Wohlklang
 
@@ -112,7 +112,7 @@ BatchSessionLearner existiert bereits — Transfer-Learning für Künstler-Finge
 
 ---
 
-> **v9.20.3:** SectionStrengthEnvelope, Preservation Mode, Fragile-Guard,
+> **v10.0.0:** SectionStrengthEnvelope, Preservation Mode, Fragile-Guard,
 > Onset-Guard, Contralto-Erkennung, Uniformer Gain.
 > **v10.0.0-Phantom:** ComfortGuard (§16.2), BreathPreserver (§16.3),
 > VocalQualityGate 6-dim (§16.4), PhantomDetector Zero-Config (§16.1).

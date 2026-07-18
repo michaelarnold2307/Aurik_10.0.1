@@ -345,7 +345,7 @@ class DSPPolicyEngine:
             chain.append(("TapeNoiseReduction", {}))
             chain.append(("Dehiss", {}))
 
-        # Universelles Noise Gate (Aurik 9.0): gilt für ALLE Medien.
+        # Universelles Noise Gate (Aurik 10.0.0): gilt für ALLE Medien.
         # Wissenschaftliche Begründung: Kompression (Phase 5) pumpt Rauschen mit hoch,
         # wenn kein Gate vorgeschaltet ist. Das Gate MUSS vor dem Compressor kommen.
         # Schwellwert: vinyl=-40 dB (sehr präzise), analog=-35 dB, digital=-45 dB

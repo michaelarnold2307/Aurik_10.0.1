@@ -3,7 +3,7 @@ from __future__ import annotations
 """
 tests/unit/test_natuerlichkeit_stateless_and_emotional_arc_score.py
 ====================================================================
-FIXED v9.11 — Zwei kritische Bugs, die HPG-Integrität untergruben:
+FIXED v10.0.0 — Zwei kritische Bugs, die HPG-Integrität untergruben:
 
 1. NatuerlichkeitMetric.measure() war CREPE-load-state-abhängig:
    Ohne CREPE: w_onset=0.24, w_voice=0.0
@@ -52,7 +52,7 @@ def _harmonic_signal(sr: int = 48000, dur: float = 2.0) -> np.ndarray:
 
 @pytest.mark.unit
 class TestNatuerlichkeitStateless:
-    """FIXED v9.11: Immer gleiche Gewichte, CREPE verfeinert nur voicing_naturalness."""
+    """FIXED v10.0.0: Immer gleiche Gewichte, CREPE verfeinert nur voicing_naturalness."""
 
     @pytest.fixture(autouse=True)
     def _disable_crepe(self, monkeypatch):
@@ -133,7 +133,7 @@ class TestNatuerlichkeitStateless:
         assert s < tonal_s, f"Noise {s:.3f} sollte < Tonal {tonal_s:.3f}"
 
     def test_weights_sum_invariant(self):
-        """Alle Gewichte summieren zu 1.0 — immer (FIXED v9.11 stateless)."""
+        """Alle Gewichte summieren zu 1.0 — immer (FIXED v10.0.0 stateless)."""
         # Gewichte sind jetzt fest: w_flat=0.24 + w_zcr=0.21 + w_cont=0.21 + w_voice=0.18 + w_onset=0.16 = 1.00
         w_flat, w_zcr, w_cont, w_voice, w_onset = 0.24, 0.21, 0.21, 0.18, 0.16
         total = w_flat + w_zcr + w_cont + w_voice + w_onset
@@ -146,7 +146,7 @@ class TestNatuerlichkeitStateless:
 
 
 class TestEmotionalArcPreservationScore:
-    """FIXED v9.11: preservation_score Property fehlte → HPG immer 1.0."""
+    """FIXED v10.0.0: preservation_score Property fehlte → HPG immer 1.0."""
 
     def _make_result(self, **kwargs):
         from backend.core.emotional_arc_preservation import EmotionalArcResult

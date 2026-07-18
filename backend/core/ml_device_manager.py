@@ -1,4 +1,4 @@
-"""ml_device_manager — Mixed CPU/GPU Device Selection for Aurik 9.
+"""ml_device_manager — Mixed CPU/GPU Device Selection for Aurik 10.0.0.
 
 Detects available GPU acceleration (ROCm on Linux, DirectML on Windows) and
 provides a unified interface for per-plugin device assignment.

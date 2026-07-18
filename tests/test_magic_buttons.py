@@ -1,7 +1,7 @@
 import pytest
 
 """
-Test: 2 Magic Buttons in Aurik 9.0
+Test: 2 Magic Buttons in Aurik 10.0.0
 ====================================
 
 Magic Button 1: Restoration Only (keine Enhancement)
@@ -74,7 +74,7 @@ def analyze_audio(audio, label):
 
 def main():
     print("=" * 80)
-    print("TEST: 2 Magic Buttons in Aurik 9.0")
+    print("TEST: 2 Magic Buttons in Aurik 10.0.0")
     print("=" * 80)
 
     # Generate test audio

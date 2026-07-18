@@ -1,4 +1,4 @@
-"""Long-form Musical Coherence Guard (v9.12.9).
+"""Long-form Musical Coherence Guard (v10.0.0).
 
 Stellt sicher, dass strukturell identische Song-Abschnitte (Vers-1 ↔ Vers-2,
 Refrain-1 ↔ Refrain-2) nach der Restaurierung einen konsistenten Klang aufweisen.

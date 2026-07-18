@@ -1,5 +1,5 @@
 # =============================================================================
-# pyproject.toml — Aurik 9 Code-Qualitäts-Konfiguration (SOTA, März 2026)
+# pyproject.toml — Aurik 10.0.8 Code-Qualitäts-Konfiguration (SOTA, Juli 2026)
 # =============================================================================
 
 [build-system]
@@ -7,8 +7,8 @@ requires = ["setuptools>=68.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "aurik9"
-version = "9.20.3"
+name = "aurik10"
+version = "10.0.8"
 description = "Intelligentes Musik-Restaurierungssystem — weltweite Erstimplementierung"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -167,7 +167,7 @@ ignore = [
     # Aurik-DSP-Spezifische Ausnahmen (bewusste Design-Entscheidungen)
     # =========================================================================
     # Deutschsprachige Unicode-Zeichen in Docstrings/Kommentaren/Strings
-    # sind in Aurik 9 bewusst gesetzt (Nutzermeldungen, Kommentare auf Deutsch)
+    # sind in Aurik 10.0.0 bewusst gesetzt (Nutzermeldungen, Kommentare auf Deutsch)
     "RUF001",
     "RUF002",
     "RUF003",

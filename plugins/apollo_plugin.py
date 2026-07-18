@@ -1,5 +1,5 @@
 """
-Apollo Plugin — Codec-Artefakt-Entfernung für Aurik 9 (MP3/AAC/ATRAC)
+Apollo Plugin — Codec-Artefakt-Entfernung für Aurik 10.0.0 (MP3/AAC/ATRAC)
 
 Apollo ist ein Band-Sequence Mamba-Modell für hochqualitative Musik-Restaurierung
 aus komprimierten Audio-Formaten. Es übertrifft alle bisherigen Codec-Repair-Methoden.

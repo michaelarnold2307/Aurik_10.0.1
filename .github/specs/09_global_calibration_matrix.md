@@ -1,6 +1,6 @@
 # Spec §09 — Globale Kalibrierungs-Matrix für reproduzierbare Optimalwerte | §v10 Pleasantness-First
 
-**Aurik 10.11.14+ | Gültig ab: 18. April 2026 | Stand: 19. April 2026 (v9.11.14+) | Normativ übergeordnet über einzelne Phase-Konfigurationen**
+**Aurik 10.11.14+ | Gültig ab: 18. April 2026 | Stand: 19. April 2026 (v10.0.0+) | Normativ übergeordnet über einzelne Phase-Konfigurationen**
 
 ---
 
@@ -157,7 +157,7 @@ CANONICAL_THRESHOLDS_STUDIO2026 = {
 
 Nicht alle Songs sollten zu denselben Schwellwerten führen. Ein 1920er-Shellac-Aufnahme kann unmöglich 0.78 Brillanz haben (technische Grenze 8 kHz, Rolloff). Ein 1990er CD-Pop sollte 0.87+ Brillanz haben.
 
-### §09.2a PMGG-Blend-Invariante (normativ, v9.11.14)
+### §09.2a PMGG-Blend-Invariante (normativ, v10.0.0)
 
 **Problem**: Fixer 60/40-Blend (60 % canonical, 40 % SGT) erzeugt PMGG-Schwellwerte **über** der physikalischen Ceiling — z.B. `brillanz` Shellac: `0.60 × 0.78 + 0.40 × 0.51 = 0.71` bei physikalischer Grenze 0.51. Resultat: 5 Retries → 15 % Stärke → degradierte Restaurierung.
 
@@ -189,7 +189,7 @@ Diese werden als `adaptive_goal_thresholds` an **jeden** `wrap_phase()`-Aufruf, 
 
 **Invariante**: PMGG-Blend und Pipeline-Ende-Blend verwenden identische delta-adaptive Logik — kein Split-Behavior zwischen per-Phase-Steuerung und Final-Gate.
 
-### §09.2b [RELEASE_MUST] Effektiver Goal-Target-Resolver (v9.12.13)
+### §09.2b [RELEASE_MUST] Effektiver Goal-Target-Resolver (v10.0.0)
 
 Für jedes Importstück MUSS ein vollständiger Target-Vektor für alle **15** anwendbaren Musical Goals berechnet werden. Dieser Vektor ist die einzige normative Vergleichsgrundlage für `§GOAL_BASELINE_CHECK`, PMGG, FeedbackChain, End-Gate, UI und Analyse-Reports.
 
@@ -249,7 +249,7 @@ def resolve_effective_goal_targets(
 
 **Invariante**: `studio_goal_targets.estimate_song_goal_targets` ist die Pipeline-Referenz. Die Convenience-API darf nicht für PMGG-Integration oder Phase-Steering eingesetzt werden — dort fehlen Confidence, IBS und Chain-Depth-Pullback.
 
-### §09.2b Restoration-Prior-Payload (v9.15.4)
+### §09.2b Restoration-Prior-Payload (v10.0.0)
 
 Wenn `restoration_prior` an `estimate_song_goal_targets(...)` oder GP-Proposal-Pfade übergeben
 wird, ist die kanonische Struktur:
@@ -267,7 +267,7 @@ wird, ist die kanonische Struktur:
 - PMGG/CIG/AFG/HPI bleiben normative Endinstanzen; restoration_prior darf nur initiale
     Parametervorschläge und milde Gewichtung beeinflussen.
 
-### §09.2c Runtime-Metric-Reliability-Layer (v9.15.5)
+### §09.2c Runtime-Metric-Reliability-Layer (v10.0.0)
 
 Der Closed-Loop-Stack darf Goal-Konfidenzen nicht nur aus statischen Proxys ableiten.
 Zusätzlich MUSS ein laufzeitnaher Reliability-Layer aus realen Phase-Deltas und PMGG-
@@ -463,7 +463,7 @@ for s in linspace(strength_min, strength_max, n_steps=15):
 return best_strength
 ```
 
-### §09.3c [RELEASE_MUST] Phase-Strength-Oracles fuer alle profitierenden Phasen (v9.12.9)
+### §09.3c [RELEASE_MUST] Phase-Strength-Oracles fuer alle profitierenden Phasen (v10.0.0)
 
 `GlobalPlan.recommend()` liefert nur den globalen Song-Kontext. Die finale lokale
 Interventionsstaerke jeder Phase wird durch ein **Phase-Strength-Oracle** bestimmt.
@@ -549,7 +549,7 @@ def compute_chain_factor(material_key: str, transfer_chain: list[str], confidenc
 
 **Kreuzreferenz:** Die konkrete 64-Phasen-Bindung der Oracle-Klasse steht in Spec 06 §7.1d.
 
-### §09.3d Evidenzklassen fuer P1-Kernschwellen (v9.12.9+)
+### §09.3d Evidenzklassen fuer P1-Kernschwellen (v10.0.0+)
 
 Zur Vermeidung scheinbarer Praezision ohne Quellenpflicht werden Kern-Schwellen in Evidenzklassen gefuehrt:
 
@@ -568,7 +568,7 @@ Zur Vermeidung scheinbarer Praezision ohne Quellenpflicht werden Kern-Schwellen 
 
 PMGG prüft nach jeder Phase, ob die 15 Goals den effektiven Zielwert halten.
 
-### §09.4c Rekonstruktive Konfidenz und Threshold-Multiplikator [RELEASE_MUST v9.15.3]
+### §09.4c Rekonstruktive Konfidenz und Threshold-Multiplikator [RELEASE_MUST v10.0.0]
 
 Rekonstruktive Phasen (`phase_23`, `phase_24`, `phase_50`, `phase_55`) dürfen nicht nur
 gegen den defektzentrierten Zielbereich bewertet werden. Für `passed_reconstruction_localized`
@@ -623,7 +623,7 @@ MATERIAL_THRESHOLD_BONUS = {
 threshold = base_threshold + material_bonus
 ```
 
-### §09.4b Priority-aware Retry-Budgets (§2.29 v9.10.77)
+### §09.4b Priority-aware Retry-Budgets (§2.29 v10.0.0)
 
 ```python
 PRIORITY_MAX_RETRIES = {
@@ -638,7 +638,7 @@ PRIORITY_MAX_RETRIES = {
 # Sub-Threshold Deltas (JND-unterschwellig) werden akzeptiert ohne Retry.
 ```
 
-### §09.4d Goal-Koalitionen bei Recovery-Prioritäten [RELEASE_MUST v9.15.3]
+### §09.4d Goal-Koalitionen bei Recovery-Prioritäten [RELEASE_MUST v10.0.0]
 
 Wenn mehrere offene Goals dieselbe Primär-Recovery-Phase teilen, darf die
 Reschedule-Priorisierung nicht nur den numerischen Gap betrachten. Recovery-Phasen,
@@ -951,7 +951,7 @@ Integration:
 - Additive Phasen duerfen pro Iteration nur einen Anteil von `cpb` verbrauchen.
 - Bei `cpb -> 0` muss die Phase auf konservatives Wet/Dry zurueckfallen.
 
-### §09.10d-2 Headroom-Scalar für Additive Phasen (v9.11.14)
+### §09.10d-2 Headroom-Scalar für Additive Phasen (v10.0.0)
 
 Ergänzt §09.10d. Enhancement-Phasen der Familien `harmonic_reconstruction`, `harmonic_enhancement`, `tonal_enhancement`, `source_enhancement`, `stereo_enhancement`, `stereo_generation` erhalten einen Strength-Scalar proportional zum **absoluten Headroom** bis zur physikalischen Decke:
 
@@ -1075,7 +1075,7 @@ Integration:
 
 ---
 
-## §09.11 [RELEASE_MUST] Maximum-Achievable-Score (MAS) — Formale Definition (v9.12.1)
+## §09.11 [RELEASE_MUST] Maximum-Achievable-Score (MAS) — Formale Definition (v10.0.0)
 
 MAS ist der höchste physikalisch erreichbare Goal-Score für einen konkreten Song — gegeben Material, Ära, Genre und Restorability. MAS ist **das primäre Optimierungsziel der Pipeline** — kein Bodengrenzwert, kein Stopp-Signal, sondern aktives Konvergenzziel.
 
@@ -1202,7 +1202,7 @@ def test_compute_mas_convergence_early_stop():
 
 ---
 
-## §09.10 [RELEASE_MUST] §GOAL_BASELINE_CHECK — Pre-Pipeline-Absicherung (v9.12.0)
+## §09.10 [RELEASE_MUST] §GOAL_BASELINE_CHECK — Pre-Pipeline-Absicherung (v10.0.0)
 
 > **Normative Spec-Grundlage** für das in Copilot Instructions §0k beschriebene Prinzip.
 > Schließt die CAUSE_TO_PHASES-Lücke: wenn DefectScanner einen Goal-Defizit nicht
@@ -1271,10 +1271,10 @@ for goal_name, goal_score in _goal_snapshot.items():
 
 ---
 
-## §09.11 [RELEASE_MUST] Goal-Recovery-Phase-Mappings (v9.12.0)
+## §09.11 [RELEASE_MUST] Goal-Recovery-Phase-Mappings (v10.0.0)
 
 > **Normative Vollständig-Tabelle** für `get_goal_recovery_phases()` in
-> `backend/core/calibration_matrix.py`. Bis v9.12.0 nur in Copilot Instructions beschrieben —
+> `backend/core/calibration_matrix.py`. Bis v10.0.0 nur in Copilot Instructions beschrieben —
 > hier erstmalig als Spec-Grundlage spezifiziert.
 
 ### [RELEASE_MUST] §09.11a `_GOAL_TO_RECOVERY_PHASES_RESTORATION`
@@ -1369,7 +1369,7 @@ def test_get_goal_recovery_phases_all_phase_ids_exist_on_disk():
 
 ---
 
-## §09.12 [RELEASE_MUST] Restorability-adaptive Floor-Skalierung (v9.12.0)
+## §09.12 [RELEASE_MUST] Restorability-adaptive Floor-Skalierung (v10.0.0)
 
 > **Problem**: `get_material_floor()` liefert absolute Material-Böden (Shellac: 0.72, Vinyl: 0.82,
 > CD: 0.90). Bei extremer Degradierung (`restorability < 30`) sind diese Böden physikalisch
@@ -1449,7 +1449,7 @@ if restorability_score < 30:
 
 ---
 
-## §09.13 [RELEASE_MUST] Chain-End-Codec-Floor-Override (v9.15.1)
+## §09.13 [RELEASE_MUST] Chain-End-Codec-Floor-Override (v10.0.0)
 
 > **Problem**: `get_material_floor()` wird mit dem primären Träger aufgerufen (z.B. `cassette`).
 > Bei einer Transfer-Kette wie `cassette → mp3_low` ist der limitierende Faktor jedoch der

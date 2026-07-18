@@ -407,8 +407,8 @@ class PipelineGuard:
             frame_idx = int(time_s / hop_s)
             if 0 <= frame_idx < len(mask):
                 return float(mask[frame_idx])
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.debug("pipeline_guard: non-critical exception: %s", _e)
         return 0.0
 
     def check_and_restore_dynamics(self, audio: np.ndarray, sr: int, phase_name: str) -> np.ndarray:
@@ -477,8 +477,8 @@ class PipelineGuard:
         self._phase_count = 0
         try:
             self._wd().reset()
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.debug("pipeline_guard: non-critical exception: %s", _e)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

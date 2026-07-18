@@ -1,5 +1,5 @@
 """
-LyricsTranscriber Plugin — Whisper-Tiny ONNX (§2.36 Aurik Spec v9.10.46b)
+LyricsTranscriber Plugin — Whisper-Tiny ONNX (§2.36 Aurik Spec v10.0.0b)
 ===========================================================================
 
 Transkribiert Gesangs-Audio zu Wort-Zeitstempeln. Kein Netzwerkzugriff.

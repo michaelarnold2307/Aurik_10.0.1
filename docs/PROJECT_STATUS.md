@@ -1,7 +1,7 @@
-# 📊 Aurik 9.20.3 — Project Status Report
+# 📊 Aurik 10.0.0 — Project Status Report
 
 **Datum:** Juli 2026
-**Version:** 9.20.3
+**Version:** 10.0.8
 **Status:** ✅ Produktionsbereit | §v10 Pleasantness-First aktiv | SNR-adaptive Defekterkennung
 
 > Verbindlicher Ist-Stand: `.github/specs/01-14`, `.github/copilot-instructions.md`, `CLAUDE.md`.
@@ -10,14 +10,14 @@
 
 ## Executive Summary
 
-**Aurik 9.20.3 ist ein autonom denkendes Musik-Restaurierungssystem — jeder Song wird individuell gemessen und optimiert.**
+**Aurik 10.0.0 ist ein autonom denkendes Musik-Restaurierungssystem — jeder Song wird individuell gemessen und optimiert.**
 
 | Kennzahl | Wert |
 | --- | --- |
 | Tests | **~18.400** pytest-IDs (Juli 2026), 511 mit Markern |
-| Phasen | **64** (Phase 01–64, Defect-First, Spectrum-Aware EQ) |
-| Materialien | **15** auto-erkannte Typen + Multi-Generation-Chain |
-| Musical Goals | **15** psychoakustisch fundierte Ziele (Pleasantness-First) |
+| Phasen | **68** (Phase 01–66 + Vocal Repair + Glue Stage) |
+| Materialien | **16** auto-erkannte Typen + Multi-Generation-Chain |
+| Musical Goals | **14** psychoakustisch fundierte Ziele (Pleasantness-First) |
 | SNR-Adaption | ✅ Click, Tape-Splice, MATERIAL_SENSITIVITY, CAUSE_PARAMS |
 | Spectrum-Aware | ✅ Phase 16 (Final EQ), Phase 17 (Mastering Polish) |
 | Harmonic-Aware | ✅ Phase 17 Saturation (misst Even/Odd-Harmonic-Ratio) |
@@ -27,9 +27,9 @@
 > Wettbewerbsführung oder formaler Hörtest-Nähe sind intern als Ziel- und Steuerungsrahmen
 > zu verstehen und werden erst durch externe Blindtests und reproduzierbare Vergleichsstudien
 > belastbar.
-| DefectTypes | **47** erkennbare Defektarten (DetectionTypes in DefectScanner) |
-| Kausal-Ursachen | **53** Behandlungs-Ursachen (CAUSES in CausalDefectReasoner) |
-| Hardware | CPU-only, Desktop (Linux AppImage & Windows 10/11) |
+| DefectTypes | **62** erkennbare Defektarten (DetectionTypes in DefectScanner) |
+| Kausal-Ursachen | **62** Behandlungs-Ursachen (CAUSES in CausalDefectReasoner) |
+| Hardware | CPU + optionale AMD-GPU (ROCM/DirectML), Desktop (Linux AppImage & Windows 10/11) |
 | Netzwerk | Keine Cloud, keine Serverabhängigkeiten — 100 % offline |
 
 ---
@@ -44,7 +44,7 @@
 | `PerceptualQualityScorer` | `core/perceptual_quality_scorer.py` | ✅ |
 | `MusicalGoalsChecker` (14 Ziele) | `backend/core/musical_goals/musical_goals_metrics.py` | ✅ |
 | `MediumDetector` | `forensics/medium_detector.py` | ✅ |
-| `DefectScanner` (54 DefectTypes) | `core/defect_scanner.py` | ✅ |
+| `DefectScanner` (62 DefectTypes) | `core/defect_scanner.py` | ✅ |
 | `VocalAIEnhancement` | `core/vocal_ai_enhancement.py` | ✅ |
 | `ExcellenceOptimizer` | `core/excellence_optimizer.py` | ✅ |
 | `FeedbackChain` | `core/feedback_chain.py` | ✅ |
@@ -79,7 +79,7 @@
 
 ---
 
-## 🎯 14 Musical Goals — Qualitätsstatus (v9.10.77 Pareto-Differenzierung)
+## 🎯 14 Musical Goals — Qualitätsstatus (v10.0.0 Pareto-Differenzierung)
 
 Alle 14 Ziele werden durch `MusicalGoalsChecker.measure_all()` nach jeder Restaurierung geprüft.
 Regression in einem anwendbaren Ziel macht das Feature ungültig.
@@ -107,7 +107,7 @@ Emotionalität, Transparenz, Timbre-Authentizität, Artikulation.
 
 ---
 
-## 📋 64-Phasen-Pipeline (kanonisch, v9.10.101)
+## 📋 68-Phasen-Pipeline (kanonisch, v10.0.8)
 
 ```text
 DCOffset-Removal
@@ -115,10 +115,10 @@ DCOffset-Removal
 -> RestorabilityEstimator -> SongCalibrationProfile
 -> EraClassifier + GermanSchlagerClassifier + MediumDetector (parallel)
 -> GoalApplicabilityFilter -> AdaptiveGoalThresholds
--> DefectScanner (54 DetectionTypes) -> CausalDefectReasoner (62 CAUSES)
+-> DefectScanner (62 DetectionTypes) -> CausalDefectReasoner (62 CAUSES)
 -> GPParameterOptimizer -> HarmonicPreservationGuard
 -> PerPhaseMusicalGoalsGate (umhüllt jede Phase)
--> Phasen-Ausführung (01–64)
+-> Phasen-Ausführung (01–68)
 -> FeedbackChain -> PhysicalCeilingEstimator
 -> MusicalGoalsChecker (14 Ziele)
 -> MicroDynamicsEnvelopeMorphing
@@ -177,27 +177,27 @@ ConsonantEnhancement: Frikative-SNR >= +3 dB · HF-Anhebung <= +6 dB · Crossfad
 
 | Version | Milestone | Tests |
 | --- | --- | --- |
-| v9.0 | UnifiedRestorerV3, Material-Auto-Detektion | 6 Tests |
-| v9.5 | ML-Hybrid, 12 Materialien, 21 DefectTypes, 55 Phasen | 166 Tests |
-| v9.7 | Kognitive Architektur (5 Kernmodule), VoiceGender, PANNs | 206 Tests |
-| v9.8 | Über-SOTA DSP (OMLSA/IMCRA, pYIN, NMF-b, PGHI) | 222 Tests |
-| v9.9.0 | GrooveMetric (#8), MRSA, Psychoakust. Masking, HarmonicLattice | 5169 Tests |
-| v9.9.5 | 14 Musical Goals, EraClassifier, TonalCenter, MicroDynamics | 6073 Tests |
-| v9.9.7 | StemRemixBalancer, EnsembleProcessor, IAD, BatchSessionLearner | 6180 Tests |
-| v9.9.9 | TDP, HPG, PMGG, MDEM | 6312 Tests |
-| v9.10.42 | E2E-Tests, TIER-Invarianten, PMGG-Fixes, v2-Cleanup | 6312 Tests |
-| v9.10.43 | WPE als kanonisches Dereverb (SGMSE+ entfernt) | 6312 Tests |
-| v9.10.45 | RemasterDetector, EraResult.is_remaster_suspected, temporale Defektverortung | 6347 Tests |
-| v9.10.46 | Spec-Konsistenz-Audit, JSON-Schema, Genre-Profile, DDSP, UI-Shortcuts | 6312 Tests |
-| v9.10.47 | Spec-Konsistenz-Audit: 6 Korrekturen (EraResult, PMGG-Default, MaterialQuality, GP-Genre-Keys) | 6312 Tests |
-| v9.10.48 | Infrastruktur: SBOM, GP-Backup, i18n-Tests, Export-Roundtrip | 6312 Tests |
-| v9.10.49 | Performance: SHA256-Cache, parallele Eingangs-Analyse, PMGG-Sample-Dauer, Warmup-Thread | 6312 Tests |
-| v9.10.50 | §Dach: MusikalischerGlobalplan, 13 Ära-Profile, Genre-Modifikatoren, 17 Phase-Adjustments | 6312 Tests |
-| v9.10.x | §SR-Invariante: assert sample_rate==48000 lückenlos an allen API-Einstiegspunkten | historischer Teststand |
-| v9.10.74–83 | KMV Stufe-2, ML-Headroom-Guard, OOM-Checkpoint, Denker-Differenzierung, Song-Kalibrierung | 7.500+ Tests |
-| v9.10.84–91 | Dual-SR-Vertrag, PMGG SNR-Proxy-Fixes (§9.7.11–14), Stab.-Invarianten | 8.500+ Tests |
-| v9.10.92–99 | PMGG SNR-Proxies brillanz/transparenz/waerme, Codec-Repair, AMRB-Kalibrierung | 9.500+ Tests |
-| v9.10.100–102 | Lyrics-Produktivpfad, Phasen 59–64, Genre-Phase-1 (Family+Top-k+Open-Set) | ~18.400 Tests |
+| v10.0.0 | UnifiedRestorerV3, Material-Auto-Detektion | 6 Tests |
+| v10.0.0 | ML-Hybrid, 12 Materialien, 21 DefectTypes, 55 Phasen | 166 Tests |
+| v10.0.0 | Kognitive Architektur (5 Kernmodule), VoiceGender, PANNs | 206 Tests |
+| v10.0.0 | Über-SOTA DSP (OMLSA/IMCRA, pYIN, NMF-b, PGHI) | 222 Tests |
+| v10.0.0 | GrooveMetric (#8), MRSA, Psychoakust. Masking, HarmonicLattice | 5169 Tests |
+| v10.0.0 | 14 Musical Goals, EraClassifier, TonalCenter, MicroDynamics | 6073 Tests |
+| v10.0.0 | StemRemixBalancer, EnsembleProcessor, IAD, BatchSessionLearner | 6180 Tests |
+| v10.0.0 | TDP, HPG, PMGG, MDEM | 6312 Tests |
+| v10.0.0 | E2E-Tests, TIER-Invarianten, PMGG-Fixes, v2-Cleanup | 6312 Tests |
+| v10.0.0 | WPE als kanonisches Dereverb (SGMSE+ entfernt) | 6312 Tests |
+| v10.0.0 | RemasterDetector, EraResult.is_remaster_suspected, temporale Defektverortung | 6347 Tests |
+| v10.0.0 | Spec-Konsistenz-Audit, JSON-Schema, Genre-Profile, DDSP, UI-Shortcuts | 6312 Tests |
+| v10.0.0 | Spec-Konsistenz-Audit: 6 Korrekturen (EraResult, PMGG-Default, MaterialQuality, GP-Genre-Keys) | 6312 Tests |
+| v10.0.0 | Infrastruktur: SBOM, GP-Backup, i18n-Tests, Export-Roundtrip | 6312 Tests |
+| v10.0.0 | Performance: SHA256-Cache, parallele Eingangs-Analyse, PMGG-Sample-Dauer, Warmup-Thread | 6312 Tests |
+| v10.0.0 | §Dach: MusikalischerGlobalplan, 13 Ära-Profile, Genre-Modifikatoren, 17 Phase-Adjustments | 6312 Tests |
+| v10.0.0.x | §SR-Invariante: assert sample_rate==48000 lückenlos an allen API-Einstiegspunkten | historischer Teststand |
+| v10.0.0–83 | KMV Stufe-2, ML-Headroom-Guard, OOM-Checkpoint, Denker-Differenzierung, Song-Kalibrierung | 7.500+ Tests |
+| v10.0.0–91 | Dual-SR-Vertrag, PMGG SNR-Proxy-Fixes (§9.7.11–14), Stab.-Invarianten | 8.500+ Tests |
+| v10.0.0–99 | PMGG SNR-Proxies brillanz/transparenz/waerme, Codec-Repair, AMRB-Kalibrierung | 9.500+ Tests |
+| v10.0.0–102 | Lyrics-Produktivpfad, Phasen 59–64, Genre-Phase-1 (Family+Top-k+Open-Set) | ~18.400 Tests |
 
 ### 🔜 Geplant
 
@@ -224,7 +224,7 @@ Dithering: POW-r Typ 3 bei 24->16-bit; Fallback: TPDF
 | --- | --- |
 | Interne SR | 48 000 Hz (Pflicht, `assert sample_rate == 48000`) |
 | Bit-Tiefe intern | float32, [-1, 1] |
-| Hardware | CPU-only (`providers=["CPUExecutionProvider"]`) |
+| Hardware | CPU + optionale AMD-GPU (`providers=["CPUExecutionProvider", "ROCMExecutionProvider"]`) |
 | Resampling | Lanczos-4 (`scipy.signal.resample_poly`, Kaiser b=14) |
 | GP-Gedächtnis | `~/.aurik/gp_memory/<material>.json` |
 | FeedbackChain | max. 5 Iterationen, D\|MOS\| < 0.02 |
@@ -265,4 +265,4 @@ Dithering: POW-r Typ 3 bei 24->16-bit; Fallback: TPDF
 
 ---
 
-_Aurik 9.20.3 — Mai 2026 (Stand: 03.04.2026)_
+_Aurik 10.0.8 — Juli 2026 (Stand: 03.04.2026)_

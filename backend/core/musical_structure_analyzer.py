@@ -1,5 +1,5 @@
 """
-backend/core/musical_structure_analyzer.py — MusicalStructureAnalyzer (Aurik 9 §2.17)
+backend/core/musical_structure_analyzer.py — MusicalStructureAnalyzer (Aurik 10.0.0 §2.17)
 ===========================================================================
 SSM-gestützte Segmentstruktur-Erkennung (Intro/Verse/Chorus/Bridge/Outro).
 Implementierung gemäß Spec §2.17: Self-Similarity-Matrix, Novelty-Kurve, Foote 2000.

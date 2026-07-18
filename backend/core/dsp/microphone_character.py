@@ -1,5 +1,5 @@
 """
-Microphone Character Detector — Lücke 6 (v9.12.x)
+Microphone Character Detector — Lücke 6 (v10.0.0.x)
 ==================================================
 
 Erkennt und schützt mikrofonspezifische spektrale Charakteristika
@@ -43,7 +43,7 @@ ALGORITHMUS:
 Ausgabe: MicrophoneSignature + MicrophoneProtectionEQ für phase_04.
 
 Author: Aurik Development Team
-Version: 1.0.0 (v9.12.x — Lücke 6)
+Version: 1.0.0 (v10.0.0.x — Lücke 6)
 """
 
 from __future__ import annotations

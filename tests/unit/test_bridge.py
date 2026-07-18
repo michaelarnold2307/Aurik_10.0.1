@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""Tests für backend/api/bridge.py — Aurik 9 API Bridge (§11 Spec 08).
+"""Tests für backend/api/bridge.py — Aurik 10.0.0 API Bridge (§11 Spec 08).
 
 Prüft:
 - Alle __all__-Einträge sind tatsächlich importierbar

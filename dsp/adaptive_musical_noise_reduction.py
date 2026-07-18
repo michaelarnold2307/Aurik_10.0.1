@@ -1,5 +1,5 @@
 """
-Adaptive Musical Noise Reduction DSP-Modul für Aurik 9.10 (SOTA-Maximum)
+Adaptive Musical Noise Reduction DSP-Modul für Aurik 10.0.0 (SOTA-Maximum)
 
 Implements principled musical noise artifact suppression using:
 - Temporal-spectral variance tracking (Cohen 2002 approach)

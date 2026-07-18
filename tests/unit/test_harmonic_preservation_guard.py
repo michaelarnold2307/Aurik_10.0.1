@@ -1,7 +1,7 @@
 """
 tests/unit/test_harmonic_preservation_guard.py
 ===============================================
-Aurik 9.9 — HarmonicPreservationGuard (§2.28)
+Aurik 10.0.0 — HarmonicPreservationGuard (§2.28)
 
 25 Unit-Tests.
 Alle Tests synthetisch (keine echten Audio-Dateien).

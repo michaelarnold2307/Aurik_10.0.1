@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-"""Unit-Tests für MediumDetectionResult — neue Felder §6.7 (v9.11.14)."""
+"""Unit-Tests für MediumDetectionResult — neue Felder §6.7 (v10.0.0)."""
 
 
 from forensics.medium_detector import MediumDetectionResult, SpectralFingerprint

@@ -103,7 +103,7 @@ class HybridVocalSeparator:
         - Tracks nebenwirkungen from both models
         - Preserves individual outputs for auditability
         """
-        # SR-Invariante (Aurik 9 nutzt 48000 Hz)
+        # SR-Invariante (Aurik 10.0.0 nutzt 48000 Hz)
         if sr is not None:
             assert sr == 48000, f"SR muss 48000 Hz sein, erhalten: {sr}"
         # NaN/Inf-Guard

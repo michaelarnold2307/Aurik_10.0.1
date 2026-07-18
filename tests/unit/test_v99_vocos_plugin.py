@@ -1,5 +1,5 @@
 """
-Unit-Tests für plugins/vocos_plugin.py — Aurik 9
+Unit-Tests für plugins/vocos_plugin.py — Aurik 10.0.0
 
 Testumfang: 40 Tests — alle öffentlichen Methoden, Randfälle, NaN/Inf-Schutz,
 Singleton-Thread-Safety, SR-Routing, Fallback-Kaskade.

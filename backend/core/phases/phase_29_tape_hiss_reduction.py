@@ -248,7 +248,7 @@ class TapeHissReductionPhase(PhaseInterface):
             cand_rms = float(np.sqrt(np.mean(cand_seg * cand_seg)) + 1e-12)
             ref_db = float(20.0 * np.log10(ref_rms))
             cand_db = float(20.0 * np.log10(cand_rms))
-            # v9.15.2 Fix C Korrektur: Digitale Stille (ref_db < -80 dBFS) würde
+            # v10.0.0 Fix C Korrektur: Digitale Stille (ref_db < -80 dBFS) würde
             # unphysikalische delta_db-Werte (~215 dB) erzeugen → scale ≈ 2e-11 →
             # klangliche Auslöschung. Aber §0h verlangt, dass Stille-Zonen sakrosankt
             # sind: Wenn der Kandidat in einer digitalen Stille-Zone laut ist (Pegelexplosion),
@@ -481,7 +481,7 @@ class TapeHissReductionPhase(PhaseInterface):
         self.validate_input(audio)
         audio, _p29_transposed = to_channels_last(audio)
 
-        # §EraTarget: Read era-adaptive G_floor from restoration context (v9.12.1).
+        # §EraTarget: Read era-adaptive G_floor from restoration context (v10.0.0).
         # Stored on self for access in _process_channel_omlsa_mrsa without signature change.
         _era_ctx_p29 = kwargs.get("_restoration_context", {}).get("era_carrier_target", {})
         self._era_nr_g_floor = float(np.clip(_era_ctx_p29.get("nr_g_floor", 0.10), 0.10, 0.50))
@@ -813,7 +813,7 @@ class TapeHissReductionPhase(PhaseInterface):
             "lag_output_corrected_samples": 0,
         }
 
-        # §SibilantProtect [RELEASE_MUST] (v9.12.x): PANNs-Score vor OMLSA-Aufruf auf self
+        # §SibilantProtect [RELEASE_MUST] (v10.0.0.x): PANNs-Score vor OMLSA-Aufruf auf self
         # speichern, damit _process_channel_omlsa_mrsa das Sibilantenband (Presence-Zone)
         # transient-aware glätten kann (schneller Onset-Anstieg bei Gesang).
         self._omlsa_panns_singing = float(kwargs.get("panns_singing", kwargs.get("panns_singing_confidence", 0.0)))
@@ -1475,7 +1475,7 @@ class TapeHissReductionPhase(PhaseInterface):
                 if _peak_99 > 1e-8:
                     # Peak-Guard: Gain nur soweit wie Clipping-frei möglich
                     _safe_gain = min(_gain_lin, 0.999 / _peak_99)
-                    # §2.45a-II: signal-relative gate — CEDAR/iZotope RX approach (v9.12.2)
+                    # §2.45a-II: signal-relative gate — CEDAR/iZotope RX approach (v10.0.0)
                     _gate_dbfs_29 = compute_signal_relative_gate_dbfs(_orig_arr, material_key=material_key)
                     processed_audio = apply_musical_gain_envelope(
                         _proc_arr,
@@ -1796,7 +1796,7 @@ class TapeHissReductionPhase(PhaseInterface):
         G_floor = G_floor_map.get(mat_name, 0.10)
         intensity_scale = float(np.clip(intensity_scale, 0.0, 1.0))
         G_floor = float(np.clip(1.0 - intensity_scale * (1.0 - G_floor), 0.10, 1.0))  # hard min §2.62
-        # §EraTarget: era-adaptive G_floor lift (v9.12.1) — preserves authentic carrier noise texture.
+        # §EraTarget: era-adaptive G_floor lift (v10.0.0) — preserves authentic carrier noise texture.
         # E.g. 1935 shellac → _era_nr_g_floor=0.35 ensures vintage ambience survives OMLSA.
         G_floor = float(max(G_floor, getattr(self, "_era_nr_g_floor", 0.10)))
         runtime_profile = getattr(self, "_omlsa_runtime_profile_current", {})
@@ -1927,7 +1927,7 @@ class TapeHissReductionPhase(PhaseInterface):
                     G_z = _pm_col_z * _G_PRES_P29 + (1.0 - _pm_col_z) * G_z
                     G_z = np.clip(np.nan_to_num(G_z, nan=G_floor), G_floor, 1.0)
 
-                # §Gap5 EmotionalArc FrissonZone Schutz — §0p v9.12.8
+                # §Gap5 EmotionalArc FrissonZone Schutz — §0p v10.0.0
                 # ArcPlan aus _restoration_context: geschützte Zonen bekommen weniger NR.
                 _arc_plan_p29 = getattr(self, "_arc_plan_p29", None)
                 if _arc_plan_p29 is None:
@@ -1968,7 +1968,7 @@ class TapeHissReductionPhase(PhaseInterface):
                         logger.warning("phase_29_tape_hiss_reduction.py::unknown fallback: %s", e)
                         pass  # nie pipeline-blockierend
 
-                # §v9.10.113: Stronger HF suppression in presence/air zones when DeepFilterNet absent.
+                # §v10.0.0: Stronger HF suppression in presence/air zones when DeepFilterNet absent.
                 # DeepFilterNet removes residual hiss 2–16 kHz; without it, G_floor must be lower.
                 # TAPE: 0.08 → 0.036, VINYL: 0.10 → 0.045, SHELLAC: 0.12 → 0.054 in these zones.
                 if zone_name in ("presence", "air") and intensity_scale > 0.40:
@@ -1987,7 +1987,7 @@ class TapeHissReductionPhase(PhaseInterface):
                 G_z_sm = _lfilter_p29([1.0 - alpha_g], [1.0, -alpha_g], G_z, axis=1)
                 G_z_sm = np.clip(np.nan_to_num(G_z_sm, nan=G_floor), G_floor, 1.0)
 
-                # §SibilantProtect [RELEASE_MUST] (v9.12.x): Transient-aware Gain für
+                # §SibilantProtect [RELEASE_MUST] (v10.0.0.x): Transient-aware Gain für
                 # Presence-Zone bei Gesangsmaterial. Symmetrische Cappé-Glättung
                 # (tau≈32 ms) verschluckt Sibilanten-Onsets (50-150 ms) → progressive
                 # Sibilantenunterdrückung in dichten Vokalpassagen. Fix: paralleler

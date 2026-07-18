@@ -1,6 +1,6 @@
 """
 backend/core/micro_temporal_envelope_fidelity.py
-Aurik 9 — Micro-Temporal Envelope Fidelity (MTEF)
+Aurik 10.0.0 — Micro-Temporal Envelope Fidelity (MTEF)
 
 Bridges the temporal gap between TFS preservation (<2 ms) and MDEM (400 ms)
 by preserving envelope shape at syllable/note scale (10–100 ms).

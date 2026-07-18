@@ -1,6 +1,6 @@
 import pytest
 
-"""§2.64 v9.12.2 — Unit-Tests für _fast_goal_snapshot Proxy-Kalibrierung.
+"""§2.64 v10.0.0 — Unit-Tests für _fast_goal_snapshot Proxy-Kalibrierung.
 
 Schützt vor Regression der drei systemischen Proxy-Bugs, die zu persistenten
 zu niedrigen Delta-Werten für ALLE Import-Songs führten:
@@ -87,7 +87,7 @@ class TestNatuerlichkeitProxy:
     def test_multi_segment_stability(self):
         """Pause im Zentrum-Segment darf natuerlichkeit nicht kollabieren.
 
-        §2.64 v9.12.2: Single-Segment-Bug — Pause im Zentrum gab natuerlichkeit ≈ 0.02.
+        §2.64 v10.0.0: Single-Segment-Bug — Pause im Zentrum gab natuerlichkeit ≈ 0.02.
         Multi-Segment-Fix: 25%/50%/75% → stabile Messung auch bei Zentrum-Pause.
         """
         sig = _make_tonal_audio()
@@ -110,7 +110,7 @@ class TestNatuerlichkeitProxy:
 
 class TestAuthentizitaetProxy:
     def test_dropout_repaired_intro_doesnt_crash_acf(self):
-        """§2.64 v9.12.2: ACF auf Zentral-Drittel vermeidet phase_24-Inpainting-Crash.
+        """§2.64 v10.0.0: ACF auf Zentral-Drittel vermeidet phase_24-Inpainting-Crash.
 
         Alt: ACF auf mono[:8192] — nach Dropout-Repair am Intro kollabiert Peak 0.71→0.06.
         Neu: ACF auf mono[N//3 : N//3+8192] — stabiler Bereich, kein Absturz.
@@ -125,7 +125,7 @@ class TestAuthentizitaetProxy:
         gap = s_clean["authentizitaet"] - s_rep["authentizitaet"]
         assert gap < 0.30, (
             f"authentizitaet-Gap nach Dropout-Repair-Intro: clean={s_clean['authentizitaet']:.3f} "
-            f"repaired={s_rep['authentizitaet']:.3f} gap={gap:.3f} — Regression des §2.64 v9.12.2 Fixes!"
+            f"repaired={s_rep['authentizitaet']:.3f} gap={gap:.3f} — Regression des §2.64 v10.0.0 Fixes!"
         )
 
     def test_authentizitaet_voiced_signal(self):
@@ -142,7 +142,7 @@ class TestAuthentizitaetProxy:
 
 class TestTransparenzProxy:
     def test_compressed_pop_not_near_zero(self):
-        """§2.64 v9.12.2: transparenz-Proxy darf für komprimiertes Pop nicht ≤ 0.20 sein.
+        """§2.64 v10.0.0: transparenz-Proxy darf für komprimiertes Pop nicht ≤ 0.20 sein.
 
         Alt: Single-Segment 5th/99th-Perzentil-SNR → bei loud Passage 5th-Pct ≈ 0.2,
         peak ≈ 0.25 → log10(1.25)/5 ≈ 0.02 → transparenz=0.02. Bug!
@@ -199,7 +199,7 @@ class TestSnapshotCompleteness:
             "natuerlichkeit",
             "authentizitaet",
             "timbre_authentizitaet",
-            "timbre",  # §2.64 v9.12.8: Alias für timbre_authentizitaet
+            "timbre",  # §2.64 v10.0.0: Alias für timbre_authentizitaet
             "tonal_center",
             "artikulation",
             "transient_energie",
@@ -212,7 +212,7 @@ class TestSnapshotCompleteness:
             "separation_fidelity",  # kanonischer Key (nicht "sep_fidelity")
             "brillanz",
             "raumtiefe",
-            "spatial_depth",  # Alias für raumtiefe (§2.64 v9.12.1)
+            "spatial_depth",  # Alias für raumtiefe (§2.64 v10.0.0)
         }
         missing = required_keys - set(s.keys())
         assert not missing, f"Fehlende Goal-Schlüssel: {missing}"
@@ -238,7 +238,7 @@ class TestSnapshotCompleteness:
 
 
 class TestSpatialDepthProxyMSRatio:
-    """§2.64 v9.12.9 — spatial_depth/raumtiefe Proxy: M/S-Stereobreite statt HF-Anteil.
+    """§2.64 v10.0.0 — spatial_depth/raumtiefe Proxy: M/S-Stereobreite statt HF-Anteil.
 
     Regression-Test für Bug: alter Proxy (4–16 kHz / 200–16 kHz * 2.5) lieferte
     für cassette/mp3_low-Material ~0.11 trotz guter Stereobreite → §GOAL_BASELINE_CHECK
@@ -322,7 +322,7 @@ class TestSpatialDepthProxyMSRatio:
 
 
 class TestPrimaryMaterialEnumNormalization:
-    """§2.64 v9.12.9 — primary_material Enum→String-Normalisierung.
+    """§2.64 v10.0.0 — primary_material Enum→String-Normalisierung.
 
     Regression-Test für Bug: Python 3.12 str(MaterialType.CASSETTE) = 'MaterialType.CASSETTE'
     → groove-noisy_mat-Set-Check scheitert → groove proxy false-low für ALLE Kassetten.
@@ -343,7 +343,7 @@ class TestPrimaryMaterialEnumNormalization:
     def test_groove_proxy_noisy_mat_set_does_not_accept_enum_string(self):
         """Bug-Regression: Python 3.12 str(MaterialType.CASSETTE) = 'MaterialType.CASSETTE'.
         Das in noisy_mat-Set-Check als 'materialtype.cassette' übergeben darf NICHT matchen
-        — das wäre der alte Bugs-Zustand (vor Fix v9.12.9).
+        — das wäre der alte Bugs-Zustand (vor Fix v10.0.0).
         Fix: primary_material normalisiert zu .value.lower() → 'cassette' vor Speicherung.
         """
         _noisy_mat_set = {"cassette", "tape", "reel_tape", "mp3_low", "mp3_high"}

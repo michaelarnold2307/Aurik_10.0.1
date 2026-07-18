@@ -172,7 +172,7 @@ class VocalEnhancement(PhaseInterface):
             "breath_reduction_db": 4,
             "compression_ratio": 1.8,
         },
-        MaterialType.CASSETTE: {  # v9.12.9: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
+        MaterialType.CASSETTE: {  # v10.0.0: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
             "deess_threshold_db": -20,
             "deess_reduction_db": 5,
             "presence_gain_db": 3.5,
@@ -201,7 +201,7 @@ class VocalEnhancement(PhaseInterface):
         },
     }
 
-    # §VoiceAge Age-Adaptive Enhancement Factors (v9.11.14)
+    # §VoiceAge Age-Adaptive Enhancement Factors (v10.0.0)
     # Keys correspond to VoiceAgeGroup.value strings.
     # Older voices (MATURE/SENIOR) exhibit inherent breathiness and tremolo that should be
     # preserved, not corrected against.  Younger voices tolerate more aggressive processing.
@@ -261,7 +261,7 @@ class VocalEnhancement(PhaseInterface):
         MaterialType.SHELLAC: 0.06,
         MaterialType.VINYL: 0.05,
         MaterialType.TAPE: 0.045,
-        MaterialType.CASSETTE: 0.045,  # v9.12.9: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
+        MaterialType.CASSETTE: 0.045,  # v10.0.0: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
         MaterialType.CD_DIGITAL: 0.04,
         MaterialType.STREAMING: 0.04,
     }
@@ -269,7 +269,7 @@ class VocalEnhancement(PhaseInterface):
         MaterialType.SHELLAC: 0.60,
         MaterialType.VINYL: 0.55,
         MaterialType.TAPE: 0.50,
-        MaterialType.CASSETTE: 0.50,  # v9.12.9: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
+        MaterialType.CASSETTE: 0.50,  # v10.0.0: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
         MaterialType.CD_DIGITAL: 0.45,
         MaterialType.STREAMING: 0.45,
     }
@@ -501,7 +501,7 @@ class VocalEnhancement(PhaseInterface):
                 # Prevent brittle brightness on harsh material.
                 config["presence_gain_db"] = float(config["presence_gain_db"] * (1.0 - 0.20 * _harshness_saliency))
 
-        # --- Vocal Harshness Severity aus DefectScanner-Ergebnis (§v9.10.77) ---
+        # --- Vocal Harshness Severity aus DefectScanner-Ergebnis (§v10.0.0) ---
         # Wenn DefectScanner VOCAL_HARSHNESS erkannt hat, wird die Presence-Boost-Phase
         # gedämpft und eine Harshness-Absenkung vorgeschaltet.
         harshness_severity = 0.0
@@ -516,7 +516,7 @@ class VocalEnhancement(PhaseInterface):
         # §2.8 Vocal-Chain: Pipeline-weite Gender-Info aus _restoration_context
         _vocal_gender = str(kwargs.get("vocal_gender", "unknown"))
 
-        # §VoiceAge Age-Adaptive Config Scaling (v9.11.14)
+        # §VoiceAge Age-Adaptive Config Scaling (v10.0.0)
         # Use GenderDetector to estimate age_group and scale config parameters accordingly.
         # Senior/Mature voices: preserve inherent breathiness + tremolo (less correction).
         # Child voices: softer compression, stronger formant enhancement.
@@ -1049,7 +1049,7 @@ class VocalEnhancement(PhaseInterface):
             except Exception as _hnr_exc_p42:
                 logger.debug("§0p HNR-Blend phase_42 (non-blocking): %s", _hnr_exc_p42)
 
-        # §0p [RELEASE_MUST] Formant-Gate v9.12.9 — F1–F4 dürfen max. ±2 dB verschoben werden.
+        # §0p [RELEASE_MUST] Formant-Gate v10.0.0 — F1–F4 dürfen max. ±2 dB verschoben werden.
         # `check_formant_shift_db()` misst Spektral-Energie an F1–F4-Formantfrequenzen pre/post.
         # max_shift > 2 dB → sofortiger Rollback (§0p Vocal-Invarianten).
         if _p42_panns >= 0.35:
@@ -1334,7 +1334,7 @@ class VocalEnhancement(PhaseInterface):
 
             _avail_gb = float(_psutil.virtual_memory().available / (1024**3))
             # MelBandRoformer (T²-Transformer) needs ~9 GB working memory per 15s chunk.
-            # With 7s chunks (v9.11.16) ~2 GB each — but swap pressure can still OOM at <12 GB.
+            # With 7s chunks (v10.0.0) ~2 GB each — but swap pressure can still OOM at <12 GB.
             if _avail_gb < 12.0:
                 _skip_roformer_reason = f"low_ram_{_avail_gb:.1f}GB"
         except Exception:
@@ -1609,17 +1609,17 @@ class VocalEnhancement(PhaseInterface):
     ) -> np.ndarray:
         """Enhance vocals in a single audio channel.
 
-        §2.8 Integration (v9.10.78):
+        §2.8 Integration (v10.0.0):
         - PhonemeDetector → phoneme-guided formant steering
         - BreathDetector → segment-aware breath reduction (replaces static bandpass)
         - Gender → passed to FormantSystem for per-gender formant targets
 
-        §Hebel-4 (v9.11.0):
+        §Hebel-4 (v10.0.0):
         - Carrier-Formant-Decay-Inversion between Stage 0 and Stage 1
         """
         enhanced = audio.copy()
 
-        # Stage 0: Harshness reduction (NEW — §v9.10.77)
+        # Stage 0: Harshness reduction (NEW — §v10.0.0)
         # When DefectScanner detects VOCAL_HARSHNESS, apply targeted mid-presence
         # notch/dip BEFORE any enhancement to remove harsh/scratchy character.
         if harshness_severity > 0.05:
@@ -1671,7 +1671,7 @@ class VocalEnhancement(PhaseInterface):
         sample_rate: int,
         material_type: "MaterialType",
     ) -> np.ndarray:
-        """§Hebel-4: Carrier-Formant-Decay-Inversion (v9.11.0).
+        """§Hebel-4: Carrier-Formant-Decay-Inversion (v10.0.0).
 
         Inverts the systematic per-formant frequency-response decay introduced by
         the physical carrier medium's transfer function. Analog carriers attenuate
@@ -2151,7 +2151,7 @@ class VocalEnhancement(PhaseInterface):
             except Exception as _fs_err:
                 logger.debug("FormantSystem fehlgeschlagen, Bell-EQ-Fallback: %s", _fs_err)
 
-        # DSP-Fallback: Multi-Formant Bell-EQ chain (v9.10.112)
+        # DSP-Fallback: Multi-Formant Bell-EQ chain (v10.0.0)
         # Replaces single 1.5 kHz bell with 4-band formant chain derived from
         # Peterson & Barney 1952 (F1–F3) + Sundberg 1974 (Singer's Formant).
         # Each band lifts its formant region proportionally to gain_db:

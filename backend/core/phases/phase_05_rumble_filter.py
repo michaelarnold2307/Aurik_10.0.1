@@ -1,5 +1,5 @@
 """
-Phase 5: Professional Rumble Filter - Aurik 9.0
+Phase 5: Professional Rumble Filter - Aurik 10.0.0
 ================================================
 
 Professional-grade subsonic filter competing with iZotope RX De-rumble and Waves X-Rumble.
@@ -63,7 +63,7 @@ BENCHMARK COMPARISON:
 - WaveArts MR Hum: Adaptive subsonic filter
 - Aurik v2.0: Professional, transient-preserving, <0.3× realtime ✅
 
-Author: Aurik 9.0 Development Team
+Author: Aurik 10.0.0 Development Team
 Version: 2.0.0 (Professional Upgrade)
 Date: 15. Februar 2026
 """

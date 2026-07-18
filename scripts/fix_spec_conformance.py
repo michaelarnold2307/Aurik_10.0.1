@@ -221,7 +221,7 @@ def add_sr_assert_to_phase(path: Path) -> bool:
 # ---------------------------------------------------------------------------
 def main() -> None:
     mode = "DRY-RUN" if DRY_RUN else "LIVE"
-    print(f"\n=== Aurik 9 Spec-Konformität-Fix ({mode}) ===\n")
+    print(f"\n=== Aurik 10.0.0 Spec-Konformität-Fix ({mode}) ===\n")
 
     # ------------------------------------------------------------------
     # Fix 1: print() → logger.debug()

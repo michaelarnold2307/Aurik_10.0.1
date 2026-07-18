@@ -1,4 +1,4 @@
-"""Aurik 9 — Vocos Neural Vocoder Plugin
+"""Aurik 10.0.0 — Vocos Neural Vocoder Plugin
 
 PRIMÄRER Vocoder: Vocos 0.1.0 (Siuzdak 2023, MIT)
 Modell-Kaskade (§4.4 SOTA-Matrix, 3-Tier):
@@ -93,7 +93,7 @@ class VocosResult:
 # VocosPlugin
 # ---------------------------------------------------------------------------
 class VocosPlugin:
-    """Vocos Neural Vocoder — Aurik 9 Implementierung.
+    """Vocos Neural Vocoder — Aurik 10.0.0 Implementierung.
 
     Modell-Kaskade (§4.4 SOTA-Matrix, 3-Tier):
         1. Vocos ONNX 48 kHz nativ — vocos_48khz/vocos_48khz.onnx (kein Resampling!)

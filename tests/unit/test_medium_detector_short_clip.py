@@ -5,7 +5,7 @@ import pytest
 """tests/unit/test_medium_detector_short_clip.py
 
 Tests für §2.47/§0c Fix: rotation_strength-Maskierung bei kurzen Clips
-in MediumDetector._bayesian_score (v9.11.14).
+in MediumDetector._bayesian_score (v10.0.0).
 
 Problem: 33⅓ RPM-Rotation erzeugt ACF-Peak erst nach ≥3 Zyklen (≈5.5 s).
 In Clips < 6 s ist rotation_strength ≈ 0 — das is ein MESS-Artefakt, kein

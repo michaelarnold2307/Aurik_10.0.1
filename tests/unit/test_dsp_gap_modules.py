@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 """
-Unit-Tests für die 4 neuen DSP-Lücken-Module (v9.12.x)
+Unit-Tests für die 4 neuen DSP-Lücken-Module (v10.0.0.x)
 =========================================================
 Abgedeckt:
 - sibilance_pathology       (Lücke 4)
@@ -1024,7 +1024,7 @@ class TestSingMosGate:
 
 
 # =============================================================================
-# §VocalStyle VocalStyleProfiler — per-recording singer fingerprint (v9.12.1)
+# §VocalStyle VocalStyleProfiler — per-recording singer fingerprint (v10.0.0)
 # =============================================================================
 
 
@@ -1143,7 +1143,7 @@ class TestVocalStyleProfiler:
 
 
 # =============================================================================
-# §ArcPlan EmotionalArcPlanner — Dramaturgie-Schutz-Planung (v9.12.1)
+# §ArcPlan EmotionalArcPlanner — Dramaturgie-Schutz-Planung (v10.0.0)
 # =============================================================================
 
 
@@ -1258,7 +1258,7 @@ class TestEmotionalArcPlanner:
 
 
 # =============================================================================
-# §EraTarget EraCarrierTargetModel — Ära×Träger Klangziel (v9.12.1)
+# §EraTarget EraCarrierTargetModel — Ära×Träger Klangziel (v10.0.0)
 # =============================================================================
 
 

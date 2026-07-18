@@ -1,4 +1,4 @@
-"""Noise-Texture-Coherence-Guard (§4.7, v9.11.14).
+"""Noise-Texture-Coherence-Guard (§4.7, v10.0.0).
 
 Misst, ob die spektrale Form des Restrauschens nach Denoising zum
 erkannten Trägerprofil passt (z.B. rosa für Vinyl, Brown+HF-Hiss für Tape).
@@ -260,7 +260,7 @@ class NoiseTextureCoherenceGuard:
                 material_type,
             )
         elif result.coherence < 0.80:
-            # §4.7-v9.11.15: Schwelle 0.60–0.80 → wet ×0.85 (bisher nur Warning ohne Wirkung).
+            # §4.7-v10.0.0: Schwelle 0.60–0.80 → wet ×0.85 (bisher nur Warning ohne Wirkung).
             # Rauschtextur im 0.60–0.80-Band ist für sensible Hörer bereits hörbar inkohärent
             # (Vinyl klingt 'digital-flach'). Konservative Wet-Dämpfung erzwingt mehr Retention
             # des Carrier-Profils ohne die subtraktive Wirkung komplett zu neutralisieren.

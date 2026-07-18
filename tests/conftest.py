@@ -1,5 +1,5 @@
 """
-Aurik 9.0 - Zentralisierte Test Fixtures
+Aurik 10.0.0 - Zentralisierte Test Fixtures
 =========================================
 
 Pytest fixtures für alle Aurik-Tests.

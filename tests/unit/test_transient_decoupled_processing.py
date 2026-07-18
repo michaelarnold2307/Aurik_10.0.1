@@ -1,7 +1,7 @@
 """
 tests/unit/test_transient_decoupled_processing.py
 ==================================================
-Aurik 9.9 — TransientDecoupledProcessor (§2.27)
+Aurik 10.0.0 — TransientDecoupledProcessor (§2.27)
 
 22 Unit-Tests.
 Alle Tests synthetisch (keine echten Audio-Dateien).

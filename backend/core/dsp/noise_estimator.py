@@ -1,7 +1,7 @@
 """
 backend/core/dsp/noise_estimator.py
 
-IMCRA Noise Estimation — Canonical DSP module (DSP-Instructions, Aurik 9.12.x).
+IMCRA Noise Estimation — Canonical DSP module (DSP-Instructions, Aurik 10.0.0.x).
 
 Implements Cohen's Improved Minima Controlled Recursive Averaging (IMCRA, 2003)
 for non-stationary noise PSD estimation in music/speech.

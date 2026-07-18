@@ -1,5 +1,5 @@
 """
-Automated Data Augmentation für Aurik 8.0
+Automated Data Augmentation für Aurik 10.0.0
 
 Implementiert automatische Datenaugmentierung für Audio:
 - AutoAugment für Audio

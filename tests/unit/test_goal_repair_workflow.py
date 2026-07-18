@@ -4,7 +4,7 @@ from __future__ import annotations
 tests/unit/test_goal_repair_workflow.py
 ========================================
 
-Normative tests for the goal-achievement workflow optimizations (v9.11.1):
+Normative tests for the goal-achievement workflow optimizations (v10.0.0):
   - ExzellenzDenker.messe_und_repariere() — P3-P5 goal repair
   - AurikDenker Stufe 7 integration wiring (import + signature)
   - UV3 deferred-phase promotion logic (_DEFERRED_FC_WHITELIST)
@@ -371,7 +371,7 @@ class TestAurikDenkerGoalRepairWiring:
         import denker.aurik_denker as _ad_mod
 
         src = inspect.getsource(_ad_mod)
-        assert "messe_und_repariere" in src, "AurikDenker Stufe 7 muss exd.messe_und_repariere() aufrufen (v9.11.1)."
+        assert "messe_und_repariere" in src, "AurikDenker Stufe 7 muss exd.messe_und_repariere() aufrufen (v10.0.0)."
 
     def test_aurik_denker_stufe7_passes_reference_audio(self):
         """AurikDenker must pass reference_audio= to messe_und_repariere."""

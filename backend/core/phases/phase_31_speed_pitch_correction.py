@@ -1,5 +1,5 @@
 """
-Phase 31: Professional Speed/Pitch Correction — Aurik 9.0 v3.0
+Phase 31: Professional Speed/Pitch Correction — Aurik 10.0.0 v3.0
 ==============================================================
 
 Professional-grade time-stretching and pitch-shifting mit pYIN-Pitch-Detektion.
@@ -51,7 +51,7 @@ PERFORMANCE TARGET:
 - Pitch-Erkennung: ±0.5% Genauigkeit für saubere Signale (pYIN)
 - Zeitdehnung: 0.5×-2.0× artefaktfrei
 
-Author: Aurik 9.0 Development Team
+Author: Aurik 10.0.0 Development Team
 Version: 3.0.0 (pYIN Upgrade — 19. Februar 2026)
 
 ML-Hybrid v3.0:
@@ -111,14 +111,14 @@ class SpeedPitchCorrectionPhase(PhaseInterface):
     # Material-adaptive Parameters (Professional-tuned)
     MATERIAL_PARAMS = {
         "tape": {
-            "max_speed_error": 0.10,  # v9.10.97: raised from 3% → 10% for cassette motor startup ramp.
+            "max_speed_error": 0.10,  # v10.0.0: raised from 3% → 10% for cassette motor startup ramp.
             #   Capstan run-up in the first 2–5 s can exceed 5% speed deviation.
             #   Previous 3% limit caused phase skip precisely for the worst cassette
             #   start artifacts.  WSOLA time-stretch with formant preservation handles
             #   these extreme corrections safely.  Scientific basis: McKnight (1969)
             #   AES Convention 36 — measured cassette start speed error 3–12%.
             "correction_strength": 0.85,
-            "pitch_detection_confidence": 0.6,  # v9.10.97: lowered from 0.7 for tape-start regions
+            "pitch_detection_confidence": 0.6,  # v10.0.0: lowered from 0.7 for tape-start regions
             "wow_flutter_correction": True,  # Enable for tape
             "formant_preserve": 0.8,
             "algorithm": "wsola",  # Preserve tape character
@@ -473,7 +473,7 @@ class SpeedPitchCorrectionPhase(PhaseInterface):
             )
 
         # Check if error within expected range
-        # v9.10.97: max_speed_error for tape raised to 10% (cassette motor startup ramp).
+        # v10.0.0: max_speed_error for tape raised to 10% (cassette motor startup ramp).
         # The original 3% limit rejected valid cassette start corrections.  The broader
         # limit is safe because WSOLA + formant preservation handles these corrections
         # without audible artifacts.  For extreme errors (>10%), still skip.

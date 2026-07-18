@@ -1,6 +1,6 @@
 # Spec 12: Perceptual Optimization Patterns (§G–§Z) | §v10 Pleasantness-First
 
-> **Status:** Normativ · **Version:** Aurik 9.20.3 · **Scope:** Entscheidungsintelligenz, Klangqualität, Resilienz
+> **Status:** Normativ · **Version:** Aurik 10.0.0 · **Scope:** Entscheidungsintelligenz, Klangqualität, Resilienz
 
 ## §12.1 [RELEASE_MUST] Übersicht der Patterns
 

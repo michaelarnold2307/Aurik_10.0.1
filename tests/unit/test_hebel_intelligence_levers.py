@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""Unit tests for Hebel 1–4 intelligence levers (v9.11.0).
+"""Unit tests for Hebel 1–4 intelligence levers (v10.0.0).
 
 Tests:
   Hebel 1 — Salience-aware PhaseSkipper in UV3

@@ -213,13 +213,13 @@ class NoiseGate(PhaseInterface):
             "look_ahead_ms": 10,
         },
         MaterialType.CASSETTE: {
-            "thresholds_db": [-36, -36, -33, -28],  # v9.12.9: etwas höher als TAPE (Cassette-Hiss)
-            "reductions_db": [-10, -13, -18, -16],  # v9.12.9: etwas sanfter — erhält Hiss-Textur
+            "thresholds_db": [-36, -36, -33, -28],  # v10.0.0: etwas höher als TAPE (Cassette-Hiss)
+            "reductions_db": [-10, -13, -18, -16],  # v10.0.0: etwas sanfter — erhält Hiss-Textur
             "attack_ms": [10, 8, 8, 6],
-            "release_ms": [130, 110, 105, 85],  # v9.12.9: minimal länger (pumping-Schutz)
+            "release_ms": [130, 110, 105, 85],  # v10.0.0: minimal länger (pumping-Schutz)
             "knee_db": 12,
             "look_ahead_ms": 10,
-        },  # v9.12.9: IEC 60094-1 — gleiche Capstan-Physik wie TAPE, Hiss-Profil angepasst
+        },  # v10.0.0: IEC 60094-1 — gleiche Capstan-Physik wie TAPE, Hiss-Profil angepasst
         MaterialType.CD_DIGITAL: {
             "thresholds_db": [-55, -53, -50, -48],
             "reductions_db": [-30, -35, -40, -50],
@@ -435,8 +435,8 @@ class NoiseGate(PhaseInterface):
                 _nf18["noise_floor_db"],
                 [f"{t:.0f}" for t in config["thresholds_db"]],
             )
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.debug("%s: non-critical exception: %s", __name__, _e)
 
         config["masking_gain_floors"] = _compute_band_masking_gain_floors(audio, sample_rate)
 
@@ -859,8 +859,8 @@ class NoiseGate(PhaseInterface):
             makeup_gain_db = float(np.clip(required_gain_db, 0.0, 6.0))
             if makeup_gain_db > 0.0:
                 _gain_lin = float(10.0 ** (makeup_gain_db / 20.0))
-                # §2.45a-II: signal-relative gate — CEDAR/iZotope RX approach (v9.12.2)
-                # §v9.20.3 Genre-adaptive: Schlager/Pop brauchen weicheren Gate
+                # §2.45a-II: signal-relative gate — CEDAR/iZotope RX approach (v10.0.0)
+                # §v10.0.0 Genre-adaptive: Schlager/Pop brauchen weicheren Gate
                 # (dichter Mix, keine echten Stille-Passagen). Klassik/Jazz
                 # vertragen tieferen Gate (tatsächliche Pausen zwischen Phrasen).
                 _genre_18 = ""

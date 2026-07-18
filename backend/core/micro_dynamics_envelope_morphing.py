@@ -1,6 +1,6 @@
 """
 backend/core/micro_dynamics_envelope_morphing.py
-Aurik 9 -- Spec §2.30: MicroDynamicsEnvelopeMorphing (MDEM)
+Aurik 10.0.0 -- Spec §2.30: MicroDynamicsEnvelopeMorphing (MDEM)
 
 Stellt origales Mikro-Dynamik-Profil im restaurierten Signal wieder her.
 """
@@ -101,7 +101,7 @@ class MicroDynamicsEnvelopeMorphing:
     ) -> np.ndarray:
         """Morphed restauriertes Signal auf Original-Mikrodynamik. NaN/Inf-sicher.
 
-        §2.30 v9.10.79 Mode-basierte MAX_GAIN_LU-Kalibrierung:
+        §2.30 v10.0.0 Mode-basierte MAX_GAIN_LU-Kalibrierung:
         - Restoration: 4.0 dB (bewahrt emotionale Spitzen, aber konservativ für degradierte Quellen)
         - Studio 2026: 6.0 dB (maximale Dynamik-Restauration für hochwertige Eingaben)
 
@@ -109,7 +109,7 @@ class MicroDynamicsEnvelopeMorphing:
         (bis zum Klassen-Maximum MAX_GAIN_LU), um Vokal-Intensität zu bewahren.
         """
         assert sr == 48000, f"SR muss 48000 Hz sein, erhalten: {sr}"
-        max_gain = 4.0 if mode == "restoration" else 6.0  # §2.30 v9.10.79 Psychoakustische Kalibrierung
+        max_gain = 4.0 if mode == "restoration" else 6.0  # §2.30 v10.0.0 Psychoakustische Kalibrierung
 
         # §2.36a: Vorberechnung stressed-vowel frame mask (frame index → extra gain headroom)
         _stressed_frames: set[int] = set()
@@ -486,7 +486,7 @@ class MicroDynamicsEnvelopeMorphing:
     ) -> np.ndarray:
         """Interne Gain-Envelope-Berechnung und -Anwendung auf Mono-Signale (kein Retry).
 
-        Default max_gain = 4.0 LU (Restoration mode, §2.30 v9.10.79).
+        Default max_gain = 4.0 LU (Restoration mode, §2.30 v10.0.0).
         VERBOTEN: einheitliches 3.0 LU — nicht spec-konform (Fix X2 §2.30).
         """
         L_orig = self.compute_lufs_profile(orig_mono)

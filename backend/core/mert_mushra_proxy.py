@@ -123,7 +123,7 @@ Modul: backend/core/mert_mushra_proxy.py
 Singleton: get_proxy_evaluator() — Thread-safe, Double-Checked Locking (§3.x).
 Budget: Nutzt get_loaded_mert_plugin() — triggert KEINEN Lazy-Load.
 
-Autor: Aurik 9.10 — 5. April 2026
+Autor: Aurik 10.0.0 — 5. April 2026
 Referenzen:
     - Li et al. (2023): MERT: Acoustic Music Understanding Model. arXiv:2306.00107
     - Chinen et al. (2020): ViSQOL v3. arXiv:2004.09584

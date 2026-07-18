@@ -1,4 +1,4 @@
-"""§Gap11 AdaptiveGainRider — Onset-ausgerichtetes Gain-Riding (v9.12.8).
+"""§Gap11 AdaptiveGainRider — Onset-ausgerichtetes Gain-Riding (v10.0.0).
 
 Korrigiert Lautstärke-Inkonsistenzen, die durch NR, BW-Erweiterung oder
 Hallucination-Rollbacks entstehen: Der restaurierte Track soll dieselbe

@@ -62,7 +62,7 @@ def test_phase23_uses_ms_path_and_avoids_lr_independent_ml_repair() -> None:
 @pytest.mark.normative
 @pytest.mark.timeout(20)
 def test_phase23_bw_ceiling_skips_harmonic_ceiling_violation_check() -> None:
-    """§6.2c + §2.46e False-Positive-Bug v9.12.10:
+    """§6.2c + §2.46e False-Positive-Bug v10.0.0:
     Wenn _apply_material_bw_ceiling applied=True zurückgibt, darf
     check_hallucination KEIN material_bw_ceiling_hz erhalten — sonst
     triggert der 6th-Order-Butterworth-Rolloff ein false-positive

@@ -64,7 +64,7 @@ excludes = ['torch', 'nvidia.*']
 #### Option 2: Lightweight Installation
 
 - Strip CUDA libraries (if not using GPU)
-- Use CPU-only PyTorch build
+- Use CPU + optionale AMD-GPU PyTorch build
 - Exclude test/debug modules
 
 Expected size reduction: **7.0 GB → 1.5 GB**

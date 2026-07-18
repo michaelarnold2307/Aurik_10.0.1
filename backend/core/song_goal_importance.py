@@ -1,6 +1,6 @@
 """
 backend/core/song_goal_importance.py
-Aurik 9 — §2.56 Song-Specific Goal Importance (v9.12.0)
+Aurik 10.0.0 — §2.56 Song-Specific Goal Importance (v10.0.0)
 
 Computes per-song goal weights based on genre, era, material, and audio features.
 These weights modulate PMGG regression thresholds, CIG drift tolerance,
@@ -437,7 +437,7 @@ _MATERIAL_WEIGHT_MODIFIERS: dict[str, dict[str, float]] = {
 
 
 # ---------------------------------------------------------------------------
-# §C10 Active Listener Calibration — Bayesian EMA Feedback Store (v9.12.1)
+# §C10 Active Listener Calibration — Bayesian EMA Feedback Store (v10.0.0)
 # ---------------------------------------------------------------------------
 
 
@@ -586,7 +586,7 @@ def estimate_goal_importance(
     vocal_confidence: float = 0.0,
     restorability_score: float = 50.0,
     is_studio_2026: bool = False,
-    # ── Audio-derived features (§2.56 v9.12 — real per-song analysis) ──
+    # ── Audio-derived features (§2.56 v10.0.0 — real per-song analysis) ──
     snr_db: float | None = None,
     effective_bandwidth_hz: float | None = None,
     dynamic_range_db: float | None = None,

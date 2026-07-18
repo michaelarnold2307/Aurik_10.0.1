@@ -1,13 +1,13 @@
 """
-Aurik 9.0 - Test Utilities
+Aurik 10.0.0 - Test Utilities
 ===========================
 
-Zentrale Test-Utilities und Audio-Generatoren für die Aurik 9.0 Testsuite.
+Zentrale Test-Utilities und Audio-Generatoren für die Aurik 10.0.0 Testsuite.
 Wird von conftest.py und anderen Testmodulen importiert.
 
 Author: Aurik Testing Team
 Date: 2026
-Version: 9.0.0
+Version: 10.0.0
 """
 
 import numpy as np

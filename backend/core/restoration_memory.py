@@ -1,4 +1,4 @@
-"""RestorationMemory — Persistente GPOptimizer-Priors (§2.70, v9.13).
+"""RestorationMemory — Persistente GPOptimizer-Priors (§2.70, v10.0.0).
 
 Speichert erfolgreiche Restaurierungs-Läufe (era × material × defect_cluster_hash)
 als JSON unter ~/.aurik/restoration_memory.json und stellt sie als Prior für den

@@ -1,6 +1,6 @@
 """Tests für SongStrategyCache (§SSC-1).
 
-Spec: §SSC-1 Song-Strategy-Cache (v9.12.1)
+Spec: §SSC-1 Song-Strategy-Cache (v10.0.0)
 """
 
 import tempfile

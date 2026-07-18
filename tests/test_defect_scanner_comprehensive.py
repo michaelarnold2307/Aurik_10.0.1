@@ -1,11 +1,11 @@
 """
-Comprehensive DefectScanner Test Suite - Aurik 9.0
+Comprehensive DefectScanner Test Suite - Aurik 10.0.0
 ==================================================
 
 Tests für DefectScanner mit allen 11 Defekttypen und Material-Adaption.
 
 Sprint 1, Week 1 - DefectScanner Validation
-Author: Aurik 9.0 Development Team
+Author: Aurik 10.0.0 Development Team
 Date: 2026-02-15
 """
 

@@ -334,7 +334,7 @@ class SpectralRepair(PhaseInterface):
             "nperseg": 2048,
             "noverlap": 1536,
             "nfft": 4096,
-        },  # v9.12.9: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
+        },  # v10.0.0: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
         MaterialType.CD_DIGITAL: {
             "nperseg": 2048,
             "noverlap": 1024,  # 50% overlap (less processing needed)
@@ -366,9 +366,9 @@ class SpectralRepair(PhaseInterface):
         },
         MaterialType.CASSETTE: {
             "outlier_z_score": 3.5,
-            "energy_floor_db": -63,  # v9.12.9: leicht höher als TAPE (Cassette-Hiss-Boden)
+            "energy_floor_db": -63,  # v10.0.0: leicht höher als TAPE (Cassette-Hiss-Boden)
             "phase_jump_threshold": np.pi * 0.5,
-        },  # v9.12.9: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
+        },  # v10.0.0: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
         MaterialType.CD_DIGITAL: {
             "outlier_z_score": 3.0,  # More sensitive
             "energy_floor_db": -70,
@@ -386,7 +386,7 @@ class SpectralRepair(PhaseInterface):
         MaterialType.SHELLAC: 0.60,  # Moderate (preserve character)
         MaterialType.VINYL: 0.70,
         MaterialType.TAPE: 0.75,
-        MaterialType.CASSETTE: 0.64,  # v9.12.9: NR ≈ TAPE×0.85 — Cassette-Rauschen hat anderes Spektralprofil
+        MaterialType.CASSETTE: 0.64,  # v10.0.0: NR ≈ TAPE×0.85 — Cassette-Rauschen hat anderes Spektralprofil
         MaterialType.CD_DIGITAL: 0.85,  # Aggressive (digital artifacts obvious)
         MaterialType.STREAMING: 0.90,  # Very aggressive (codec artifacts)
     }
@@ -702,8 +702,8 @@ class SpectralRepair(PhaseInterface):
                 _energy_floor_adaptive,
                 _nf23["noise_floor_db"],
             )
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.debug("%s: non-critical exception: %s", __name__, _e)
         repair_strength = self.REPAIR_STRENGTH.get(material, 0.75)
         _material_meta_key23 = self._material_key(material)
 

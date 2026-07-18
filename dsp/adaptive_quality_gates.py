@@ -1,5 +1,5 @@
 """
-Aurik 9.x — Adaptive Quality Gates
+Aurik 10.0.0.x — Adaptive Quality Gates
 Material- und genre-adaptive Prüfgrenzen für Pipeline-Qualitätskontrolle.
 """
 

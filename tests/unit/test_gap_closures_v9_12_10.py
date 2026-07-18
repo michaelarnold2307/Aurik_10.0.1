@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-"""Gap Closure Tests für v9.12.10 — EraVocalProfile, Pre-Echo, RestorationMemory.
+"""Gap Closure Tests für v10.0.0 — EraVocalProfile, Pre-Echo, RestorationMemory.
 
 Unit-Tests für die geschlossenen Lücken:
 1. EraVocalProfile wird an compute_vqi() in VocalNoHarmGate übergeben

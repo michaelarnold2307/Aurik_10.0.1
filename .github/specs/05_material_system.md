@@ -27,7 +27,7 @@ SUPPORTED_MATERIALS = [
     "streaming",     # Streaming-Kopie: variables Bitrate-Profil
     "unknown",       # Unbekannt: konservative Prior
 ]
-# Hinweis: lacquer_disc, wax_cylinder, wire_recording → historische Materialien (v9.9.5)
+# Hinweis: lacquer_disc, wax_cylinder, wire_recording → historische Materialien (v10.0.0)
 # [RELEASE_MUST] Schlüssel-Mapping MediumDetector → SUPPORTED_MATERIALS (kanonisch):
 # MediumDetector (forensics/medium_detector.py) verwendet intern andere Schlüsselnamen.
 # MediumDetector.detect() MUSS diese Keys vor Rückgabe auf SUPPORTED_MATERIALS normieren:
@@ -66,7 +66,7 @@ SUPPORTED_MATERIALS = [
 
 ---
 
-## §6.2a [RELEASE_MUST] Pflicht-Phasen-Aktivierung pro Material (v9.10.73)
+## §6.2a [RELEASE_MUST] Pflicht-Phasen-Aktivierung pro Material (v10.0.0)
 
 Die in §6.2 gelisteten **Prioritäts-Phasen** eines Materials MÜSSEN **unbedingt aktiviert** werden, wenn das Material erkannt wurde — **unabhängig vom DefectScanner-Severity-Score**.
 
@@ -85,7 +85,7 @@ for phase_id in MATERIAL_PRIORITY_PHASES[material]:
 
 ---
 
-## §6.2b [RELEASE_MUST] Material-Dynamic-Range-Ceiling (v9.11.14)
+## §6.2b [RELEASE_MUST] Material-Dynamic-Range-Ceiling (v10.0.0)
 
 **Problem**: `phase_26_dynamic_range_expansion` hat nur ein globales `MAX_EXPANSION_DB = 12.0`, aber kein material-spezifisches Ceiling. Ein Vinyl-Song physikalisch kann nicht mehr als ≈ 70 dB DR aufweisen — Expansion über dieses Limit erzeugt Rauschartefakte, die als „Dynamik" fehlinterpretiert werden.
 
@@ -139,7 +139,7 @@ expansion_target = min(expansion_target, max_expansion)
 
 ---
 
-## §6.2c [RELEASE_MUST] Material-Bandwidth-Ceiling (v9.11.14)
+## §6.2c [RELEASE_MUST] Material-Bandwidth-Ceiling (v10.0.0)
 
 **Problem**: Additive Phasen (phase_06, phase_07, phase_23, phase_39) erzeugen kumulativ Frequenzinhalt, der das physikalische BW-Limit des Quellmaterials überschreiten kann. Einzelphasen haben per-Phase-Limits, aber der kumulative Effect wird nicht zentral überwacht.
 
@@ -179,7 +179,7 @@ _MATERIAL_BW_CEILING_HZ = {
 
 **Invariante**: `_MATERIAL_BW_CEILING_HZ` ist identisch mit der `bw_ceiling_hz`-Spalte in `CARRIER_TRANSFER_CHARACTERISTICS` (§4.8). Änderungen müssen synchron erfolgen.
 
-### §6.2d [RELEASE_MUST] BW/DR-Ceiling Bidirektionale Sync-Invariante (v9.11.14)
+### §6.2d [RELEASE_MUST] BW/DR-Ceiling Bidirektionale Sync-Invariante (v10.0.0)
 
 Drei Dicts führen physikalische Materialgrenzen: `_MATERIAL_BW_CEILING_HZ` (§6.2c), `_MATERIAL_DR_CEILING_DB` (§6.2b) und `CARRIER_TRANSFER_CHARACTERISTICS` (§4.8). Diese MÜSSEN bidirektional synchron sein:
 
@@ -194,7 +194,7 @@ Drei Dicts führen physikalische Materialgrenzen: `_MATERIAL_BW_CEILING_HZ` (§6
 ## §6.3 DefectType-Vollkatalog (54 DefectTypes) + §6.3b CAUSES (62 Kausal-Ursachen)
 
 ```python
-# core/defect_scanner.py — DefectType (Enum, 47 Werte, Stand v9.12.x)
+# core/defect_scanner.py — DefectType (Enum, 47 Werte, Stand v10.0.0.x)
 # Kanonische Kausal-Ursachen (CAUSES in causal_defect_reasoner.py): 53 Einträge
 
 # Analoge Kerndefekte:
@@ -235,7 +235,7 @@ AZIMUTH_ERROR    # Kammfilterung L/R durch Kopf-Fehlausrichtung → phase_14 + p
                  # Signatur: frequenzabhängige L/R-Phasendifferenz, Kreuzkorrelation-Peak ≠ 0 lag
                  # Detektion: PHD(freq) = angle(STFT_L / STFT_R) → monotone HF-Drift > 20°/kHz
 
-# Entzerrungs- & Digitalisierungsfehler (neu v9.10.46):
+# Entzerrungs- & Digitalisierungsfehler (neu v10.0.0):
 RIAA_CURVE_ERROR  # Falsche oder historische Disc-Entzerrungskurve → phase_04 + phase_06
                   # Kurvenvarianten (pre-RIAA 1954): NAB, Columbia, AES, Capitol, London, CCIR
                   # Erkennung: Referenzvergleich Spektral-Slope 250–8000 Hz vs. RIAA-Ideal
@@ -287,11 +287,11 @@ RIAA_CURVE_ERROR  # Falsche oder historische Disc-Entzerrungskurve → phase_04 
                   # Shelving-Kette anwenden. VERBOTEN: generische EQ-Schätzung ohne LUT.
 ALIASING          # Spiegelfrequenzen durch AA-Filter-Fehler → phase_03 + phase_23
 BIAS_ERROR        # Falscher Vormagnetisierungsstrom → phase_04 + phase_03 + phase_29
-# --- Spec §6.3 v9.10.57: Sibilanten-Überbetonung ---
+# --- Spec §6.3 v10.0.0: Sibilanten-Überbetonung ---
 SIBILANCE         # Zischlautüberbetonung (> 6 kHz) — De-Esser-Trigger (phase_19 + phase_43)
-# --- v9.10.57b: Transport-Bump ---
+# --- v10.0.0b: Transport-Bump ---
 TRANSPORT_BUMP    # Impulsartige Mikro-Geschwindigkeitssprünge 50–300 ms (Kassette/Tape-Holpern) → phase_12
-# --- v9.10.77: Vocal-Harshness ---
+# --- v10.0.0: Vocal-Harshness ---
 VOCAL_HARSHNESS   # Vokale Härte/Übersteuerung/Kratzigkeit im 2–6 kHz Band → phase_42 + phase_19
 ```
 
@@ -309,7 +309,7 @@ def classify_clipping(audio: np.ndarray, sr: int) -> ClippingType:
 
 ---
 
-## §6.4a [RELEASE_MUST] Material-adaptive Erkennungsschwellen im DefectScanner (v9.10.73)
+## §6.4a [RELEASE_MUST] Material-adaptive Erkennungsschwellen im DefectScanner (v10.0.0)
 
 DefectScanner-Erkennungsschwellen MÜSSEN **material-adaptiv** sein. Analoge Medien erfordern empfindlichere Schwellwerte als digitale Quellen.
 
@@ -324,7 +324,7 @@ DefectScanner-Erkennungsschwellen MÜSSEN **material-adaptiv** sein. Analoge Med
 
 ---
 
-## §6.4b [RELEASE_MUST] `TAPE_HEAD_LEVEL_DIP` Material-Gate mit Cross-Material-Fallback (v9.11.2)
+## §6.4b [RELEASE_MUST] `TAPE_HEAD_LEVEL_DIP` Material-Gate mit Cross-Material-Fallback (v10.0.0)
 
 `TAPE_HEAD_LEVEL_DIP` bleibt primär material-gebunden (`tape`, `reel_tape`, `wire_recording`),
 MUSS aber bei starker Morphologie auch bei Fehlklassifikation (z. B. Tape-Transfer als Vinyl markiert)
@@ -368,7 +368,7 @@ Sauberes Nicht-Tape-Material darf durch den Fallback nicht flaggen (`severity ==
 
 ---
 
-## §6.4a [RELEASE_MUST] Historische Mikrofon-Response-Datenbank (v9.12.0)
+## §6.4a [RELEASE_MUST] Historische Mikrofon-Response-Datenbank (v10.0.0)
 
 **Motivation**: §2.46 Stufe 6 fordert, die Recording-Chain-Signatur zu **bewahren**. Ohne eine Referenz für die Frequenzcharakteristik des Originalaufnahme-Mikrofons ist jede EQ-Phase reine Heuristik. Diese Datenbank macht Recording-Chain-Bewahren messbar.
 
@@ -501,9 +501,9 @@ assert sample_rate == 48000, f"SR muss 48000 Hz sein, erhalten: {sample_rate}"
 
 ---
 
-## §6.7 Tonträgerketten-Erkennung (bindend ab v9.10.97)
+## §6.7 Tonträgerketten-Erkennung (bindend ab v10.0.0)
 
-**Modul**: `forensics/medium_detector.py` — `MediumDetector.detect(audio, sr, file_ext=...)` — einziges autoritatives System ab v9.10.97.
+**Modul**: `forensics/medium_detector.py` — `MediumDetector.detect(audio, sr, file_ext=...)` — einziges autoritatives System ab v10.0.0.
 
 **Architektur**: Zweistufige Fusion aus Bayesian-Gaussian-Scoring + physikalischer Inferenz.
 
@@ -525,7 +525,7 @@ Log-Likelihood: `log P(m|features) = Σ log N(f; μ_m, σ_m)` → Softmax-Poster
 
 **file_ext Prior-Zeroing**: Bei digitalen Dateiendungen (`.mp3`, `.aac`, `.ogg`, `.wma`, `.opus` u. a.) werden Analog-Posteriors auf 0 gezwungen — der Bayesian-Scorer kann keine analoge Primärquelle ausgeben.
 
-### Phase 1b: Physikalische Analogquellen-Inferenz (v9.10.97, aktualisiert v9.11.14)
+### Phase 1b: Physikalische Analogquellen-Inferenz (v10.0.0, aktualisiert v10.0.0)
 
 Greift wenn `file_ext ∈ DIGITAL_FILE_EXTS` und Bayesian kein `best_analog` findet. Physikalische Merkmale überleben bei Kassetten/Vinyl auch nach Codec-Encoding. **Implementierung: `_infer_analog_source_from_fingerprint()` in `forensics/medium_detector.py`.**
 
@@ -617,7 +617,7 @@ Sortierte Liste `[(material_key, confidence)]` nach Signalketten-Reihenfolge (Di
 
 Rückgabe: sortierte Liste `[(material_key, confidence)]` nach Signalketten-Reihenfolge (Disc vor Band vor Codec). Konfidenzen: [0.12, 0.85].
 
-### Phase 1c: Dolby / DBX NR-Erkennung (v9.10.128)
+### Phase 1c: Dolby / DBX NR-Erkennung (v10.0.0)
 
 **Modul**: `backend/core/dolby_nr_detector.py` — `DolbyNRDetector.detect(audio, sr, material_type, era_decade)`.
 
@@ -646,7 +646,7 @@ Wird **automatisch** von `MediumDetector.detect()` aufgerufen wenn `primary_mate
 
 **Integration in `phase_04_eq_correction.py`**: Beide kwargs `dolby_nr_type` und `dolby_nr_confidence` werden nach RIAA/NAB-EQ angewendet. Activation via `kwargs["dolby_nr_type"] = result.dolby_nr_type`.
 
-**`MediumDetectionResult`-Felder** (v9.10.128, erweitert v9.11.14):
+**`MediumDetectionResult`-Felder** (v10.0.0, erweitert v10.0.0):
 
 - `dolby_nr_type: str = "none"` — erkannter Typ
 - `dolby_nr_confidence: float = 0.0` — Konfidenz [0..1]
@@ -679,7 +679,7 @@ else:
 
 ### Phase 2: Transferketten-Aufbau
 
-**Deep-Chain-Pflicht (v9.10.124)**: Kettenaufbau ist nicht auf Primärquelle + 1 Sekundärstufe begrenzt.
+**Deep-Chain-Pflicht (v10.0.0)**: Kettenaufbau ist nicht auf Primärquelle + 1 Sekundärstufe begrenzt.
 
 - Mehrere analoge Folgeglieder sind zulässig, solange die Reihenfolge kausal bleibt (`_MEDIUM_ORDER` monoton steigend).
 - Digitale Zwischenstufen (`cd_digital`, `dat`) müssen eingefügt werden, wenn Posterior-Evidenz vorliegt.
@@ -778,7 +778,7 @@ AR-Prädiktionsmodell für Clicks, Bayesian-Crackle, probabilistisches Defektmod
 
 ---
 
-## §6.5 [RELEASE_MUST] Authentischer Klangcharakter vs. Defekt — Taxonomy (v9.12.0)
+## §6.5 [RELEASE_MUST] Authentischer Klangcharakter vs. Defekt — Taxonomy (v10.0.0)
 
 > **Das wichtigste Konzept für Weltklasse-Restaurierung**: Aurik muss wissen, was es BEWAHREN
 > soll, nicht nur was es reparieren soll. Vintage-Charakter ist nicht dasselbe wie Schaden.
@@ -886,7 +886,7 @@ AUTHENTIC_CHARACTER = {
 
 ---
 
-## §6.6 [RELEASE_MUST] RIAA-Kurven-Klassifikation — normative Metriken (v9.12.0)
+## §6.6 [RELEASE_MUST] RIAA-Kurven-Klassifikation — normative Metriken (v10.0.0)
 
 > **LÜCKE geschlossen**: §6.3a hatte Zeitkonstanten aber keine Klassifikations-Metriken.
 

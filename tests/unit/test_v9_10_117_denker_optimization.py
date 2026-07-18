@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 """
-Tests for v9.10.117 — Denker full-context optimization.
+Tests for v10.0.0 — Denker full-context optimization.
 
 §2.41: Material-adaptive ReparaturDenker thresholds, chirurgical
 defect-location-based repair, era-adaptive hum detection.

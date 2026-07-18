@@ -165,20 +165,20 @@ CANONICAL_THRESHOLDS_RESTORATION: dict[str, float] = {
     "tonal_center": 0.95,
     "tonalcenter": 0.95,
     "timbre_authentizitaet": 0.87,
-    "artikulation": 0.88,  # §09.1 Spec P2 (v9.12.6: 0.85→0.88)
-    "emotionalitaet": 0.84,  # §09.1 Spec P3 (v9.12.6: 0.82→0.84)
+    "artikulation": 0.88,  # §09.1 Spec P2 (v10.0.0: 0.85→0.88)
+    "emotionalitaet": 0.84,  # §09.1 Spec P3 (v10.0.0: 0.82→0.84)
     "mikrodynamik": 0.88,
     "micro_dynamics": 0.88,
     "groove": 0.83,
     "transparenz": 0.82,
-    "waerme": 0.77,  # §V25 Wärmeband-Guard v9.5 (200–800 Hz, ≤2.5 dB kumulativer Verlust)
+    "waerme": 0.77,  # §V25 Wärmeband-Guard v10.0.0 (200–800 Hz, ≤2.5 dB kumulativer Verlust)
     "bass_kraft": 0.78,
     "basskraft": 0.78,
-    "separation_fidelity": 0.80,  # §09.1 Spec P4 (v9.12.6: 0.78→0.80)
+    "separation_fidelity": 0.80,  # §09.1 Spec P4 (v10.0.0: 0.78→0.80)
     "brillanz": 0.78,
     "raumtiefe": 0.70,
     "spatial_depth": 0.70,
-    "transient_energie": 0.80,  # §§1.4.6 v9.12.9: Transient-Energie-Ziel (P3)
+    "transient_energie": 0.80,  # §§1.4.6 v10.0.0: Transient-Energie-Ziel (P3)
 }
 
 CANONICAL_THRESHOLDS_STUDIO2026: dict[str, float] = {
@@ -187,8 +187,8 @@ CANONICAL_THRESHOLDS_STUDIO2026: dict[str, float] = {
     "tonal_center": 0.96,
     "tonalcenter": 0.96,
     "timbre_authentizitaet": 0.89,
-    "artikulation": 0.90,  # §09.1 Spec P2 (v9.12.6: 0.87→0.90)
-    "emotionalitaet": 0.87,  # §09.1 Spec P3 (v9.12.6: 0.84→0.87)
+    "artikulation": 0.90,  # §09.1 Spec P2 (v10.0.0: 0.87→0.90)
+    "emotionalitaet": 0.87,  # §09.1 Spec P3 (v10.0.0: 0.84→0.87)
     "mikrodynamik": 0.90,
     "micro_dynamics": 0.90,
     "groove": 0.85,
@@ -196,11 +196,11 @@ CANONICAL_THRESHOLDS_STUDIO2026: dict[str, float] = {
     "waerme": 0.78,
     "bass_kraft": 0.80,
     "basskraft": 0.80,
-    "separation_fidelity": 0.83,  # §09.1 Spec P4 (v9.12.6: 0.80→0.83)
+    "separation_fidelity": 0.83,  # §09.1 Spec P4 (v10.0.0: 0.80→0.83)
     "brillanz": 0.82,
     "raumtiefe": 0.74,
     "spatial_depth": 0.74,
-    "transient_energie": 0.83,  # §§1.4.6 v9.12.9: Transient-Energie-Ziel (P3, Studio 2026)
+    "transient_energie": 0.83,  # §§1.4.6 v10.0.0: Transient-Energie-Ziel (P3, Studio 2026)
 }
 
 # ---------------------------------------------------------------------------
@@ -325,7 +325,7 @@ _MATERIAL_GOAL_FLOOR_OVERRIDES: dict[str, dict[str, float]] = {
     "aac": {"spatial_depth": 0.44},
     "streaming": {"spatial_depth": 0.44},
     "minidisc": {"spatial_depth": 0.36},  # ATRAC Stereo-Masking aggressiver als MP3
-    # §09.19 Kassette — IEC 60094-1 Type I physikalische Grenzen (v9.19.0):
+    # §09.19 Kassette — IEC 60094-1 Type I physikalische Grenzen (v10.0.0):
     # brillanz:          12-kHz-BW-Ceiling (IEC Type I) begrenzt HF-Restaurierung auf ~0.68;
     #                    tape_analog-Bias -0.22 ergibt ~0.721 — zu optimistisch nach phase_06.
     # spatial_depth:     Kassetten-Stereo: L/R-Übersprechen ~40 dB (IEC 60094-1 §5.4);
@@ -365,7 +365,7 @@ _MATERIAL_BIAS: dict[str, dict[str, float]] = {
         # P4 — spektral/strukturell limitiert
         "bass_kraft": -0.22,  # LF-Rolloff: Shellac ≤ 100 Hz praktisch, Wax ≤ 80 Hz (§0 §6.2c)
         "separation_fidelity": -0.24,  # Mono oder Mono-kompatibles Narrow-Stereo → keine Stem-Sep möglich
-        # §Bug#fix v9.12.1: get_material_floor() nutzt "spatial_depth" (Metrik-Dict-Key), nicht
+        # §Bug#fix v10.0.0: get_material_floor() nutzt "spatial_depth" (Metrik-Dict-Key), nicht
         # "raumtiefe" (Legacy-Key). Legacy-Key bleibt für SGT-Alias-Propagation erhalten.
         "raumtiefe": -0.15,  # Legacy-Key: SGT-Alias-Propagation (estimate_song_goal_targets)
         "spatial_depth": -0.15,  # Canonical Key: get_material_floor("shellac", "spatial_depth")
@@ -393,7 +393,7 @@ _MATERIAL_BIAS: dict[str, dict[str, float]] = {
         "groove": -0.04,  # Leichtes Wow/Flutter
         "bass_kraft": -0.06,  # Vinyl-Schneidebeschränkung LF
         "separation_fidelity": -0.06,  # Narrow-Stereo, Early-Stereo-Artefakte
-        # §09.2 Ergänzende Vinyl-Biases (v9.12.1):
+        # §09.2 Ergänzende Vinyl-Biases (v10.0.0):
         # transparenz: Oberflächenrauschen reduziert Spektralklarheit; ceiling ~0.793
         # Formula: (0.793-0.82)/0.27 = -0.10
         "transparenz": -0.10,
@@ -405,7 +405,7 @@ _MATERIAL_BIAS: dict[str, dict[str, float]] = {
         "micro_dynamics": -0.08,
     },
     # Tape (Reel-Tape, Kassette) — physikalisch stärker limitiert als Vinyl
-    # §09.2 (v9.12.5): Separatklasse tape_analog, da Tape-spezifische Einschränkungen
+    # §09.2 (v10.0.0): Separatklasse tape_analog, da Tape-spezifische Einschränkungen
     # sich grundlegend von Vinyl unterscheiden:
     # - Tape-Hiss-NR reduziert HF stärker als Vinyl-Rausch-NR → brillanz Ceiling tiefer
     # - Wow/Flutter bei Tape stärker → groove/artikulation eingeschränkter
@@ -424,14 +424,14 @@ _MATERIAL_BIAS: dict[str, dict[str, float]] = {
         "artikulation": -0.15,  # Dropout+Hiss maskiert Transienten
         "timbre_authentizitaet": -0.04,
         "spatial_depth": -0.04,
-        # §09.2 Ergänzende Tape-Biases (v9.12.1):
+        # §09.2 Ergänzende Tape-Biases (v10.0.0):
         # micro_dynamics: Tape-Hiss maskiert feine Dynamik auch nach NR; ceiling ~0.839
         # Formula: (0.839-0.88)/0.27 = -0.15
         "micro_dynamics": -0.15,
         # tonal_center: Wow/Flutter (~0.3% WRMS) beeinträchtigt Tonstabilität; ceiling ~0.869
         # Formula: (0.869-0.95)/0.27 = -0.30
         "tonal_center": -0.30,
-        # §09.2 Ergänzende Tape-Biases (v9.12.9 Kalibrierungslücke §GOAL_BASELINE_CHECK):
+        # §09.2 Ergänzende Tape-Biases (v10.0.0 Kalibrierungslücke §GOAL_BASELINE_CHECK):
         # transparenz: Kassetten-/Bandhiss reduziert Spektralklarheit stärker als Vinyl (-0.10).
         # Physikalisches Ceiling Kassette ~0.776 (Type-I) → bias = (0.776-0.82)/0.27 = -0.163 ≈ -0.15
         "transparenz": -0.15,
@@ -440,7 +440,7 @@ _MATERIAL_BIAS: dict[str, dict[str, float]] = {
         # Recovery-Phasen in §GOAL_BASELINE_CHECK.
         # Physikalisches Ceiling Kassette ~0.746 → bias = (0.746-0.80)/0.27 = -0.200
         "transient_energie": -0.20,
-        # §09.2 Realmesspflichtige Ergänzung (v9.12.9 Echtmessung 2026-05-20):
+        # §09.2 Realmesspflichtige Ergänzung (v10.0.0 Echtmessung 2026-05-20):
         # emotionalitaet: Kassetten-AGC-Kompressionsschaltkreis reduziert dynamische Modulation;
         # 12-kHz-BW-Ceiling (IEC 60094-1 Type I) begrenzt tonale Bandbreite für Arousal-Messungen.
         # Echtmessung Original-Kassette (Elke Best, 1970er, Schlager, measure_all() mit panns=0.7):
@@ -461,7 +461,7 @@ _MATERIAL_BIAS: dict[str, dict[str, float]] = {
     # Formula: floor = canonical(0.90) + kappa_min(0.27) * bias → bias = (0.78-0.90)/0.27 = -0.444
     "lossy": {
         "natuerlichkeit": -0.44,
-        # §Bug#fix v9.12.1: war +0.04 (falsche Richtung!). mp3 Pre-Echo + HF-Rolloff (~16 kHz
+        # §Bug#fix v10.0.0: war +0.04 (falsche Richtung!). mp3 Pre-Echo + HF-Rolloff (~16 kHz
         # bei 128 kbps) begrenzen Transparenz; physikalisches Ceiling ~0.793.
         # Formula: (0.793 - 0.82) / 0.27 = -0.10. CD/DAT ("digital") hat +0.08 ✓.
         "transparenz": -0.10,
@@ -474,7 +474,7 @@ _MATERIAL_BIAS: dict[str, dict[str, float]] = {
         # Vergleich: vinyl analog = -0.06 (floor 0.764); tape_analog = -0.22 (floor 0.721).
         # Lossy ist schlechter als Vinyl (Codec-Quantisierung) aber besser als Tape (Stereo erhalten).
         "separation_fidelity": -0.10,
-        # §09.2 Ergänzende Lossy-Biases (v9.12.1):
+        # §09.2 Ergänzende Lossy-Biases (v10.0.0):
         # bass_kraft: Codec-Quantisierung beeinträchtigt Bass-Klarheit; ceiling ~0.758
         # Formula: (0.758 - 0.78) / 0.27 = -0.08
         "bass_kraft": -0.08,
@@ -497,9 +497,9 @@ _MATERIAL_CLASS: dict[str, str] = {
     "lacquer_disc": "ultra_analog",
     "vinyl": "analog",
     "lp": "analog",
-    "tape": "tape_analog",  # §09.2 (v9.12.5): eigene Klasse, nicht mit Vinyl zusammen
-    "reel_tape": "tape_analog",  # §09.2 (v9.12.5): tape_analog mit korrekten HF/Sep-Böden
-    "cassette": "tape_analog",  # §09.2 (v9.12.5): Kassette physikalisch näher an Tape als Vinyl
+    "tape": "tape_analog",  # §09.2 (v10.0.0): eigene Klasse, nicht mit Vinyl zusammen
+    "reel_tape": "tape_analog",  # §09.2 (v10.0.0): tape_analog mit korrekten HF/Sep-Böden
+    "cassette": "tape_analog",  # §09.2 (v10.0.0): Kassette physikalisch näher an Tape als Vinyl
     "kassette": "tape_analog",  # Alias
     "cd_digital": "digital",
     "cd": "digital",

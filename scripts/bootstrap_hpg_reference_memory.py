@@ -64,7 +64,7 @@ _MAT_MP3H = "mp3_high"
 _MAT_STREAM = "streaming"
 _MAT_UNKNOWN = "unknown"
 
-# v9.20.0: Ungültige Ära-Formate alter Bootstrap-Versionen (werden aus Memory entfernt)
+# v10.0.0: Ungültige Ära-Formate alter Bootstrap-Versionen (werden aus Memory entfernt)
 _STALE_ERA_FORMATS: frozenset[str] = frozenset(
     {
         "1960-1990",
@@ -169,7 +169,7 @@ def _generate_synthetic_audio(sr: int, freq_hz: float, noise_sigma: float, durat
 
 
 def _cleanup_stale_entries(gate: object) -> int:  # type: ignore[type-arg]
-    """v9.20.0: Entfernt Einträge mit falschen Ära-Formaten aus dem Reference-Memory.
+    """v10.0.0: Entfernt Einträge mit falschen Ära-Formaten aus dem Reference-Memory.
 
     Stale-Formate: '1960-1990', 'post-1990', 'pre-1960' etc. (alter Bootstrap).
     UV3 verwendet ausschließlich: 'pre-1950' | 'pre-1980' | 'post-1980'.
@@ -188,7 +188,7 @@ def _cleanup_stale_entries(gate: object) -> int:  # type: ignore[type-arg]
         for key in stale_keys:
             del ref_memory[key]
     if stale_keys:
-        logger.info("v9.20.0 Stale-Cleanup: %d veraltete Einträge entfernt: %s", len(stale_keys), stale_keys)
+        logger.info("v10.0.0 Stale-Cleanup: %d veraltete Einträge entfernt: %s", len(stale_keys), stale_keys)
         # Persist bereinigtes Memory
         try:
             _save = getattr(gate, "_save_ref_memory_to_disk", None)
@@ -349,14 +349,14 @@ def main() -> None:
     gate = get_holistic_gate()
     total = 0
 
-    # v9.20.0 Phase 0: Stale-Entry-Cleanup (falsche Ära-Formate)
-    logger.info("§2.44 v9.20.0 Phase 0: Stale-Entry-Cleanup")
+    # v10.0.0 Phase 0: Stale-Entry-Cleanup (falsche Ära-Formate)
+    logger.info("§2.44 v10.0.0 Phase 0: Stale-Entry-Cleanup")
     removed = _cleanup_stale_entries(gate)
     logger.info("  %d veraltete Einträge bereinigt.", removed)
 
     # Phase 1: Synthetische Prototypen für alle Material×Ära-Kombinationen
     logger.info(
-        "§2.44 v9.20.0 Phase 1: Synthetische Prototyp-Embeddings (%d Kombinationen)", len(_SYNTHETIC_PROTOTYPES)
+        "§2.44 v10.0.0 Phase 1: Synthetische Prototyp-Embeddings (%d Kombinationen)", len(_SYNTHETIC_PROTOTYPES)
     )
     synth_count = _seed_synthetic_prototypes(gate)
     total += synth_count
@@ -365,7 +365,7 @@ def main() -> None:
     # Phase 2: Golden-Samples (echte digitale Referenz-Audio)
     references_dir = _REPO_ROOT / "golden_samples" / "references"
     if references_dir.exists():
-        logger.info("§2.44 v9.20.0 Phase 2: Golden-Samples aus %s", references_dir)
+        logger.info("§2.44 v10.0.0 Phase 2: Golden-Samples aus %s", references_dir)
         audio_count = run_bootstrap(references_dir)
         total += audio_count
         logger.info("  %d Golden-Sample-Einträge geseedet.", audio_count)
@@ -373,7 +373,7 @@ def main() -> None:
         logger.info("Golden-Samples-Verzeichnis nicht gefunden — Phase 2 übersprungen.")
 
     logger.info(
-        "§2.44 HPG Bootstrap v9.20.0 fertig: %d neue Embeddings gespeichert in ~/.aurik/hpg_reference_memory.json",
+        "§2.44 HPG Bootstrap v10.0.0 fertig: %d neue Embeddings gespeichert in ~/.aurik/hpg_reference_memory.json",
         total,
     )
 

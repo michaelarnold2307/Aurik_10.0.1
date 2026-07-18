@@ -1,5 +1,5 @@
 """
-Adaptive MMSE Noise PSD Estimation DSP-Modul für Aurik 9.10 (SOTA-Maximum)
+Adaptive MMSE Noise PSD Estimation DSP-Modul für Aurik 10.0.0 (SOTA-Maximum)
 
 Implements IMCRA-inspired noise PSD estimation with:
 - Minimum-statistics tracking over sliding window (Cohen 2002)

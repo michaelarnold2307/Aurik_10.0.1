@@ -1,4 +1,4 @@
-# Changelog — Aurik 10.0.2
+# Changelog — Aurik 10.0.8
 
 ## 10.0.3 (2026-07-11) — BW Harmonic Exciter
 

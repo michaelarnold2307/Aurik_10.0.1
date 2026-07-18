@@ -1,16 +1,16 @@
-# GO/NO-GO Decision Protocol — Hearing Test Validation (v9.20.3)
+# GO/NO-GO Decision Protocol — Hearing Test Validation (v10.0.0)
 
 - Purpose: Structured decision framework for PR reviewers evaluating hearing-test results
 
 - Spec Reference: .github/specs/07_quality_and_tests.md §5.7a [RELEASE_MUST] §8.1.1a
 
-- Version: 9.20.3 | Date: 2026-05-19 | Mandatory for Aurik 9 Release
+- Version: 10.0.0 | Date: 2026-05-19 | Mandatory for Aurik 10.0.0 Release
 
 ---
 
 ## I. Overview & Purpose
 
-This protocol guides PR reviewers through **hearing-test results evaluation** for Aurik 9.x restoration and studio2026 enhancement pipelines. It ensures:
+This protocol guides PR reviewers through **hearing-test results evaluation** for Aurik 10.0.0.x restoration and studio2026 enhancement pipelines. It ensures:
 
 1. **Mode-Separated Scoring**: Restoration and studio2026 use incompatible quality dimensions; scores must NOT be mixed
 2. **Objective GO/NO-GO Decision**: Quantitative gates + subjective listener agreement consensus
@@ -474,7 +474,7 @@ After completing both decision flows:
 
 ---
 
-**Document Status**: FINAL (v9.10.130)
+**Document Status**: FINAL (v10.0.0)
 **Last Updated**: 2026-04-07
-**Mandatory For**: Aurik 9 Release (v9.10.x or later)
+**Mandatory For**: Aurik 10.0.0 Release (v10.0.0.x or later)
 **Review Cycle**: Quarterly (Q1–Q4 2026)

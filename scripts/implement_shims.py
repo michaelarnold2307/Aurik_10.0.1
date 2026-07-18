@@ -3,14 +3,14 @@
 Automatisches Bulk-Replacement aller 33 Shim-Dateien in backend/core/.
 
 Ersetzt alle `from core.X import *` Shims durch vollständige Implementierungen
-gemäß Aurik 9 copilot-instructions §2.x.
+gemäß Aurik 10.0.0 copilot-instructions §2.x.
 """
 
 from pathlib import Path
 
 # Mapping: Dateiname → vollständige Implementierung
 IMPLEMENTATIONS = {
-    "transient_decoupled_processor.py": '''"""TransientDecoupledProcessing — Aurik 9.x.x (Spec §2.27)
+    "transient_decoupled_processor.py": '''"""TransientDecoupledProcessing — Aurik 10.0.0.x.x (Spec §2.27)
 
 Trennt Transienten am allerersten Pipeline-Schritt via HPSS (Medianfilter).
 

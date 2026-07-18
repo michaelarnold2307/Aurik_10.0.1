@@ -1,5 +1,5 @@
 """
-Aurik 9 — IntroducedArtifactDetector (IAD) §2.23
+Aurik 10.0.0 — IntroducedArtifactDetector (IAD) §2.23
 ==================================================
 Erkennt durch Restaurierung neu eingebrachte Artefakte im restaurierten Audio.
 """
@@ -69,7 +69,7 @@ class IntroducedArtifactDetector:
     MUSICAL_NOISE_THRESHOLD_DB: float = 3.0
     SILENCE_THRESHOLD_DBFS: float = -40.0
     HARMONICITY_THRESHOLD: float = 0.70
-    # §2.46e Relative-Harmonicity-Guard (v9.12.1):
+    # §2.46e Relative-Harmonicity-Guard (v10.0.0):
     # Residuum-Harmonizität muss HALLUCINATION_RELATIVE_MARGIN über Original-Harmonizität liegen.
     # Verhindert False-Positives: Restaurierungs-Delta auf vokalen/harmonischen Content erbt
     # die Harmonizität des Originals → kein Hallucination-Flag.
@@ -179,7 +179,7 @@ class IntroducedArtifactDetector:
         return artifacts
 
     def _detect_ml_hallucinations(self, orig: np.ndarray, residuum: np.ndarray, sr: int) -> list[ArtifactRegion]:
-        """§2.46e Relative-Harmonicity-Guard (v9.12.1).
+        """§2.46e Relative-Harmonicity-Guard (v10.0.0).
 
         Detects truly hallucinated harmonic content introduced by ML restoration.
         The residuum (restored − original) of any vocal/musical restoration inherits

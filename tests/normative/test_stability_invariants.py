@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""[RELEASE_MUST] §3.9 Stabilitäts-Invarianten — normative CI-Gate Tests (v9.10.81)
+"""[RELEASE_MUST] §3.9 Stabilitäts-Invarianten — normative CI-Gate Tests (v10.0.0)
 
 Spec reference:  .github/specs/08_architecture_and_distribution.md §3.9.1–§3.9.9
 Gate entry:      copilot-instructions.md §3.9 — je Invariante mind. 3 Tests

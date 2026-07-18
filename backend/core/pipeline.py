@@ -1,5 +1,5 @@
 """
-Aurik 9.0 – Normative Pipeline
+Aurik 10.0.0 – Normative Pipeline
 Abbild der normativen Verarbeitungskette: Epistemic Gate → Zonen → Conduct → Regulator
 """
 

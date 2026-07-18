@@ -84,33 +84,33 @@ class PresenceBoost(PhaseInterface):
     # Enhancement parameters (material-adaptive)
     BOOST_CONFIG = {
         MaterialType.SHELLAC: {
-            "lower_gain_db": 4.5,  # v9.10.114: ↑3.0→4.5
-            "upper_gain_db": 5.5,  # v9.10.114: ↑4.0→5.5
+            "lower_gain_db": 4.5,  # v10.0.0: ↑3.0→4.5
+            "upper_gain_db": 5.5,  # v10.0.0: ↑4.0→5.5
             "q_factor": 1.5,
         },
         MaterialType.VINYL: {
-            "lower_gain_db": 3.5,  # v9.10.114: ↑2.5→3.5
-            "upper_gain_db": 4.5,  # v9.10.114: ↑3.5→4.5
+            "lower_gain_db": 3.5,  # v10.0.0: ↑2.5→3.5
+            "upper_gain_db": 4.5,  # v10.0.0: ↑3.5→4.5
             "q_factor": 1.8,
         },
         MaterialType.TAPE: {
-            "lower_gain_db": 3.0,  # v9.10.114: ↑2.0→3.0
-            "upper_gain_db": 4.0,  # v9.10.114: ↑3.0→4.0
+            "lower_gain_db": 3.0,  # v10.0.0: ↑2.0→3.0
+            "upper_gain_db": 4.0,  # v10.0.0: ↑3.0→4.0
             "q_factor": 2.0,
         },
-        MaterialType.CASSETTE: {  # v9.12.9: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
+        MaterialType.CASSETTE: {  # v10.0.0: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
             "lower_gain_db": 3.0,
             "upper_gain_db": 4.0,
             "q_factor": 2.0,
         },
         MaterialType.CD_DIGITAL: {
-            "lower_gain_db": 4.5,  # v9.10.114: ↑3.5→4.5
-            "upper_gain_db": 5.5,  # v9.10.114: ↑4.5→5.5
+            "lower_gain_db": 4.5,  # v10.0.0: ↑3.5→4.5
+            "upper_gain_db": 5.5,  # v10.0.0: ↑4.5→5.5
             "q_factor": 1.2,
         },
         MaterialType.STREAMING: {
-            "lower_gain_db": 4.0,  # v9.10.114: ↑3.0→4.0
-            "upper_gain_db": 5.0,  # v9.10.114: ↑4.0→5.0
+            "lower_gain_db": 4.0,  # v10.0.0: ↑3.0→4.0
+            "upper_gain_db": 5.0,  # v10.0.0: ↑4.0→5.0
             "q_factor": 1.5,
         },
     }
@@ -164,7 +164,7 @@ class PresenceBoost(PhaseInterface):
         _effective_strength = float(np.clip(_pmgg_strength * phase_locality_factor, 0.0, 1.0))
 
         # §V41 ForwardMaskingGuard: Stärke in post-transienten Masking-Fenstern erhöhen.
-        # Optimierung v9.12.9: UV3 berechnet Zonen vor der Phase und übergibt sie via kwargs;
+        # Optimierung v10.0.0: UV3 berechnet Zonen vor der Phase und übergibt sie via kwargs;
         # nur wenn keine pre-computed Zonen vorhanden, werden sie neu berechnet (spart CPU).
         _panns_s_38 = float(kwargs.get("panns_singing", 0.0))
         if _panns_s_38 >= 0.25 and _effective_strength > 0.0:
@@ -211,8 +211,11 @@ class PresenceBoost(PhaseInterface):
                 logger.debug("Phase38 §2.17 SectionStrengthEnvelope non-blocking: %s", _env_exc_38)
 
         if _effective_strength <= 0.0:
+            logger.info("Phase 38: skipped — effective_strength=%.3f (no presence boost applied)", _effective_strength)
             audio = np.nan_to_num(audio, nan=0.0, posinf=0.0, neginf=0.0)
             audio = np.clip(audio, -1.0, 1.0)
+            # §5/5: Echte Peak-Messung auch bei Skip
+            _p_peak = float(20.0 * np.log10(np.percentile(np.abs(audio), 99.9) + 1e-10))
             return PhaseResult(
                 success=True,
                 audio=audio.copy(),
@@ -247,7 +250,7 @@ class PresenceBoost(PhaseInterface):
         if _decade is not None:
             _dec = int(_decade)
             if _dec <= 1950:
-                # Vintage: cap presence boost (don't over-brighten) — v9.10.114: ↑2.5/3.0→3.5/4.0
+                # Vintage: cap presence boost (don't over-brighten) — v10.0.0: ↑2.5/3.0→3.5/4.0
                 config["lower_gain_db"] = min(config["lower_gain_db"], 3.5)
                 config["upper_gain_db"] = min(config["upper_gain_db"], 4.0)
             elif _dec >= 2000:
@@ -288,7 +291,7 @@ class PresenceBoost(PhaseInterface):
                 _vp_strength_38,
             )
 
-        # §2.41 (v9.10.116) SOTA: Ära-bewusste Presence-Center aus SourceFidelityTarget.
+        # §2.41 (v10.0.0) SOTA: Ära-bewusste Presence-Center aus SourceFidelityTarget.
         # Verschiedene Mikrofon-Ären haben unterschiedliche Hotspot-Frequenzen:
         #   Acoustic/Carbon (1920s): 2000–4000 Hz (Horn-Resonanz + Carbon-Peak)
         #   Ribbon (1930s): 2800–4300 Hz (Ribbon-Wärme-Zone)

@@ -3,7 +3,7 @@ TontraegerketteDenker — Domäne: Mehrstufige Tonträgerketten-Analyse
 ====================================================================
 
 Analysiert mehrstufige Übertragungsketten in Audioaufnahmen gemäß §6.6
-(Tonträgerketten-Erkennung, bindend ab v9.10.45).
+(Tonträgerketten-Erkennung, bindend ab v10.0.0).
 
 In der Praxis landet eine Aufnahme selten auf nur einem Träger:
   Vinyl → Kassette → MP3 (klassische 3-Stufen-Kette)

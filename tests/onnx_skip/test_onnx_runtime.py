@@ -8,10 +8,10 @@ Tests OptimizedONNXModel class for:
 - Performance tracking
 - Error handling
 
-Aurik 9.0 Compliance:
+Aurik 10.0.0 Compliance:
 - All tests use mocks to avoid real ONNX model loading
 - Timeouts prevent hanging tests
-- Following Aurik 9.0 testing best practices
+- Following Aurik 10.0.0 testing best practices
 """
 
 import importlib.util

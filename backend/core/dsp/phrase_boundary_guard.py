@@ -1,5 +1,5 @@
 """
-PhraseBoundaryGuard — §Gap3 Phrase-Boundary Aware DSP (Aurik 9.12.x)
+PhraseBoundaryGuard — §Gap3 Phrase-Boundary Aware DSP (Aurik 10.0.0.x)
 ======================================================================
 
 Detects phrase boundaries in vocal/music material and provides a

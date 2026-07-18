@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-UAT Report Generator für Aurik 9.10.77
+UAT Report Generator für Aurik 10.0.0
 Führt UAT-Tests aus und generiert formale Scorecard + Final Report
 
 Usage:
@@ -372,7 +372,7 @@ class UATReportGenerator:
         print("[INFO] Generating scorecard markdown...")
 
         lines = [
-            "# Aurik 9.10.77 — UAT Scorecard",
+            "# Aurik 10.0.0 — UAT Scorecard",
             f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}",
             "**Version:** 9.10.77",
             "",
@@ -487,7 +487,7 @@ class UATReportGenerator:
         )
 
         lines = [
-            "# Aurik 9.10.77 — UAT Final Report",
+            "# Aurik 10.0.0 — UAT Final Report",
             "",
             f"**Test Date:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}  ",
             f"**Version:** {self.summary.aurik_version}  ",
@@ -671,7 +671,7 @@ class UATReportGenerator:
     def run(self) -> int:
         """Main execution flow."""
         print("=" * 80)
-        print("Aurik 9.10.77 — UAT Report Generator")
+        print("Aurik 10.0.0 — UAT Report Generator")
         print("=" * 80)
 
         try:
@@ -716,7 +716,7 @@ class UATReportGenerator:
 
 def main():
     """Parse CLI arguments and execute the UAT report generator."""
-    parser = argparse.ArgumentParser(description="Generate UAT Report for Aurik 9.10.77")
+    parser = argparse.ArgumentParser(description="Generate UAT Report for Aurik 10.0.0")
     parser.add_argument(
         "--output-dir",
         type=Path,

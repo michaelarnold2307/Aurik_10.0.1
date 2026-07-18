@@ -26,7 +26,7 @@ Beispiel::
     logger.debug("Kategorie: %s", result.grade)  # z.B. "Good"
     logger.debug("ITU-Konform: %s", result.itu_grade)  # z.B. "B (Good)"
 
-Autor: Aurik 9.9 — 19. Februar 2026
+Autor: Aurik 10.0.0 — 19. Februar 2026
 Referenz: ITU-R BS.1534-3 (2015): "Method for the subjective assessment of
 intermediate quality levels of audio systems"
 """

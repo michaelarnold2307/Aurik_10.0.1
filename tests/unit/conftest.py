@@ -1,5 +1,5 @@
 """
-Aurik 9.x — Unit-Test Fixtures (leichtgewichtig)
+Aurik 10.0.0.x — Unit-Test Fixtures (leichtgewichtig)
 ==================================================
 
 Nur numpy / stdlib — KEIN Backend-Import.

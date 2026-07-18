@@ -1,5 +1,5 @@
 """
-Quality Metrics Manager - Aurik 9.x
+Quality Metrics Manager - Aurik 10.0.0.x
 ====================================
 
 Zentrale Integration aller §4.4-konformen Audio-Qualitätsmetriken für Musik:
@@ -459,7 +459,7 @@ class QualityMetricsManager:
         """
         report_lines = []
         report_lines.append("=" * 80)
-        report_lines.append("QUALITY METRICS REPORT — Aurik 9.x (§4.4 musik-konforme Metriken)")
+        report_lines.append("QUALITY METRICS REPORT — Aurik 10.0.0.x (§4.4 musik-konforme Metriken)")
         report_lines.append("=" * 80)
         report_lines.append(f"\nAudio File: {results['audio_file']}")
         report_lines.append("\n" + "-" * 80)

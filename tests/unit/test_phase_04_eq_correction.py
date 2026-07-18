@@ -1,7 +1,7 @@
 """
 tests/unit/test_phase_04_eq_correction.py
 ==========================================
-Aurik 9.10 — Phase 04 EQ Correction
+Aurik 10.0.0 — Phase 04 EQ Correction
   * Historische RIAA-Varianten (pre-1954)
   * _auto_detect_riaa_variant()
   * Decade-aware process() integration

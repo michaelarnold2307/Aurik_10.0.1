@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-"""[RELEASE_MUST] Automatischer Spec-Konsistenz-Validator (v9.12.0)
+"""[RELEASE_MUST] Automatischer Spec-Konsistenz-Validator (v10.0.0)
 
 CI-Gate das DAUERHAFT und AUTOMATISCH folgende Invarianten prüft:
 
@@ -244,7 +244,7 @@ class TestSection0aSpec06Purity:
             "§0a Verletzung in Spec 06 CAUSE_TO_PHASES — verbotene Phasen gefunden:\n"
             + "\n".join(violations)
             + "\n\n§0a-verbotene Phasen (Stem-Enhancement/Harmonic Exciter) dürfen "
-            "NIEMALS in CAUSE_TO_PHASES stehen (BUG-FIX v9.12.0 §0a)."
+            "NIEMALS in CAUSE_TO_PHASES stehen (BUG-FIX v10.0.0 §0a)."
         )
 
 
@@ -338,7 +338,7 @@ class TestSpecOrphanRegression:
     """Regressions-Schutz für bekannte frühere Spec-Bugs."""
 
     def test_azimuth_error_not_in_spec06_cause_to_phases(self) -> None:
-        """azimuth_error darf NICHT in Spec 06 CAUSE_TO_PHASES stehen (BUG-FIX v9.12.0).
+        """azimuth_error darf NICHT in Spec 06 CAUSE_TO_PHASES stehen (BUG-FIX v10.0.0).
 
         azimuth_error ist ein DefectScanner-Messwert, keine CAUSES-Ursache.
         Früher hatte Spec 06 einen orphaned azimuth_error-CAUSE_TO_PHASES-Eintrag (V12-Bug).
@@ -346,24 +346,24 @@ class TestSpecOrphanRegression:
         spec_keys = _parse_spec06_cause_keys(_SPEC_06_PATH)
         assert "azimuth_error" not in spec_keys, (
             "Regression: 'azimuth_error' ist wieder in Spec 06 CAUSE_TO_PHASES aufgetaucht.\n"
-            "BUG-FIX v9.12.0: azimuth_error ist kein CAUSES-Eintrag im Code — "
+            "BUG-FIX v10.0.0: azimuth_error ist kein CAUSES-Eintrag im Code — "
             "der Spec-Key muss entfernt bleiben (V12-Invariante)."
         )
 
     def test_vinyl_warp_in_spec06_cause_to_phases(self) -> None:
-        """vinyl_warp MUSS in Spec 06 CAUSE_TO_PHASES stehen (BUG-FIX v9.12.0).
+        """vinyl_warp MUSS in Spec 06 CAUSE_TO_PHASES stehen (BUG-FIX v10.0.0).
 
         vinyl_warp war früher im Code-CAUSES aber fehlte in Spec 06 — Spec-Code-Drift.
         """
         spec_keys = _parse_spec06_cause_keys(_SPEC_06_PATH)
         assert "vinyl_warp" in spec_keys, (
             "Regression: 'vinyl_warp' fehlt in Spec 06 CAUSE_TO_PHASES.\n"
-            "BUG-FIX v9.12.0: vinyl_warp ist in Code-CAUSES definiert — "
+            "BUG-FIX v10.0.0: vinyl_warp ist in Code-CAUSES definiert — "
             "Spec muss synchron sein."
         )
 
     def test_no_phase_39_in_bandwidth_loss_cause(self) -> None:
-        """phase_39 darf NICHT in bandwidth_loss CAUSE_TO_PHASES stehen (BUG-FIX v9.12.0 §6.2c).
+        """phase_39 darf NICHT in bandwidth_loss CAUSE_TO_PHASES stehen (BUG-FIX v10.0.0 §6.2c).
 
         BW-Extension über Material-BW-Ceiling erzeugt Halluzinationen in Restoration.
         """
@@ -371,7 +371,7 @@ class TestSpecOrphanRegression:
         bw_phases = c2p.get("bandwidth_loss", [])
         assert "phase_39_air_band_enhancement" not in bw_phases, (
             "Regression: 'phase_39_air_band_enhancement' ist wieder in bandwidth_loss "
-            "CAUSE_TO_PHASES.\nBUG-FIX v9.12.0 §6.2c: phase_39 erzeugt Halluzinationen "
+            "CAUSE_TO_PHASES.\nBUG-FIX v10.0.0 §6.2c: phase_39 erzeugt Halluzinationen "
             "über BW-Ceiling analoger Materialien im Restoration-Modus."
         )
 

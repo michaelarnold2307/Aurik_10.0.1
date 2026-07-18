@@ -1,5 +1,5 @@
 """
-backend/core/psychoacoustic_masking_model.py — Psychoakustisches Masking-Modell (Aurik 9 §4.5)
+backend/core/psychoacoustic_masking_model.py — Psychoakustisches Masking-Modell (Aurik 10.0.0 §4.5)
 ===========================================================================
 ISO 11172-3 Simultane + Temporale Maskierung als OMLSA-Gain-Modifier.
 Stille-Segmente (<= SILENCE_DB) erhalten Gain ≤ SILENCE_GAIN_MAX = 0.30.

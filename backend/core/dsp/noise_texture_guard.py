@@ -9,7 +9,7 @@ Kanonische Nutzung (UV3 post-phase hook):
     if dist > 0.25:  # → nr_strength × 0.5 (WARNING)
         ...
 
-Konzeptueller Unterschied zu v9.12.8:
+Konzeptueller Unterschied zu v10.0.0:
     Die frühere _MATERIAL_SLOPE_RANGES modellierte den Slope des in-situ Materiallauschens
     (dunkel, negativ für Shellac). Das Residual (entfernter Inhalt) hat jedoch ein
     ANDERES Profil als das in-situ Rauschen:

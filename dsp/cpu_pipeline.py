@@ -1,5 +1,5 @@
 """
-dsp/cpu_pipeline.py — CPU-optimierte DSP-Pipeline für Aurik 9.5
+dsp/cpu_pipeline.py — CPU-optimierte DSP-Pipeline für Aurik 10.0.0
 ================================================================
 
 Hochperformante, rein CPU-basierte DSP-Pipeline ohne GPU-Abhängigkeiten.

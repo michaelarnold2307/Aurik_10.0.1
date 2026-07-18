@@ -5,7 +5,7 @@ Definiert standardisierte Testszenarien mit Ground-Truth-Paaren
 (degradiert → original) und misst alle relevanten Qualitätsdimensionen:
 
 - **MUSHRA-Score** (0–100, ITU-R BS.1534-3 objektive Approximation)
-- **Aurik Musical Goals** (9 Ziele, v9.9)
+- **Aurik Musical Goals** (9 Ziele, v10.0.0)
 - **PQS-MOS** (PerceptualQualityScorer, Gammatone-basiert)
 - **Defect-Removal-Rate** (wie viel % der Defekte entfernt wurden)
 
@@ -45,7 +45,7 @@ Positionierung:
     werden. Referenzwerte für bekannte Systeme werden in AMRB_BASELINES
     dokumentiert.
 
-Autor: Aurik 9.9 — 19. Februar 2026
+Autor: Aurik 10.0.0 — 19. Februar 2026
 """
 
 from __future__ import annotations
@@ -105,12 +105,12 @@ AMRB_BASELINES: dict[str, dict[str, float]] = {
         "pqs_mos": 3.9,
         "goal_natuerlichkeit": 0.80,
     },
-    "Aurik 9.9 (Restoration Mode)": {
+    "Aurik 10.0.0 (Restoration Mode)": {
         "mushra_overall": 84.0,  # Pflicht-Ziel: ≥ 80
         "pqs_mos": 4.2,
         "goal_natuerlichkeit": 0.91,
     },
-    "Aurik 9.9 (Studio 2026 Mode)": {
+    "Aurik 10.0.0 (Studio 2026 Mode)": {
         "mushra_overall": 88.0,  # Pflicht-Ziel: ≥ 85 (Studio)
         "pqs_mos": 4.5,
         "goal_natuerlichkeit": 0.93,
@@ -166,7 +166,7 @@ def _amrb_03_shellac(audio: np.ndarray, sr: int) -> np.ndarray:
     Calibrated to SNR=15 dB, which is representative of real-world shellac
     digitizations (typical SNR 20-30 dB; severely degraded specimens 10-20 dB).
     SNR=6 dB (original) was unrealistically harsh and inconsistent with the
-    84.0 AMRB baseline target (Aurik 9.9 Restoration Mode).
+    84.0 AMRB baseline target (Aurik 10.0.0 Restoration Mode).
     """
     rms = float(np.sqrt(np.mean(audio**2) + 1e-12))
     noise = np.random.randn(*audio.shape).astype(np.float32) * (rms * 0.18)  # ≈ 15 dB SNR
@@ -438,7 +438,7 @@ class BenchmarkConfig:
     duration_s: float = 5.0
     scenarios: list[str] | None = None  # None = alle
     report_path: Path | None = None
-    system_name: str = "Aurik 9.12.x"
+    system_name: str = "Aurik 10.0.0.x"
     verbose: bool = True
     # Optional heavy-evaluation toggles for CI/normative audit runs.
     enable_mushra_proxy: bool = True

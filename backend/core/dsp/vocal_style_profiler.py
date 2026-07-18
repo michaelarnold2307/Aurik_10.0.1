@@ -1,4 +1,4 @@
-"""§VocalStyle VocalStyleProfiler — per-recording singer fingerprint (v9.12.1).
+"""§VocalStyle VocalStyleProfiler — per-recording singer fingerprint (v10.0.0).
 
 Learns from the first ~20 s of material how this specific singer produces sound
 in this specific recording: vibrato characteristics, register distribution,

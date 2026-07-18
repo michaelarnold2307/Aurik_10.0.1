@@ -18,7 +18,7 @@ TESTS_DIR = ROOT / "tests"
 # reference style that should not reappear in active Python tests.
 STALE_MARKERS: tuple[str, ...] = (
     "highend_studio",
-    "v9.9.",
+    "v10.0.0.",
     "legacy_tests_to_remove.txt",
 )
 

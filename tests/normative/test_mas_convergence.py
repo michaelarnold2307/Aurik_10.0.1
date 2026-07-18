@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""[RELEASE_MUST] MAS-Konvergenz-CI-Gate (v9.12.1)
+"""[RELEASE_MUST] MAS-Konvergenz-CI-Gate (v10.0.0)
 
 CI-Gate das normativ prüft:
 

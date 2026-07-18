@@ -155,7 +155,7 @@ class FeedbackChain:
 
         Loop-Score = VERSA_MOS × VQI^0.5 — sqrt-Gewichtung verhindert VQI-Dominanz,
         aber stellt sicher dass Vokal-Verschlechterungen den Score deutlich reduzieren
-        (F-06 v9.12.10: Exponent 0.3→0.5 für stärkere Penalty bei VQI < 0.82).
+        (F-06 v10.0.0: Exponent 0.3→0.5 für stärkere Penalty bei VQI < 0.82).
         Zusätzlich: §Frisson-Gewichtung — Energy-Abfall in Frisson-Zonen (Gänsehaut-Passagen)
         reduziert den Loop-Score, damit FeedbackChain diese Klimax-Momente nicht wegoptimiert.
         Non-blocking: Exception → base_mos unverändert zurückgeben.

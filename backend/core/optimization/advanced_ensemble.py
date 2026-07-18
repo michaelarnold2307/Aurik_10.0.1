@@ -1,5 +1,5 @@
 """
-Advanced Ensemble Strategies für Aurik 8.0
+Advanced Ensemble Strategies für Aurik 10.0.0
 
 Implementiert fortgeschrittene Ensemble-Methoden:
 - Stacking mit Meta-Learner
@@ -294,7 +294,7 @@ class AdvancedEnsemble:
         self,
         ensemble_members: list[EnsembleMember],
         strategy: str = "stacking",
-        device: str = "cpu",  # §9.5: Aurik 9 — ausschließlich CPU, kein CUDA/ROCm/Metal
+        device: str = "cpu",  # §9.5: Aurik 10.0.0 — ausschließlich CPU, kein CUDA/ROCm/Metal
     ) -> None:
         """
         Initialisiert advanced ensemble.

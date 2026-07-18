@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Aurik 9 — Compliance-Check (VERBOTEN-Regeln aus copilot-instructions.md)
+Aurik 10.0.0 — Compliance-Check (VERBOTEN-Regeln aus copilot-instructions.md)
 =========================================================================
 Prüft alle Python-Quelldateien auf verbotene Muster aus der Ruleset-Tabelle.
 Exit 0 = clean, Exit 1 = Verstöße gefunden.
@@ -182,7 +182,7 @@ RULES: list[Rule] = [
         severity="error",
     ),
     # R16 — LPC-Ordnung < 10 explizit gesetzt
-    # BUG-FIX v9.12.10: Formant-Analyse auf schmalem Vokalband (200–3400 Hz) benötigt
+    # BUG-FIX v10.0.0: Formant-Analyse auf schmalem Vokalband (200–3400 Hz) benötigt
     # lpc_order=14 (ITU-T P.501: 7 Polpaare für F1–F3). Breitband-LPC (0–24 kHz)
     # verwendet 30–40. Schwelle auf 10 gesenkt um beide Anwendungsfälle zu erlauben.
     Rule(
@@ -404,7 +404,7 @@ def report(violations: list[Violation], show_warnings: bool = True) -> int:
 
 def main(argv: Sequence[str] | None = None) -> int:
     """Einstiegspunkt: Parst Argumente, scannt Quelldateien und gibt den Exit-Code zurück."""
-    parser = argparse.ArgumentParser(description="Aurik 9 Compliance-Check (VERBOTEN-Regeln)")
+    parser = argparse.ArgumentParser(description="Aurik 10.0.0 Compliance-Check (VERBOTEN-Regeln)")
     parser.add_argument(
         "paths",
         nargs="*",
@@ -439,7 +439,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"{YELLOW}Keine Python-Dateien gefunden in: {roots}{RESET}")
         return 0
 
-    print(f"Aurik 9 Compliance-Check — {len(files)} Dateien")
+    print(f"Aurik 10.0.0 Compliance-Check — {len(files)} Dateien")
     print("=" * 60)
 
     all_violations: list[Violation] = []

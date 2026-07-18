@@ -1,5 +1,5 @@
 """
-dsp/hybrid_ml_denoiser.py — Hybrid DSP+ML Denoiser (Aurik 9.10.x)
+dsp/hybrid_ml_denoiser.py — Hybrid DSP+ML Denoiser (Aurik 10.0.0.x)
 ==================================================================
 
 Implements an OMLSA-based spectral denoiser as the DSP-fast stage, with an

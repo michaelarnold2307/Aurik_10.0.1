@@ -6,7 +6,7 @@ Historische Mikrofon-EQ-Profile für era-adaptive Signalverarbeitung.
 Liefert EQ-Kurven für Phase_38 / Phase_06 um die Recording-Chain
 des Originals zu modellieren.
 
-Spec: 05_material_system.md §6.4a (v9.12.0)
+Spec: 05_material_system.md §6.4a (v10.0.0)
 """
 
 import json

@@ -1,5 +1,5 @@
 """
-Generates premium 128×128 px defect-type icons and star-rating icons for Aurik 9.
+Generates premium 128×128 px defect-type icons and star-rating icons for Aurik 10.0.0.
 
 Output directories:
   Aurik10/resources/defect_icons/<defect>.png   — 30 defect-type icons

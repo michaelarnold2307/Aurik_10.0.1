@@ -1,7 +1,7 @@
 """
 tests/unit/test_v99_hybrid_modules.py
 ======================================
-v9.10.38 — Tests für alle 6 core/hybrid/-Module:
+v10.0.0 — Tests für alle 6 core/hybrid/-Module:
   HybridDereverb, HybridMLDenoiser, HybridNVSR,
   HybridSpeedPitch, HybridVocalEnhancer, HybridWowFlutter
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""Externes Mini-MUSHRA-Artefakt-Kontrakt — [RELEASE_MUST] (§8.4 / §5.7 spec 07, v9.10.79)
+"""Externes Mini-MUSHRA-Artefakt-Kontrakt — [RELEASE_MUST] (§8.4 / §5.7 spec 07, v10.0.0)
 
 Spec §8.4 / §5.7 (copilot-instructions.md, spec 07 §5.7):
     Bei Änderungen an Kernphasen, PMGG, DefectScanner oder heavy ML-Fallbacks

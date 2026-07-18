@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run30 — Optimierter Full-Pipeline-Run mit Pre-Analysis-Handover + no_rt_limit (v9.11.82)
+"""Run30 — Optimierter Full-Pipeline-Run mit Pre-Analysis-Handover + no_rt_limit (v10.0.0)
 
 Verbesserungen gegenüber run28/29:
 - Pre-Analysis EINMALIG berechnet, direkt an AurikDenker weitergereicht (§2.47a)

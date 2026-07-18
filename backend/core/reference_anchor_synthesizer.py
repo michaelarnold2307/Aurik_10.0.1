@@ -1,5 +1,5 @@
 """
-core/reference_anchor_synthesizer.py — Aurik 9.9+ (§2.25)
+core/reference_anchor_synthesizer.py — Aurik 10.0.0+ (§2.25)
 
 ReferenceAnchorSynthesizer: Wenn der Nutzer keinen Referenztrack für
 Reference Mastering angibt, erzeugt dieser Synthesizer automatisch einen

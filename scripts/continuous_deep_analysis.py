@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Aurik 9 — Kontinuierliche Tiefenanalyse & Qualitäts-Monitoring
+Aurik 10.0.0 — Kontinuierliche Tiefenanalyse & Qualitäts-Monitoring
 =================================================================
 
 Führt eine vollständige Restaurierung mit Phase-weisen Qualitäts-Checkpoints durch,
@@ -335,8 +335,18 @@ class ContinuousDeepAnalyzer:
         # UV3 stores HPI under metadata["holistic_perceptual_gate"]["hpi"] (not flat "hpi_score")
         _hpg = metadata.get("holistic_perceptual_gate") or {}
         _hpg = _hpg if isinstance(_hpg, dict) else {}
+        # §G-HPI-ROOT: More robust HPI fallback chain
+        _hpi_raw = _hpg.get("hpi")
+        if _hpi_raw is None:
+            _hpi_raw = (
+                (metadata.get("holistic_perceptual_gate") or {}).get("hpi")
+                if isinstance(metadata.get("holistic_perceptual_gate"), dict)
+                else None
+            )
+        if _hpi_raw is None:
+            _hpi_raw = metadata.get("hpi_score")
         final_hpi = self._metric_to_float(
-            _hpg.get("hpi") if _hpg.get("hpi") is not None else metadata.get("hpi_score"),
+            _hpi_raw,
             ("hpi", "hpi_score", "score", "value"),
         )
         # UV3 stores AFG as dict: metadata["artifact_freedom"]["score"] or inside holistic_perceptual_gate
@@ -699,6 +709,9 @@ class ContinuousDeepAnalyzer:
         p1_scores = [float(_summary_goals.get(g, 0.0)) for g in p1_goals]
         p1_avg = np.mean(p1_scores) if p1_scores else 0.0
         hpi_value = self._metric_to_float(last_cp.hpi_score, ("hpi", "hpi_score", "score", "value"))
+        # §G-HPI-GATE: Fallback über final_hpg wenn checkpoint kein HPI hat
+        if hpi_value is None and self._final_hpg:
+            hpi_value = self._metric_to_float(self._final_hpg.get("hpi"), ("hpi", "hpi_score", "score", "value"))
         afg_value = self._metric_to_float(
             last_cp.artifact_freedom,
             ("artifact_freedom", "artifact_freedom_score", "score", "value"),
@@ -758,7 +771,7 @@ class ContinuousDeepAnalyzer:
 
 def main():
     """Parse CLI args, run continuous deep analysis, and return process exit code."""
-    parser = argparse.ArgumentParser(description="Aurik 9 — Kontinuierliche Tiefenanalyse")
+    parser = argparse.ArgumentParser(description="Aurik 10.0.0 — Kontinuierliche Tiefenanalyse")
     parser.add_argument("--audio", type=str, default=None, help="Audio-Datei-Pfad")
     parser.add_argument(
         "--mode",

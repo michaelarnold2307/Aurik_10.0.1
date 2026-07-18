@@ -47,7 +47,7 @@ phase_36_transient_shaper.py        Transient-Shaper
 phase_37_bass_enhancement.py        Bass-Fundament-Anhebung
 phase_38_presence_boost.py          Präsenz-Boost (Ära-bewusst: 2–6 kHz, SourceFidelity Mic-Center §2.42)
 phase_39_air_band_enhancement.py    Air-Band-Enhancement (Ära-bewusst, BW-Cap §2.42, > 12 kHz)
-                                    **[BUG-FIX v9.12.0] RESTORATION-EINSCHRÄNKUNG**: Phase_39 ist im
+                                    **[BUG-FIX v10.0.0] RESTORATION-EINSCHRÄNKUNG**: Phase_39 ist im
                                     Restoration-Modus für **alle analogen Materialien VERBOTEN**:
                                     vinyl, shellac, wax_cylinder, wire_recording, tape, reel_tape,
                                     cassette, lacquer_disc. Grund: Air-Band-Erweiterung über das
@@ -99,7 +99,7 @@ phase_65_vocal_naturalness_restoration.py  DSP-Vocal-Naturalness-Restaurierung
                                      nur Restoration, §0a-konform; kein ML, kein Enhancement)
 ```
 
-**Phase-58-Datenvertrag (bindend ab v9.10.100):**
+**Phase-58-Datenvertrag (bindend ab v10.0.0):**
 
 - Persistiert oder geloggt werden dürfen nur Segmentzeiten, `phoneme_type`, Konfidenzen, Fallback-Flags und aggregierte Zähler.
 - Verboten sind Worttext, Transkript, Voll-Lyrics und Roh-Alignment-Tokens in `RestorationResult.metadata`, Checkpoints, Logger-Ausgaben und Debug-UI.
@@ -121,7 +121,7 @@ Die Meldung »`structural_silence_zones nicht in context`« in `structural_silen
 
 `logger.info` → `logger.debug`.
 
-## §7.1d [RELEASE_MUST] 64-Phasen-SOTA-Bindung und Strength-Oracle-Matrix (v9.12.9)
+## §7.1d [RELEASE_MUST] 64-Phasen-SOTA-Bindung und Strength-Oracle-Matrix (v10.0.0)
 
 Die folgende Matrix ist die bindende Vorgabe fuer Phase 01-64. Sie definiert pro Phase:
 
@@ -254,7 +254,7 @@ Parameterprofil, die finale Interventionsstaerke MUSS zusaetzlich durch den
 
 ---
 
-## §7.1b [RELEASE_MUST] Phase 12 — Tape-Head-Level-Stabilizer v2 (v9.11.2)
+## §7.1b [RELEASE_MUST] Phase 12 — Tape-Head-Level-Stabilizer v2 (v10.0.0)
 
 `phase_12_wow_flutter_fix` enthält neben Wow/Flutter-Korrektur einen dedizierten
 `TAPE_HEAD_LEVEL_DIP`-Pfad mit frequenzabhängiger Kompensation.
@@ -286,7 +286,7 @@ Cross-Material-Fallback und Periodizitäts-Marker.
 
 ---
 
-## §7.1a [RELEASE_MUST] Stereo-Kohärenz-Pflicht für Phasen (v9.10.127)
+## §7.1a [RELEASE_MUST] Stereo-Kohärenz-Pflicht für Phasen (v10.0.0)
 
 Phasen, die auf Stereo-Audio operieren, dürfen L und R **nicht unabhängig** mit signal-modifizierendem DSP verarbeiten (separates Gate, separater Kompressor, separate Spektralreparatur). Dies erzeugt anti-phasige Transient-Artefakte in 2–3 Frame-Grenzen, die §2.49 korrekt als Phase-Cancellation flaggt und zurückrollt — mit direkter OQS-Auswirkung.
 
@@ -339,7 +339,7 @@ def _compute_linked_gain(l_audio, r_audio, gain_fn) -> np.ndarray:
 
 ---
 
-## §7.1c [RELEASE_MUST] Phasen-Familien-Taxonomie — ADDITIVE / SUBTRAKTIVE / DYNAMICS (v9.11.14)
+## §7.1c [RELEASE_MUST] Phasen-Familien-Taxonomie — ADDITIVE / SUBTRAKTIVE / DYNAMICS (v10.0.0)
 
 Jede Phase gehört zu **genau einer** Phasen-Familie. Die Zuordnung steuert:
 
@@ -425,7 +425,7 @@ CAUSE_TO_PHASES = {
     "digital_clip":              ["phase_23_spectral_repair", "phase_06_frequency_restoration",
                                   "phase_40_loudness_normalization"],
     "bandwidth_loss":            ["phase_06_frequency_restoration", "phase_07_harmonic_restoration"],
-                                  # phase_39 ENTFERNT (BUG-FIX v9.12.0 §6.2c): Air-Band-Erweiterung
+                                  # phase_39 ENTFERNT (BUG-FIX v10.0.0 §6.2c): Air-Band-Erweiterung
                                   # über BW-Ceiling analoger Materialien erzeugt Halluzinationen
                                   # im Restoration-Modus. Studio-2026 und digitale Quellen bleiben unberührt.
     "high_freq_noise":           ["phase_29_tape_hiss_reduction", "phase_03_denoise",
@@ -446,10 +446,10 @@ CAUSE_TO_PHASES = {
                                   "phase_06_frequency_restoration"],
     "jitter_artifacts":          ["phase_23_spectral_repair", "phase_14_phase_correction"],
     "dynamic_compression_excess":["phase_26_dynamic_range_expansion", "phase_54_transparent_dynamics"],
-                                  # phase_35_multiband_compression ENTFERNT (BUG-FIX v9.12.0 §0a): Stem-Enhancement VERBOTEN in Restoration
+                                  # phase_35_multiband_compression ENTFERNT (BUG-FIX v10.0.0 §0a): Stem-Enhancement VERBOTEN in Restoration
     "head_wear":                 ["phase_56_spectral_band_gap_repair", "phase_14_phase_correction",
                                   "phase_06_frequency_restoration"],
-    # BUG-FIX v9.12.0 §2.59/V12: "azimuth_error" ENTFERNT — kein CAUSES-Gegenstück in Code.
+    # BUG-FIX v10.0.0 §2.59/V12: "azimuth_error" ENTFERNT — kein CAUSES-Gegenstück in Code.
     # "azimuth_error" ist ein DefectScanner-Messwert (Eingabe in Likelihood-Funktionen
     # für head_misalignment/head_wear), keine eigenständige Kausalursache.
     # Azimuth-Korrektur wird über head_misalignment + tape_start_instability getriggert.
@@ -461,24 +461,24 @@ CAUSE_TO_PHASES = {
     "transient_smearing":        ["phase_08_transient_preservation", "phase_36_transient_shaper",
                                   "phase_23_spectral_repair"],
     "clipping":                  ["phase_23_spectral_repair", "phase_06_frequency_restoration"],
-    # Neu v9.10.46:
+    # Neu v10.0.0:
     "riaa_curve_error":          ["phase_04_eq_correction", "phase_06_frequency_restoration",
                                   "phase_07_harmonic_restoration"],
     "aliasing":                  ["phase_23_spectral_repair",
                                   "phase_50_spectral_repair"],
     "bias_error":                ["phase_04_eq_correction", "phase_03_denoise",
                                   "phase_06_frequency_restoration", "phase_29_tape_hiss_reduction"],
-    # Sibilanten (§6.3 v9.10.57):
+    # Sibilanten (§6.3 v10.0.0):
     "sibilance":                 ["phase_19_de_esser", "phase_43_ml_deesser"],
-                                  # phase_42_vocal_enhancement ENTFERNT (BUG-FIX v9.12.0 §0a): Stem-Enhancement VERBOTEN in Restoration
-    # Transport-Bump (v9.10.57b — Kassetten-Holpern):
+                                  # phase_42_vocal_enhancement ENTFERNT (BUG-FIX v10.0.0 §0a): Stem-Enhancement VERBOTEN in Restoration
+    # Transport-Bump (v10.0.0b — Kassetten-Holpern):
     "transport_bump":            ["phase_12_wow_flutter_fix", "phase_24_dropout_repair",
                                   "phase_31_speed_pitch_correction"],
-    # Vocal-Harshness (v9.10.77 — Vokal-Härte/Übersteuerung/Kratzigkeit):
+    # Vocal-Harshness (v10.0.0 — Vokal-Härte/Übersteuerung/Kratzigkeit):
     "vocal_harshness":           ["phase_19_de_esser", "phase_43_ml_deesser",
                                   "phase_23_spectral_repair"],
-                                  # phase_42_vocal_enhancement ENTFERNT (BUG-FIX v9.12.0 §0a): Stem-Enhancement VERBOTEN in Restoration
-    # Neu v9.10.97/98:
+                                  # phase_42_vocal_enhancement ENTFERNT (BUG-FIX v10.0.0 §0a): Stem-Enhancement VERBOTEN in Restoration
+    # Neu v10.0.0/98:
     "tape_start_instability":    ["phase_12_wow_flutter_fix", "phase_25_azimuth_correction",
                                   "phase_31_speed_pitch_correction", "phase_14_phase_correction",
                                   "phase_24_dropout_repair"],
@@ -508,9 +508,9 @@ CAUSE_TO_PHASES = {
                                   "phase_23_spectral_repair", "phase_04_eq_correction"],
     "motor_interference":        ["phase_02_hum_removal", "phase_03_denoise",
                                   "phase_29_tape_hiss_reduction", "phase_04_eq_correction"],
-    # ── v9.12.1: Pegelveränderung ──────────────────────────────────────────────
+    # ── v10.0.0: Pegelveränderung ──────────────────────────────────────────────
     "amplitude_drift":           ["phase_40_loudness_normalization"],
-    # ── v9.12.2: DefectType→CAUSE-Lücken ───────────────────────────────────────
+    # ── v10.0.0: DefectType→CAUSE-Lücken ───────────────────────────────────────
     "clicks":                    ["phase_01_click_removal", "phase_09_crackle_removal"],
     "dolby_nr_mismatch":         ["phase_04_eq_correction", "phase_29_tape_hiss_reduction",
                                   "phase_03_denoise"],
@@ -520,7 +520,7 @@ CAUSE_TO_PHASES = {
                                   "phase_08_transient_preservation"],
     "tape_head_clog":            ["phase_56_spectral_band_gap_repair", "phase_25_azimuth_correction",
                                   "phase_24_dropout_repair"],
-    # ── v9.12.9: Erweiterte Kausal-Ursachen ───────────────────────────────────
+    # ── v10.0.0: Erweiterte Kausal-Ursachen ───────────────────────────────────
     "proximity_effect_excess":   ["phase_04_eq_correction", "phase_05_rumble_filter"],
     "room_mode_resonance":       ["phase_04_eq_correction", "phase_16_final_eq",
                                   "phase_05_rumble_filter"],
@@ -545,7 +545,7 @@ CAUSE_TO_PHASES = {
 }
 # PFLICHT: Jede neue Ursache → Eintrag hier UND in allen Material-Prior-Tabellen des DefectScanners.
 
-# [RELEASE_MUST] §7.2a Severity-Weighted Phase-Reorder bei ≥3 Simultandefekten (v9.10.100+):
+# [RELEASE_MUST] §7.2a Severity-Weighted Phase-Reorder bei ≥3 Simultandefekten (v10.0.0+):
 
 #
 ### §6.10 Phantom-Guards in PhaseInterface (v10.0.0-Phantom)
@@ -557,7 +557,7 @@ CAUSE_TO_PHASES = {
 
 Diese Guards laufen ohne manuelle Konfiguration — jede Phase profitiert.
 
-## §6.9b [RELEASE_MUST] Phase-50 Team-Kohärenz + CONFLICT_REGISTRY (v9.11.5, erweitert v9.11.7)
+## §6.9b [RELEASE_MUST] Phase-50 Team-Kohärenz + CONFLICT_REGISTRY (v10.0.0, erweitert v10.0.0)
 
 `phase_50_spectral_repair` ist nach `phase_06_frequency_restoration`,
 `phase_07_harmonic_restoration` oder `phase_23_spectral_repair` als
@@ -573,7 +573,7 @@ Diese Guards laufen ohne manuelle Konfiguration — jede Phase profitiert.
     wenn die erkannte Regression dem Team-Policy-Grund
     `phase50_after_hf_restoration` entspricht.
 
-**CONFLICT_REGISTRY (v9.11.7)** — `backend/core/phase_ontology.py`:
+**CONFLICT_REGISTRY (v10.0.0)** — `backend/core/phase_ontology.py`:
 
 Für alle aktiven Phasen gilt: UV3 prüft vor jeder Phasen-Ausführung, ob im
 `CONFLICT_REGISTRY` ein Eintrag existiert, der die aktuelle Phase als potentiell
@@ -581,9 +581,9 @@ neutralisierend einstuft. Falls ja, erhält die Phase `conflict_with_prior_phase
 
 Die Phase selbst entscheidet, wie sie mit `conflict_with_prior_phases` umgeht —
 typischerweise: konservativere Threshold, Schutz bestimmter Frequenzbereiche.
-`phase_50` nutzt bereits `hf_protected_bin_start` (v9.11.4) für genau diesen Zweck.
+`phase_50` nutzt bereits `hf_protected_bin_start` (v10.0.0) für genau diesen Zweck.
 
-**Team-Telemetrie (v9.11.7)**:
+**Team-Telemetrie (v10.0.0)**:
 
 UV3 schreibt `metadata["team_coordination"]` nach jeder Pipeline:
 - `event_count`: Anzahl Phasen, bei denen Team-Policy aktiv war
@@ -623,7 +623,7 @@ dürfen frühere restaurative Interventionen nicht indirekt neutralisieren.
 | Piano / Keyboard | `phase_52_piano_restoration` | ≥ 0.50 |
 | Singing / Vocals | `phase_19_de_esser` + `phase_42_vocal_enhancement` + `phase_43_ml_deesser` + VocalAIEnhancement | ≥ 0.40 (Soft 0.35–0.40: 50 % Strength) |
 
-> **Invariante** (v9.10.83): Instrument-Schwelle ist einheitlich **0.50** für alle Instrumente. Höherer Wert (z.B. 0.60) blockiert Enhancement bei Ensemble-Aufnahmen mit mehreren gleichzeitigen Instrumenten. Änderungen hier → immer auch `backend/core/unified_restorer_v3.py` L≈5822 + `plugins/panns_plugin.py` Docstring anpassen.
+> **Invariante** (v10.0.0): Instrument-Schwelle ist einheitlich **0.50** für alle Instrumente. Höherer Wert (z.B. 0.60) blockiert Enhancement bei Ensemble-Aufnahmen mit mehreren gleichzeitigen Instrumenten. Änderungen hier → immer auch `backend/core/unified_restorer_v3.py` L≈5822 + `plugins/panns_plugin.py` Docstring anpassen.
 
 **Regel**: Instrument-Phasen IMMER nach Defektkorrektur, VOR Mastering.
 
@@ -753,7 +753,7 @@ result = process_in_adaptive_chunks(
     max_severity=defect_severity,
     phase_kwargs={"material_type": material, ...},
 )
-# Crossfade: Hanning-Fenster 10 ms @ 50% Overlap — COLA-konform (Lücke-E-Fix v9.10.100)
+# Crossfade: Hanning-Fenster 10 ms @ 50% Overlap — COLA-konform (Lücke-E-Fix v10.0.0)
 #   COLA-Bedingung (Constant Overlap-Add): sum(w[n-H], w[n]) = 1.0 für alle n
 #   → Hanning + 50 % Overlap (Hop = fsize/2) ist COLA-konform — kein Amplitudeneinbruch
 #   → Konkret: fsize = 480 Samples (10 ms @ 48 kHz), hop = 240 Samples (5 ms)
@@ -763,7 +763,7 @@ result = process_in_adaptive_chunks(
 # Minimum: 2 s | Maximum: 120 s
 # Segment-Grenzen (SegmentAdaptiveProcessor) haben Vorrang vor Chunk-Grenzen
 #
-# [RELEASE_MUST] §7.6a Chunk-Boundary-Transient-Guard (v9.10.100+):
+# [RELEASE_MUST] §7.6a Chunk-Boundary-Transient-Guard (v10.0.0+):
 # Liegt ein Transient (onset_strength > 0.35, aus librosa.onset.onset_strength) innerhalb
 # von ±20 ms einer geplanten Chunk-Grenze, MUSS die Grenze um +25 ms nach vorne verschoben
 # werden (weg vom Transient).
@@ -774,7 +774,7 @@ result = process_in_adaptive_chunks(
 # Implementierung: `adaptive_chunk_processor._find_safe_boundary(pos_samples, audio, sr)`
 ```
 
-**Defect-Locations-Flow** (v9.10.75): `_execute_pipeline` extrahiert `defect_locations` (dict[str, list[tuple[float,float]]]) und `max_defect_severity` (float) aus DefectScanner-Ergebnissen und übergibt sie als kwargs an jede Phase. Phasen können Locations als Hints für gezieltere Verarbeitung nutzen (opt-in), erkennen Defekte weiterhin auch eigenständig intern (Redundanz-Prinzip).
+**Defect-Locations-Flow** (v10.0.0): `_execute_pipeline` extrahiert `defect_locations` (dict[str, list[tuple[float,float]]]) und `max_defect_severity` (float) aus DefectScanner-Ergebnissen und übergibt sie als kwargs an jede Phase. Phasen können Locations als Hints für gezieltere Verarbeitung nutzen (opt-in), erkennen Defekte weiterhin auch eigenständig intern (Redundanz-Prinzip).
 
 **[RELEASE_MUST] Location-Completeness-Invariante**:
 
@@ -826,7 +826,7 @@ audio_retry = _wet_dry_blend(audio, audio_full, retry_strength)
 
 ---
 
-## §7.8 [RELEASE_MUST] Phase-50 HF-Spike-Schutz nach Vorphasen-Restauration (v9.11.4)
+## §7.8 [RELEASE_MUST] Phase-50 HF-Spike-Schutz nach Vorphasen-Restauration (v10.0.0)
 
 Pass-1 Spike-Detektor (11-Bin-Fenster, Threshold-Factor 3.0–4.5) darf durch `phase_07`/`phase_06`
 restaurierte Harmoniken **nicht** als Codec-Spikes flaggen.
@@ -839,7 +839,7 @@ Pass-2 (Frame-Energy-Dropout) bleibt global aktiv.
 
 > Vollständige Invariante: Spec 02 §2.57a — Algorithmus: Spec 04 §4.7a (Lookup-Tabelle)
 
-## §7.9 [RELEASE_MUST] Phase-09 LPC/AR-Lücken-Interpolation (v9.11.13)
+## §7.9 [RELEASE_MUST] Phase-09 LPC/AR-Lücken-Interpolation (v10.0.0)
 
 `_interpolate_hybrid()` ist eine **vollständige LPC/AR-Vorhersage** — kein Stub.
 
@@ -852,7 +852,7 @@ Pol-Stabilisierung (|z| ≥ 0.995 → 0.994). 5 ms Boundary-Crossfade.
 
 ---
 
-## §7.10 [RELEASE_MUST] Phase_65 — DSP-Vocal-Naturalness-Restaurierung (Restoration, v9.12.0)
+## §7.10 [RELEASE_MUST] Phase_65 — DSP-Vocal-Naturalness-Restaurierung (Restoration, v10.0.0)
 
 > **Kontext**: `phase_42_vocal_enhancement` ist in Restoration-Modus per §0a Crossfire-Invariante
 > verboten (Stem-Enhancement = Halluzination). Dies hinterlässt eine Lücke: Nach aggressivem NR
@@ -971,7 +971,7 @@ ML-deterministische Phasen: Erster Aufruf mit `strength=1.0` → Cache `audio_fu
 STFT-Bereich: `M_blend = (1−α)·M_dry + α·M_wet`, Phase vom Wet-Signal.
 Verhindert Phase-Cancellation bei Kopfhörer.
 
-### PHASE_GOAL_EXCLUSIONS — kanonische Tabelle (v9.10.96)
+### PHASE_GOAL_EXCLUSIONS — kanonische Tabelle (v10.0.0)
 
 | Phase | Ausgeschlossene Goals | Begründung |
 | --- | --- | --- |

@@ -1,6 +1,6 @@
 """
 backend/core/goal_applicability_filter.py
-Aurik 9 -- Spec §2.32: GoalApplicabilityFilter
+Aurik 10.0.0 -- Spec §2.32: GoalApplicabilityFilter
 
 Filtert physikalisch nicht messbare Musical Goals heraus.
 """
@@ -108,7 +108,7 @@ class GoalApplicabilityFilter:
     Deaktivierungs-Regeln:
         SpatialDepthMetric:  Mono-Aufnahme (decade <= 1950 oder mono-Material)
         BrillanzMetric:      Quell-BW < 8 kHz
-        TonalCenterMetric:   wax_cylinder (Fix K v9.10.100: SNR-Bedingung entfernt —
+        TonalCenterMetric:   wax_cylinder (Fix K v10.0.0: SNR-Bedingung entfernt —
                              K-S-Key-Detection ist SNR-invariant gemäß §9.7.11)
         GrooveMetric:        <10 s oder keine Percussion
         MicroDynamicsMetric: <20 s oder stark komprimiert
@@ -237,7 +237,7 @@ class GoalApplicabilityFilter:
             )
 
         # REGEL: TonalCenterMetric
-        # Fix K (v9.10.100): SNR-Bedingung entfernt — K-S-Key-Detection ist SNR-invariant
+        # Fix K (v10.0.0): SNR-Bedingung entfernt — K-S-Key-Detection ist SNR-invariant
         # gemäß §9.7.11; Deaktivierung bei SNR < −5 dB war inkonsistent mit der
         # K-S-Invarianz-Aussage und hätte tonal_center auf stark degradiertem Material
         # blind abgeschaltet. Nur WAX_CYLINDER wird weiterhin deaktiviert (proprietäres

@@ -1,5 +1,5 @@
 """
-core/emotional_arc_preservation.py — Aurik 9.9+ (§2.30 / §8.2 Punkt 12)
+core/emotional_arc_preservation.py — Aurik 10.0.0+ (§2.30 / §8.2 Punkt 12)
 
 EmotionalArcPreservationMetric: Prüft, ob der emotionale Dynamik-Bogen
 (Arousal-/Valence-Kurve) des Originals im restaurierten Signal erhalten bleibt.
@@ -80,7 +80,7 @@ class EmotionalArcResult:
     def preservation_score(self) -> float:
         """Skalarer Erhaltungs-Score ∈ [0, 1] für HPG §2.44.
 
-        FIXED v9.11: UV3 nutzt getattr(result, "preservation_score", 1.0) —
+        FIXED v10.0.0: UV3 nutzt getattr(result, "preservation_score", 1.0) —
         ohne dieses Property fällt es immer auf den 1.0-Default zurück
         (emotional_arc_preservation nie unter 1.0, HPG-Faktor wirkungslos).
 
@@ -386,7 +386,7 @@ class EmotionalArcPreservationMetric:
             if not np.isfinite(seg).all():
                 continue
 
-            # Arousal: 0.55·RMS + 0.45·spectral_centroid_norm (v9.10.114)
+            # Arousal: 0.55·RMS + 0.45·spectral_centroid_norm (v10.0.0)
             # §9.10.119: Centroid normalized relative to per-song median instead
             # of Nyquist.  After denoising, the noise floor drops → centroid
             # shifts upward → false arousal increase → flattened dynamic arc.

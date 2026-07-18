@@ -381,7 +381,7 @@ class SGMSEPlusPlugin:
         sr: int,
         sigma: float = 0.5,
         max_runtime_s: float | None = None,
-        panns_singing: float = 0.0,  # §0p v9.12.9: Vokal-Mode — konservativeres sigma bei Gesang
+        panns_singing: float = 0.0,  # §0p v10.0.0: Vokal-Mode — konservativeres sigma bei Gesang
     ) -> SgmseResult:
         """Kombinierte Rausch-/Hallunterdrückung via SGMSE+ oder WPE-Fallback.
 

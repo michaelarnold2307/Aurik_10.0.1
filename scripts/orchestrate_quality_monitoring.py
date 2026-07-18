@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Aurik 9 — Integriertes Qualitäts-Monitoring & Deep-Analysis Ökosystem
+Aurik 10.0.0 — Integriertes Qualitäts-Monitoring & Deep-Analysis Ökosystem
 =======================================================================
 
 Orchestriert:
@@ -265,7 +265,7 @@ class QualityMonitoringOrchestrator:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Aurik 9 — Integriertes Qualitäts-Monitoring",
+        description="Aurik 10.0.0 — Integriertes Qualitäts-Monitoring",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Beispiele:

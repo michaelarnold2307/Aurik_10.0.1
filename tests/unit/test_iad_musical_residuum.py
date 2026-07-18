@@ -2,7 +2,7 @@ import pytest
 
 """
 tests/unit/test_iad_musical_residuum.py — IntroducedArtifactDetector §2.23 Test-Suite
-§2.46e Relative-Harmonicity-Guard (v9.12.1) — artifact_freedom = 0.95 adhesion fix.
+§2.46e Relative-Harmonicity-Guard (v10.0.0) — artifact_freedom = 0.95 adhesion fix.
 
 Alle Tests synthetisch, kein ML-Modell erforderlich.
 """
@@ -157,7 +157,7 @@ def test_06_iad_result_penalty_above_095():
 
 
 def test_07_relative_margin_constant():
-    """HALLUCINATION_RELATIVE_MARGIN muss 0.20 sein (§2.46e v9.12.1)."""
+    """HALLUCINATION_RELATIVE_MARGIN muss 0.20 sein (§2.46e v10.0.0)."""
     from backend.core.introduced_artifact_detector import IntroducedArtifactDetector
 
     iad = IntroducedArtifactDetector()

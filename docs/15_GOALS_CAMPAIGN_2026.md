@@ -1,3 +1,4 @@
+<!-- HINWEIS: Ursprünglich "15 Goals", jetzt 14 (ein Goal wurde konsolidiert). Stand: Mai 2026. -->
 # 15 Musikalische Ziele — Kampagne 2026
 
 **Stand**: 19. Mai 2026  

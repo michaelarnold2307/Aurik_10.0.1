@@ -372,7 +372,7 @@ class ExcellenceBenchmark:
         Returns:
             True wenn alle Ziele erfüllt, False andernfalls.
         """
-        # Zielwerte für Aurik 9.6
+        # Zielwerte für Aurik 10.0.0
         # Tuple: (target_value, operator) — "ge" = ≥ (höher ist besser), "le" = ≤ (niedriger ist besser)
         targets = {
             "avg_after_ovr": (3.80, "ge"),  # MUSIC_OVR ≥ 3.80 (= 0.95 normiert)

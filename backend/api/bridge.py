@@ -1,4 +1,4 @@
-"""Aurik 9 — API Bridge (§11 Spec 08)
+"""Aurik 10.0.0 — API Bridge (§11 Spec 08)
 =====================================
 Einziger Eintrittspunkt für Frontend/CLI → Backend-Core.
 
@@ -2370,11 +2370,11 @@ def get_layman_summary(result: Any) -> dict[str, Any]:
     frisson = float(insights.get("frisson_index", 0.5) or 0.5)
     degradation = str(insights.get("quality_gate", {}).get("degradation_status", "ok") or "ok")
     preserve = float(insights.get("quality_gate", {}).get("preserve_signal", 0.5) or 0.5)
-    cluster = str(insights.get("cluster_key", "") or "")
+    _cluster = str(insights.get("cluster_key", "") or "")
     fqf = dict(insights.get("fallback_quality_floor", {}) or {})
     fqf_triggered = bool(fqf.get("triggered", False))
     fqf_recovered = bool(fqf.get("recovered", False))
-    recommendations = list(insights.get("recommendations", []) or [])
+    _recommendations = list(insights.get("recommendations", []) or [])
 
     # ── Material/Era/Defekt-Kontext extrahieren ─────────────────────────────
     _meta_raw = getattr(result, "metadata", None)
@@ -2807,7 +2807,8 @@ def get_layman_summary(result: Any) -> dict[str, Any]:
         _exp_meta = _coerce_dict_str_any(_meta.get("export_metrics", {}))
         lufs_target = _exp_meta.get("target_lufs")
         lufs_actual = _exp_meta.get("integrated_lufs_after") or _exp_meta.get("output_integrated_lufs")
-    except Exception:
+    except Exception as _e:
+        logger.debug("bridge: non-critical exception: %s", _e)
         pass
 
     # ── ML-Status ────────────────────────────────────────────────────────────
@@ -2831,8 +2832,8 @@ def get_layman_summary(result: Any) -> dict[str, Any]:
 
         _narrator_ls = _get_narrator_ls()
         chain_summary = _narrator_ls.chain_summary()
-    except Exception:
-        pass
+    except Exception as _e:
+        logger.debug("bridge: non-critical exception: %s", _e)
 
     return {
         "headline": headline,

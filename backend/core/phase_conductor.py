@@ -1,5 +1,5 @@
 """
-PhaseConductor — Inter-Phase Adaptive Controller (Aurik 9.11.x, §Hebel-3)
+PhaseConductor — Inter-Phase Adaptive Controller (Aurik 10.0.0.x, §Hebel-3)
 =========================================================================
 
 Intelligente Wetness-Steuerung zwischen Phasen:
@@ -21,7 +21,7 @@ Alle Operationen: CPU-only, < 50 ms für 1 min Audio.
 Singleton via `get_phase_conductor()`.
 
 Author: Aurik Development Team
-Version: 1.0.0 (Hebel-3 §Adaptive-Intelligence v9.11.0)
+Version: 1.0.0 (Hebel-3 §Adaptive-Intelligence v10.0.0)
 """
 
 from __future__ import annotations

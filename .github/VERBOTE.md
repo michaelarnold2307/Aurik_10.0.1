@@ -1,6 +1,6 @@
 # Aurik 10 — VERBOTE (Normativer Katalog)
 
-> **Status:** Normativ | **Version:** 10.0.5 | **Stand:** 13. Juli 2026
+> **Status:** Normativ | **Version:** 10.0.8 | **Stand:** 13. Juli 2026
 >
 > Dieser Katalog definiert alle unverhandelbaren VERBOTE — Handlungen, die Aurik
 > **niemals** ausführen darf. Jedes Verbot hat eine eindeutige ID (§V1, §V2 usw.).

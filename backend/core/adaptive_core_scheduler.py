@@ -1,5 +1,5 @@
 """
-Adaptive Core Scheduler for Aurik 9.0 - Intelligent 4-Core Parallelization
+Adaptive Core Scheduler for Aurik 10.0.0 - Intelligent 4-Core Parallelization
 ===========================================================================
 
 Orchestriert parallele Ausführung von Audio-Processing Phasen mit optim optimaler
@@ -13,8 +13,8 @@ Key Features:
 
 Performance Target: 2.7× Speedup @ 67% Efficiency
 
-Author: Aurik 9.0 Development Team
-Version: 9.0.0
+Author: Aurik 10.0.0 Development Team
+Version: 10.0.0
 Date: 2026-02-15
 """
 
@@ -75,7 +75,7 @@ class SchedulerStats:
 
 class AdaptiveCoreScheduler:
     """
-    Intelligenter 4-Core Scheduler für Aurik 9.0.
+    Intelligenter 4-Core Scheduler für Aurik 10.0.0.
 
     Analyse hat gezeigt:
     - 4 Cores = OPTIMAL (2.7× Speedup, 67% Efficiency)

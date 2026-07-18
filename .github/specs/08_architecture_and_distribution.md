@@ -91,7 +91,7 @@ Pflichtregeln:
 
 Abweichungen sind Release-Blocker.
 
-### §11.1a [RELEASE_MUST] Bridge-Experience-Insights-Kontrakt (v9.11.1)
+### §11.1a [RELEASE_MUST] Bridge-Experience-Insights-Kontrakt (v10.0.0)
 
 `backend/api/bridge.py` MUSS eine stabile Extraktionsfunktion bereitstellen:
 
@@ -244,7 +244,7 @@ class MyResult:
     metadata: dict[str, float] = field(default_factory=dict)
 ```
 
-### §3.7 Type-Annotation-Pflicht (ab v9.8)
+### §3.7 Type-Annotation-Pflicht (ab v10.0.0)
 
 ```python
 # PFLICHT für alle public APIs:
@@ -279,7 +279,7 @@ def audio_sha256(audio: np.ndarray, sr: int) -> str:
 
 ---
 
-## §3.9 [RELEASE_MUST] Stabilitäts-Invarianten (v9.10.81)
+## §3.9 [RELEASE_MUST] Stabilitäts-Invarianten (v10.0.0)
 
 Ergänzende Invarianten zur Absicherung gegen Abstürze, OOM, Deadlocks, Freezes und undefinierte Zustände.  
 Diese Regeln sind orthogonal zu §2.38–§2.41 und fokussieren auf Laufzeit-Systemgrenzen.
@@ -503,7 +503,7 @@ def _check_audio_buffer_size(audio: np.ndarray, file_path: str) -> None:
 - `AudioTooLargeError` → `item_error`-Signal mit verständlicher deutscher Fehlermeldung.
 - `MAX_AUDIO_BYTES_RAM` als Konfigurationskonstante in `backend/core/audio_validator.py` [ROADMAP].
 
-**Code-Sync v9.10.130:** Das normative Limit ist auf 4 GB harmonisiert und entspricht
+**Code-Sync v10.0.0:** Das normative Limit ist auf 4 GB harmonisiert und entspricht
 dem aktuellen UV3-Guard in `backend/core/unified_restorer_v3.py`.
 
 ### [RELEASE_MUST] §3.9.8 Lock-Acquisition-Order — Deadlock-Prävention zwischen ARM und PLM
@@ -623,7 +623,7 @@ class AudioFileValidator:
 
 ## §11.3 Plugin-Policy — bestehende Plugins nutzen, nicht neu schreiben
 
-> **Aktuelle Plugin-Anzahl**: 51 Plugin-Dateien unter `plugins/` (Stand v9.10.121).
+> **Aktuelle Plugin-Anzahl**: 51 Plugin-Dateien unter `plugins/` (Stand v10.0.0).
 
 ```text
 ✅ = lokal gebündelt, out-of-the-box, kein Download
@@ -712,9 +712,9 @@ self.btn_magic_restoration.setStyleSheet(f"""
 | `Escape` | Verarbeitung abbrechen |
 | `Ctrl+Z` | Pfad-Clipboard |
 
-**A/B-Sync-Loop** (v9.10.112): Checkable `btn_ab_sync`-Button — bei aktiviertem Sync wechseln A/B die Quelle im aktuellen Loop-Punkt, kein Reset auf Anfang. Queue-Drag-&-Drop-Reordering für Batch-Liste.
+**A/B-Sync-Loop** (v10.0.0): Checkable `btn_ab_sync`-Button — bei aktiviertem Sync wechseln A/B die Quelle im aktuellen Loop-Punkt, kein Reset auf Anfang. Queue-Drag-&-Drop-Reordering für Batch-Liste.
 
-### §11.4c [RELEASE_MUST] Experience-UI-Propagation (v9.11.1)
+### §11.4c [RELEASE_MUST] Experience-UI-Propagation (v10.0.0)
 
 Nach `item_finished_with_result` MUSS die Frontend-Oberfläche die neuen Runtime-Signale darstellen:
 
@@ -808,7 +808,7 @@ Das visuelle Feedback teilt sich auf zwei Anzeigebereiche auf:
 
 ---
 
-## §11.4d [RELEASE_MUST] Tonträgerketten-Display-Invarianten (v9.11.14)
+## §11.4d [RELEASE_MUST] Tonträgerketten-Display-Invarianten (v10.0.0)
 
 Das Tonträger-Display-System in `Aurik10/ui/modern_window.py` hat **drei unabhängige Update-Pfade**, die alle auf denselben State schreiben (`detected_medium_label`, `_carrier_bg_label`). Ohne Single Source of Truth können Medien-Mappings divergieren und Anzeigen falsch oder leer werden.
 
@@ -1019,7 +1019,7 @@ torch==2.2.2  --extra-index-url https://download.pytorch.org/whl/cpu
 # Für DirectML: pip install torch-directml
 ```
 
-### §8.7 AMD-GPU-Beschleunigung — Architektur-Erkennung & Tier-System (v9.11.14)
+### §8.7 AMD-GPU-Beschleunigung — Architektur-Erkennung & Tier-System (v10.0.0)
 
 **Singleton**: `backend/core/ml_device_manager.py` — `get_ml_device_manager()`
 

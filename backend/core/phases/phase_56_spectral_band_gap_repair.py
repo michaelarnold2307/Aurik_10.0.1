@@ -1,5 +1,5 @@
 """
-Phase 56: Spectral Band Gap Repair — Aurik 9.0
+Phase 56: Spectral Band Gap Repair — Aurik 10.0.0
 ================================================
 
 Behebt HEAD_WEAR-Defekte: vollständige Frequenzbandauslöschung durch Azimuth-
@@ -43,7 +43,7 @@ AKTIVIERUNG:
 Nur bei DefectType.HEAD_WEAR, confidence ≥ 0.55 (CAUSE_TO_PHASES §7.2)
 Nur bei MaterialType TAPE / REEL_TAPE
 
-Autor: Aurik 9.0 Development Team / v9.9.8
+Autor: Aurik 10.0.0 Development Team / v10.0.0
 """
 
 from __future__ import annotations

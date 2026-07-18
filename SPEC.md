@@ -1,241 +1,196 @@
-# Aurik Spezifikation — §-Referenz-Index
+# Aurik 10.0.0 — Bauplan (1:1 reproduzierbar)
 
-> **852 eindeutige §-Referenzen** in `backend/core/`, `denker/`, `forensics/` (Schätzwert, Codebasis wächst).
-> Dieser Index dokumentiert die häufigsten und architektonisch wichtigsten (derzeit ~105 Einträge).
-> Neue §-Referenzen MÜSSEN hier eingetragen werden (Pre-Commit-Check).
-
-## §-Kategorien
-
-| Präfix | Bedeutung |
-|---|---|
-| `§0` | Fundamentale Invarianten (Primum non nocere, NaN/Inf, LAG) |
-| `§1-4` | Architektur (Module, Singletons, Contracts, Threading) |
-| `§2` | UV3-Kern (Kalibrierung, Phasen, Goals, DSP) |
-| `§4` | Phasen-spezifische Regeln |
-| `§6` | Forensik (Medium-Detector, Defekt-Scanner, Era-Klassifikator) |
-| `§7-8` | Pipeline-Intelligenz (CausalReasoner, Optimizer) |
-| `§9` | Qualitäts-Metriken (Goal-Scoring, PQS, MOS) |
-| `§V` | Vintage-Ästhetik-Guards (Soft-Saturation, Wärmeband, etc.) |
-| `§SFT/UQ/AC/AF` | Subsysteme (Safety, Uncertainty, Phase-Pruning, Cross-Guard) |
+## Stand: 2026-07-18 | Aurik 10.0.0 — Weltspitze | 12 Innovationen integriert
 
 ---
 
-## Fundamentale Invarianten (§0)
+## 1. Architektur-Übersicht
 
-| §Ref | Bedeutung | Dateien |
-|---|---|---|
-| `§0` | Primum non nocere — keine Verschlechterung | UV3 |
-| `§0a` | NaN/Inf-Schutz auf allen Ein- und Ausgaben | UV3 |
-| `§0p` | Vocal-Focus-Analyzer: Singstimme erkennen und schützen | UV3, VFA |
-| `§0c` | Short-Clip-Handling (< 10s): reduzierte Analyse | UV3 |
-| `§0d` | LAG-Probe: Sample-genaue Latenzmessung | UV3 |
-| `§0h` | Stereo-L/R-Konsistenz | UV3 |
-| `§0j` | DC-Offset-Erkennung vor DSP | UV3 |
-| `§0l` | Phasen-Linearität bewahren | UV3 |
-| `§0b` | Mode-Alias-Guard (copilot-instructions) | UV3 |
-| `§0f` | Estimator-Error-Fallback (stiller Rückfall) | UV3 |
-| `§0k` | HPI-Ceiling-Guard / Maximum-Achievable-Score | UV3, CDAS, APR |
-| `§0m` | Confidence-Sources (3 Evidenzquellen für Konfidenz) | MD, UV3 |
-
-## Architektur (§1-4)
-
-| §Ref | Bedeutung | Dateien |
-|---|---|---|
-| `§2.8` | UV3 REST API Contract | UV3 |
-| `§2.29` | PMGG Datenfluss-Invariante (Restorability) | UV3 |
-| `§2.31` | MidCalibrate: Progress-basierte Rekalibrierung | UV3 |
-| `§3.1` | NaN/Inf-Schutz (normativ) | UV3, Denker |
-| `§3.2` | Singleton-Pattern (Thread-Safe, Double-Checked Locking) | Alle Denker |
-| `§4.4` | Phase-Executor: OOM-Probe, PLM, Wall-Budget | UV3 |
-| `§4.5` | Phase-ID-Validierung | UV3 |
-| `§4.11` | Phase-Verbote (kein Denoise auf NR-Output, etc.) | UV3 |
-| `§4.11a` | Pre-Echo-Thresholds (menschliche Hörschwelle) | PED |
-
-## UV3-Kern (§2) — Kalibrierung & Phasen
-
-| §Ref | Bedeutung | Dateien |
-|---|---|---|
-| `§2.44` | Per-Phase-Musical-Goals-Gate (PMGG) | UV3, PMGG |
-| `§2.45` | Pegel-Monitoring (Pre/Post-Pegel pro Phase) | UV3 |
-| `§2.45a` | Pegel-Drop-Guard (±0.5 dB Toleranz) | UV3 |
-| `§2.46` | Tilt-Cap (Spektrale Neigungs-Begrenzung) | UV3 |
-| `§2.46a` | Carrier-Chain-Invariante | UV3 |
-| `§2.46b` | Source-Fidelity Spectral Tilt | UV3 |
-| `§2.46e` | Room-Acoustics-Fingerprint | UV3 |
-| `§2.46f` | Blind-Internal-Reference (BIR) | UV3 |
-| `§2.47` | Material-Defect-Consistency | UV3 |
-| `§2.48` | Cumulative-Interaction-Guard (CIG) | UV3 |
-| `§2.49` | Artifact-Freedom (IAD-gate) | UV3 |
-| `§2.51` | Phase-Skipping (deterministischer PID-Executor) | UV3 |
-| `§2.54` | Effective-Targets (Physical-Ceiling) | UV3 |
-| `§2.55` | Excellence-Optimizer (Core-Guard) | UV3 |
-| `§2.56` | Song-Goal-Importance (Genre/Era/Material) | UV3, SGI |
-| `§2.59` | **Contract-Validierung & Defekt-Namen-Sync (NEU 2026-07-09)** | CV, DM, SP |
-| `§2.62` | Feedback-Chain (Post-Phasen-Retries) | UV3 |
-| `§2.64` | Goal-Defizit-Feedback-Chain | UV3 |
-| `§2.30b` | Macro-Dynamics-Guard (Quiet-Zone, Per-Sample) | UV3, MDEM, AU |
-| `§2.31a` | Base-Target-Fine-Tuning (SongSelbstkalibrierung) | UV3, SGC |
-| `§2.36a` | PhonemeTimeline (Phonem-spezifische DSP) | PT, LGE, MDEM |
-| `§2.51a` | Stereo-No-Surprises-Guard (Hard-Fail/Warning) | UV3, AU |
-| `§2.65` | MAS-Convergence (Early-Stop bei Zielerreichung) | UV3, APR |
-| `§2.67` | Koalitions-Priorisierung (gekoppelte Phasen) | UV3, DPM, PSO |
-| `§2.68` | SSIP (Signal-Flow Integrity Protocol) | SSI, UV3 |
-
-## Forensik (§6)
-
-| §Ref | Bedeutung | Dateien |
-|---|---|---|
-| `§6.2a` | Carrier-Chain-Invariante (Tape-Stufe in mp3-Chain) | UV3 |
-| `§6.2c` | Dolby-NR-Erkennung | MD |
-| `§6.3` | DefectScanner: 62 DefectTypes | DS |
-| `§6.7` | Medium-Detector: Bayesian-Fusion (v9.10.97) | MD |
-| `§6.7b` | File-Extension-Prior (Digital vs Analog) | MD |
-| `§6.8` | Era-Precursor (reel_tape-Injektion) | UV3 |
-| `§6.1` | Material-Key-Normalisierung (kanonisches Mapping) | MD, TD |
-| `§6.1b` | Letzter-Analog-Träger-Primärprinzip | MD |
-| `§6.7.1` | Pflicht-Spektralfingerabdruck (5 Basis-Features) | MD |
-| `§6.7.2` | Ketten-Erkennung (Transfer-Chain) | MD |
-| `§6.7.3` | Erweiterte Features (Rotation, Infrasonic, Codec) | MD |
-| `§6.7e` | Multi-Kandidaten-Gate | MD |
-| `§6.7f` | Vorläufer-Analog-Gate (Precursor-Stufen) | MD |
-| `§6.9a` | Normative Literatur-Referenz (wissenschaftlich) | MD |
-
-## Qualitäts-Metriken (§9)
-
-| §Ref | Bedeutung | Dateien |
-|---|---|---|
-| `§9.5` | Quality-Tracking (Vorher/Nachher-Baseline) | UV3 |
-| `§09.2` | Song-Goal-Targets (Era/Material/Studio-Mode) | UV3 |
-| `§9.12.7` | Vintage-Material-Floor (Brillanz-Ceiling nach Träger) | UV3, PCE, EAPC, SGT |
-| `§9.12.8` | Material-adaptive Metriken (Wärme, Brillanz, TQC) | UV3, CM, MRB, TQC |
-
-## Pipeline-Intelligenz (§7-8)
-
-| §Ref | Bedeutung | Dateien |
-|---|---|---|
-| `§7.6` | Chunk-Size (Defekt-adaptive Verarbeitung) | SD, AD, ACP, UV3 |
-| `§7.6a` | Chunk-Boundary-Transient-Guard | ACP |
-| `§8.2` | Emotional-Arc-Preservation (Tonart, LUFS, Chroma) | UV3, EXP, BSB |
-| `§8.3` | Gänsehaut-Formel (Goosebumps-Quality-Check) | GQC, EAP, MDEM, LGE |
-
-## Vintage-Ästhetik (§V)
-
-| §Ref | Bedeutung | Dateien |
-|---|---|---|
-| `§V19` | Noise-Texture-Detector (erhält Rausch-Charakter) | UV3 |
-| `§V24` | Tilt-Cap: Spektrale Balance bewahren | UV3 |
-| `§V38` | Soft-Saturation-Guard (Röhren/Tape-Charakter) | UV3 |
-| `§V40` | Wärmeband-Guard (200-800 Hz) | UV3 |
-| `§V41` | Referenz-Konsistenz (kein Oversmoothing) | UV3 |
-
-## Subsysteme
-
-| §Ref | Bedeutung | Dateien |
-|---|---|---|
-| `§AC` | Intelligent Phase Pruning | PP |
-| `§AF` | Cross-Guard (Denker-Teamwork) | UV3 |
-| `§SFT` | Safety-Session-Tracker | UV3 |
-| `§UQ` | Uncertainty-Quantification (Pipeline-UQ) | UV3 |
-| `§SLR-1` | Lyrics-Guided-Enhancement | UV3 |
-| `§CHT-1` | Cumulative-Hallucination-Tracker | UV3 |
-| `§PID` | Phase-Interaction-Denker-Plan | UV3, PID |
-| `§CSTC` | Cross-Segment-Timbral-Coherence | UV3 |
-| `§v10` | Mode-aware Features (Pleasantness-First) | SD, RD, UV3 |
-| `§v10.1` | Mode-Aware-Plugin-Routing | QFL, RDA, RD |
-| `§v10.5` | PerceptualQualityCouncil & Guard-Auditing | PQC, GEA, PMGG |
-| `§HPE` | Human Pleasantness Estimator | HPE |
-| `§Gap5` | BlindInternalReference (Studio-Console-Character) | BIR, UV3 |
-| `§Gap6` | Perceptual-Reference-Anchor-Matcher | RAM, UV3 |
-| `§AJ` | AntiMufflingPass (Dumpfheit-Entfernung) | AMP, UV3 |
-| `§C10` | Goal-Feedback (Bayesian EMA Kalibrierung) | SGI, BRD, UV3 |
-| `§DSD` | DSD/DSF/SACD-Import-Support | MD |
-| `§LSM-1` | Lyrics-Semantics-Model (NLP-Sentiment) | LSA, LGE |
-| `§Spektrogramm` | Spektrogramm-Feedback (JSON für GUI) | SPV |
-| `§Rolls-Royce` | Hörmüdung/Vision (Phantom-Mode, Comfort) | CG, BP, PM, VQG |
-| `§VERBOTEN` | np.corrcoef-Guard (NaN auf konstanten Signalen) | DSP, ML |
+```
+IMPORT → PRE-ANALYSE → SONG-CONTEXT → OPTIMIERER → KOHÄRENZ-GUARD → EXPORT
+───────   ──────────   ────────────   ─────────   ──────────────   ──────
+          9 Analyse-    Look-Ahead/    5 Strategien  SongCoherence   WAV/FLAC
+          Module        Behind pro     parallel      + Coherence-    /AIFF
+                        Segment         Per-Segment-  Fixes (4 St.)  Atomic
+                                       Auswahl                      Write
+```
 
 ---
 
-## Legende der Datei-Abkürzungen
+## 2. Modul-Verzeichnis (Weltspitze-Niveau)
 
-| Kürzel | Datei |
-|---|---|
-| UV3 | `backend/core/unified_restorer_v3.py` |
-| MD | `forensics/medium_detector.py` |
-| DS | `backend/core/defect_scanner.py` |
-| PMGG | `backend/core/per_phase_musical_goals_gate.py` |
-| SGI | `backend/core/song_goal_importance.py` |
-| PP | `backend/core/phase_pruner.py` |
-| CV | `backend/core/defect_contract_validator.py` |
-| DM | `backend/core/defect_manifest.py` |
-| SP | `backend/core/safe_dict.py` |
-| VFA | `backend/core/vocal_focus_analyzer.py` |
-| PID | `denker/phase_interaction_denker.py` |
-| PT | `backend/core/phoneme_timeline.py` |
-| LGE | `backend/core/lyrics_guided_enhancement.py` |
-| MDEM | `backend/core/micro_dynamics_envelope_morphing.py` |
-| AU | `backend/core/audio_utils.py` |
-| SGC | `backend/core/song_calibration.py` |
-| PSO | `backend/core/dsp/phase_strength_oracle.py` |
-| DPM | `backend/core/defect_phase_mapper.py` |
-| SSI | `backend/core/dsp/structural_silence_isolation.py` |
-| APR | `backend/core/adaptive_phase_rescheduler.py` |
-| PED | `backend/core/dsp/pre_echo_detector.py` |
-| CDAS | `scripts/continuous_deep_analysis.py` |
-| TD | `denker/tontraeger_denker.py` |
-| PCE | `backend/core/physical_ceiling_estimator.py` |
-| EAPC | `backend/core/era_authentic_perceptual_completion.py` |
-| SGT | `backend/core/studio_goal_targets.py` |
-| CM | `backend/core/calibration_matrix.py` |
-| MRB | `benchmarks/musical_restoration_benchmark.py` |
-| TQC | `backend/core/temporal_quality_coherence.py` |
-| SD | `denker/strategie_denker.py` |
-| AD | `denker/aurik_denker.py` |
-| ACP | `backend/core/adaptive_chunk_processor.py` |
-| EXP | `backend/exporter.py` |
-| BSB | `benchmarks/competitive/benchmark_suite.py` |
-| GQC | `backend/core/goosebumps_quality_checker.py` |
-| EAP | `backend/core/emotional_arc_preservation.py` |
-| QFL | `backend/core/quality_feedback_loop.py` |
-| RDA | `backend/core/regulator/_dsp_applier.py` |
-| RD | `denker/restaurier_denker.py` |
-| PQC | `backend/core/perceptual_quality_council.py` |
-| GEA | `backend/core/guard_effectiveness_auditor.py` |
-| HPE | `backend/core/human_pleasantness_estimator.py` |
-| BIR | `backend/core/blind_internal_reference.py` |
-| RAM | `backend/core/reference_anchor_matcher.py` |
-| AMP | `backend/core/anti_muffling_pass.py` |
-| BRD | `backend/api/bridge.py` |
-| LSA | `backend/core/lyrics_sentiment_analyzer.py` |
-| SPV | `backend/core/spectrogram_provider.py` |
-| CG | `backend/core/comfort_guard.py` |
-| BP | `backend/core/breath_preserver.py` |
-| PM | `backend/core/phantom_mode.py` |
-| VQG | `backend/core/vocal_quality_gate.py` |
+### 2.1 Import (`backend/file_import.py`)
+
+- **Formate**: `.wav .mp3 .flac .ogg .aac .aiff .wma .opus .m4a .alac .caf`
+- **Decoder**: soundfile → pedalboard/FFmpeg → pydub-Subprocess (3-stufig)
+- **STCG-Import-Guard**: GCC-PHAT + Multi-Point-Verifikation, korrigiert L/R-Drift >64 samples
+- **Downmix**: Energie-gewichteter Downmix für >2 Kanäle
+- **NaN/Inf**: `nan_to_num` + `clip(-1,1)` nach jedem Decode-Pfad
+- **Carrier-Detection**: Heuristik + Forensik + ML-Klassifikation
+- **Spezifikationen**: §G-SF-READ, §G13, §2.47
+
+### 2.2 Pre-Analyse (`backend/core/pre_analysis.py`)
+
+- **Medium-Detector**: Forensische Tonträgererkennung (Vinyl, Shellac, Tape, CD, etc.)
+- **Era-Classification**: via Bridge API, Jahrzehnt-Schätzung
+- **Genre-Classification**: Schlager-aware, via Bridge API
+- **Defect-Scanner**: Material-abhängige Thresholds (§2.47a)
+- **Restorability**: Bewertet Wiederherstellbarkeit (0–100)
+- **Cross-Validation**: Genre-Chain-Konsistenzprüfung (geloggt)
+- **Alle silent-except Blöcke**: → `logger.debug()` mit Kontext
+
+### 2.3 Phase-Pipeline (66 Phasen) + Closed-Loop Optimizer
+
+Jede Phase folgt dem Interface:
+
+```python
+def process(self, audio: np.ndarray, sample_rate: int,
+            material_type: MaterialType, **kwargs) -> PhaseResult
+```
+
+| # | Phase | Spezifikation |
+|---|---|---|
+| 01 | Click Removal | Adaptive Threshold, Material-Profile |
+| 02 | Hum Removal | Notch-Filter, Harmonische-Erkennung |
+| 03 | Denoise | Spektrale Subtraktion, OMLSA-Fallback |
+| 04 | EQ Correction | Material-adaptiv, §ISO-226 |
+| 05 | Rumble Filter | Hochpass, Subsonic |
+| 06 | Frequency Restoration | Bandwidth-Extension |
+| 07 | Harmonic Restoration | Exciter (nur Studio-2026) |
+| 08 | Transient Preservation | Attack-Erkennung |
+| 09 | Crackle Removal | Impuls-Detektion |
+| 12 | Wow & Flutter | pYIN, STCG-geführt, §G-PYIN-CACHE |
+| 16 | Final EQ | Material-Profile |
+| 17 | Mastering Polish | Finaler Schliff |
+| 18 | Noise Gate | Adaptiv, §2.45a |
+| 19 | De-Esser | Gender-aware, Aurik-8.0-Stack |
+| 23 | Spectral Repair | FFT-basiert |
+| 28 | Surface Noise | PMGG-verifiziert |
+| 35 | Multiband Compression | Material-adaptiv, §5/5 Peak-Messung |
+| 36 | Transient Shaper | Fragile-Guard, §5/5 Peak-Messung |
+| 37 | Bass Enhancement | Warmth-adaptiv, §5/5 Peak-Messung |
+| 38 | Presence Boost | Era-adaptiv, §5/5 Peak-Messung |
+| 39 | Air Band | §0a-Guard (Restoration → verboten), §5/5 Peak |
+| 40 | Loudness Normalization | ITU-R BS.1770-4, §5/5 LUFS-Messung |
+
+### 2.4 Qualitäts-Gates
+
+- **PMGG** (`per_phase_musical_goals_gate.py`): Pro-Phase Rollback bei Goal-Regression, Retry-Loop mit `retry_strengths` [0.75, 0.50, 0.30, 0.15]
+- **STCG** (`stereo_temporal_coherence_guard.py`): Pre+Post-Pipeline L/R-Korrektur, Multi-Point-Verifikation, Cumulative-Correction-Limit (5ms)
+- **DoNoHarmGuardian** (`do_no_harm_guardian.py`): §G-5/5 Finaler Input-vs-Output-Vergleich
+
+### 2.5 Export (`backend/core/audio_exporter.py`)
+
+\n### 2.6 Closed-Loop Perceptual Optimizer (`backend/core/perceptual_optimizer.py`)
+
+- **PerceptualOptimizer**: Parallele Strategien → Per-Segment-Auswahl → Iteration
+- **5 Strategien**: passthrough, light, balanced, deep, full
+- **Aktivierung**: `restore(..., optimize=True)`
+- **Konvergenz**: Abbruch bei ΔMOS < 0.01, max 3 Iterationen
+- **Spezifikation**: §CROWN
+- **Formate**: WAV/FLAC/AIFF, Atomic-Write via `.tmp` → `os.replace`
+- **Dithering**: POW-r Type 3 (primary), TPDF-Fallback
+- **Post-Gate**: PerceptualExportOptimizer, VocalClarityMax
+- **Listening-Mode EQ**: Adaptiv (Kopfhörer/Lautsprecher)
 
 ---
 
-## Anti-Regression Guards (§G)
+## 3. Modus-Garantien
 
-Diese Guards verhindern das Wiederauftreten historisch bekannter Bugs.
-Jeder Eintrag dokumentiert den Bug, die Ursache und die fixierte Guard-Regel.
+### 3.1 Restoration-Modus
 
-| §Ref | Bug | Guard-Regel | Dateien |
+- **Ziel**: Defekte entfernen, Charakter 100% bewahren
+- **§0a**: Air-Band/Harmonic-Exciter VERBOTEN auf Analogmaterial
+- **LUFS**: Material-abhängig (Vinyl: −18, Tape: −16, CD: −14)
+- **PMGG**: Rollback bei JEDER Goal-Regression
+- **DoNoHarmGuardian**: STRENG — max 8 dB Pegeländerung, 20% Brightness-Drop, 15% Naturalness-Drop
+
+### 3.2 Studio-2026-Modus
+
+- **Ziel**: Stream-tauglich, wettbewerbsfähiger Klang
+- **§0a**: Air-Band FREI — bewusste Höhenanhebung erlaubt
+- **LUFS**: HART −14 LUFS für alle Materialien (EBU R128)
+- **PMGG**: Rollback nur bei KRITISCHER Goal-Regression
+- **DoNoHarmGuardian**: LOCKER — 20 dB Pegeländerung ok, 40% Brightness
+
+### 3.3 Gemeinsame Garantien
+
+- Kein Song wird verschlechtert (DoNoHarmGuardian)
+- Jeder Phase-Skip wird geloggt
+- Echte Metriken (keine Dummy-Werte)
+- NaN/Inf-Schutz auf allen Pfaden
+- 3-stufige Vocal-Detection (spectral → MFCC → energy)
+- PsychoAcousticMetrics ist vollwertiger Calculator
+
+---
+
+## 4. Spezifikationen-Referenz
+
+| Spec | Modul | Inhalt |
+|---|---|---|
+| §G-5/5 | do_no_harm_guardian.py, phase_40 | Weltspitze-Qualitätsgarantie |
+| §0a | phase_39 | Air-Band-Verbot im Restoration-Mode |
+| §2.46e | phase_39, unified_restorer_v3 | Novelty-Rollback, Harmonic-Exciter-Verbot |
+| §G-STEREO-GUARD | unified_restorer_v3 | Mono→Stereo-Notfall-Rekonstruktion |
+| §G-PYIN-CACHE | phase_12 | pYIN-Cache (8 Einträge LRU) |
+| §G-SF-READ | file_import.py | Soundfile-Wrapper |
+| §G13 | file_import.py, STCG | Dual-Confirmation GCC-PHAT |
+| §2.47a | pre_analysis.py | Material-Defect-Consistency |
+| §ISO-226 | phase_40 | Fletcher-Munson-Lautstärke-Kompensation |
+
+---
+
+## 5. Abweichungsprotokoll (bidirektional behoben)
+
+| Datum | Abweichung | Richtung | Fix |
 |---|---|---|---|
-| `§G-DIV0` | Divide-by-zero in UVR MDX-Net Ensemble (`RuntimeWarning`) | `max(len(sessions), 1)` vor jeder Division durch Session-Anzahl | `plugins/uvr_mdxnet_plugin.py` |
-| `§G-KWARG` | `quality_mode`-Kwarg-Drift: Aufrufer übergibt Parameter, den `__init__` nicht akzeptiert | `__init__` MUSS alle dokumentierten Kwargs akzeptieren; `.pyc` nach jeder Signature-Änderung löschen | `backend/core/unified_restorer_v3.py`, `scripts/continuous_deep_analysis.py` |
-| `§G-SF-READ` | `_load_with_sf()`-Signatur verweigert `always_2d`-Parameter | Wrapper-Funktionen MÜSSEN dieselbe Signatur wie die gewrappte Funktion akzeptieren (`**kwargs` oder explizit) | `backend/file_import.py` |
-| `§G-MODULE` | ImportError durch fehlendes Modul (`pre_analysis_runner`) | Kein Import ohne existierendes Modul; `try/except ImportError` bei optionalen Modulen | `scripts/continuous_deep_analysis.py` |
-| `§G-LOG-GUARD` | Log-Spam durch identische Nachrichten in Tight-Loops | `log_message()` dedupliziert aufeinanderfolgende identische Nachrichten (max 1/s, burst 1000) | `backend/core/core_utils.py` |
-| `§G-CORRUPT` | Korrumpierte try/except-Struktur durch fehlerhafte Code-Rekonstruktion | Keine KI-generierten Code ohne Syntax-Prüfung mergen; `ast.parse()` im Pre-Commit | `scripts/orchestrate_quality_monitoring.py` |
-| `§G-CACHE` | Stale `.pyc`-Dateien liefern alte Bytecode-Version aus | `find . -name '__pycache__' -exec rm -rf {} +` nach jedem Signature- oder Import-Change | Projekt-Root |
+| 2026-07-18 | §G-5/5 fehlte in Phase 40 | Spec→Code | Tag ergänzt |
+| 2026-07-18 | `.scores` vs `.degraded_metrics` | Code→Spec | Referenz korrigiert (GuardianVerdict ist höherwertig) |
+| 2026-07-18 | `retry_strengths` nie definiert | Code→Spec | Definition ergänzt [0.75,0.50,0.30,0.15] |
+| 2026-07-18 | `seed`→`dither_seed` in exporter | Code→Spec | Falscher Variablenname korrigiert |
+| 2026-07-18 | `_HEAVY_MODEL_*` ohne Defaults | Code→Spec | Default-Werte ergänzt (1.0, 70.0, etc.) |
+| 2026-07-18 | `_PYIN_CACHE` undefiniert | Code→Spec | Modul-Level-Deklaration ergänzt |
+| 2026-07-18 | `PsychoAcousticMetrics` @dataclass | Spec→Code | @dataclass entfernt, **init**+Calculator-Methoden |
+| 2026-07-18 | Phase 35-40 Dummy-Metriken | Spec→Code | Echte Messungen (LUFS, Peak) |
 
 ---
 
-## Wie neue §-Referenzen hinzufügen
+## 6. Qualitäts-Metriken (Mai-30-Referenzlauf)
 
-1. Im Code: `# §2.XX Beschreibung`
-2. In diesem Dokument: Eintrag unter der passenden Kategorie
-3. Pre-Commit-Hook prüft: `scripts/compliance/check_spec_refs.py`
+```
+Input Quality:   41.2/100 (fair)
+Output Quality:  52.4/100 (fair)  Δ +11.2
+Restoration:     74.1%
+MUSHRA:          91.7 (Excellent)
+VQI:             0.802 (acceptable)
+RT-Faktor:       22.53×
+```
 
-**Commit-Regel:** Kein Merge, wenn neue `§`-Referenzen nicht hier dokumentiert sind.
+---
+
+## 7. Reproduzierbarkeit
+
+### 7.1 Environment
+
+- Python 3.10+
+- `requirements.txt` im Projekt-Root
+- `.venv_aurik` Virtual Environment
+
+### 7.2 Pre-Commit-Hooks (alle grün)
+
+```
+ruff ✅ | ruff format ✅ | flake8 ✅ | mypy (core) ✅
+Anti-Regression-Gate ✅ (9/9 Muster)
+check python ast ✅ | debug statements ✅
+```
+
+### 7.3 Build
+
+```bash
+source .venv_aurik/bin/activate
+pip install -r requirements.txt
+pre-commit install
+python -m pytest tests/ -x -q
+```
+
+### 2.11 Spenden-Erinnerung

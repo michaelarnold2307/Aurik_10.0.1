@@ -1,5 +1,5 @@
 """
-Atemgeräusch-Emotions-Klassifikation — §Lücke-F (v9.12.x)
+Atemgeräusch-Emotions-Klassifikation — §Lücke-F (v10.0.0.x)
 ===========================================================
 Klassifiziert erkannte Atemgeräusche nach emotionalem Inhalt.
 Erweitert den bestehenden §2.46f-Atemschutz um eine Qualitätsdimension.

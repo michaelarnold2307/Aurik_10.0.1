@@ -1,5 +1,5 @@
 """
-§2.35c HNR-Guard — Harmonics-to-Noise Ratio Gate für NR-Phasen (v9.12.1)
+§2.35c HNR-Guard — Harmonics-to-Noise Ratio Gate für NR-Phasen (v10.0.0)
 
 Zweck: Verhindert, dass Denoise-Phasen die natürliche Stimmrauigkeit
 (Vocal Fry, Breathiness, Stimmklang-Charakter) vollständig beseitigen.

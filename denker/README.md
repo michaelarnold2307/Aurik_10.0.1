@@ -1,4 +1,4 @@
-# `denker/` — Kognitive Orchestrierungsschicht von Aurik 9
+# `denker/` — Kognitive Orchestrierungsschicht von Aurik 10.0.0
 
 > **Spec-Referenz**: §2.1 Kernmodule · §2.2 Kanonische Pipeline · §3.2 Singleton-Pattern ·
 > §6.6 Tonträgerketten-Erkennung · §9.5 Performance-Budget
@@ -15,7 +15,7 @@ ist kein Zufall, sondern Design: Denker = Deutsch (kognitive Semantik), Engine =
 
 ## Übersicht
 
-Das `denker/`-Paket ist die **kognitive Orchestrierungsschicht** von Aurik 9. Es bietet
+Das `denker/`-Paket ist die **kognitive Orchestrierungsschicht** von Aurik 10.0.0. Es bietet
 eine einheitliche High-Level-API über alle §2.1-Kernmodule und schützt die Produktions-Pipeline
 vor direkten Abhängigkeiten an Core-Internals.
 
@@ -132,7 +132,7 @@ ergebnis = denker.erkenne_kette(audio, sr=48_000)
 # ergebnis.combined_phases:     ["phase_03_denoise", "phase_23_spectral_repair"]
 ```
 
-**§6.6-Pflichtimplementierung** (`bindend ab v9.10.45`): Erkennt mehrstufige
+**§6.6-Pflichtimplementierung** (`bindend ab v10.0.0`): Erkennt mehrstufige
 Degradationspfade (z.B. Kassette→MP3-Komprimierung) und kombiniert die Phasen
 beider Materialien automatisch.
 
@@ -401,4 +401,4 @@ scipy (direkt)                  (ReparaturDenker — self-contained Fallback)
 
 ## Versionsinfo
 
-Spec-Version: Aurik 9.10.45 — Stand: Februar 2026
+Spec-Version: Aurik 10.0.0 — Stand: Februar 2026

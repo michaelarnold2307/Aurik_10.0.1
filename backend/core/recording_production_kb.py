@@ -1,5 +1,5 @@
 """
-RecordingProductionKB — Aufnahme-Produktions-Wissensbasis (v9.12.x)
+RecordingProductionKB — Aufnahme-Produktions-Wissensbasis (v10.0.0.x)
 ====================================================================
 
 Schließt Lücke 2 der Provenienz-Analyse: Ohne Kenntnis des spezifischen

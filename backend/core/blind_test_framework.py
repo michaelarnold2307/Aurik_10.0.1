@@ -106,7 +106,7 @@ class ABXTestHarness:
             seed = int(hashlib.sha256(flat.tobytes()).hexdigest()[:16], 16) % (2**31)
         rng = np.random.default_rng(seed)
 
-        o = self._to_mono(original)
+        _o = self._to_mono(original)
         a = self._to_mono(processed_a)
         b = self._to_mono(processed_b)
 

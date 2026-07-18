@@ -339,8 +339,8 @@ def score_music_mos(audio: np.ndarray, sample_rate: int) -> MusicMOS:
 
     # MUSIC_NAT: 5-Komponenten-Score für maximale Naturalness-Auflösung
     # Centroid-Stabilität + Envelope-Glätte + Harmonizität (klassisch)
-    # + Spectral Flux Continuity (neu v9.5.1) — glatte zeitl. Evolution
-    # + Micro-Dynamic Variation (neu v9.5.1) — natürl. Amplitudenmodulation
+    # + Spectral Flux Continuity (neu v10.0.0) — glatte zeitl. Evolution
+    # + Micro-Dynamic Variation (neu v10.0.0) — natürl. Amplitudenmodulation
     music_nat_raw = (
         0.28 * _spectral_centroid_stability(frames)
         + 0.22 * _envelope_smoothness(resampled)
@@ -350,7 +350,7 @@ def score_music_mos(audio: np.ndarray, sample_rate: int) -> MusicMOS:
     )
     MUSIC_NAT = _scale_to_mos(music_nat_raw)
 
-    # MUSIC_OVR: Gewichtetes Mittel — v9.5.1: NAT-Gewicht 0.25→0.35,
+    # MUSIC_OVR: Gewichtetes Mittel — v10.0.0: NAT-Gewicht 0.25→0.35,
     # SIG 0.40→0.33, BAK 0.35→0.32 (validiert gegen Referenz-Corpus)
     MUSIC_OVR = _scale_to_mos(0.33 * (MUSIC_SIG - 1) / 4 + 0.32 * (MUSIC_BAK - 1) / 4 + 0.35 * (MUSIC_NAT - 1) / 4)
 

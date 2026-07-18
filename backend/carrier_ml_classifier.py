@@ -9,7 +9,7 @@ Migrationsanleitung::
 
     # Alt (Aurik 6.0):
     from backend.carrier_ml_classifier import CarrierMLClassifier
-    # Neu (Aurik 9.x):
+    # Neu (Aurik 10.0.0.x):
     from backend.core.medium_classifier import MediumClassifier, classify_medium
 
 Referenz: §2.1 Aurik-9-Spec, MediumClassifier (§6.1 MaterialType)

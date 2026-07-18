@@ -1,5 +1,5 @@
 """
-Phase 6: Professional Frequency Restoration - Aurik 9.0.
+Phase 6: Professional Frequency Restoration - Aurik 10.0.0.
 ========================================================
 
 Professional bandwidth extension with Spectral Band Replication (SBR) competing with iZotope RX.
@@ -69,7 +69,7 @@ BENCHMARK COMPARISON:
 - SPL Vitalizer: Multi-band HF restoration
 - Aurik v2.0: Professional, SBR-based, <0.8× realtime ✅
 
-Author: Aurik 9.0 Development Team
+Author: Aurik 10.0.0 Development Team
 Version: 2.0.0 (Professional Upgrade)
 Date: 15. Februar 2026
 """
@@ -662,7 +662,7 @@ class FrequencyRestorationPhase(PhaseInterface):
         restored = np.nan_to_num(restored, nan=0.0, posinf=0.0, neginf=0.0)
         restored = np.clip(restored, -1.0, 1.0)
 
-        # §2.41 (v9.10.116) SOTA: SourceFidelityEQ — Generationsverlust-Kompensation.
+        # §2.41 (v10.0.0) SOTA: SourceFidelityEQ — Generationsverlust-Kompensation.
         # Wendet frequenz-abhängige Korrekturkurve an (firwin2 FIR, nur Boosts ≥ 1.0).
         # Kompensiert akkumulierten HF-Verlust aus Überspielgenerationen.
         # Nur aktiv wenn reconstruction_strength ≥ 0.20 und confidence ≥ 0.35.
@@ -697,7 +697,7 @@ class FrequencyRestorationPhase(PhaseInterface):
         # Gilt auch für den FlashSR-ML-Pfad — ML-Output ist nicht ceiling-aware.
         _BW_CEILING_HZ: dict[str, float] = {
             "shellac": 8000.0,
-            "wax_cylinder": 3000.0,  # §ERA 1900-1925: max 3 kHz (v9.12.9)
+            "wax_cylinder": 3000.0,  # §ERA 1900-1925: max 3 kHz (v10.0.0)
             "vinyl": 16000.0,
             "reel_tape": 18000.0,
             "cassette": 14000.0,  # §6.2c delegated to central definition (carrier_transfer_characteristics)
@@ -763,7 +763,7 @@ class FrequencyRestorationPhase(PhaseInterface):
                     _hg_result06.spectral_novelty,
                     f"{_bw_cap_hz:.0f}" if _bw_cap_hz is not None else "n/a",
                 )
-                # §Gap10 v9.12.8: NVSR-Fallback vor Rollback auf Original.
+                # §Gap10 v10.0.0: NVSR-Fallback vor Rollback auf Original.
                 # NVSR ist deterministisch (kein Halluzinationsrisiko) und liefert
                 # bessere BW-Erweiterung als reines Passthrough.
                 _nvsr_applied = False
@@ -1182,7 +1182,7 @@ class FrequencyRestorationPhase(PhaseInterface):
             "restoration": 0.32,
         }
         _alpha_base = alpha_by_mode.get(quality_mode, 0.25)
-        # Bandwidth-deficit adaptive boost (v9.10.112): when rolloff is far below
+        # Bandwidth-deficit adaptive boost (v10.0.0): when rolloff is far below
         # Nyquist most of the HF content is synthesised by FlashSR — use a higher
         # blend ratio so the ML output is not washed out by the DSP baseline.
         # Formula: deficit_fraction = clamp(1 − rolloff_hz / (0.60 × Nyquist), 0, 1)

@@ -1,6 +1,6 @@
 """
 backend/core/studio_goal_targets.py
-Aurik 9 — Per-song studio-day goal targets for phase steering.
+Aurik 10.0.0 — Per-song studio-day goal targets for phase steering.
 
 Computes target values for all 15 musical goals so PMGG can evaluate whether a
 phase moves toward or away from the intended studio-day profile instead of only
@@ -54,7 +54,7 @@ _PHYSICAL_CEILING: dict[str, dict[str, float]] = {
         "raumtiefe": 0.80,
     },
     "tape": {
-        # §9.12.7 [BUG-FIX v9.12.7] Ceiling-Rekalibrierung nach material-adaptiver Formel:
+        # §9.12.7 [BUG-FIX v10.0.0] Ceiling-Rekalibrierung nach material-adaptiver Formel:
         # Die material-adaptive BrillanzMetric-Formel (§9.12.7) kalibriert den HF-Crest
         # auf das tape-spezifische Rausch-/Signalverhältnis um. Mit G_floor=0.22 und
         # crest_peak≈8 ergibt die neue Formel score≈0.67 (vorher: 0.20 mit CD-Formel).

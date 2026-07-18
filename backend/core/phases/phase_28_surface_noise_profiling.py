@@ -122,12 +122,12 @@ class SurfaceNoiseProfiling(PhaseInterface):
             "noise_learn_duration_s": 1.0,
         },
         MaterialType.CASSETTE: {
-            "over_subtraction_alpha": 1.55,  # v9.12.9: NR ≈ TAPE×0.85 — Cassette-Rauschen hat anderes Spektralprofil
+            "over_subtraction_alpha": 1.55,  # v10.0.0: NR ≈ TAPE×0.85 — Cassette-Rauschen hat anderes Spektralprofil
             "spectral_floor": 0.10,  # §2.62 hard min
-            "vad_threshold_db": -46,  # v9.12.9: etwas höher als TAPE (Cassette-Hiss höherer Pegel)
-            "smoothing_frames": 13,  # v9.12.9: minimal mehr Glättung
+            "vad_threshold_db": -46,  # v10.0.0: etwas höher als TAPE (Cassette-Hiss höherer Pegel)
+            "smoothing_frames": 13,  # v10.0.0: minimal mehr Glättung
             "noise_learn_duration_s": 1.0,
-        },  # v9.12.9: IEC 60094-1 — Cassette-Hiss-Profil angepasst
+        },  # v10.0.0: IEC 60094-1 — Cassette-Hiss-Profil angepasst
         MaterialType.CD_DIGITAL: {
             "over_subtraction_alpha": 1.3,
             "spectral_floor": 0.10,  # §2.62 hard min
@@ -366,8 +366,8 @@ class SurfaceNoiseProfiling(PhaseInterface):
                 config["vad_threshold_db"],
                 _nf28["noise_floor_db"],
             )
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.debug("%s: non-critical exception: %s", __name__, _e)
 
         config["over_subtraction_alpha"] = float(1.0 + (config["over_subtraction_alpha"] - 1.0) * _safe_strength)
         config["spectral_floor"] = float(
@@ -608,7 +608,7 @@ class SurfaceNoiseProfiling(PhaseInterface):
         material_key = getattr(material, "name", str(material)).lower()
         max_rms_drop_db = float(self._MAX_RMS_DROP_DB.get(material_key, self._MAX_RMS_DROP_DB["unknown"]))
         # §2.45a signal-relative gate: max(material_floor, P15(reference)+9 dB)
-        # CEDAR/iZotope RX approach — gate derived from actual source noise floor (v9.12.2).
+        # CEDAR/iZotope RX approach — gate derived from actual source noise floor (v10.0.0).
         _gate_dbfs = compute_signal_relative_gate_dbfs(original_audio, material_key=material_key)
 
         # §2.45a-I Gated-RMS: only musical frames > −50 dBFS
@@ -631,15 +631,15 @@ class SurfaceNoiseProfiling(PhaseInterface):
                         "phase_28_surface_noise_profiling", makeup_gain_db, priority="normal"
                     )
                     makeup_gain_db = _approved
-                except Exception:
-                    pass
+                except Exception as _e:
+                    logger.debug("%s: non-critical exception: %s", __name__, _e)
             if makeup_gain_db > 0.0:
                 _gain_lin = float(10.0 ** (makeup_gain_db / 20.0))
                 # §2.45a-II: gain applied ONLY to musical frames via envelope.
                 # reference_for_gate=original_audio: use pre-phase noise floor for P5 computation.
                 # After surface-noise removal, processed audio's P5 drops (fully-denoised frames
                 # drag it to -55 dBFS) → without reference, adaptive gate fails → residual noise
-                # at -35 dBFS gets amplified → Pegelexplosion. (v9.12.1)
+                # at -35 dBFS gets amplified → Pegelexplosion. (v10.0.0)
                 processed_audio = apply_musical_gain_envelope(
                     processed_audio,
                     _gain_lin,

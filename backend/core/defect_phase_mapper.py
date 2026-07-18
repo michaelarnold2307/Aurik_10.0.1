@@ -62,7 +62,7 @@ logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # §0a: Studio-2026-only phases — NEVER suggested in Restoration mode
-# (BUG-FIX v9.12.0 §0a — UV3-Guard blocks them anyway, but CausalDefectReasoner
+# (BUG-FIX v10.0.0 §0a — UV3-Guard blocks them anyway, but CausalDefectReasoner
 # and DefectPhaseMapper must not even propose them for restoration runs)
 # ---------------------------------------------------------------------------
 _RESTORATION_FORBIDDEN_PHASES: frozenset[str] = frozenset(
@@ -484,17 +484,19 @@ _PHASE_MAP: dict[DefectType, PhaseAssignment] = {
     DefectType.CLIPPING: PhaseAssignment(
         defect_type=DefectType.CLIPPING,
         primary_phases=[
+            "phase_07_declipper",  # §v10.18: Selbstkalibrierender Declipper (PCHIP + Spline-Adaptiv)
             "phase_23_spectral_repair",  # Spektrale Rekonstruktion clipper Obertöne
-            "phase_26_dynamic_range_expansion",  # Dynamikbereich nach Clipping wiederherstellen
         ],
         secondary_phases=[
-            "phase_07_harmonic_restoration",  # Verlorene Obertöne aus Clipping rekonstruieren
+            "phase_26_dynamic_range_expansion",  # Dynamikbereich nach Clipping wiederherstellen
             "phase_08_transient_preservation",  # Transienten-Schutz während Declipping
         ],
         description=(
-            "Amplituden-Übersteuerungs-Korrektur via spektraler Interpolation und "
-            "adaptiver Declipping-Algorithmen. Rekonstruiert abgeschnittene Wellenformspitzen "
-            "und stellt harmonische Obertöne wieder her."
+            "Amplituden-Übersteuerungs-Korrektur via selbstkalibrierendem Declipper "
+            "(PCHIP + Spline-Adaptiv mit adaptiver Crossfade-Glättung). "
+            "Kalibriert Clip-Schwelle automatisch per Song-Statistik. "
+            "Rekonstruiert abgeschnittene Wellenformspitzen und stellt "
+            "harmonische Obertöne wieder her."
         ),
         config_delta={
             "declip_strength": 0.85,  # Primäraktion: Clipping entfernen
@@ -964,7 +966,7 @@ _PHASE_MAP: dict[DefectType, PhaseAssignment] = {
             # §0a: phase_42_vocal_enhancement ist Studio-2026-only — in Restoration
             # ist phase_65_vocal_naturalness_restoration der §0a-konforme Ersatz
             # (HNR-Blend + Spektral-Tilt + Formant-Tilt). §0a: phase_42 darf hier
-            # nie stehen (V04-BUG-FIX v9.15.1).
+            # nie stehen (V04-BUG-FIX v10.0.0).
             "phase_65_vocal_naturalness_restoration",  # §0a-konformer Restoration-Ersatz (HNR-Blend, Formant-Tilt)
             "phase_19_de_esser",  # De-Essing / De-Harshness im 2–6 kHz Band
         ],
@@ -1721,7 +1723,7 @@ _MATERIAL_PHASE_FACTORS: dict[str, dict[str, float]] = {
         "phase_02_hum_removal": 0.45,  # shellac motor rumble is character
         "phase_18_noise_gate": 0.20,  # gating destroys groove-noise character
         "phase_24_dropout_repair": 0.50,  # scratch-based dropouts need care
-        # v9.15.1: Shellac-spezifische Defekte vollständig abdecken
+        # v10.0.0: Shellac-spezifische Defekte vollständig abdecken
         "phase_05_rumble_filter": 0.80,  # Schellack-Dreher Subsonic-Rumble
         "phase_23_spectral_repair": 0.45,  # Spektrale Reparatur für IGD + Oberflächenlücken
         "phase_29_tape_hiss_reduction": 0.60,  # Shellac-Oberflächenrauschen ähnelt Tape-Hiss
@@ -1797,7 +1799,7 @@ _MATERIAL_PHASE_FACTORS: dict[str, dict[str, float]] = {
         "phase_02_hum_removal": 0.40,  # turntable motor rumble + AC hum
         "phase_18_noise_gate": 0.25,  # vinyl surface noise is continuous — gating = artifacts
         "phase_24_dropout_repair": 0.60,  # vinyl scratches need careful fill
-        # v9.15.1: Vinyl-spezifische Defekte vollständig abdecken
+        # v10.0.0: Vinyl-spezifische Defekte vollständig abdecken
         "phase_05_rumble_filter": 0.80,  # Plattenteller-Subsonic-Rumble (<25 Hz)
         "phase_12_wow_flutter_fix": 0.45,  # Vinyl-Warp → langsame Pitch-Schwankung
         "phase_23_spectral_repair": 0.60,  # IGD-Reste, Groove-Echo-Reparatur
@@ -1832,7 +1834,7 @@ _MATERIAL_PHASE_FACTORS: dict[str, dict[str, float]] = {
         "phase_18_noise_gate": 0.20,  # tape hiss is continuous — gating = pumping artifacts
         "phase_24_dropout_repair": 0.55,  # oxide flaking dropouts need careful fill
         "phase_12_wow_flutter_fix": 0.75,  # capstan flutter is real but ML phase has no retry
-        # v9.15.1: Tape-spezifische Defekte vollständig abdecken
+        # v10.0.0: Tape-spezifische Defekte vollständig abdecken
         "phase_01_click_removal": 0.45,  # Tape-Dropouts erzeugen click-artige Impulse
         "phase_23_spectral_repair": 0.55,  # Print-Through-Reste, Generation-Loss-Reparatur
         "phase_31_speed_pitch_correction": 0.40,  # Reel-Tape-Motorgeschwindigkeitsfehler
@@ -1856,7 +1858,7 @@ _MATERIAL_PHASE_FACTORS: dict[str, dict[str, float]] = {
         "phase_49_advanced_dereverb": 0.25,
         "phase_18_noise_gate": 0.15,  # gating cassette hiss creates pumping/echo illusion
         "phase_39_air_band_enhancement": 0.20,
-        # v9.15.1: Kassetten-spezifische Defekte vollständig abdecken
+        # v10.0.0: Kassetten-spezifische Defekte vollständig abdecken
         "phase_01_click_removal": 0.50,  # Oxide-Fehler + Head-Clog → click-artige Impulse
         "phase_02_hum_removal": 0.45,  # Kassettenrekorder-Gleichstrommotor-Brummen
         "phase_08_transient_preservation": 0.65,  # Transienten nach NR schützen (Dolby-Atmung)

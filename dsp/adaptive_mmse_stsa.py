@@ -1,5 +1,5 @@
 """
-Adaptive Ephraim-Malah MMSE-STSA DSP-Modul für Aurik 9.10 (SOTA-Maximum)
+Adaptive Ephraim-Malah MMSE-STSA DSP-Modul für Aurik 10.0.0 (SOTA-Maximum)
 
 Implements the full MMSE Short-Time Spectral Amplitude estimator
 (Ephraim & Malah 1985) with:

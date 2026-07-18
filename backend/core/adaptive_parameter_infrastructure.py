@@ -24,12 +24,12 @@ def derive_noise_floor(audio: np.ndarray, sr: int) -> dict:
     """
     mono = audio if audio.ndim == 1 else audio.mean(axis=0)
     mono = np.asarray(mono, dtype=np.float64)
-    n = len(mono)
+    _n = len(mono)
 
     # RMS und Peak
     rms = float(np.sqrt(np.mean(mono**2) + 1e-20))
     peak = float(np.max(np.abs(mono)))
-    rms_db = 20.0 * np.log10(max(rms, 1e-12))
+    _rms_db = 20.0 * np.log10(max(rms, 1e-12))
     peak_db = 20.0 * np.log10(max(peak, 1e-12))
 
     # Rauschschätzung via spektraler Minimum-Statistik

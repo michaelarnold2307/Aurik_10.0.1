@@ -36,7 +36,7 @@ def _make_fake_phase(strength_recorder: list) -> object:
     """Creates a minimal phase that records strength and returns input audio.
 
     CRITICAL: Must define process() not __call__, because PMGG _run_phase
-    calls phase.process() (v9.10.64 fix — PhaseInterface has no __call__).
+    calls phase.process() (v10.0.0 fix — PhaseInterface has no __call__).
     """
 
     class FakePhase:

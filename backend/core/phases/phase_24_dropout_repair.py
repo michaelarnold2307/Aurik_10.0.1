@@ -1,5 +1,5 @@
 """
-Phase 24: Professional Dropout Repair - Aurik 9.0
+Phase 24: Professional Dropout Repair - Aurik 10.0.0
 ==================================================
 
 Professional-grade dropout repair competing with iZotope RX Spectral Repair.
@@ -65,7 +65,7 @@ BENCHMARK COMPARISON:
 - CEDAR Declickle/Restore: Professional studio standard
 - Aurik v2.0: Professional, context-aware, <1.5× realtime ✅
 
-Author: Aurik 9.0 Development Team
+Author: Aurik 10.0.0 Development Team
 Version: 2.0.0 (Professional Upgrade)
 Date: 15. Februar 2026
 """
@@ -1211,7 +1211,7 @@ class DropoutRepairPhase(PhaseInterface):
                 if _p999 > 1e-9:
                     _g = min(_g, float(0.995 / _p999))
                 if _g > 1.0005:
-                    # §2.45a-II v9.12.2: reference_for_gate=audio (pre-repair) → signal-relative gate
+                    # §2.45a-II v10.0.0: reference_for_gate=audio (pre-repair) → signal-relative gate
                     repaired_audio = apply_musical_gain_envelope(
                         repaired_audio,
                         _g,
@@ -2271,7 +2271,7 @@ class DropoutRepairPhase(PhaseInterface):
 
         Févotte & Idier (2011): "Algorithms for Nonnegative Matrix Factorization
         with the β-Divergence" (β=0 = Itakura-Saito IS-Divergenz, PFLICHT für
-        kurze Lücken < 50 ms und Transient-Gaps per Lücke-F-Fix v9.10.100).
+        kurze Lücken < 50 ms und Transient-Gaps per Lücke-F-Fix v10.0.0).
 
         Vereinfachtes NMF-β-Verfahren:
             1. STFT Kontext-Frames (V: F×T, nicht-negativ: Betragsspektrum)
@@ -2312,7 +2312,7 @@ class DropoutRepairPhase(PhaseInterface):
             W = rng.uniform(EPS, 1.0, (n_freq, K))
             H = rng.uniform(EPS, 1.0, (K, n_frames_ctx))
 
-            # Multiplikative IS-NMF Update-Regeln (β=0, Itakura-Saito — PFLICHT per Lücke-F-Fix v9.10.100)
+            # Multiplikative IS-NMF Update-Regeln (β=0, Itakura-Saito — PFLICHT per Lücke-F-Fix v10.0.0)
             # W += W * (((V / (W@H + EPS)^2) @ H.T) / ((W@H + EPS)^(-1) @ H.T))
             # Vereinfacht (MMSE-approximiert via IS-Schätzer):
             for _ in range(N_ITER):

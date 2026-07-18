@@ -32,7 +32,7 @@
 ### 4. Reproduzierbarkeit
 
 - Seed(s): n/a.
-- Commit: v9.12.9-hotfix.2 Release-Kandidat.
+- Commit: v10.0.0-hotfix.2 Release-Kandidat.
 - Skript/Befehl: `.venv_aurik/bin/python -m pytest tests/normative/test_canonical_contract_drift_gate.py -p no:xdist --override-ini="addopts=--strict-markers --import-mode=importlib" --timeout=30 --tb=short -q --disable-warnings --no-header`
 - Artefaktpfade: tests/normative/test_canonical_contract_drift_gate.py; docs/reports/spec_evidence/2026-05-19_canonical_contract_drift_gate.md.
 

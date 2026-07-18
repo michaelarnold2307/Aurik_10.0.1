@@ -1,4 +1,4 @@
-"""EraVocalProfile — Ära-adaptive VQI-Kalibrierung (§EraVocalProfile, v9.13).
+"""EraVocalProfile — Ära-adaptive VQI-Kalibrierung (§EraVocalProfile, v10.0.0).
 
 Historische Vokalstile haben abweichende Vibrato-Charakteristika, Nasalität und
 Formant-Toleranzen. Feste ±2 dB-Grenzen (wie in VQI-Basisversion) erzeugen

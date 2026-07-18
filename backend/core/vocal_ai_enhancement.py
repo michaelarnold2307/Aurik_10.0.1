@@ -1,5 +1,5 @@
 """
-Aurik 9.0 Vocal AI Enhancement - Gender-Aware Processing
+Aurik 10.0.0 Vocal AI Enhancement - Gender-Aware Processing
 =========================================================
 
 Integration von Phase 19 (De-Esser) und Phase 42 (Vocal Enhancement)
@@ -12,7 +12,7 @@ FEATURES:
 - Formant-basierte Gender-Detection
 - Adaptive Parameter für jede Geschlechts-/Altersgruppe
 
-Author: Aurik 9.0 Development Team
+Author: Aurik 10.0.0 Development Team
 Date: 15. Februar 2026
 Version: 1.0.0
 """
@@ -1010,7 +1010,7 @@ class UnifiedVocalAIEnhancer:
 
 def _demo() -> None:
     """Führt aus: a local smoke demo for manual development."""
-    logger.debug("Testing Aurik 9.0 Vocal AI Enhancement...")
+    logger.debug("Testing Aurik 10.0.0 Vocal AI Enhancement...")
     logger.debug("=" * 70)
 
     # Generate test vocal signal

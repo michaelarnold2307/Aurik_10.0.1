@@ -1,5 +1,5 @@
 """
-BS-RoFormer Plugin — Primäre Stem-Separation für Aurik 9
+BS-RoFormer Plugin — Primäre Stem-Separation für Aurik 10.0.0
 
 Ersetzt Demucs v4 als primäres Stem-Separation-Modell. BS-RoFormer (Band-Split
 RoPE Transformer) liefert +2–3 dB SDR über Demucs v4 bei Vocals, drums, bass.
@@ -407,9 +407,9 @@ class BSRoFormerPlugin:
             bin_pts = self._mbr_mel_band_boundaries()
             input_name = session.get_inputs()[0].name
 
-            # OOM-Guard: RAM-adaptive chunk size (v9.11.16).
+            # OOM-Guard: RAM-adaptive chunk size (v10.0.0).
             # Transformer attention is O(T²): T=frames per chunk.
-            # v9.11.14: 60s→15s prevented 69 GB OOM. But 15s still OOMs on 32 GB systems
+            # v10.0.0: 60s→15s prevented 69 GB OOM. But 15s still OOMs on 32 GB systems
             # with heavy swap pressure (confirmed: 9 GB consumed per 15s chunk on 32 GB, 2026-05-01).
             # Reduction schedule: avail<16GB→5s(T=500,~0.5GB), 16-24GB→7s(T=700,~1GB), >24GB→10s(T=1000,~2GB).
             # Adaptive OOM-retry: if a segment still OOMs, halve chunk size and retry once.

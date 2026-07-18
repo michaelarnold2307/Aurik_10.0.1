@@ -1,7 +1,7 @@
 """
-Longitudinales Künstler-Signaturmodell — Aurik 9 (§2.13)
+Longitudinales Künstler-Signaturmodell — Aurik 10.0.0 (§2.13)
 
-Bei mehreren Dateien derselben Session / desselben Künstlers speichert Aurik 9
+Bei mehreren Dateien derselben Session / desselben Künstlers speichert Aurik 10.0.0
 den Klang-Fingerabdruck des Künstlers und nutzt ihn als Prior für stark degradierte
 Stellen zur authentischeren Rekonstruktion.
 

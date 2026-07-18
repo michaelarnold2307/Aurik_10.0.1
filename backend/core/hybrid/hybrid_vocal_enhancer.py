@@ -2,7 +2,7 @@
 Hybrid Vocal Enhancement Suite (DSP + ML)
 =========================================
 
-Modul für Aurik 9.0: Kombiniert klassische DSP-Algorithmen mit modernen ML-Modellen für optimale Gesangsverbesserung.
+Modul für Aurik 10.0.0: Kombiniert klassische DSP-Algorithmen mit modernen ML-Modellen für optimale Gesangsverbesserung.
 
 Features:
 - Präsenzanhebung (2-4 kHz) via EQ (DSP) + ML-gestützte Formantverstärkung
@@ -17,7 +17,7 @@ Qualitätsmodi:
 - BALANCED: Adaptive ML (nur bei Bedarf)
 - MAXIMUM: Volle ML-Pipeline (höchste Qualität)
 
-Autor: Aurik 9.0 Team
+Autor: Aurik 10.0.0 Team
 Version: 1.0
 """
 

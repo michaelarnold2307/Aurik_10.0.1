@@ -11,7 +11,7 @@ flowchart TD
 
     subgraph PRE["🔍 Pre-Analysis (pre_analysis.py)"]
         direction TB
-        MD["MediumDetector\n20 Tonträger · 76 Ketten\n195 Genres · 7 Sprachen"]
+        MD["MediumDetector\n16 Tonträger · 76 Ketten\n195 Genres · 7 Sprachen"]
         EC["EraClassifier\nJahrzehnt · Material-Prior"]
         GC["GenreClassifier\nGermanSchlagerClassifier\n6 DSP-Tiers + CLAP"]
         DS["DefectScanner\n54 Defekttypen"]
@@ -21,7 +21,7 @@ flowchart TD
     end
 
     subgraph KNOWLEDGE["🧠 Knowledge Base (medium_detector.py)"]
-        KB1["_MEDIUM_ORDER\n20 Tonträger chronologisch"]
+        KB1["_MEDIUM_ORDER\n16 Tonträger chronologisch"]
         KB2["_KNOWN_CHAINS\n76 Transfer-Ketten"]
         KB3["_GENRE_EARLIEST_ORDER\n195 Genres × 14 Ären"]
         KB4["_MEDIUM_EXCLUDES_GENRES\n8 Medien × Ausschlüsse"]
@@ -39,7 +39,7 @@ flowchart TD
         CROSS["CrossPhaseCoordinator\nPhasen-Kohärenz"]
     end
 
-    subgraph PHASES["⚙️ 66 Verarbeitungsphasen"]
+    subgraph PHASES["⚙️ 68 Verarbeitungsphasen"]
         direction LR
         P01["01 Click Removal"]
         P02["02 Hum Removal"]
@@ -51,7 +51,7 @@ flowchart TD
         P24["24 Dropout Repair\n(GACELA+AudioLDM2)"]
         P42["42 Vocal Enhancement\n(Demucs+BS-RoFormer)"]
         P66["66 Stem NR"]
-        MORE["... 56 weitere Phasen"]
+        MORE["... 58 weitere Phasen"]
     end
 
     subgraph MODELS["🧩 41 ML-Modelle (ml_model_readiness.py)"]

@@ -212,16 +212,16 @@ DefectScanner (62 Typen)
 | `EmotionalArcPreservationMetric` | Arousal/Valence Pearson ≥ 0.85/0.80, Klimax-Erhalt |
 | `IntroducedArtifactDetector` | ML_HALLUCINATION / NMF_CLICK / SMEARING-Detektion |
 | `StemRemixBalancer` | LUFS-korrekter Re-Mix nach getrennter Stem-Verarbeitung |
-| `MusikalischerGlobalplanDienst` | Cross-Phase-Globalplan: 13 Ära-Profile × Genre-Modifikatoren, 17 Phase-Adjustments (v9.10.50) |
+| `MusikalischerGlobalplanDienst` | Cross-Phase-Globalplan: 13 Ära-Profile × Genre-Modifikatoren, 17 Phase-Adjustments (v10.0.0) |
 | `PerceptualAttentionModel` | Salienz-Karte [n_frames × 24 Bark-Bänder] ∈ [0.3, 2.0] |
 | `BatchSessionLearner` | GP-Warm-Start von Datei zu Datei (SHA256-Session-ID) |
 | `ReferenceAnchorSynthesizer` | 270 MUSDB18-HQ-Ankerpunkte (Ära × Genre × Material) |
 | `VocalAIEnhancement` | Stimmtyp-adaptiv (MALE/FEMALE/CHILD/ANDROGYNOUS) |
 | `HarmonicLatticeAnalyzer` | Fletcher-Modell, B-Koeff., Partial-Abw. ≤ 3 Cent |
 | `StereoAuthenticityInvariant` | Mono-Ära M/S ≥ 0.97, Decca-Wide ∈ [0.25, 0.65] |
-| `LyricsGuidedEnhancement` | Wort-zeitgenaue Klangverbesserung via Transkription (§2.36, Pflicht ab v9.10.x); Stimmtyp- und Phonem-adaptiv |
+| `LyricsGuidedEnhancement` | Wort-zeitgenaue Klangverbesserung via Transkription (§2.36, Pflicht ab v10.0.0.x); Stimmtyp- und Phonem-adaptiv |
 | `HumanHearingComfortPolicy` | Zentrale Hörkomfort-Steuerung: Peak-/HF-Caps, Eingriffsbudget pro Phase (§2.44) |
-| `LiveDefectCounter` | GUI-Live-Defektzähler: Dropout-Chips via Timeline-Cursor (v9.20.3) |
+| `LiveDefectCounter` | GUI-Live-Defektzähler: Dropout-Chips via Timeline-Cursor (v10.0.0) |
 | `RecordingChainProfiler` | Aufnahmeketten-Profiler: DAW-Limiter, Kassetten-Charakteristik (§2.66) |
 
 ---
@@ -234,7 +234,7 @@ und produziert das vollständige `AurikErgebnis` (17 Felder, `@dataclass`).
 | Denker | Zuständigkeit |
 | --- | --- |
 | `TontraegerDenker` | Trägermedium-Erkennung (Vinyl / Tape / CD / Digital) |
-| `TontraegerketteDenker` | §6.6-Ketten-Erkennung (bindend ab v9.10.45) |
+| `TontraegerketteDenker` | §6.6-Ketten-Erkennung (bindend ab v10.0.0) |
 | `DefektDenker` | Defektanalyse via `CausalDefectReasoner` |
 | `MusikalischerGlobalplanDienst` | Cross-Phase-Globalplan: 13 Ära-Profile × 17 Phase-Adjustments (§Dach) |
 | `StrategieDenker` | Phasenstrategie + RT-Guard (`_3X_RT_LIMIT = 8.0`) + Human-Hearing-Comfort-Profil |
@@ -363,7 +363,7 @@ print(result.metadata.get("quality_gate_payload", {}))
 
 ### 🎼 Restaurierungs-Pipeline (66 Phasen)
 
-**Pipeline-Reihenfolge (v9.20.3 — kanonisch):**
+**Pipeline-Reihenfolge (v10.0.0 — kanonisch):**
 
 ```text
 TransientDecoupledProcessing → RestorabilityEstimator → EraClassifier
@@ -398,7 +398,7 @@ TransientDecoupledProcessing → RestorabilityEstimator → EraClassifier
 - Phase 58: HallucinationGuard (§2.46e) · Phase 62: TemporalContinuityGuard
 - Phase 63: Real-Audio-Comfort-Gate · Phase 66: Human-Hearing-Comfort-Policy (§2.44)
 
-**Aktuelle Erweiterungen (v9.20.3):**
+**Aktuelle Erweiterungen (v10.0.0):**
 
 - §2.44 HPG Reference Memory Bootstrap + Human-Hearing-Comfort-Policy
 - §2.46e HallucinationGuard
@@ -544,7 +544,7 @@ pytest tests/unit/test_v99_genre_schlager.py -v
 # Normative Contract-Gates
 pytest tests/normative -q
 
-# Neue v9.20.x Module
+# Neue v10.0.0.x Module
 pytest tests/unit/test_human_hearing_comfort.py -v
 pytest tests/unit/test_adaptive_pipeline_canonical_policy_guard.py -v
 pytest tests/normative/test_real_audio_edge_lag_gate.py -v
@@ -678,7 +678,7 @@ Recall ≥ 90 % (mit CLAP) · False-Positive < 5 % · ≤ 20 s/Minute Audio
 
 ## 📜 Lizenz
 
-Aurik 9 steht unter der **Apache-2.0-Lizenz** — siehe [LICENSE](LICENSE).
+Aurik 10.0.0 steht unter der **Apache-2.0-Lizenz** — siehe [LICENSE](LICENSE).
 
 ---
 

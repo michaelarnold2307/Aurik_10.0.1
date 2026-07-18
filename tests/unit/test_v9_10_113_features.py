@@ -1,6 +1,6 @@
 import pytest
 
-"""Tests für v9.10.113-Features: Phase-40 Studio-2026-LUFS, Phase-09-Severity-Blend,
+"""Tests für v10.0.0-Features: Phase-40 Studio-2026-LUFS, Phase-09-Severity-Blend,
 Phase-29-HF-G-Floor, Phase-55-AR-Order.
 
 Abgedeckt:

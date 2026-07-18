@@ -20,7 +20,7 @@ Invarianten:
 - Singleton (thread-safe, double-checked locking)
 
 Author: Aurik Development Team
-Version: 1.0.0 (§2.78 Closed-Loop Rescheduler v9.12.9)
+Version: 1.0.0 (§2.78 Closed-Loop Rescheduler v10.0.0)
 """
 
 from __future__ import annotations
@@ -54,7 +54,7 @@ def _adaptive_gap_threshold(restorability_score: float) -> float:
       weil jede Recovery-Chance zählt und falsch-negative teurer sind als falsch-positive.
 
     Lineare Interpolation zwischen den Polen; Ergebnis auf [0.020, 0.05] geclippt.
-    v9.12.9: Basis-Schwelle 0.035→0.030 für sensitivere Recovery bei mittlerer Qualität.
+    v10.0.0: Basis-Schwelle 0.035→0.030 für sensitivere Recovery bei mittlerer Qualität.
     """
     _rest = float(np.clip(restorability_score, 0.0, 100.0))
     return float(np.clip(0.020 + 0.030 * (_rest / 100.0), 0.020, 0.050))

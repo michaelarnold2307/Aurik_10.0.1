@@ -1,4 +1,4 @@
-"""Song-specific strategy persistence for Aurik 9.
+"""Song-specific strategy persistence for Aurik 10.0.0.
 
 A human mastering engineer remembers their session notes:
 "Last time Phase 42 before Phase 29 worked better — and strength 0.65
@@ -10,7 +10,7 @@ plan on the next run.
 
 File: ~/.config/aurik/song_strategy_cache.json (max 500 entries, LRU eviction)
 
-Spec: §SSC-1 Song-Strategy-Cache (v9.12.1)
+Spec: §SSC-1 Song-Strategy-Cache (v10.0.0)
 """
 
 from __future__ import annotations

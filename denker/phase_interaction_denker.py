@@ -34,7 +34,7 @@ Aufruf (AurikDenker Stufe 5b, nach StrategieDenker, vor _run_rest):
     # plan.phases → precomputed_phase_plan → RestaurierDenker → UV3.restore()
 
 Spec §2.46 Carrier-Chain-Inversion + §2.47 Adaptive-Intelligence + §2.48 Kumulative-Guard
-v9.11.1 — PhaseInteractionDenker
+v10.0.0 — PhaseInteractionDenker
 """
 
 from __future__ import annotations
@@ -158,6 +158,7 @@ _PHASE_SEMANTICS: dict[str, frozenset[str]] = {
     # ── Additiv: Spektrum / Energie ergänzen ────────────────────────────────
     "phase_06_frequency_restoration": frozenset({"ADDITIVE", "FREQUENCY_EXT"}),
     "phase_07_harmonic_restoration": frozenset({"ADDITIVE", "HARMONIC"}),
+    "phase_07_declipper": frozenset({"WAVEFORM_REPAIR", "ADDITIVE"}),  # §v10.18: Selbstkalibrierender Declipper
     "phase_11_transient_shaper": frozenset({"ADDITIVE", "TRANSIENT_ADD"}),
     "phase_21_harmonic_exciter": frozenset({"ADDITIVE", "HARMONIC"}),
     "phase_38_presence_boost": frozenset({"ADDITIVE", "FREQUENCY_EXT", "HF"}),
@@ -186,6 +187,10 @@ _PHASE_SEMANTICS: dict[str, frozenset[str]] = {
     "phase_40_loudness_normalization": frozenset({"MASTERING", "LOUDNESS_NORMALIZATION"}),
     "phase_47_truepeak_limiter": frozenset({"MASTERING", "LIMITER", "NEEDS_LOUDNESS"}),
     "phase_41_output_format_optimization": frozenset({"OUTPUT"}),
+    # §v10.18: Phasen ohne Annotation nachgetragen (für Konfliktregeln und DAG-Reorder)
+    "phase_08_transient_preservation": frozenset({"TRANSIENT", "WAVEFORM_REPAIR"}),  # Zölzer §8.1: vor NR
+    "phase_19_de_esser": frozenset({"SUBTRACTIVE", "SIBILANCE"}),  # De-Essing nach Denoise
+    "phase_28_surface_noise_profiling": frozenset({"SUBTRACTIVE", "NOISE_PROFILING"}),  # Profiling vor Gate
 }
 
 # ---------------------------------------------------------------------------
@@ -201,6 +206,9 @@ _CONFLICT_RULES: list[tuple[frozenset[str], frozenset[str]]] = [
     (frozenset({"DYNAMICS_EXPANDING"}), frozenset({"DYNAMICS_COMPRESSING"})),
     # Stereo-Einengung → kein anschließendes Erweitern (hebt Einengung auf)
     (frozenset({"STEREO_NARROWING"}), frozenset({"STEREO_WIDENING"})),
+    # §v10.18 Declipper: Waveform-Repair → kein Komprimieren danach
+    # (Compression hebt de-clippte Peaks wieder auf → kreisförmige Verarbeitung)
+    (frozenset({"WAVEFORM_REPAIR"}), frozenset({"DYNAMICS_COMPRESSING"})),
 ]
 
 # ---------------------------------------------------------------------------
@@ -218,12 +226,33 @@ _ORDER_CONSTRAINTS: list[tuple[str, str]] = [
     # EBU R128: LUFS-Normalisierung vor TruePeak-Limiter (§6.1)
     ("phase_40_loudness_normalization", "phase_47_truepeak_limiter"),
     # Spec §2.46 Carrier-Chain-Inversion: subtraktiv vor additiv
+    # §v10.18 Declipper: muss VOR Denoising laufen (Godsill & Rayner 1998, §5.2).
+    # Clipped samples haben keine HF-Information → Noise-Model auf Clips lernt falsch.
+    ("phase_07_declipper", "phase_03_denoise"),
+    ("phase_07_declipper", "phase_04_eq_correction"),  # EQ nicht auf Clips anwenden
+    ("phase_07_declipper", "phase_06_frequency_restoration"),  # Freq-Restore auf sauberer Wellenform
     ("phase_03_denoise", "phase_07_harmonic_restoration"),
     ("phase_03_denoise", "phase_06_frequency_restoration"),
     ("phase_03_denoise", "phase_21_harmonic_exciter"),
     ("phase_29_tape_hiss_reduction", "phase_07_harmonic_restoration"),
     ("phase_29_tape_hiss_reduction", "phase_06_frequency_restoration"),
     ("phase_29_tape_hiss_reduction", "phase_21_harmonic_exciter"),
+    # §v10.18 Wissenschaftliche Reihenfolge-Korrekturen:
+    # Godsill & Rayner (1998) §5.2: impulsive repair → broadband NR
+    ("phase_01_click_removal", "phase_03_denoise"),
+    ("phase_09_crackle_removal", "phase_03_denoise"),
+    # Schmalband → Breitband-Prinzip (Zölzer 2008, §9.2)
+    ("phase_05_rumble_filter", "phase_03_denoise"),
+    # Zölzer (2008) §8.1: Waveform-Repair vor Spectral-Processing
+    ("phase_08_transient_preservation", "phase_03_denoise"),
+    # De-Esser braucht sauberes Signal für Sibilanz-Detektion (4-12 kHz)
+    ("phase_03_denoise", "phase_19_de_esser"),
+    # Noise Gate NACH Denoise (Cano et al. 2013: Gate vor NR erzeugt Pumping)
+    ("phase_03_denoise", "phase_18_noise_gate"),
+    # Surface Noise Profiling vor Gate (vollständiges Rauschprofil nötig)
+    ("phase_28_surface_noise_profiling", "phase_18_noise_gate"),
+    # Mastering: Stereo-Widening vor finalem EQ
+    ("phase_13_stereo_enhancement", "phase_16_final_eq"),
 ]
 
 # ---------------------------------------------------------------------------
@@ -870,6 +899,7 @@ class PhaseInteractionDenker:
         _has_clip_phases = bool(
             _ph
             & {
+                "phase_07_declipper",  # §v10.18: Primär-Declipper
                 "phase_23_spectral_repair",
                 "phase_06_frequency_restoration",
             }

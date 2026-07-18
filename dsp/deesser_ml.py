@@ -1,5 +1,5 @@
 """
-ML-basierter De-Esser für Aurik 9.0
+ML-basierter De-Esser für Aurik 10.0.0
 Open Source, Eigenentwicklung — scipy/numpy (kein torch/torchaudio)
 
 Spektrale De-Esser Implementierung:

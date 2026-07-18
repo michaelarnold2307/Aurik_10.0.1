@@ -1,5 +1,5 @@
 """
-Signal Flow Tracer (§SFT v9.12.9) — lückenlose Per-Phase-Audioverfolgung.
+Signal Flow Tracer (§SFT v10.0.0) — lückenlose Per-Phase-Audioverfolgung.
 
 Schreibt pro Restaurierung eine JSON-Trace-Datei:
   ~/.aurik/traces/sft_<session_id>.json
@@ -303,7 +303,7 @@ class SignalFlowTracer:
             rms_delta = rms_post - rms_pre
 
             # ── Spektrale Neuheit ────────────────────────────────────────────
-            # v9.12.9c FIX: Per-Phase-Novelty (post vs. pre) für NOVELTY_CRIT-Flag.
+            # v10.0.0c FIX: Per-Phase-Novelty (post vs. pre) für NOVELTY_CRIT-Flag.
             # VORHER: novelty = post vs. orig_psd → nach BW-Extension zeigten phase_14/16
             # dauerhaft ~0.50 Novelty, obwohl sie selbst nichts Neues hinzufügen
             # (alle HF-Bins >12 kHz vom Original abweichend durch frühere phase_07-Arbeit).

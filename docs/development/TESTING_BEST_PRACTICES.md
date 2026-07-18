@@ -1,6 +1,6 @@
-# Aurik 9.x.x — Testing Best Practices
+# Aurik 10.0.8 — Testing Best Practices
 
-**Version:** 9.20.3  
+**Version:** 10.0.8  
 **Datum:** Mai 2026  
 **Status:** ✅ Production Ready
 
@@ -26,7 +26,7 @@
 
 ## Übersicht
 
-Aurik 9 Tests müssen die **14 Musical Goals** und das **Adaptive Thresholds System** berücksichtigen, um produktive und musikalisch sinnvolle Tests zu gewährleisten.
+Aurik 10.0.0 Tests müssen die **14 Musical Goals** und das **Adaptive Thresholds System** berücksichtigen, um produktive und musikalisch sinnvolle Tests zu gewährleisten.
 
 ### Kernprinzipien
 
@@ -39,7 +39,7 @@ Aurik 9 Tests müssen die **14 Musical Goals** und das **Adaptive Thresholds Sys
 
 ## Musical Goals Testing
 
-### Die 14 Musical Goals (Stand v9.10.x)
+### Die 14 Musical Goals (Stand v10.0.0.x)
 
 1. **Brillanz** (HF Clarity 8–20 kHz) — Threshold: 0.85
 2. **Wärme** (Mid-Range 200–2000 Hz) — Threshold: 0.80
@@ -256,7 +256,7 @@ def generate_extreme_degraded_audio(sr=48000, duration=3.0):
 
 ### Übersicht
 
-Aurik 9 verfügt über ein **geschlechts- und alters-spezifisches Vocal Enhancement System** mit **individueller Sibilanten-Beseitigung** (De-Essing).
+Aurik 10.0.0 verfügt über ein **geschlechts- und alters-spezifisches Vocal Enhancement System** mit **individueller Sibilanten-Beseitigung** (De-Essing).
 
 **Location:** `dsp/aurik_deesser_pro/music_vocal_pipeline.py`
 
@@ -567,7 +567,7 @@ def test_e2e_vocal_enhancement_cross_gender_consistency():
 
 ### Übersicht
 
-Aurik 9 unterstützt **30+ analoge und digitale Tonträger** mit **Medium-spezifischen Musical Goals Thresholds** und **Forensischer Analyse**.
+Aurik 10.0.0 unterstützt **30+ analoge und digitale Tonträger** mit **Medium-spezifischen Musical Goals Thresholds** und **Forensischer Analyse**.
 
 **Locations:**
 
@@ -586,9 +586,9 @@ Aurik 9 unterstützt **30+ analoge und digitale Tonträger** mit **Medium-spezif
 7. **BROADCAST** (1920-heute): AM, FM, DAB
 8. **TELEPHONE** (1900-heute): PSTN, GSM, VoIP
 
-### ⚠️ Aurik 9 Scope: Mono/Stereo Only
+### ⚠️ Aurik 10.0.0 Scope: Mono/Stereo Only
 
-**WICHTIG:** Aurik 9 unterstützt ausschließlich **Mono- und Stereo-Formate** für **Processing**.
+**WICHTIG:** Aurik 10.0.0 unterstützt ausschließlich **Mono- und Stereo-Formate** für **Processing**.
 
 **❌ NICHT UNTERSTÜTZT (Processing):**
 
@@ -730,7 +730,7 @@ def test_medium_specific_thresholds():
 - 🚫 360 Reality Audio
 - 🚫 Spatial Audio
 
-**REASON:** Aurik 9 ist ausschließlich für Mono/Stereo optimiert.
+**REASON:** Aurik 10.0.0 ist ausschließlich für Mono/Stereo optimiert.
 
 ---
 

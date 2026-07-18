@@ -1,5 +1,5 @@
 """
-End-to-End Optimizer für Aurik 8.0
+End-to-End Optimizer für Aurik 10.0.0
 
 Ermöglicht Joint Training über die gesamte Processing-Pipeline hinweg.
 Macht kritische DSP-Module differenzierbar für Gradient-basierte Optimierung.
@@ -346,7 +346,7 @@ class DifferentiableNoiseGate(nn.Module):
 
 class E2EOptimizationFramework:
     """
-    End-to-End Optimization Framework for Aurik 8.0.
+    End-to-End Optimization Framework for Aurik 10.0.0.
 
     Coordinates joint training of:
     1. ML Models (DeepFilterNet, Demucs, etc.)
@@ -359,7 +359,7 @@ class E2EOptimizationFramework:
     def __init__(
         self,
         sr: int = 48000,
-        device: str = "cpu",  # §9.5: Aurik 9 — ausschließlich CPU, kein CUDA/ROCm/Metal
+        device: str = "cpu",  # §9.5: Aurik 10.0.0 — ausschließlich CPU, kein CUDA/ROCm/Metal
         checkpoint_dir: Path | None = None,
     ) -> None:
         self.sr = sr

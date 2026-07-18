@@ -1,4 +1,4 @@
-"""§EraTarget EraCarrierTargetModel — Era × Carrier spectral target (v9.12.1).
+"""§EraTarget EraCarrierTargetModel — Era × Carrier spectral target (v10.0.0).
 
 Provides a physically-grounded spectral target frame per (era_decade, carrier_type).
 The key innovation: *noise_texture_preserve_ratio* — how much of the measured

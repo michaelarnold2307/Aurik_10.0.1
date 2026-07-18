@@ -1,6 +1,6 @@
-# Aurik 9.x.x — 64-Phasen-Pipeline Überblick
+# Aurik 10.0.8 — 68-Phasen-Pipeline Überblick
 
-**Version:** 9.20.3  
+**Version:** 10.0.8  
 **Stand:** Mai 2026  
 **Status:** ✅ Produktionsbereit
 
@@ -14,7 +14,7 @@ Tier 0: RestorabilityEstimator, EraClassifier, GermanSchlagerClassifier
 Tier 1: MediumClassifier, DefectScanner, CausalDefectReasoner
 Tier 1: UncertaintyQuantifier, GPParameterOptimizer
 Tier 1: HarmonicPreservationGuard
-Tier 2-5: Phasen 01–64 (jede via PerPhaseMusicalGoalsGate)
+Tier 2-5: Phasen 01–66 + Vocal Repair + Glue Stage (jede via PerPhaseMusicalGoalsGate)
 Tier 5: EraAuthenticPerceptualCompletion (konditionell)
 Tier 5: IntroducedArtifactDetector
 Tier 6: FeedbackChain, TemporalQualityCoherenceMetric
@@ -149,7 +149,7 @@ Bei Regression um mehr als REGRESSION_THRESHOLD:
 - Retry 5: strength x 0.10
 - Rollback: Phase übersprungen, Warnung in phase_gate_log
 
-REGRESSION_THRESHOLD ist restorability-adaptiv (§2.29 v9.10.77):
+REGRESSION_THRESHOLD ist restorability-adaptiv (§2.29 v10.0.0):
 
 - GOOD (>= 70): 0.020
 - FAIR (40–69): 0.035
@@ -159,4 +159,4 @@ Max. 5 Retries; P1/P2-Regression → volle Retry-Kaskade (4 Retries + Emergency)
 
 ---
 
-**Aurik 9.20.3 — Mai 2026**
+**Aurik 10.0.0 — Mai 2026**

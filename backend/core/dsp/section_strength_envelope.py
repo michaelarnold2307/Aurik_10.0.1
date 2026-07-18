@@ -16,7 +16,7 @@ Key invariants:
     - The envelope is precomputed ONCE and passed via restoration_context
     - Phases do NOT recompute — they simply read the precomputed array
 
-Author: Aurik v9.20.3
+Author: Aurik v10.0.0
 """
 
 from __future__ import annotations

@@ -117,7 +117,7 @@ class DynamicRangeExpansion(PhaseInterface):
             "knee_width_db": 6,
             "attack_ms": 20,
             "release_ms": 100,
-        },  # v9.12.9: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
+        },  # v10.0.0: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
         MaterialType.CD_DIGITAL: {
             "upward_ratio": 1.5,  # Aggressive (restore from brick-wall limiting)
             "upward_threshold_db": -12,

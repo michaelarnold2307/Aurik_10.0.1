@@ -2,7 +2,7 @@
 applyTo: "backend/core/musical_goals/*.py"
 ---
 
-# Musical Goals — Regeln (normativ, Aurik 9.12.x)
+# Musical Goals — Regeln (normativ, Aurik 10.0.0.x)
 
 ## 15 Goals — Prioritäten und kanonische Böden
 
@@ -20,7 +20,7 @@ applyTo: "backend/core/musical_goals/*.py"
 | **P3** | transient_energie | ≥ 0.80 (§1.4.6 V26: HPSS-Onset-Fenster 0–20 ms nach Transient geschützt) | ≥ 0.83 |
 | **P3** | groove | ≥ 0.83 | ≥ 0.85 |
 | **P4** | transparenz | ≥ 0.82 | ≥ 0.85 |
-| **P4** | waerme | ≥ 0.77 (war: 0.75; v9.5 Wärmeband-Guard V25: 200–800 Hz kumulativer Verlust ≤ 2.5 dB) | ≥ 0.78 |
+| **P4** | waerme | ≥ 0.77 (war: 0.75; v10.0.0 Wärmeband-Guard V25: 200–800 Hz kumulativer Verlust ≤ 2.5 dB) | ≥ 0.78 |
 | **P4** | bass_kraft | ≥ 0.78 | ≥ 0.80 |
 | **P4** | separation_fidelity (`sep_fidelity`) | ≥ 0.80 | ≥ 0.83 |
 | **P5** | brillanz | ≥ 0.78 | ≥ 0.82 |
@@ -215,7 +215,7 @@ vqi_score = result["vqi"]  # float [0, 1]
 # → pipeline.instructions.md, Abschnitt "VQI-Gate (Gesangsmaterial)"
 ```
 
-## EraVocalProfile — Ära-adaptive VQI-Kalibrierung [RELEASE_MUST v9.13]
+## EraVocalProfile — Ära-adaptive VQI-Kalibrierung [RELEASE_MUST v10.0.0]
 
 **Problem**: `compute_vqi()` verwendet feste Formant-Toleranz (±2 dB für F1–F4). Ein Falsett-Sänger von 1932 hat physikalisch andere Vibrato-Charakteristika und eine höhere nasale Resonanz als ein Popsänger von 1985. Die feste Toleranz erzeugt systematisch falsch-negative VQI-Scores für historisches Material und falsch-positive Recovery-Kaskaden, die gar nicht notwendig sind.
 

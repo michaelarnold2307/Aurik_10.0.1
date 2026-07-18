@@ -1,4 +1,4 @@
-"""Unit-Tests für EraVocalProfile (§EraVocalProfile, v9.13)."""
+"""Unit-Tests für EraVocalProfile (§EraVocalProfile, v10.0.0)."""
 
 import pytest
 

@@ -20,7 +20,7 @@ Expected Results:
 - BALANCED Mode: Adaptive ML (ca. 1.8× RT)
 - Quality: 0.39 → 0.84 (+0.45 improvement)
 
-Author: Aurik 9.0 Development Team
+Author: Aurik 10.0.0 Development Team
 Date: 15. Februar 2026
 """
 

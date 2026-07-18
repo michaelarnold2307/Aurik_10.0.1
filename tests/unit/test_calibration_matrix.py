@@ -496,7 +496,7 @@ def test_cassette_emotionalitaet_floor_below_canonical():
     cassette_floor = get_material_floor("cassette", "emotionalitaet")
     assert cassette_floor < canonical, (
         f"cassette emotionalitaet floor {cassette_floor:.3f} must be < canonical {canonical:.3f} "
-        "(Kassetten-AGC + BW-Ceiling 12 kHz — §09.2 v9.12.9)"
+        "(Kassetten-AGC + BW-Ceiling 12 kHz — §09.2 v10.0.0)"
     )
 
 
@@ -511,7 +511,7 @@ def test_cassette_emotionalitaet_floor_compatible_with_real_measurement():
     real_original_score = 0.782  # measure_all() Echtmessung 2026-05-20
     assert real_original_score >= cassette_floor, (
         f"Original-Kassette ({real_original_score:.3f}) liegt unter Floor ({cassette_floor:.3f}) — "
-        "§GOAL_BASELINE_CHECK würde fälschlicherweise Recovery triggern (§09.2 v9.12.9)"
+        "§GOAL_BASELINE_CHECK würde fälschlicherweise Recovery triggern (§09.2 v10.0.0)"
     )
 
 
@@ -534,7 +534,7 @@ def test_cassette_emotionalitaet_floor_range():
     floor = get_material_floor("cassette", "emotionalitaet")
     assert 0.77 <= floor < 0.84, (
         f"cassette emotionalitaet floor {floor:.3f} must be in [0.77, 0.84) "
-        "(physikalisches Ceiling Kassette-AGC + BW 12 kHz — §09.2 v9.12.9)"
+        "(physikalisches Ceiling Kassette-AGC + BW 12 kHz — §09.2 v10.0.0)"
     )
 
 
@@ -882,12 +882,12 @@ def test_restorability_scale_min_in_all_list():
 
 
 # ---------------------------------------------------------------------------
-# §0d groove-Timing-Fix (v9.13) — Normative Guard-Tests
+# §0d groove-Timing-Fix (v10.0.0) — Normative Guard-Tests
 # ---------------------------------------------------------------------------
 
 
 def test_emotionalitaet_recovery_primary_is_phase_54():
-    """§0d v9.13: emotionalitaet primary recovery phase MUSS phase_54_transparent_dynamics sein.
+    """§0d v10.0.0: emotionalitaet primary recovery phase MUSS phase_54_transparent_dynamics sein.
 
     Grund: DFN/SGMSE+/OMLSA glätten alle 4 Dynamik-Komponenten (crest, variance, micro, range).
     phase_26 (Dynamic Range Expansion) behebt nur crest_score; phase_54 wirkt auf alle Komponenten.
@@ -896,7 +896,7 @@ def test_emotionalitaet_recovery_primary_is_phase_54():
     assert phases, "emotionalitaet recovery list ist leer"
     assert phases[0] == "phase_54_transparent_dynamics", (
         f"Primary recovery phase für emotionalitaet muss phase_54_transparent_dynamics sein, "
-        f"got '{phases[0]}' — §0d v9.13 Envelope-Re-Smoothing-Fix (NR-Glättung betrifft alle 4 Dynamik-Komponenten)"
+        f"got '{phases[0]}' — §0d v10.0.0 Envelope-Re-Smoothing-Fix (NR-Glättung betrifft alle 4 Dynamik-Komponenten)"
     )
     # phase_26 muss weiterhin in der Liste stehen (als sekundäre Phase)
     assert "phase_26_dynamic_range_expansion" in phases, (

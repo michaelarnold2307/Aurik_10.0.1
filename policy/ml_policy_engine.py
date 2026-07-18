@@ -66,7 +66,7 @@ class MLModelPolicyEngine:
             Canonical route name, not a direct legacy plugin name.
 
         The legacy policy layer no longer names individual obsolete plugins.
-        It returns canonical Aurik 9 routes so execution is centralized in UV3,
+        It returns canonical Aurik 10.0.0 routes so execution is centralized in UV3,
         SotaVocalModelRouter, ModelCapabilityGate, and phase-level guards.
         """
         del goal

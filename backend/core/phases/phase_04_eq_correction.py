@@ -1,5 +1,5 @@
 """
-Phase 4: Professional EQ Correction - Aurik 9.0.
+Phase 4: Professional EQ Correction - Aurik 10.0.0.
 ===============================================
 
 Professional-grade adaptive equalization competing with FabFilter Pro-Q and iZotope Ozone EQ.
@@ -68,7 +68,7 @@ BENCHMARK COMPARISON:
 - Waves Renaissance EQ: Classic analog modeling
 - Aurik v2.0: Professional, material-adaptive, <0.5× realtime ✅
 
-Author: Aurik 9.0 Development Team
+Author: Aurik 10.0.0 Development Team
 Version: 2.0.0 (Professional Upgrade)
 Date: 15. Februar 2026
 """
@@ -172,7 +172,7 @@ class EQCorrectionPhase(PhaseInterface):
     }
 
     # ---------------------------------------------------------------------------
-    # §6.3a PRE-RIAA Canonical τ-Constant LUT (bindend, spec §6.3a v9.10.x)
+    # §6.3a PRE-RIAA Canonical τ-Constant LUT (bindend, spec §6.3a v10.0.0.x)
     # Triplet: (τ_bass_µs, τ_mid_µs, τ_treble_µs).  0 = no shelf at that pole.
     # Playback correction: INVERT of recording characteristic derived from τ.
     # Reference: Copeland (2008); Galo (2003); IEC 60098:1987; Robertson (2011).

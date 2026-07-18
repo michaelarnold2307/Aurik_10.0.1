@@ -1,5 +1,5 @@
 """
-Generiert synthetische ERA-Classifier-Ankerpunkte für Aurik 9.
+Generiert synthetische ERA-Classifier-Ankerpunkte für Aurik 10.0.0.
 
 Erzeugte Dateien:
     models/era_classifier/era_anchors.npy          — [15 × 512] CLAP-Embedding-Anker
@@ -15,7 +15,7 @@ Hinweis:
     und dienen als Prior für Nearest-Neighbor-Suche wenn LAION-CLAP verfügbar ist.
     Die Qualität der Tier-2-DSP-Klassifikation ist davon unabhängig.
 
-Referenz: §2.14, §2.25 Aurik-9-Spec v9.9.9
+Referenz: §2.14, §2.25 Aurik-9-Spec v10.0.0
 """
 
 from __future__ import annotations

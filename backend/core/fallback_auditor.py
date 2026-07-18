@@ -34,20 +34,6 @@ class FallbackAuditor:
         self._events: list[FallbackEvent] = []
         self._lock = threading.Lock()
 
-    def record(self, component: str, gold: str, fallback: str, reason: str, severity: str = "warning"):
-        with self._lock:
-            self._events.append(
-                FallbackEvent(
-                    component=component,
-                    gold_standard=gold,
-                    fallback_used=fallback,
-                    reason=reason,
-                    severity=severity,
-                )
-            )
-        # Handler-based auto-detect catches this — don't double-log
-        pass
-
     @property
     def degraded(self) -> bool:
         return len(self._events) > 0
@@ -162,8 +148,8 @@ class FallbackAuditor:
                         if keyword.lower() in msg.lower():
                             _auditor.record(comp, gold, fallb, keyword.lower().replace(" ", "_")[:50])
                             break  # one match per message
-                except Exception:
-                    pass
+                except Exception as _fa_emit_exc:
+                    logger.debug("fallback_auditor: log record processing failed (non-critical): %s", _fa_emit_exc)
 
         # An Root-Logger hängen — fängt ALLE Logs ab
         root = logging.getLogger()

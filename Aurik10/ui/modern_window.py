@@ -2538,7 +2538,7 @@ class BatchProcessingThread(QThread):
                     "head_wear": ["head_wear", "azimuth_error"],
                     "bias": ["bias_error"],
                     "eq": ["bandwidth_loss", "riaa_curve_error"],
-                    # ── Phases 37/43/59–64: causal defects from v9.10.98 (inner groove, tape splice,
+                    # ── Phases 37/43/59–64: causal defects from v10.0.0 (inner groove, tape splice,
                     # crosstalk, IM-distortion, modulation noise, groove echo) — previously missing,
                     # so waveform markers for these phases never turned green.
                     "codec_artifact": ["compression_artifacts"],
@@ -13378,7 +13378,7 @@ class ModernMainWindow(QMainWindow):
         self.btn_delta.clicked.connect(self._play_delta)
         ab_row_layout.addWidget(self.btn_delta)
 
-        # ── A/B Sync-Loop: gleiche Position, nahtloser Quellwechsel (v9.10.111) ──
+        # ── A/B Sync-Loop: gleiche Position, nahtloser Quellwechsel (v10.0.0) ──
         _ab_style_sync = (
             "QPushButton{background:qlineargradient(x1:0,y1:0,x2:1,y2:0,"
             "stop:0 #4a3a7a,stop:1 #2e2060);border:none;border-radius:7px;"
@@ -17815,7 +17815,7 @@ class ModernMainWindow(QMainWindow):
                 self._ab_source_label.setVisible(False)
 
     def _ab_sync_toggle(self) -> None:
-        """A/B-Sync-Loop starten oder stoppen (v9.10.111).
+        """A/B-Sync-Loop starten oder stoppen (v10.0.0).
 
         Beim Start: aktuelle Playhead-Position (oder 0.0) als Loop-Startpunkt
         speichern, Original abspielen. Beim Stopp: Wiedergabe beenden, State
@@ -17868,7 +17868,7 @@ class ModernMainWindow(QMainWindow):
             self._ab_source_label.setVisible(True)
 
     def _ab_switch_source(self, source: str) -> None:
-        """Wechselt die A/B-Loop-Quelle bei laufendem Loop (v9.10.111).
+        """Wechselt die A/B-Loop-Quelle bei laufendem Loop (v10.0.0).
 
         Speichert die aktuelle Playhead-Position als neuen Startpunkt, stoppt
         die Wiedergabe und startet die andere Quelle von derselben Position.

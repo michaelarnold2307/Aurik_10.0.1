@@ -291,6 +291,9 @@ class StereoTemporalCoherenceGuard:
                                        its un-processed original (phase_42 stem remix).
     """
 
+    _cumulative_correction_samples: float = 0.0
+    _last_audio_id: int = 0
+
     # ------------------------------------------------------------------
     # 1. Inter-channel delay correction (L vs R)
     # ------------------------------------------------------------------
@@ -349,13 +352,65 @@ class StereoTemporalCoherenceGuard:
             delay = float(_mp_verified["median_lag"])
             _mp_spread = _mp_verified.get("max_spread", 0)
         else:
-            # §v10.16 Single-point: without multi-point consensus, the
-            # measurement could be stereo panning artifact. Skip correction
-            # to prevent comb filtering from false channel shifts.
-            delay = 0.0
-            _mp_spread = -1
-            logger.info("STCG: only 1 measurement point — unreliable for stereo-panned material, skipping")
-            return audio
+            # §v10.18 Single-point fallback: multi-point verification can fail on
+            # narrow-bandwidth or MP3-encoded material where GCC-PHAT struggles
+            # in sub-windows. Before giving up, try a single full-length measurement
+            # with tighter guards: require correlation > 0.60 (not 0.40) and
+            # lag < 10 ms (not 20 ms). This catches genuine hardware lags while
+            # protecting against false positives from stereo-panning artifacts.
+            _num_pts = _mp_verified.get("num_points", 0)
+            try:
+                _single_lag = _estimate_delay_subsample(
+                    ch_l[: min(len(ch_l), sr * 30)].astype(np.float32),
+                    ch_r[: min(len(ch_r), sr * 30)].astype(np.float32),
+                    sr,
+                )
+                _single_corr = (
+                    abs(
+                        float(
+                            np.corrcoef(
+                                ch_l[: min(len(ch_l), sr * 10)],
+                                ch_r[: min(len(ch_r), sr * 10)],
+                            ).flat[1]
+                        )
+                    )
+                    if len(ch_l) > 10
+                    else 0.0
+                )
+                _single_corr = _single_corr if np.isfinite(_single_corr) else 0.0
+                if _single_corr >= 0.60 and abs(_single_lag) < sr // 100:  # < 10 ms
+                    delay = float(_single_lag)
+                    _mp_spread = 0
+                    logger.info(
+                        "STCG [%s]: multi-point got %d point(s) — single-full-length "
+                        "fallback: lag=%d samples (%.1f ms), corr=%.3f",
+                        phase_id,
+                        _num_pts,
+                        int(delay),
+                        delay / sr * 1000,
+                        _single_corr,
+                    )
+                else:
+                    delay = 0.0
+                    _mp_spread = -1
+                    logger.warning(
+                        "STCG [%s]: multi-point got %d point(s), single-fallback "
+                        "rejected (corr=%.3f < 0.60 or lag=%.1f ms > 10 ms) — skipping",
+                        phase_id,
+                        _num_pts,
+                        _single_corr,
+                        _single_lag / sr * 1000,
+                    )
+                    return audio
+            except Exception:
+                delay = 0.0
+                _mp_spread = -1
+                logger.warning(
+                    "STCG [%s]: only %d measurement point(s) and single-fallback failed — skipping correction",
+                    phase_id,
+                    _num_pts,
+                )
+                return audio
 
         delay_ms = delay / sr * 1000.0
 
@@ -488,8 +543,11 @@ class StereoTemporalCoherenceGuard:
                     sr,
                 )
                 lags.append(int(round(lag)))
-            except Exception:
-                pass
+            except Exception as _stcg_lag_exc:
+                logger.debug(
+                    "stereo_temporal_coherence_guard: multi-point lag measurement failed (non-critical): %s",
+                    _stcg_lag_exc,
+                )
 
         if len(lags) < 2:
             return {"verified": False, "median_lag": 0, "max_spread": 9999, "num_points": len(lags)}

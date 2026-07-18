@@ -1,7 +1,7 @@
 """
 TransientEnergyMetric — §1.4.6 [RELEASE_MUST] Onset-Amplitude-Ratio Messung.
 
-Spec: 01_musical_goals.md §1.4.6 (v9.12.0)
+Spec: 01_musical_goals.md §1.4.6 (v10.0.0)
 
 Misst, wie gut subtraktive Phasen (NR, Dereverb, EQ) die transiente Energie
 an Onset-Punkten erhalten haben.
@@ -140,7 +140,7 @@ def get_transient_energy_material_floor(
 class TransientEnergyMetric:
     """Misst Onset-Amplitude-Ratio zwischen Original- und Restaurierungs-Audio.
 
-    Spec §1.4.6 (01_musical_goals.md v9.12.0).
+    Spec §1.4.6 (01_musical_goals.md v10.0.0).
 
     Algorithmus:
     1. HPSS auf Original und Restaurierung (Percussive-Komponente isolieren)

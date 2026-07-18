@@ -1,6 +1,6 @@
-# Aurik 9.x.x — Testing Guide
+# Aurik 10.0.8 — Testing Guide
 
-**Version:** 9.20.3  
+**Version:** 10.0.8  
 **Datum:** Mai 2026  
 **Status:** ✅ Production Ready
 
@@ -640,7 +640,7 @@ class TestProcessingBenchmarks:
     """Performance Benchmarks"""
 
     def test_restoration_processing_time_cpu(self):
-        """Benchmark: RESTORATION Mode (CPU-only)"""
+        """Benchmark: RESTORATION Mode (CPU + optionale AMD-GPU)"""
         # Arrange
         sr = 48000
         duration = 180.0  # 3 minutes

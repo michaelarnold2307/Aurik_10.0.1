@@ -1,4 +1,4 @@
-# TRADEMARK.md — Markenzeichen-Richtlinie für Aurik 9
+# TRADEMARK.md — Markenzeichen-Richtlinie für Aurik 10.0.8
 
 „Aurik" und das Aurik-Logo sind nicht-eingetragene Markenzeichen von Michael Arnold.
 

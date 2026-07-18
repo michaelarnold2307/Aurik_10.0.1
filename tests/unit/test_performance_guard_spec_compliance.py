@@ -13,10 +13,10 @@ class TestPerformanceGuardSpecCompliance:
 
     def test_limits_match_2026_spec(self) -> None:
         assert pytest.approx(8.0) == PerformanceGuard.LIMIT_FAST
-        assert pytest.approx(32.0) == PerformanceGuard.LIMIT_BALANCED  # v9.10.72: 32× RT (§PerformanceGuard)
-        assert pytest.approx(32.0) == PerformanceGuard.LIMIT_QUALITY  # v9.10.72: 32× RT (Restoration)
-        assert pytest.approx(32.0) == PerformanceGuard.LIMIT_MAXIMUM  # v9.10.72: 32× RT (Studio-2026-ML-Chain)
-        assert pytest.approx(32.0) == PerformanceGuard.RT8_EXCELLENCE_BUDGET  # v9.10.72: 32× RT
+        assert pytest.approx(32.0) == PerformanceGuard.LIMIT_BALANCED  # v10.0.0: 32× RT (§PerformanceGuard)
+        assert pytest.approx(32.0) == PerformanceGuard.LIMIT_QUALITY  # v10.0.0: 32× RT (Restoration)
+        assert pytest.approx(32.0) == PerformanceGuard.LIMIT_MAXIMUM  # v10.0.0: 32× RT (Studio-2026-ML-Chain)
+        assert pytest.approx(32.0) == PerformanceGuard.RT8_EXCELLENCE_BUDGET  # v10.0.0: 32× RT
 
     def test_target_mapping_uses_quality_budget(self) -> None:
         fast_guard = PerformanceGuard(mode=QualityMode.FAST, enforce_limit=True, enable_adaptive_skipping=True)
@@ -24,8 +24,8 @@ class TestPerformanceGuardSpecCompliance:
         quality_guard = PerformanceGuard(mode=QualityMode.QUALITY, enforce_limit=True, enable_adaptive_skipping=True)
 
         assert fast_guard.target_rt_factor == pytest.approx(8.0)
-        assert balanced_guard.target_rt_factor == pytest.approx(32.0)  # v9.10.72: 32× RT
-        assert quality_guard.target_rt_factor == pytest.approx(32.0)  # v9.10.72: 32× RT
+        assert balanced_guard.target_rt_factor == pytest.approx(32.0)  # v10.0.0: 32× RT
+        assert quality_guard.target_rt_factor == pytest.approx(32.0)  # v10.0.0: 32× RT
 
     def test_start_phase_uses_monotonic_clock(self) -> None:
         guard = PerformanceGuard(mode=QualityMode.BALANCED, enforce_limit=True, enable_adaptive_skipping=True)
@@ -72,7 +72,7 @@ class TestPerformanceGuardSpecCompliance:
         assert guard.check_early_exit(remaining_phases=3) is False
 
     def test_absolute_90min_limit_triggers_early_exit(self) -> None:
-        """§9.5: 90-Minuten-Absolutlimit (5400s) ist der einzige harte Abbruchgrund (v9.10.72)."""
+        """§9.5: 90-Minuten-Absolutlimit (5400s) ist der einzige harte Abbruchgrund (v10.0.0)."""
         guard = PerformanceGuard(mode=QualityMode.QUALITY, enforce_limit=True, enable_adaptive_skipping=True)
         guard.start_monitoring(10.0)
         # Simulate 5401 seconds elapsed (>90min)

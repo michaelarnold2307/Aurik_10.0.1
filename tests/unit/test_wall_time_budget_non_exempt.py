@@ -276,7 +276,7 @@ class TestWallTimeBudgetInvariant:
 
 class TestWallTimeBudgetAFGRefund:
     """
-    §Wall-Time-Budget Refund Invariante (v9.11.14):
+    §Wall-Time-Budget Refund Invariante (v10.0.0):
     AFG-zurückgerollte Phasen dürfen das Budget für Folgephasen nicht aufbrauchen.
 
     Konkreter Bug: phase_23 läuft 2322s (AFG-Rollback), phase_06 wird

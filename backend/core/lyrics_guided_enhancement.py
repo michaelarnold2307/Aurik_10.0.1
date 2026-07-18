@@ -553,7 +553,7 @@ def get_lyrics_guided_timeline() -> LyricsGuidedTimeline:
 
 
 class LyricsGuidedEnhancement:
-    """§2.36 LyricsGuidedEnhancement — mandatory from Aurik 9.10.x.
+    """§2.36 LyricsGuidedEnhancement — mandatory from Aurik 10.0.0.x.
 
     Pipeline:
       1. Resample to 16 kHz → 80-channel log-mel spectrogram

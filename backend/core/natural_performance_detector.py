@@ -1,4 +1,4 @@
-"""natural_performance_detector.py — §2.46f Natural-Performance-Artifacts-Guard (Aurik 9.12.0)
+"""natural_performance_detector.py — §2.46f Natural-Performance-Artifacts-Guard (Aurik 10.0.0)
 
 Erkennt und schützt performancebedingte Klangereignisse vor ungewollter Entfernung.
 Drei Kategorien (§2.46f):

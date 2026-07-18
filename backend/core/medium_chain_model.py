@@ -63,7 +63,7 @@ class ChainInversionResult:
 
 class PhysicalMediumChainModel:
     """
-    Physikalisches Tonträger-Kettenmodell (Aurik 9.0).
+    Physikalisches Tonträger-Kettenmodell (Aurik 10.0.0).
 
     Jeder Tonträgertyp hat eine charakteristisch geprägte Signalkette.
     Diese Klasse modelliert die Kette und invertiert sie DSP-präzise,

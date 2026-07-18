@@ -5,7 +5,7 @@ unmusikalischer digitaler Stille oder zu erneutem analogem Trägerrauschen führ
 Analoge Tonträger werden im Export auf CD-ähnlichen Rauschboden gezielt; ihre
 Hiss-/Oberflächenrausch-Textur darf nicht als Mindestboden zurückkehren.
 
-Era-Textur-Erweiterung (v9.12.9): Wenn ``original_audio`` übergeben wird,
+Era-Textur-Erweiterung (v10.0.0): Wenn ``original_audio`` übergeben wird,
 extrahiert der Guard das Spektral-Profil des Originals aus dessen Ruhezonen
 und verwendet es als Vorlage für die Rausch-Injektion — statt synthetischem
 Butterworth-Rauschen. Diese Textur-Rekonstruktion ist nur noch für explizite
@@ -153,7 +153,7 @@ def apply_noise_floor_minimum(
 ) -> np.ndarray:
     """Hebt vollständig stille Frames nur bei explizitem Override auf einen Boden an.
 
-    Era-Textur-Rekonstruktion (v9.12.9): Wenn ``original_audio`` übergeben wird,
+    Era-Textur-Rekonstruktion (v10.0.0): Wenn ``original_audio`` übergeben wird,
     wird das Spektral-Profil des Trägers aus dessen Ruhezonen extrahiert und als
     Vorlage für das Ersatzrauschen verwendet. Standardmäßig ist dieser Pfad für
     analoge Tonträger deaktiviert, damit der Export CD-ähnlichen Rauschboden

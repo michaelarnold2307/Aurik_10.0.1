@@ -51,7 +51,7 @@ def _stereo(dur: float = 5.0) -> np.ndarray:
 @pytest.mark.unit
 class TestConstants:
     def test_all_goals_count(self):
-        # §0p v9.12.10: vocal_quality + formant_fidelity hinzugefügt (P0-Goals)
+        # §0p v10.0.0: vocal_quality + formant_fidelity hinzugefügt (P0-Goals)
         assert len(ALL_GOALS) == 17
 
     def test_always_applicable_count(self):

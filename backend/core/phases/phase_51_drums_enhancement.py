@@ -136,7 +136,7 @@ class DrumsEnhancementV1(PhaseInterface):
             "transient_enhancement": 0.5,
             "mix": 0.40,  # 40% enhancement
         },
-        MaterialType.CASSETTE: {  # v9.12.9: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
+        MaterialType.CASSETTE: {  # v10.0.0: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
             "kick_gain_db": 2.5,
             "snare_articulation": 0.6,
             "hihat_clarity_db": 2.0,

@@ -146,7 +146,7 @@ class PianoRestorationV1(PhaseInterface):
             "pedal_threshold_db": -45,
             "mix": 0.45,  # 45% processed
         },
-        MaterialType.CASSETTE: {  # v9.12.9: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
+        MaterialType.CASSETTE: {  # v10.0.0: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
             "hammer_enhancement": 0.50,
             "string_resonance": 0.50,
             "pedal_reduction": 0.40,

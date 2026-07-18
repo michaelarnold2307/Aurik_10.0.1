@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 """
-Tests für v9.10.115 — Klangtreue zum Aufnahmetag (SourceFidelityReconstructor)
+Tests für v10.0.0 — Klangtreue zum Aufnahmetag (SourceFidelityReconstructor)
 ==============================================================================
 
-Abgedeckte Änderungen (v9.10.115):
+Abgedeckte Änderungen (v10.0.0):
   1. SourceFidelityReconstructor — neues Modul backend/core/source_fidelity_reconstructor.py
      - ERA_BANDWIDTH-Tabelle (1900–2020)
      - MATERIAL_GENERATION_COUNT-Tabelle (shellac=4, vinyl=3, cd=1, ...)

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 """tests/unit/test_medium_classifier_sota.py
-Unit tests for three SOTA improvements to MediumClassifier (Aurik 9):
+Unit tests for three SOTA improvements to MediumClassifier (Aurik 10.0.0):
 
   1. Rotation Periodicity Detector  (Cano 2005; Rodriguez & Bello 2018)
   2. IEC 60386 Wow/Flutter via FCPE modulation spectrum

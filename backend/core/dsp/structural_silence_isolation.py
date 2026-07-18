@@ -15,7 +15,7 @@ Das Inpainting-Modell sieht ausschliesslich Audio-Segmente, niemals Stille.
 
 Pflicht-Integration: phase_55 + phase_24 + jede zukünftige generative Phase.
 
-Spec: 02_pipeline_architecture.md §2.68 (v9.12.0)
+Spec: 02_pipeline_architecture.md §2.68 (v10.0.0)
 VERBOTEN-Regeln: V14, V15, V16, V17, V18
 """
 
@@ -159,7 +159,7 @@ class StructuralSilenceIsolator:
     SONDERN: Vorverarbeitungs-Isolation — das Modell sieht nur Audio-Segmente,
              nie Stille, nie Stille-Musik-Grenzen.
 
-    Spec: §2.68b (v9.12.0)
+    Spec: §2.68b (v10.0.0)
     """
 
     # Silence-Schwellen — material-adaptiv

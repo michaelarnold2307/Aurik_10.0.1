@@ -4,7 +4,7 @@ from __future__ import annotations
 tests/unit/test_v95_modules.py
 ==============================
 
-Optimierte Unit-Tests für alle v9.5-Module (parametrisiert, Fixtures mit Scope,
+Optimierte Unit-Tests für alle v10.0.0-Module (parametrisiert, Fixtures mit Scope,
 Modul-Level-Imports):
   - Phase 55: DiffusionInpaintingPhase
   - FeedbackChain & compute_perceptual_score
@@ -15,7 +15,7 @@ Modul-Level-Imports):
   - Benchmark Suite
   - GPU-Stub
 
-Aurik 9.5 — 2026
+Aurik 10.0.0 — 2026
 """
 
 
@@ -385,7 +385,7 @@ class TestCPUPipeline:
 @pytest.mark.slow
 class TestRestorationBenchmark:
     def test_reference_scores_keys(self):
-        for key in ("iZotope RX 10", "Aurik 9.5 (Ziel)"):
+        for key in ("iZotope RX 10", "Aurik 10.0.0 (Ziel)"):
             assert key in REFERENCE_SCORES
 
     def test_report_type(self, benchmark_report):
@@ -442,7 +442,7 @@ class TestGPUPipelineStub:
 
 
 # ===========================================================================
-# 9. Excellence Optimizer  (v9.5.1)
+# 9. Excellence Optimizer  (v10.0.0)
 # ===========================================================================
 
 import pytest
@@ -635,7 +635,7 @@ class TestOptimizeForExcellenceFunction:
 
 
 # ===========================================================================
-# 10. Music Quality Scorer — neue Metriken (v9.5.1)
+# 10. Music Quality Scorer — neue Metriken (v10.0.0)
 # ===========================================================================
 
 from backend.core.music_quality_scorer import (
@@ -722,7 +722,7 @@ class TestMusicMOSUpdatedFormula:
 
 
 # ===========================================================================
-# 11. FeedbackChain — Excellence-Modus (v9.5.1)
+# 11. FeedbackChain — Excellence-Modus (v10.0.0)
 # ===========================================================================
 
 from backend.core.feedback_chain import (
@@ -1173,7 +1173,7 @@ class TestOptimizeForExcellenceMaterial:
 
 
 # ===========================================================================
-# SEKTION 15 — v9.6: FeedbackChain material/use_mert + ExcellenceOptimizer use_mert
+# SEKTION 15 — v10.0.0: FeedbackChain material/use_mert + ExcellenceOptimizer use_mert
 # ===========================================================================
 
 
@@ -1319,7 +1319,7 @@ class TestExcellenceBenchmark:
 
 
 # ===========================================================================
-# SEKTION 16 – Phase-55-Integration & DiffWave-Plugin inpaint()-Bridge (v9.6.1)
+# SEKTION 16 – Phase-55-Integration & DiffWave-Plugin inpaint()-Bridge (v10.0.0)
 # ===========================================================================
 
 import pathlib

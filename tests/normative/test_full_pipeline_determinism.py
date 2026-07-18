@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""Vollpipeline-Determinismus-Gate — [RELEASE_MUST] (§2.40 / §5.5 spec 07, v9.10.79)
+"""Vollpipeline-Determinismus-Gate — [RELEASE_MUST] (§2.40 / §5.5 spec 07, v10.0.0)
 
 Spec §2.40 (copilot-instructions.md, spec 02 §2.40, spec 07 §5.5):
     Gleiche Eingabe + gleiche Umgebung + gleicher Modus => bitnahe Ausgabe.

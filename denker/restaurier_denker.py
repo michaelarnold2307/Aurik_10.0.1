@@ -442,7 +442,7 @@ class RestaurierDenker:
                 logger.warning("RestaurierDenker: OOM-Recovery fehlgeschlagen: %s", cp_exc)
                 return self._fallback(audio, material or "unknown", f"OOM-Recovery fehlgeschlagen: {cp_exc}")
 
-        # ── v9.10.72: Direkt-UV3-Pfad (kein ARE-Umweg) ─────────────────────
+        # ── v10.0.0: Direkt-UV3-Pfad (kein ARE-Umweg) ─────────────────────
         # AurikDenker hat Preprocessing (ReparaturDenker + RekonstruktionsDenker)
         # und alle Analysen (DefectScan, Era, Medium, Restorability) bereits
         # durchgeführt und als Caches weitergegeben. ARE wiederholt diese Arbeit

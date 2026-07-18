@@ -1,5 +1,5 @@
 """
-Hyperparameter Optimizer für Aurik 8.0
+Hyperparameter Optimizer für Aurik 10.0.0
 
 Automatische Optimierung aller kritischen Parameter mittels Bayesian Optimization (Optuna).
 

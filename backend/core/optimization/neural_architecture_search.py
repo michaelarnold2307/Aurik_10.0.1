@@ -1,5 +1,5 @@
 """
-Neural Architecture Search (NAS) für Aurik 8.0
+Neural Architecture Search (NAS) für Aurik 10.0.0
 
 Automatische Suche nach optimalen Netzwerk-Architekturen für:
 - DeepFilterNet Varianten

@@ -6,7 +6,7 @@ RMVPE (Robust Multi-period Vocoder-based Pitch Estimator via Mel spectrogram):
     - ONNX-Modell: models/rmvpe/rmvpe.onnx (~26 MB)
     - Fallback: librosa.pyin() (pYIN, Mauch & Dixon 2014)
 
-Aurik 9 Pitch-Tracking-Hierarchie (§4.4, Stand März 2026):
+Aurik 10.0.0 Pitch-Tracking-Hierarchie (§4.4, Stand März 2026):
     Primär:    FCPE ONNX (fcpe_plugin)
     Fallback1: CREPE full ONNX (crepe_plugin)
     Fallback2: RMVPE ONNX (dieser Plugin — nur wenn stabil verifiziert)

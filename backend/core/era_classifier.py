@@ -7,7 +7,7 @@ Erkennt das Aufnahme-Jahrzehnt (1890–2025) automatisch und leitet
 
     Tier-1: LAION-CLAP-Embeddings → Nearest-Neighbor zu Ära-Referenz-Ankern
 
-Referenz: §2.14 Aurik-9-Spec (v9.9.5)
+Referenz: §2.14 Aurik-9-Spec (v10.0.0)
 Autor: Aurik Development Team
 Datum: 20. Februar 2026
 """
@@ -1216,7 +1216,7 @@ def _microphone_type_decade(bark_energies: np.ndarray) -> tuple[int, float]:
 # ---------------------------------------------------------------------------
 
 
-# §2.13 Multi-Generation Era Ceiling (v9.20.3): Analog-Träger haben
+# §2.13 Multi-Generation Era Ceiling (v10.0.0): Analog-Träger haben
 # Produktionszeiträume. Wenn die Kette einen analogen Ursprungsträger
 # enthält (z. B. vinyl→cassette→mp3), darf die erkannte Ära NICHT
 # jünger sein als das Ende der kommerziellen Produktion dieses Trägers.

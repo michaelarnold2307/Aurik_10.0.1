@@ -1,5 +1,5 @@
 """
-Aurik 9 — AudioFileValidator (§10.5)
+Aurik 10.0.0 — AudioFileValidator (§10.5)
 =====================================
 Sicherheits- und Plausibilitätsprüfung für alle Audio-Eingabedateien.
 OWASP-konform: Pfad-Traversal-Schutz, Magic-Bytes-Verifikation,

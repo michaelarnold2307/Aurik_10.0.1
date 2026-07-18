@@ -1,5 +1,5 @@
 """
-Adaptive Minimum Statistics DSP-Modul für Aurik 9.10 (SOTA-Maximum)
+Adaptive Minimum Statistics DSP-Modul für Aurik 10.0.0 (SOTA-Maximum)
 
 Implements the Minimum Statistics approach for noise estimation with:
 - Smoothed minimum tracking over sliding window (Cohen 2002 ICASSP)

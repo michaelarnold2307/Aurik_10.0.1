@@ -1,5 +1,5 @@
 """
-core/restorability_estimator.py — Aurik 9.9+ (§2.26)
+core/restorability_estimator.py — Aurik 10.0.0+ (§2.26)
 
 RestorabilityEstimator: Schätzt in < 5 s, wie gut das Material restaurierbar
 ist und welcher PQS-MOS nach Restaurierung realistisch zu erwarten ist.

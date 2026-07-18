@@ -1,11 +1,11 @@
 """
-Aurik 9 — forensics/medium_detector.py  (§6.7, bindend ab v9.10.97)
+Aurik 10.0.0 — forensics/medium_detector.py  (§6.7, bindend ab v10.0.0)
 =====================================================================
 Vereinheitlichte Tonträgerketten-Erkennung: kombiniert die forensische
 Spektralfingerabdruck-Analyse mit Bayesian-Material-Scoring für
 weltklasse-Präzision bei komplexen Mehrstufenketten.
 
-Ab v9.10.97 ist dies das **einzige** autoritative Material-Erkennungssystem.
+Ab v10.0.0 ist dies das **einzige** autoritative Material-Erkennungssystem.
 MediumClassifier-Features (Rotation, Infrasonic, Codec MDCT) sind direkt
 integriert — kein zweiter Klassifikator nötig.
 
@@ -16,7 +16,7 @@ Pflicht-Spektralfingerabdruck (§6.7.1):
     4. Rauschpegel (Percentile-5 PSD)  — Bandrauschen
     5. Effektive Bandbreite — physikalische Signalbandbreite
 
-Erweiterte Features (§6.7.3, NEU v9.10.97):
+Erweiterte Features (§6.7.3, NEU v10.0.0):
     6. Rotation-Periodizität     — Vinyl-Plattentellerfrequenz (0.3–2 Hz)
     7. Infraschall-RMS (< 20 Hz) — Vinyl-Lager-Rumble-Diskriminator
     8. MDCT-Codec-Artefakt-Score — MP3/AAC-Quantisierungsfingerabdruck
@@ -67,7 +67,7 @@ class SpectralFingerprint:
     noise_floor_db: float = -60.0  # 5. Perzentil der Frame-Energien [dBFS]
     effective_bandwidth_hz: float = 0.0  # HF-Rolloff −60 dBFS
 
-    # --- §6.7.3 Erweiterte Features (v9.10.97) ---
+    # --- §6.7.3 Erweiterte Features (v10.0.0) ---
     rotation_hz: float = 0.0  # Vinyl-Plattentellerfrequenz [Hz]; 0 = keine Rotation
     rotation_strength: float = 0.0  # Normierter Peak-SNR des Rotationssignals [0, 1]
     infrasonic_rms: float = 0.0  # Sub-20 Hz normierter RMS (Vinyl-Rumble)
@@ -168,14 +168,14 @@ class MediumDetectionResult:
     medium_confidences: list[float] = field(default_factory=list)
     """Per-Link-Konfidenz — gleiche Länge wie transfer_chain."""
 
-    # §6.7.3 (v9.10.97): Bayesian-Scoring-Ergebnis für Durchreichung
+    # §6.7.3 (v10.0.0): Bayesian-Scoring-Ergebnis für Durchreichung
     bayesian_scores: dict[str, float] = field(default_factory=dict)
     """Posterior-Wahrscheinlichkeiten aller Materialtypen."""
 
     classification_result: object | None = None
     """ClassificationResult aus MediumClassifier (für cached_medium_result)."""
 
-    # §6.8 (v9.20.3): Physikalische Analog-Quellen für Durchreichung an Phasen
+    # §6.8 (v10.0.0): Physikalische Analog-Quellen für Durchreichung an Phasen
     physical_analog_sources: list[tuple[str, float]] = field(default_factory=list)
     """Physisch erkannte Analog-Quellen: [(material, confidence), ...] z. B. [("vinyl",0.58), ("cassette",0.42)].
     Wird als kwargs an Phasen durchgereicht für Vinyl-spezifische Restaurierung (RIAA, Rumble, Knistern)."""
@@ -186,7 +186,7 @@ class MediumDetectionResult:
     dolby_nr_confidence: float = 0.0
     """Konfidenz der Dolby-NR-Erkennung ∈ [0, 1]."""
 
-    # §6.7 (v9.11.14): Tape-Speed + RIAA-Curve Detection
+    # §6.7 (v10.0.0): Tape-Speed + RIAA-Curve Detection
     tape_speed_ips: float | None = None
     """Geschätzte Bandgeschwindigkeit in ips (1.875/3.75/7.5/15/30). None bei Nicht-Tape."""
 
@@ -228,7 +228,7 @@ class MediumDetectionResult:
 
 
 class MediumDetector:
-    """Vereinheitlichte forensische Tonträgerketten-Erkennung (§6.7, v9.10.97).
+    """Vereinheitlichte forensische Tonträgerketten-Erkennung (§6.7, v10.0.0).
 
     Kombiniert:
       - Spektralfingerabdruck (5 Basis-Features, §6.7.1)
@@ -1573,7 +1573,7 @@ class MediumDetector:
             noise_floor = -60.0
 
         # ── 5. Effektive Bandbreite (Rolloff −60 dBFS, Multi-Segment) ──────────────
-        # BUG FIX (v9.10.98): Using only the first 65536 samples (≈1.4 s at 48 kHz)
+        # BUG FIX (v10.0.0): Using only the first 65536 samples (≈1.4 s at 48 kHz)
         # caused false wax_cylinder detection for tracks with a quiet intro. A silent
         # or near-silent intro yields effective_bandwidth_hz ≈ 0, which matches the
         # wax_cylinder Gaussian model (μ=3500 Hz, σ=1200 Hz) far better than any
@@ -2053,7 +2053,7 @@ class MediumDetector:
         return dict(sorted(posteriors.items(), key=lambda x: x[1], reverse=True))
 
     def detect(self, audio: np.ndarray, sr: int, *, file_ext: str = "") -> MediumDetectionResult:
-        """Erkennt die Tonträgerkette forensisch via Bayesian-Fusion (§6.7 v9.10.97).
+        """Erkennt die Tonträgerkette forensisch via Bayesian-Fusion (§6.7 v10.0.0).
 
         Ablauf:
         1. Vollständiger Spektralfingerabdruck (13 Features)
@@ -2237,7 +2237,7 @@ class MediumDetector:
                     or fp.wow_flutter_index >= _pa_wow_thresh
                     or (fp.infrasonic_rms >= _pa_infra_thresh and fp.crackle_density >= _pa_crackle_thresh)
                 )
-                # §6.7e [RELEASE_MUST] Multi-Kandidaten-Gate (v9.12.x):
+                # §6.7e [RELEASE_MUST] Multi-Kandidaten-Gate (v10.0.0.x):
                 # Iteriere ALLE physischen Analog-Quellen (_MEDIUM_ORDER-sortiert = ältester Träger
                 # zuerst). Das letzte Gate-Positiv = closest-to-codec = Primary.  Dies behandelt
                 # multi-generation Ketten (z.B. vinyl→kassette→mp3) korrekt: Vinyl verliert sein
@@ -2323,7 +2323,7 @@ class MediumDetector:
                         fp.infrasonic_rms,
                     )
 
-        # §6.8 Bayesian-Physical-Fusion (v9.20.3): Wenn der Bayesian-Klassifikator
+        # §6.8 Bayesian-Physical-Fusion (v10.0.0): Wenn der Bayesian-Klassifikator
         # "unknown > 0.9" sagt (kein Material erkannt), aber physikalische Features
         # Analog-Quellen gefunden haben → physikalische Evidenz als Primary übernehmen.
         # Bayesian-Scoring versagt bei stark codec-degradierten Mehrgenerationen-Ketten
@@ -2454,7 +2454,7 @@ class MediumDetector:
                 _analog_depth = 1
                 _last_order = self._MEDIUM_ORDER.get(best_analog, 0)
 
-                # §6.7f [RELEASE_MUST] Vorläufer-Analog-Stufen voranstellen (v9.12.x):
+                # §6.7f [RELEASE_MUST] Vorläufer-Analog-Stufen voranstellen (v10.0.0.x):
                 # Träger mit _MEDIUM_ORDER < best_analog_order (z.B. vinyl vor cassette)
                 # werden VOR best_analog in die Chain eingefügt — nicht angehängt.
                 # Gate: Vorläufer müssen dieselben physikalischen Kriterien erfüllen wie
@@ -2478,7 +2478,7 @@ class MediumDetector:
                         or (
                             # Vinyl-Vorläufer durch Kassetten-Transfer: Rillenrauschen bleibt erhalten,
                             # Rumble wird teilweise durch Kassetten-HPF gefiltert → niedrigere Schwellen.
-                            # §FIX v9.20.3: crackle auf 0.001 gesenkt (vorher 0.002) — gut gepflegte
+                            # §FIX v10.0.0: crackle auf 0.001 gesenkt (vorher 0.002) — gut gepflegte
                             # Vinyl→Kassette-Überspielungen haben sehr geringes Rillenrauschen.
                             # infrasonic auf 0.003 gesenkt (vorher 0.004) — Kassetten-HPF bei 30-40 Hz
                             # lässt einen schwachen Rumble-Rest durch.
@@ -2583,7 +2583,7 @@ class MediumDetector:
                 chain_confidences = [top_score]
                 evidence.append(f"Bayesian-Fallback: {top_mat} (posterior={top_score:.3f})")
 
-        # §6.1 [RELEASE_MUST] Material-Key-Normalisierung (v9.10.101):
+        # §6.1 [RELEASE_MUST] Material-Key-Normalisierung (v10.0.0):
         # MediumDetector interne Bayesian-Schlüssel → SUPPORTED_MATERIALS-konforme Schlüssel.
         # Betrifft alle Elemente der transfer_chain, nicht nur primary.
         _normalized_chain: list[str] = []
@@ -2613,7 +2613,7 @@ class MediumDetector:
                 chain = _sorted_chain
 
         primary = chain[0]
-        # §6.1b [RELEASE_MUST] Letzter-Analog-Träger-Primärprinzip (v9.12.x):
+        # §6.1b [RELEASE_MUST] Letzter-Analog-Träger-Primärprinzip (v10.0.0.x):
         # Für Mehrstufenketten (vinyl→cassette→mp3_low) ist der letzte analoge Träger
         # der primäre MaterialType-Prior für DefectScanner/CausalDefectReasoner,
         # da er die dominanten Degradationsartefakte trägt.

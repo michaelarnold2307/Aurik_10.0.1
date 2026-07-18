@@ -33,7 +33,7 @@ Wichtig: Der zuvor gelöste EAPC-Fehler (`_estimate_bandwidth`) ist hier **nicht
 
 Die Pegelexplosion-Fixes haben zurecht positive Gain-Pfade härter reguliert. Das verbessert Edge-Safety, reduziert aber implizit die Fähigkeit, nach aggressiven subtraktiven Schritten HF wiederaufzubauen, wenn `phase_03` bereits `best_effort` meldet. Ergebnis: Ein Problem gelöst, ein anderes verstärkt.
 
-## Implementierte Mitigation (v9.12.3)
+## Implementierte Mitigation (v10.0.0)
 
 Datei: `backend/core/unified_restorer_v3.py`
 

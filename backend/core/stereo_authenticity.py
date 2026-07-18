@@ -14,7 +14,7 @@ Migrationsanleitung::
     from backend.core.stereo_authenticity_invariant import StereoAuthResult
 
 Dieser Shim wird in einer zukünftigen Version entfernt.
-Referenz: §2.18 Aurik-9-Spec (v9.9.5)
+Referenz: §2.18 Aurik-9-Spec (v10.0.0)
 """
 
 import warnings as _warnings

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Aurik 9 — Pegelexplosion-Detektor & Auto-Fixer
+Aurik 10.0.0 — Pegelexplosion-Detektor & Auto-Fixer
 ================================================
 
 Spezialisierter Analyzer für Pegelexplosionen (Level Spikes):
@@ -282,7 +282,7 @@ class PegelexplosionDetector:
 def main():
     import argparse
 
-    parser = argparse.ArgumentParser(description="Aurik 9 — Pegelexplosion-Detektor")
+    parser = argparse.ArgumentParser(description="Aurik 10.0.0 — Pegelexplosion-Detektor")
     parser.add_argument("--audio", type=str, default=None, help="Audio-Datei")
     parser.add_argument("--phase", type=str, default=None, help="Phase-ID für Diagnose")
     parser.add_argument("--verbose", action="store_true", help="Verbose Logging")

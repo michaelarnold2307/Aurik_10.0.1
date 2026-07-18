@@ -14,7 +14,7 @@ Regeln:
     - Abbey-Road-4-Kanal-Stereo (post-1967):
       Phantom-Center-Stabilität ≤ ±3° Azimutabweichung
 
-Referenz: §2.18 Aurik-9-Spec (v9.9.5)
+Referenz: §2.18 Aurik-9-Spec (v10.0.0)
 Autor: Aurik Development Team
 Datum: 20. Februar 2026
 """

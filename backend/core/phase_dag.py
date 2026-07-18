@@ -5,7 +5,7 @@ Phase DAG — §7.5a [RELEASE_MUST]
 Formaler Abhängigkeitsgraph der Aurik-Pipeline-Phasen.
 Definiert HARD_BEFORE-Constraints, INDEPENDENT-Gruppen und CONFLICT-Paare.
 
-Spec: 06_phases_system.md §7.5a (v9.12.0)
+Spec: 06_phases_system.md §7.5a (v10.0.0)
 """
 
 import logging

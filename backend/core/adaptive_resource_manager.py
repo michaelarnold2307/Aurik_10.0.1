@@ -1,5 +1,5 @@
 """
-Adaptive Resource Manager für Aurik 9.0
+Adaptive Resource Manager für Aurik 10.0.0
 Automatische CPU- und Speicher-Auslastungsüberwachung und dynamische Core-Zuteilung für ML-Phasen.
 Ermöglicht Fallback auf lightweight-Algorithmen bei Ressourcenknappheit.
 Funktioniert out-of-the-box, keine Nutzerinteraktion nötig.

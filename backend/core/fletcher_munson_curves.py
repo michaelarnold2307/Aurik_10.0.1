@@ -474,7 +474,13 @@ def get_fletcher_munson_curve(frequencies: np.ndarray, target_phon: int = 60, re
     return processor.get_correction_curve(frequencies, target_phon, reference_phon)
 
 
-def apply_loudness_compensation(audio: np.ndarray, sr: int, listening_level: str = "normal") -> np.ndarray:
+def apply_loudness_compensation(
+    audio: np.ndarray,
+    sr: int,
+    listening_level: str = "normal",
+    target_phon: float | None = None,
+    reference_phon: float | None = None,
+) -> np.ndarray:
     """
     Wendet an: loudness compensation based on listening level.
 
@@ -482,13 +488,18 @@ def apply_loudness_compensation(audio: np.ndarray, sr: int, listening_level: str
         audio: Input audio
         sr: Sample rate
         listening_level: 'quiet' (40 phon), 'normal' (60 phon), 'loud' (80 phon)
+        target_phon: Override target phon level (e.g. from §ISO-226 context)
+        reference_phon: Override reference phon level
 
     Returns:
         Compensated audio
     """
     level_map = {"quiet": (40, 80), "normal": (60, 80), "loud": (80, 100)}
 
-    target_phon, reference_phon = level_map.get(listening_level, (60, 80))
+    if target_phon is not None and reference_phon is not None:
+        pass  # Use explicit values — bypass level_map lookup
+    else:
+        target_phon, reference_phon = level_map.get(listening_level, (60, 80))
 
     config = FletcherMunsonConfig(target_phon=target_phon, reference_phon=reference_phon)
     processor = FletcherMunsonProcessor(config)

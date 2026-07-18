@@ -30,7 +30,7 @@ Integration with MDEM (§2.30):
 Performance: < 150 ms for 3-minute stereo at 48 kHz (pure NumPy, no ML).
 
 Author: Aurik Development Team
-Version: 1.0.0 (v9.11.14)
+Version: 1.0.0 (v10.0.0)
 """
 
 from __future__ import annotations

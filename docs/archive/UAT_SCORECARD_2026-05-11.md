@@ -1,4 +1,4 @@
-# Aurik 9.10.77 — UAT Scorecard
+# Aurik 10.0.0 — UAT Scorecard
 **Generated:** 2026-05-11 19:55:29 UTC
 **Version:** 9.10.77
 

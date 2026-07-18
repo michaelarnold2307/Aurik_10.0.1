@@ -1,4 +1,4 @@
-"""Aurik 9.0 — Standalone DSP-Modelle (scipy/numpy, kein torch).
+"""Aurik 10.0.0 — Standalone DSP-Modelle (scipy/numpy, kein torch).
 
 Werden von ModelManager.multi_stage_enhancement() als Fallback-Kette verwendet:
   denoiser  → sibilant → authenticity

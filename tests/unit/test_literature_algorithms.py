@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""Tests für literaturbasierte DSP-Algorithmen in Aurik 9.
+"""Tests für literaturbasierte DSP-Algorithmen in Aurik 10.0.0.
 
 Bedeckt:
   - Phase 09: LPC-basierte AR-Lücken-Interpolation

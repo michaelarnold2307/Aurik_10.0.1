@@ -1,6 +1,6 @@
 # Aurik GPU Setup — AMD ROCm & DirectML
 
-**Version:** 9.20.3 | **Stand:** Mai 2026
+**Version:** 10.0.8 | **Stand:** Mai 2026
 
 Aurik beschleunigt rechenintensive Phasen (Defect-Scanning, MERT-Embeddings, PSLA,
 CLAP-Referenz-Matching, Whisper-Tiny-ONNX) optional über die GPU. Auf AMD-GPUs
@@ -262,7 +262,7 @@ AURIK_GPU_DEVICE=1
 Die folgende Tabelle zeigt typische Verarbeitungszeiten für eine **3-Minuten-Stereodatei**
 (48 kHz, 24-bit) auf verschiedenen Konfigurationen:
 
-| Konfiguration | Phase 01–08 (Defect-Scan) | Kompletter Durchlauf (64 Phasen) | RT-Faktor |
+| Konfiguration | Phase 01–08 (Defect-Scan) | Kompletter Durchlauf (68 Phasen) | RT-Faktor |
 | --- | --- | --- | --- |
 | **CPU (Ryzen 9 7950X, 16 Kerne)** | ~120 s | ~18 min | ~6× |
 | **CPU + ROCm (RX 7900 XTX)** | ~18 s | ~4 min | ~1.3× |

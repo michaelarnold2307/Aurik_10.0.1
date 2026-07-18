@@ -1,6 +1,6 @@
 # Aurik 10 — GEBOTE & VERBOTE (Normativer Katalog)
 
-> **Status:** Normativ | **Version:** 10.0.7 | **Stand:** 13. Juli 2026 (Update: Lag-Integrität)
+> **Status:** Normativ | **Version:** 10.0.8 | **Stand:** 13. Juli 2026 (Update: Lag-Integrität)
 >
 > Dieser Katalog definiert alle unverhandelbaren GEBOTE (positiv, was Aurik TUN MUSS)
 > und VERBOTE (negativ, was Aurik NIEMALS tun darf). Jedes Gebot und Verbot ist mit

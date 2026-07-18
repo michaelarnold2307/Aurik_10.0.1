@@ -1,5 +1,5 @@
 """
-multiband_master.py - Intelligenter Multiband-Mastering-Kompressor für Aurik 9.10
+multiband_master.py - Intelligenter Multiband-Mastering-Kompressor für Aurik 10.0.0
 
 4-Band-Mastering-Kompressor mit Linkwitz-Riley LR4 Crossovers:
   Band 1: Sub-Bass  ( 20–200 Hz)  : leichter Ratio 2:1

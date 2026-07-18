@@ -1,1 +1,1 @@
-"""Benchmarks und AMRB-Auswertungen für Aurik 9."""
+"""Benchmarks und AMRB-Auswertungen für Aurik 10.0.0."""

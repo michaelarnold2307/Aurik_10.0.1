@@ -27,8 +27,8 @@ try:
     from backend.core.stderr_dedup import install_stderr_dedup
 
     install_stderr_dedup()
-except Exception:
-    pass  # Non-critical — dedup is a cosmetic improvement
+except Exception as _e:
+    logging.warning("onnx_runtime: non-critical exception: %s", _e)
 
 logger = logging.getLogger(__name__)
 

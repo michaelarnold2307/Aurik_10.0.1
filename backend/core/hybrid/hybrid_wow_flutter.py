@@ -28,7 +28,7 @@ Korrektur-Pipeline:
 2. Wow/Flutter-Trennung (< 4 Hz vs. 4-100 Hz)
 3. Phase-Vocoder Zeitstreckung (Korrektur)
 
-Author: Aurik 9.0 Development Team
+Author: Aurik 10.0.0 Development Team
 Version: 1.0.0
 Date: 16. Februar 2026
 """

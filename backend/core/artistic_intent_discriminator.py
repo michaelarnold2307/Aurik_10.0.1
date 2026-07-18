@@ -1,5 +1,5 @@
 """
-backend/core/artistic_intent_discriminator.py — ArtisticIntentDiscriminator (Aurik 9 §AID-1)
+backend/core/artistic_intent_discriminator.py — ArtisticIntentDiscriminator (Aurik 10.0.0 §AID-1)
 =============================================================================================
 Rule-based classifier: "Is this signal characteristic a defect to repair,
 or an intentional artistic choice to preserve?"

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-"""v9.10.120 — Harmonisierte Maximierung aller Musical-Goals-Metriken + PQS.
+"""v10.0.0 — Harmonisierte Maximierung aller Musical-Goals-Metriken + PQS.
 
 Tests verifizieren die recalibrierten Divisoren/Multiplikatoren und die
 neuen psychoakustisch korrekteren PQS-Berechnungen (Gammatone-NSIM, echte MCD).

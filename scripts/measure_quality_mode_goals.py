@@ -1,7 +1,7 @@
 """
 Standalone-Messung: UnifiedRestorerV3 mit QualityMode.QUALITY auf Elke Best.mp3
 Vergleicht gemessene Goal-Scores gegen kanonische §0-Schwellen.
-Aurik 9.11.14 — 2026-04-19
+Aurik 10.0.0 — 2026-04-19
 """
 
 # pylint: disable=wrong-import-position
@@ -43,7 +43,7 @@ def _lufs(audio, sr):
 def main():
     """Führt die Qualitätsmessung durch und gibt die Ergebnisse auf der Konsole aus."""
     print("=" * 70)
-    print("Aurik 9.11.14 — QualityMode.QUALITY Messung")
+    print("Aurik 10.0.0 — QualityMode.QUALITY Messung")
     print(f"Song: {AUDIO_PATH.name}")
     print("=" * 70)
 

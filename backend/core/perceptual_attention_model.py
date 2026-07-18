@@ -1,5 +1,5 @@
 """
-Aurik 9 — PerceptualAttentionModel (PAM) (§2.22)
+Aurik 10.0.0 — PerceptualAttentionModel (PAM) (§2.22)
 ==================================================
 Salienz-gewichtete Restaurierung — berechnet eine frequenz-zeitliche Salienz-Karte.
 

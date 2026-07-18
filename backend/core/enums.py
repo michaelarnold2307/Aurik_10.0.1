@@ -1,4 +1,4 @@
-"""shared.enums — UI-seitige Enums für Aurik 9.
+"""shared.enums — UI-seitige Enums für Aurik 10.0.0.
 
 Diese Datei definiert vereinfachte Enums für die Benutzeroberfläche.
 Sie sind auf die Auswahloptionen der UI abgestimmt und dienen als

@@ -1,4 +1,4 @@
-"""Unit-Tests für TemporalContinuityGuard (§2.69, v9.13)."""
+"""Unit-Tests für TemporalContinuityGuard (§2.69, v10.0.0)."""
 
 import numpy as np
 import pytest

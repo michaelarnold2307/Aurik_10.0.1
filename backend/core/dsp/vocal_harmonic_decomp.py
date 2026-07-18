@@ -1,5 +1,5 @@
 """
-Vocal Harmonic Decomposition — Lücke 2 (v9.12.x)
+Vocal Harmonic Decomposition — Lücke 2 (v10.0.0.x)
 =================================================
 
 Dekomponiert das Audio VOR ML-NR in Vokalharmonische und Nicht-Harmonische.
@@ -22,7 +22,7 @@ Verwendung in phase_03:
     phase_03 setzt G_floor in harm_mask-Bins auf harm_g_floor (höher)
 
 Author: Aurik Development Team
-Version: 1.0.0 (v9.12.x — Lücke 2)
+Version: 1.0.0 (v10.0.0.x — Lücke 2)
 """
 
 from __future__ import annotations

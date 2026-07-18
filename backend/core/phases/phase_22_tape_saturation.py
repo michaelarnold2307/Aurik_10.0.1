@@ -129,7 +129,7 @@ class TapeSaturation(PhaseInterface):
         MaterialType.VINYL: 0.30,  # Moderate analog warmth
         MaterialType.TAPE: 0.55,  # Strong (authentic cassette tape)
         MaterialType.REEL_TAPE: 0.45,  # Professional reel-to-reel (slightly less than cassette)
-        MaterialType.CASSETTE: 0.55,  # v9.12.9: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
+        MaterialType.CASSETTE: 0.55,  # v10.0.0: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
         MaterialType.CD_DIGITAL: 0.20,  # Subtle analogizing
         MaterialType.STREAMING: 0.25,  # Light warmth
     }
@@ -140,7 +140,7 @@ class TapeSaturation(PhaseInterface):
         MaterialType.VINYL: 0.40,  # 40% saturated
         MaterialType.TAPE: 0.60,  # 60% saturated (cassette)
         MaterialType.REEL_TAPE: 0.50,  # 50% -- pro tape, fuller sound
-        MaterialType.CASSETTE: 0.60,  # v9.12.9: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
+        MaterialType.CASSETTE: 0.60,  # v10.0.0: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
         MaterialType.CD_DIGITAL: 0.25,  # 25%
         MaterialType.STREAMING: 0.30,  # 30%
     }
@@ -151,7 +151,7 @@ class TapeSaturation(PhaseInterface):
         MaterialType.VINYL: "7.5_ips",  # Standard
         MaterialType.TAPE: "3.75_ips",  # Cassette tape: significant HF roll-off
         MaterialType.REEL_TAPE: "15_ips",  # Professional studio reel-to-reel
-        MaterialType.CASSETTE: "3.75_ips",  # v9.12.9: IEC 60094-1 — Kassette läuft auf 3,75 ips (4,75 cm/s)
+        MaterialType.CASSETTE: "3.75_ips",  # v10.0.0: IEC 60094-1 — Kassette läuft auf 3,75 ips (4,75 cm/s)
         MaterialType.CD_DIGITAL: "15_ips",
         MaterialType.STREAMING: "7.5_ips",
     }
@@ -187,7 +187,7 @@ class TapeSaturation(PhaseInterface):
         MaterialType.VINYL: 0.12,
         MaterialType.TAPE: 0.25,  # Tape-typical (cassette)
         MaterialType.REEL_TAPE: 0.20,  # Professional reel: wider tape, less hysteresis
-        MaterialType.CASSETTE: 0.25,  # v9.12.9: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
+        MaterialType.CASSETTE: 0.25,  # v10.0.0: IEC 60094-1 — gleiche Capstan-Physik wie TAPE
         MaterialType.CD_DIGITAL: 0.08,
         MaterialType.STREAMING: 0.10,
     }

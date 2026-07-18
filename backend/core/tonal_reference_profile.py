@@ -1,6 +1,6 @@
 """
 backend/core/tonal_reference_profile.py
-Aurik 9 — Tonal Reference Profile: per-song spectral ceiling for phase steering.
+Aurik 10.0.0 — Tonal Reference Profile: per-song spectral ceiling for phase steering.
 
 Derives a 24-Bark-band gain ceiling curve from Era × Genre × Material context.
 Used by Phase 06 (frequency restoration) and Phase 07 (harmonic restoration) as a

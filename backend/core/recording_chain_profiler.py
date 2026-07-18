@@ -1,4 +1,4 @@
-"""RecordingChainProfiler — Physikalische Ketten-Cluster-Analyse (§2.66, v9.13).
+"""RecordingChainProfiler — Physikalische Ketten-Cluster-Analyse (§2.66, v10.0.0).
 
 Verhindert Over-Processing durch unabhängige Aktivierung aller 8+ Kausalursachen
 derselben physikalischen Aufnahme-Kette. CausalDefectReasoner liefert 8 Causes —

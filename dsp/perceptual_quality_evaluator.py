@@ -2,7 +2,7 @@
 AdaptivePerceptualQualityEvaluator
 SOTA-konformer, adaptiver Perceptual Quality Evaluator für Musikrestaurierung.
 
-Primäre Musik-Metriken (Aurik 9):
+Primäre Musik-Metriken (Aurik 10.0.0):
   - PQS-MOS (Gammatone+NSIM, intern)
   - PEAQ / ODG (ITU-R BS.1387 — für Musik entwickelt)
   - FAD  (Fréchet Audio Distance, VGGish)
@@ -133,7 +133,7 @@ class AdaptivePerceptualQualityEvaluator:
                     self._logger.debug("CDPAM-Fehler (ignoriert): %s", e)
 
             # HINWEIS: DNSMOS / NISQA / PESQ / STOI werden hier absichtlich
-            # NICHT berechnet — Sprach-Metriken, ungeeignet für Musik (Aurik 9 Pflicht).
+            # NICHT berechnet — Sprach-Metriken, ungeeignet für Musik (Aurik 10.0.0 Pflicht).
 
             self._audit_log(results, sr)
             return results

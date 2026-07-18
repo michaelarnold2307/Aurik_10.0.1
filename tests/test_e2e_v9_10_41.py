@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 """
-E2E-Test für Aurik 9.10.41 — Kanonischer End-to-End-Test.
+E2E-Test für Aurik 10.0.0 — Kanonischer End-to-End-Test.
 
 Testet die vollständige Restaurierungs-Pipeline mit UnifiedRestorerV3
 für beide Modi: QUALITY (Restoration) und BALANCED (Studio 2026).
@@ -12,7 +12,7 @@ Anforderungen:
     Audio-Testdatei: audio_examples/Elke Best - Du wolltest nur ein Abenteuer, aber ich suchte einen Freund.mp3
     Fallback:        audio_examples/Elke_Best_Freund.mp3
 
-Spec-Referenz: §0, §2.44, §2.45, §2.49, §8.1, §8.2 (copilot-instructions.md v9.11.x)
+Spec-Referenz: §0, §2.44, §2.45, §2.49, §8.1, §8.2 (copilot-instructions.md v10.0.0.x)
 """
 
 

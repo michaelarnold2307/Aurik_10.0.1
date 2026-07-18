@@ -1,7 +1,7 @@
 """
 Phase 65 — DSP-Vocal-Naturalness-Restaurierung (KORREKTIV, §0a Restoration-only).
 
-Spec §7.10 [RELEASE_MUST] (Spec 06, v9.12.0)
+Spec §7.10 [RELEASE_MUST] (Spec 06, v10.0.0)
 
 Zweck: Behebt VQI-Abfall nach ML-NR-Phasen (phase_03, phase_29, phase_20) durch
 3-stufigen DSP-Korrektiv-Prozess ohne Halluzination, §0a-konform für Restoration-Modus.
@@ -178,7 +178,7 @@ def _apply_shelving_eq(
 class VocalNaturalnessRestorationPhase(PhaseInterface):
     """Phase 65: DSP-Vocal-Naturalness-Restaurierung.
 
-    Spec §7.10 (Spec 06 v9.12.0).
+    Spec §7.10 (Spec 06 v10.0.0).
     KORREKTIV — Restoration-only (§0a). Kein Energiegewinn über Input hinaus.
     """
 

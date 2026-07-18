@@ -1,5 +1,5 @@
 """
-Aurik 9 — ContentAwareProcessor (§2.36)
+Aurik 10.0.0 — ContentAwareProcessor (§2.36)
 ========================================
 Verfeinert die PerceptualAttentionModel-Salienz-Karte anhand von
 Wort-Zeitstempeln aus LyricsTranscriber (§2.36).

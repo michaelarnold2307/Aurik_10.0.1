@@ -1,5 +1,5 @@
 """
-core/ab_compare_manager.py — A/B-Vergleichs-Session-Manager (Aurik 9.9.6)
+core/ab_compare_manager.py — A/B-Vergleichs-Session-Manager (Aurik 10.0.0)
 
 Speichert Original- und restauriertes Audio paarweise in einer Session-Datenbank,
 damit der Nutzer jederzeit Vorher/Nachher vergleichen kann.

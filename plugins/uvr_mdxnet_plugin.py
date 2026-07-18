@@ -108,6 +108,10 @@ class UVRMDXNetPlugin:
         else:  # (N, 2) samples-first
             mono = audio.mean(axis=1)
         inst = self._run_ensemble(mono, sr) if self._sessions else self._hpss_fallback(mono)
+        # §NaN-Guard: ONNX inference and HPSS fallback can produce NaN/Inf in edge cases.
+        # Replace non-finite values before computing vocals to keep subtraction stable.
+        inst = np.nan_to_num(inst, nan=0.0, posinf=1.0, neginf=-1.0)
+        inst = np.clip(inst, -1.0, 1.0)
         voc = np.clip(mono - inst, -1.0, 1.0)
         return voc.astype(np.float32), inst.astype(np.float32)
 

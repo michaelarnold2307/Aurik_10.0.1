@@ -1,7 +1,7 @@
 """
 backend/core/dsp/cumulative_hallucination_tracker.py — §CHT-1
 =============================================================
-Cross-phase cumulative spectral novelty tracking for Aurik 9.
+Cross-phase cumulative spectral novelty tracking for Aurik 10.0.0.
 
 The per-phase hallucination_guard.py catches single-phase synthetic additions.
 But five phases each adding 3 % synthetic energy are individually "safe" yet

@@ -1,5 +1,5 @@
 """
-Uncertainty Quantification für Aurik 8.0
+Uncertainty Quantification für Aurik 10.0.0
 
 Implementiert verschiedene Methoden zur Unsicherheitsquantifizierung:
 - Monte Carlo Dropout

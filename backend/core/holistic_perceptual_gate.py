@@ -1,19 +1,19 @@
 """
-Aurik 9 — HolisticPerceptualGate §2.44 [RELEASE_MUST]
+Aurik 10.0.0 — HolisticPerceptualGate §2.44 [RELEASE_MUST]
 ======================================================
 Last gate before export. Measures holistic perceptual improvement
 instead of checking individual goals only.
 
 HPI > 0 → Export | HPI ≤ 0 → Rollback
 
-§2.44 FIX v9.11.2 — Referenz-Paradox beseitigt:
+§2.44 FIX v10.0.0 — Referenz-Paradox beseitigt:
   Für ALLE Restorability-Bereiche: Referenz-Vektor aus GP-Memory primär;
   kein Ref-Vektor → direktionale Verbesserungsmessung (_compute_directional_restoration_quality).
   Input-Ähnlichkeit als prim. Maß entfernt (bestrafte erfolgreiche Restaurierung).
 
 MERT-Referenz-Memory: EMA (α=0.15) pro (genre × material × era_bin).
 Fallback-Kaskade (5 Stufen) wenn kein passender Referenz-Vektor.
-Referenz-Update nur wenn: HPI > 0.0 AND artifact_freedom ≥ 0.95 (V54-aligned v9.20.0).
+Referenz-Update nur wenn: HPI > 0.0 AND artifact_freedom ≥ 0.95 (V54-aligned v10.0.0).
 
 Reference: Spec 02 §2.44, §2.49 (artifact_freedom)
 """
@@ -140,7 +140,7 @@ class HolisticPerceptualGate:
 
         HPI = MERT_similarity × timbral_fidelity × artifact_freedom × emotional_arc_preservation
 
-        §2.44 FIX v9.11.2 — Referenz-Paradox beseitigt:
+        §2.44 FIX v10.0.0 — Referenz-Paradox beseitigt:
           Strukturelle Klangkohärenz bedeutet NICHT Ähnlichkeit zum degradierten Input.
           Ein erfolgreich restauriertes Signal weicht vom degradierten Input ab —
           der alte Ansatz (input_weight=1.0 bei restorability > 70) hat gute
@@ -161,10 +161,10 @@ class HolisticPerceptualGate:
         _mat_key_mert = str(material).lower().replace(" ", "_")
         _bw_ceiling_hz = _MATERIAL_BW_CEILING_HZ.get(_mat_key_mert, _MATERIAL_BW_CEILING_HZ["unknown"])
         mert_sim = self._compute_mert_similarity(_reference_audio, restored, sr, bw_ceiling_hz=_bw_ceiling_hz)
-        # §2.44 [BUG-FIX v9.12.0]: MERT-Floor verhindert HPI-Kollaps auf 0 bei MERT-Ausfall.
+        # §2.44 [BUG-FIX v10.0.0]: MERT-Floor verhindert HPI-Kollaps auf 0 bei MERT-Ausfall.
         mert_sim = max(float(mert_sim), 0.5)
 
-        # §2.44 FIX v9.11.2: Referenz-Vektor bevorzugen für ALLE Restorability-Bereiche.
+        # §2.44 FIX v10.0.0: Referenz-Vektor bevorzugen für ALLE Restorability-Bereiche.
         # Kein Ref-Vektor → direktionale Qualitätsmessung statt Input-Ähnlichkeit.
         ref_vec = self._get_reference_vector(genre, material, era_bin)
         if ref_vec is not None:
@@ -173,7 +173,7 @@ class HolisticPerceptualGate:
         else:
             # Kein Referenz-Vektor: misst ob das Signal in Richtung "sauber" verbessert wurde
             timbral_ref = self._compute_directional_restoration_quality(original, restored, sr)
-            # §2.44 Codec-Digital-Floor (v9.12.10): _compute_directional_restoration_quality()
+            # §2.44 Codec-Digital-Floor (v10.0.0): _compute_directional_restoration_quality()
             # ist für analoge Defekte kalibriert (Rauschreduktion → Noise-Delta, HF-Crest-Gewinn).
             # Für Codec-Container (MP3/AAC) mit hoher Restorability ist das Signal bereits sauber
             # → direktionale Score ~0.5 (kein Rauschboden-Delta, kein HF-Crest-Gewinn) — obwohl
@@ -197,7 +197,7 @@ class HolisticPerceptualGate:
                         restorability_score,
                     )
 
-            # §2.44 Analog-Carrier-Floor (v9.15.2): _compute_directional_restoration_quality()
+            # §2.44 Analog-Carrier-Floor (v10.0.0): _compute_directional_restoration_quality()
             # ist für stationäres Rauschen kalibriert — noise_delta via 5. Perzentil der
             # Frame-Energie. Bei Musikmaterial entspricht das 5. Perzentil einer leisen
             # Musikpassage (keine Rauschbodenmessung) → noise_delta_db ≈ 0 → Score ≈ 0.5,
@@ -238,7 +238,7 @@ class HolisticPerceptualGate:
                         restorability_score,
                     )
 
-            # §P1-VQI-Codec-Floor (v9.15.2→v9.15.3): Codec-Material ohne Referenz-Vektor und ohne
+            # §P1-VQI-Codec-Floor (v10.0.0→v10.0.0): Codec-Material ohne Referenz-Vektor und ohne
             # Carrier-Checkpoint. Wenn VQI ≥ 0.82 + artifact_freedom ≥ 0.95 ist die Restaurierung
             # nachweislich korrekt; die Mel-Divergenz vom degradierten Codec-Input ist physikalisch
             # erwartet (Pre-Echo-Entfernung, HF-Rolloff-Kompensation, Artefakt-Reduktion).
@@ -311,7 +311,7 @@ class HolisticPerceptualGate:
                     )
 
         # timbral_input als Content-Integrity-Anteil (für Logging und niedrige Restorability)
-        # §2.44 BW-Ceiling-Guard (v9.12.10): mel-Vergleich auf material-native BW begrenzen
+        # §2.44 BW-Ceiling-Guard (v10.0.0): mel-Vergleich auf material-native BW begrenzen
         # → FlashSR-synthetisierter HF-Content bestraft timbral_input nicht mehr.
         timbral_input = self._compute_timbral_fidelity(_reference_audio, restored, sr, bw_ceiling_hz=_bw_ceiling_hz)
 
@@ -329,7 +329,7 @@ class HolisticPerceptualGate:
 
         timbral = input_weight * timbral_input + ref_weight * timbral_ref
 
-        # §0d CCR-Timbral-Floor (v9.15.x): Nach Carrier-Chain-Inversion legitimiert VERSA-Qualität
+        # §0d CCR-Timbral-Floor (v10.0.0.x): Nach Carrier-Chain-Inversion legitimiert VERSA-Qualität
         # die Spektral-Divergenz vom Carrier-Checkpoint. Wenn reference_audio gesetzt (CCR-Referenz-
         # Shift aktiv per §0d) UND VERSA primär (kein Proxy-Fallback):
         #   timbral-Floor = versa_sim × 0.90 (konservativ, auf [0.65, 0.95] geklippt).
@@ -337,9 +337,9 @@ class HolisticPerceptualGate:
         # Timbral-Integrität nicht beschädigt haben — die Spektral-Divergenz von checkpoint→final
         # ist physikalisch legitimiert (BW-Extension, Harmonik, Vocal-Enhancement §0d, §2.46 Stufe 5).
         # Ohne diesen Floor: mel-cosine(checkpoint, restored) ≈ 0.54 bestraft korrekte
-        # Restaurierungen (HPI 0.42 statt ≈0.65 bei VERSA-MOS 4.5 — §0d-Messzahl-Artefakt v9.15.1).
+        # Restaurierungen (HPI 0.42 statt ≈0.65 bei VERSA-MOS 4.5 — §0d-Messzahl-Artefakt v10.0.0).
         #
-        # v9.15.2: reference_audio is not None Bedingung entfernt — der Floor gilt auch
+        # v10.0.0: reference_audio is not None Bedingung entfernt — der Floor gilt auch
         # ohne aktive Carrier-Chain-Inversion, solange VERSA (primär, kein MERT-Proxy)
         # mert_sim ≥ 0.74 bestätigt. Begründung: mel-cosine(degraded_input, restored) ≈ 0.54
         # entsteht immer wenn NR erfolgreich Rauschenergie entfernt — die Divergenz ist
@@ -383,7 +383,7 @@ class HolisticPerceptualGate:
 
         # §B3 NORESQA integration: Non-intrusive MOS proxy — Advisory-Metadatum.
         # (Manocha & Kumar 2022, INTERSPEECH)
-        # v9.12.9: noresqa_ensemble wird NICHT mehr als multiplikativer HPI-Faktor eingesetzt.
+        # v10.0.0: noresqa_ensemble wird NICHT mehr als multiplikativer HPI-Faktor eingesetzt.
         # VERSA ist der primäre perceptuelle Qualitätsmesser (referenzfrei, MOS-kalibriert).
         # Ein zweiter perceptueller Multiplikator (noresqa) erzeugt systematische HPI-Kompression
         # ohne zusätzlichen Informationsgehalt — entfernt als Produktterm.
@@ -391,7 +391,7 @@ class HolisticPerceptualGate:
         noresqa_score = self._compute_noresqa_score(restored, sr)
         noresqa_ensemble = 0.85 + 0.15 * noresqa_score  # Advisory only — kein HPI-Multiplikator
 
-        # §2.44 v9.12.9: restorability-Penalty entfernt.
+        # §2.44 v10.0.0: restorability-Penalty entfernt.
         # hpi *= 0.95 bei restorability > 85 war ein inkorrekter Penalty auf hochwertiges Material:
         # Hohe Restorability (CD, FLAC) bedeutet besser restaurierbares Signal — kein Penaltygrund.
         # Korrekte Mechanik: hohe Restorability → höhere Erwartungen via _gbc_targets (§09.12),
@@ -399,7 +399,7 @@ class HolisticPerceptualGate:
 
         passed = hpi > 0.0 and artifact_freedom >= 0.95
 
-        # §0i/§2.44 BUG-FIX v9.12.0 (Bug 5): Material-adaptive timbral_fidelity floor.
+        # §0i/§2.44 BUG-FIX v10.0.0 (Bug 5): Material-adaptive timbral_fidelity floor.
         # Spec §0a: material-adaptive floors (Shellac~0.40, Vinyl~0.55, CD~0.75).
         # timbral_ref=0.318 (Vinyl) < floor 0.385 -> rollback required.
         _TIMBRAL_FLOORS_HPG = {
@@ -538,7 +538,7 @@ class HolisticPerceptualGate:
     ) -> None:
         """§2.44 Update MERT reference memory after successful restoration.
 
-        Quality-Gate v9.20.0 (V54-aligned): HPI > 0.0 AND artifact_freedom ≥ 0.95.
+        Quality-Gate v10.0.0 (V54-aligned): HPI > 0.0 AND artifact_freedom ≥ 0.95.
         (Vorher: HPI > 0.5 AND p1_p2_passed — blockierte Kaltstart-Population,
         da timbral_fidelity ohne Referenz systematisch bei 0.54 blieb → HPI < 0.5.)
         EMA-Gewichtung: α skaliert mit HPI-Qualität (α_eff = α × min(1.0, HPI/0.7)),
@@ -551,7 +551,7 @@ class HolisticPerceptualGate:
         embedding = self._compute_embedding(restored, sr)
         key = (genre, material, era_bin)
 
-        # v9.20.0: EMA-α skaliert mit HPI-Qualität — schwächere Läufe haben weniger Einfluss.
+        # v10.0.0: EMA-α skaliert mit HPI-Qualität — schwächere Läufe haben weniger Einfluss.
         # α_eff = _EMA_ALPHA × clamp(HPI / 0.7, 0.33, 1.0), Minimum-α = 0.05.
         _alpha_eff = float(np.clip(_EMA_ALPHA * min(1.0, max(0.33, hpi / 0.7)), 0.05, _EMA_ALPHA))
 
@@ -684,7 +684,7 @@ class HolisticPerceptualGate:
     ) -> np.ndarray:
         """Berechnet spectral embedding (mel-energy vector) as MERT-proxy.
 
-        §2.44 BW-Ceiling-Guard (v9.12.10): Wenn bw_ceiling_hz gesetzt ist, wird das
+        §2.44 BW-Ceiling-Guard (v10.0.0): Wenn bw_ceiling_hz gesetzt ist, wird das
         Mel-Filterbank auf diesen Frequenzbereich begrenzt. Verhindert, dass
         FlashSR-synthetisierter HF-Content (z.B. 12–22 kHz für Kassette) beim
         timbral_input-Vergleich fälschlicherweise die Cosinus-Ähnlichkeit reduziert
@@ -862,14 +862,14 @@ class HolisticPerceptualGate:
             _versa = _get_versa()
             _versa_result = _versa.score(rest_clean, sr)
             _versa_mos = float(np.clip(_versa_result.mos, 1.0, 5.0))
-            # v9.12.9: Power-Law-Normalisierung: MOS 4.0→0.83, 4.5→0.92, 5.0→1.0.
+            # v10.0.0: Power-Law-Normalisierung: MOS 4.0→0.83, 4.5→0.92, 5.0→1.0.
             # Frühere lineare ÷4-Skalierung komprimierte den Exzellenz-Bereich (4.0→0.75).
             # Power 0.65 expandiert 4.0-5.0 MOS auf 0.83-1.0 (perceptuell kalibrierter).
             # Kein spectral_coh-Blend: VERSA ist referenzfrei — spectral_coh(orig, rest)
             # ist Input-Similarity-Bias und bestraft korrekte Carrier-Chain-Inversion (§0d).
             _versa_sim = float(np.clip(((_versa_mos - 1.0) / 4.0) ** 0.65, 0.0, 1.0))
             logger.debug(
-                "§2.44 VERSA-primary (v9.12.9): mos=%.2f → versa_sim=%.3f (power-law 0.65)",
+                "§2.44 VERSA-primary (v10.0.0): mos=%.2f → versa_sim=%.3f (power-law 0.65)",
                 _versa_mos,
                 _versa_sim,
             )
@@ -1011,9 +1011,9 @@ class HolisticPerceptualGate:
         """Content-integrity check via mel-embedding cosine similarity.
 
         Used as small content-preservation anchor in evaluate_restoration().
-        NOT used as primary timbral_fidelity measure (see §2.44 FIX v9.11.2).
+        NOT used as primary timbral_fidelity measure (see §2.44 FIX v10.0.0).
 
-        §2.44 BW-Ceiling-Guard (v9.12.10): bw_ceiling_hz begrenzt den Mel-Vergleich
+        §2.44 BW-Ceiling-Guard (v10.0.0): bw_ceiling_hz begrenzt den Mel-Vergleich
         auf den material-nativen Frequenzbereich. Verhindert false-negative
         timbral_input-Werte bei FlashSR-Extension auf historischem Material.
         """
@@ -1033,16 +1033,16 @@ class HolisticPerceptualGate:
         restored: np.ndarray,
         sr: int,
     ) -> float:
-        """§2.44 FIX v9.11.2/v9.20.0 — Direktionale Verbesserungsmessung als Fallback.
+        """§2.44 FIX v10.0.0/v10.0.0 — Direktionale Verbesserungsmessung als Fallback.
 
         Misst ob die Restaurierung das Signal in Richtung "sauber und musikalisch"
         verbessert hat. Wird verwendet wenn kein Referenz-Vektor im GP-Memory vorliegt.
 
-        Vier Komponenten (v9.20.0: +D Harmonische Kohärenz für Musik):
+        Vier Komponenten (v10.0.0: +D Harmonische Kohärenz für Musik):
           A) Noise-Floor-Delta: tieferer Rauschboden nach Restaurierung → Wert steigt
           B) Spektrale Klarheit (HF-Crest): höhere Klarheit nach Denoising → Wert steigt
           C) Content-Integrity-Guard: verhindert, dass zerstörter Inhalt besteht
-          D) Harmonische Kohärenz (v9.20.0): Erhalt harmonischer Spektralstruktur →
+          D) Harmonische Kohärenz (v10.0.0): Erhalt harmonischer Spektralstruktur →
              für Musikmaterial signifikant über 0.5, auch ohne Rauschreduzierung.
              Verhindert, dass korrektes Music-Bypass als "keine Verbesserung" gewertet wird.
 
@@ -1111,7 +1111,7 @@ class HolisticPerceptualGate:
             crest_improvement = 0.0
         clarity_score = float(np.clip(0.5 + crest_improvement * 0.5, 0.0, 1.0))
 
-        # D) Harmonische Kohärenz (v9.20.0): Erhalt der spektralen Peakstruktur 80–4000 Hz.
+        # D) Harmonische Kohärenz (v10.0.0): Erhalt der spektralen Peakstruktur 80–4000 Hz.
         # Misst ob die dominanten Spektral-Peaks (Harmonik von Stimme + Instrument) im
         # restaurierten Signal an denselben Frequenzen wie im Original liegen.
         # Für Musik: content_corr ≥ 0.85 → hohes harmonisches Overlap → harmonic_score > 0.7
@@ -1123,8 +1123,8 @@ class HolisticPerceptualGate:
         # Noise-Score liefert bei Musik nur ≈0.5 (5.Pz. = leise Musikpassage, kein Rauschboden).
         # Harmonische Kohärenz liefert bei Musik 0.70–0.90 (hoher Spektral-Overlap).
         # Klarheits-Score liefert ohne BW-Erweiterung ebenfalls ≈0.5.
-        # Neue Gewichtung v9.20.0: 35% Noise + 25% Clarity + 40% Harmonik
-        # (statt 60% Noise + 40% Clarity in v9.11.2 — Harmonik ersetzt Noise-Anteil für Musik)
+        # Neue Gewichtung v10.0.0: 35% Noise + 25% Clarity + 40% Harmonik
+        # (statt 60% Noise + 40% Clarity in v10.0.0 — Harmonik ersetzt Noise-Anteil für Musik)
         combined = 0.35 * noise_score + 0.25 * clarity_score + 0.40 * harmonic_score
         return float(np.clip(combined, 0.0, 1.0))
 
@@ -1253,7 +1253,7 @@ class HolisticPerceptualGate:
         out_score = _score(restored)
 
         # Headroom-basierte Formel: Verbesserung relativ zum maximal erreichbaren
-        # Headroom ab Input-Niveau (v9.12.10). Ratio-basierte Formel verlor
+        # Headroom ab Input-Niveau (v10.0.0). Ratio-basierte Formel verlor
         # Diskriminierungskraft bei niedrigem in_score: in=0.05→out=0.06 und
         # in=0.05→out=0.90 lieferten identischen geclippten Gain (beide → 1.0).
         _headroom = max(1.0 - in_score, 0.05)  # Maximaler erreichbarer Headroom

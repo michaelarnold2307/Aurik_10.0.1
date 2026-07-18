@@ -1,5 +1,5 @@
 """
-LAION-CLAP Plugin — Text-Audio-Kontrastives Audio-Tagging für Aurik 9
+LAION-CLAP Plugin — Text-Audio-Kontrastives Audio-Tagging für Aurik 10.0.0
 
 Primäres Audio-Tagging-Modell für Genre-, Instrument- und Stil-Erkennung.
 LAION-CLAP (Contrastive Language-Audio Pretraining) wird auf Milliarden
@@ -161,7 +161,7 @@ def _load_trusted_local_torch_checkpoint(checkpoint_path: Path) -> Any:
 
 
 class LAIONCLAPPlugin:
-    """LAION-CLAP Text-Audio-Kontrastives Tagging für Aurik 9.
+    """LAION-CLAP Text-Audio-Kontrastives Tagging für Aurik 10.0.0.
 
     Algorithmus (CLAP Vollpfad):
         1. Audio-Encoder: HTS-AT (Hierarchical Token Semantic Audio Transformer)

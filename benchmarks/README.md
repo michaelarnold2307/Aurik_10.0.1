@@ -1,4 +1,4 @@
-# Aurik 9.0 - Benchmarks & Validation
+# Aurik 10.0.0 - Benchmarks & Validation
 
 **Phase 3b: Competitive Benchmarking & Real-World Validation**
 
@@ -6,7 +6,7 @@
 
 ## Overview
 
-This directory contains tools and scripts for benchmarking Aurik 9.0 against:
+This directory contains tools and scripts for benchmarking Aurik 10.0.0 against:
 
 - Commercial tools (iZotope RX 10, CEDAR Cambridge, SpectraLayers Pro)
 - State-of-the-art research benchmarks
@@ -174,7 +174,7 @@ benchmarks/
 
 ### Competitive Benchmarks
 
-| Metric | Aurik 9.0 | iZotope RX 10 | CEDAR | SpectraLayers |
+| Metric | Aurik 10.0.0 | iZotope RX 10 | CEDAR | SpectraLayers |
 | -------- | ----------- | --------------- | ------- | --------------- |
 | Overall Quality | 0.88-0.90 | 0.90 | 0.92 | 0.87 |
 | Naturalness | 0.81 | 0.88 | 0.90 | 0.85 |
@@ -265,15 +265,15 @@ python3 cli/aurik_cli.py process \
 | Score | Rating | Interpretation | -------| -------- | ---------------- |
 | 0.95+ | Excellent | World-class, professional mastering quality |
 | 0.90-0.95 | Very Good | Commercial tool quality (iZotope, CEDAR) |
-| 0.85-0.90 | **Good** | **Aurik 9.0 Target - Excellence Achieved** ✅ |
+| 0.85-0.90 | **Good** | **Aurik 10.0.0 Target - Excellence Achieved** ✅ |
 | 0.80-0.85 | Acceptable | Consumer-grade restoration |
 | < 0.80 | Poor | Audible artifacts, needs improvement |
 
-**Aurik 9.0 Status:** 0.88-0.90 (Excellence Achieved) ✅
+**Aurik 10.0.0 Status:** 0.88-0.90 (Excellence Achieved) ✅
 
 ### Artifact Detection
 
-| Artifact Type | Acceptable Level | Aurik 9.0 |
+| Artifact Type | Acceptable Level | Aurik 10.0.0 |
 | --------------- | -----------------------------|
 | Residual Clicks | < 1 per 10s | ✅ Excellent |
 | Spectral Smearing | < 3 dB deviation | ✅ Minimal |
@@ -336,7 +336,7 @@ A: No, it's optional. Aurik already achieved excellence (0.88-0.90). Validation 
 
 ## References
 
-- **Aurik 9.0 Documentation:** `../docs/`
+- **Aurik 10.0.0 Documentation:** `../docs/`
 - **Phase 3a Status Report:** `../docs/PROJECT_STATUS.md`
 - **Roadmap:** `../docs/aurik9_roadmap.md`
 - **Test Suite:** `../tests/test_full_chain_ml_hybrid.py`

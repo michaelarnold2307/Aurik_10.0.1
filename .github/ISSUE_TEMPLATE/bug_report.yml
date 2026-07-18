@@ -1,5 +1,5 @@
 name: 🐛 Bug Report
-description: Report a bug or unexpected behavior in Aurik 9.0
+description: Report a bug or unexpected behavior in Aurik 10
 title: "[Bug]: "
 labels: ["bug", "triage"]
 assignees: []
@@ -56,9 +56,8 @@ body:
       label: Aurik Version
       description: Which version of Aurik are you using?
       options:
-        - 9.0.0-rc2 (latest)
-        - 9.0.0-rc1
-        - 9.0.0-alpha
+        - 10.0.8 (latest)
+        - 10.0.0
         - Other (please specify in description)
     validations:
       required: true

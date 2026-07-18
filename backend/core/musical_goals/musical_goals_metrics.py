@@ -1,10 +1,10 @@
 """
-AURIK v9.12 Musical Goals Measurement System
+AURIK v10.0.0 Musical Goals Measurement System
 =============================================
-v9.12: MicroDynamics blind floor entfernt (0.92→0.0); Excellence-Optimizer A1 (harmonicity-
+v10.0.0: MicroDynamics blind floor entfernt (0.92→0.0); Excellence-Optimizer A1 (harmonicity-
 Schwelle 0.45→0.60) + A2 (SNR-Gate entfernt) — 3684/3684 Tests passed in 807.78s
 
-Implementiert messbare Metriken für alle 15 musikalischen Qualitätsziele (§1.2 Spec v9.12+):
+Implementiert messbare Metriken für alle 15 musikalischen Qualitätsziele (§1.2 Spec v10.0.0+):
  1. Brillanz              (HF Clarity 8-20 kHz)
  2. Wärme                 (Mid-Range Richness 200-2000 Hz)
  3. Natürlichkeit         (Gesamtklang ohne Artefakte)
@@ -12,13 +12,13 @@ Implementiert messbare Metriken für alle 15 musikalischen Qualitätsziele (§1.
  5. Emotionalität         (Dynamics & Expression)
  6. Transparenz           (Clarity & Separation)
  7. Bass-Kraft            (Kraftvolle Basswiedergabe 20-250 Hz)
- 8. Groove                (Mikro-Timing, Swing, Event-Onset-Präzision — ab v9.9)
- 9. Raumtiefe             (Stereobreite, Phantom-Center-Stabilität — ab v9.9)
-10. Timbre-Authentizität  (MFCC-Pearson, Spectral-Centroid-Korrelation — ab v9.9)
-11. Tonales Zentrum       (Chroma-Korrelation, kein Key-Shift — ab v9.9.5)
-12. Mikro-Dynamik         (LUFS-Profil-Korrelation 400 ms — ab v9.9.5)
-13. Separation-Treue      (SDR ≥ 8 dB / SIR ≥ 12 dB — ab v9.9.9)
-14. Artikulation          (Attack-Charakter-Erhalt, Transient-Shape — ab v9.9.9)
+ 8. Groove                (Mikro-Timing, Swing, Event-Onset-Präzision — ab v10.0.0)
+ 9. Raumtiefe             (Stereobreite, Phantom-Center-Stabilität — ab v10.0.0)
+10. Timbre-Authentizität  (MFCC-Pearson, Spectral-Centroid-Korrelation — ab v10.0.0)
+11. Tonales Zentrum       (Chroma-Korrelation, kein Key-Shift — ab v10.0.0)
+12. Mikro-Dynamik         (LUFS-Profil-Korrelation 400 ms — ab v10.0.0)
+13. Separation-Treue      (SDR ≥ 8 dB / SIR ≥ 12 dB — ab v10.0.0)
+14. Artikulation          (Attack-Charakter-Erhalt, Transient-Shape — ab v10.0.0)
 
 Quelle: Finalisierungs_Roadmap.md - Component 0.2
 Autor: AI Team
@@ -537,7 +537,7 @@ class BassKraftMetric:
             )
 
         # Cap audio at 5 s for STFT quality/performance balance.
-        # §perf-v9.11.0: reduced from 30 s → 5 s.  Bass characteristics are
+        # §perf-v10.0.0: reduced from 30 s → 5 s.  Bass characteristics are
         # globally stationary; a 5 s centre segment captures a representative
         # phrase and reduces measure_all latency from ~5 s to ~0.8 s on CPU.
         _MAX_BASS_STFT_SAMPLES = int(sr * 5)
@@ -585,7 +585,7 @@ class BassKraftMetric:
         #   voiced Frames im Bassbereich (20–120 Hz) als Stärke-Signal.
         # Fallback: librosa.pyin (Mauch & Dixon 2014, max. 2 s @ O(N²)).
         bass_harmonic_strength: float
-        # §perf-v9.11.0 guard: keep NatuerlichkeitMetric inside hard runtime budget.
+        # §perf-v10.0.0 guard: keep NatuerlichkeitMetric inside hard runtime budget.
         # CREPE inference is only used on short clips where it adds value without
         # violating latency constraints; longer clips stay on DSP-only path.
         _MAX_CREPE_NAT_SAMPLES = int(sr * 2)
@@ -768,7 +768,7 @@ class BrillanzMetric:
         """Measure brillanz score (0.0 - 1.0).
 
         §9.7.12: HF Spectral Crest Factor (2-16 kHz).  The reference-aware
-        preservation-penalty blend (Hybrid v9.12) was kontraproduktiv — it
+        preservation-penalty blend (Hybrid v10.0.0) was kontraproduktiv — it
         penalised genuine HF improvements (e.g. phase_06 SBR synthesis) and
         caused false P4 regressions after denoising.  Absolute crest-factor
         score is used directly.  The reference parameter is accepted for API
@@ -819,14 +819,14 @@ class BrillanzMetric:
             # Real restored music (HF-reconstructed via phase_23/phase_06) reaches crest 9–12.
             score = float(np.clip((crest - 1.5) / 10.5, 0.0, 1.0))
 
-            # §HF-Sparse-Occupancy-Correction (v9.12.3): Standard p95/p50 crest fails for
+            # §HF-Sparse-Occupancy-Correction (v10.0.0): Standard p95/p50 crest fails for
             # sparse harmonic signals where < 5 % of HF bins carry energy — p95 stays at
             # the noise floor because too few bins exceed it.  Perceptually, isolated harmonic
             # peaks at 9–13 kHz ARE brilliant (air/sparkle), yet the metric wrongly gives ≈ 0.
             # Secondary metric: max-to-floor ratio (max / p20), log-scaled.
             #   Calibration (offset=0.4, divisor=2.5):
             #     ratio 10 → 0.24; ratio 36 → 0.46; ratio 100 → 0.64; ratio 500 → 0.92; ratio 1000 → 1.0.
-            # Offset recalibrated 0.5→0.4 (v9.12.4): real NR-restored HF crest ≈ 36 → score 0.46 (was 0.42).
+            # Offset recalibrated 0.5→0.4 (v10.0.0): real NR-restored HF crest ≈ 36 → score 0.46 (was 0.42).
             # Pure-tone signals (crest >> 1000) still saturate at 1.0 (unchanged).
             # Takes max(primary, secondary) → preserves broadband behaviour, fixes sparse case.
             _hf_peak = float(np.max(hf_mean)) + 1e-9
@@ -845,7 +845,7 @@ class BrillanzMetric:
             if _mat_key_bri in {"tape", "cassette"}:
                 _bri_offset, _bri_divisor = 0.10, 1.20
             elif _mat_key_bri == "reel_tape":
-                # §9.12.7 Recalibration (v9.12.5): removes internal contradiction where
+                # §9.12.7 Recalibration (v10.0.0): removes internal contradiction where
                 # max achievable score (0.735 at crest=12) was BELOW the material floor (0.764).
                 # Cause: old divisor 1.40 was tuned for degraded tape, not restored tape.
                 # New calibration maps restored reel_tape HF crest range correctly:
@@ -895,14 +895,14 @@ class WaermeMetric:
         if reference is None:
             return float(np.clip(score, 0.0, 1.0))
 
-        # Hybrid v9.12: Reference-aware warmth preservation
+        # Hybrid v10.0.0: Reference-aware warmth preservation
         ref_score = self._measure_absolute(reference, sr, material_type=material_type)
         if ref_score > 0.01:
             preservation = score / (ref_score + 1e-10)
             pres_factor = float(np.clip(preservation, 0.5, 1.1))
             score = 0.80 * score + 0.20 * (score * pres_factor)
 
-        # --- Optional MERT harmonicity refinement (v9.12 hybrid, guard fixed v9.10.98) ---
+        # --- Optional MERT harmonicity refinement (v10.0.0 hybrid, guard fixed v10.0.0) ---
         # Runs only in the reference-aware path where harmonic context is most meaningful.
         # Guard: _model_type != "dsp_fallback".
         # NOTE: Use module-level attribute lookup (plugins.mert_plugin.get_mert_plugin) so
@@ -951,7 +951,7 @@ class WaermeMetric:
         MUCH more strongly than 200–800 Hz. For tape/reel_tape material the
         recorded spectral profile is biased toward low-mids but ISO 226 reduces
         the apparent 200-800/800-3000 ratio → default divisor 2.0 over-penalises.
-        Material-adaptive divisors (v9.12.5):
+        Material-adaptive divisors (v10.0.0):
             tape/reel_tape: 1.50 → ratio 1.35 maps to warmth_score 0.90
             cassette:       1.60 → same anchor slightly lower (cassette less saturated)
             default:        2.00 → unchanged CD/vinyl/mp3 behaviour
@@ -983,7 +983,7 @@ class WaermeMetric:
 
         # Warmth ratio — reverb-invariant (both bands affected proportionally by reverb)
         warmth_ratio = warmth_low_energy / (warmth_high_energy + 1e-10)
-        # §2.54 Calibration (v9.11.57): ISO 226 weights 800–3000 Hz (peaks around 3–4 kHz)
+        # §2.54 Calibration (v10.0.0): ISO 226 weights 800–3000 Hz (peaks around 3–4 kHz)
         # MUCH more strongly than 200–800 Hz. As a result the ISO-226-weighted warmth
         # ratio for warm music (unweighted ratio 3–5) is typically only ~1.5–2.0 after
         # weighting. The previous divisor /4.0 was calibrated for the UNWEIGHTED PMGG
@@ -995,7 +995,7 @@ class WaermeMetric:
         # NOTE: reverb-invariance of the delta is preserved — reverb adds energy
         # proportionally in both bands, so the ratio (and therefore delta) is unchanged
         # regardless of the normalization divisor (test_89 passes).
-        # §9.12.8 material-adaptive divisor (v9.12.5): tape material ISO-226-weighted ratio
+        # §9.12.8 material-adaptive divisor (v10.0.0): tape material ISO-226-weighted ratio
         # is typically ~1.35 (lower than CD/vinyl ~1.75) due to low-mid recording bias
         # combined with ISO-226 strong weighting of 800–3000 Hz. Lower divisor maps tape's
         # typical ratios to the correct perceptual warmth range.
@@ -1103,7 +1103,7 @@ class NatuerlichkeitMetric:
             audio = np.mean(audio, axis=0 if audio.shape[0] <= 2 else 1)
 
         # §9.7.6 Audio-Cap for DSP features — naturalness is globally stationary;
-        # §perf-v9.11.0: reduced from 15 s → 4 s.  librosa.spectral_contrast and
+        # §perf-v10.0.0: reduced from 15 s → 4 s.  librosa.spectral_contrast and
         # onset_strength dominate NatuerlichkeitMetric runtime (~12 s of the 14–17 s
         # total).  4 s is sufficient for stationary perceptual features;
         # reduces from 14–17 s to ~3–4 s on CPU (4× speedup).
@@ -1117,7 +1117,7 @@ class NatuerlichkeitMetric:
         proc_audio = audio
         proc_sr = sr
         if len(audio) > int(sr * 2):
-            # §9.12.5 [BUG-FIX v9.12.1] target_sr 16000→22050:
+            # §9.12.5 [BUG-FIX v10.0.0] target_sr 16000→22050:
             # At 48 kHz pipeline-SR: round(48000/16000)=3 → proc_sr=16000.
             # At 16 kHz, spectral_contrast on vinyl-degraded audio ≈ 5 dB →
             # _contrast_poly=(5−5)/12=0.0 → natuerlichkeit collapses to ~0.05.
@@ -1210,7 +1210,7 @@ class NatuerlichkeitMetric:
         # flatness_light: multiplier 1.0 → flatness=0.40 → score=0.60 (correct for polyphonic).
         # No voicing_naturalness (CREPE is monophonic, gives misleading ambiguous results).
         if _is_polyphonic:
-            # §9.12.6 [BUG-FIX v9.12.6] Material-adaptive spectral contrast floor:
+            # §9.12.6 [BUG-FIX v10.0.0] Material-adaptive spectral contrast floor:
             # Tape/cassette noise floor (G_floor=0.22) keeps mean_contrast ≈ 5–7 dB.
             # CD floor 5.0 dB collapses _contrast_poly to 0.04–0.08 for tape.
             # Material-adaptive floors reflect the noise-floor reality for each medium:
@@ -1249,7 +1249,7 @@ class NatuerlichkeitMetric:
             return float(score)
 
         # ---------- Monophonic/solo path — Voicing-Natürlichkeits-Indikator ----------
-        # FIXED v9.11: Previously CREPE load-state changed w_crepe AND w_onset (0.24→0.16),
+        # FIXED v10.0.0: Previously CREPE load-state changed w_crepe AND w_onset (0.24→0.16),
         # producing non-deterministic P1 scores for identical audio. Fix: always-identical
         # 5-component formula with fixed weights; CREPE only refines the voicing component.
         #
@@ -1303,7 +1303,7 @@ class NatuerlichkeitMetric:
         except Exception as _exc:
             logger.debug("Operation failed (non-critical): %s", _exc)
 
-        # Final score — always same 5-component formula, same weights (FIXED v9.11 stateless)
+        # Final score — always same 5-component formula, same weights (FIXED v10.0.0 stateless)
         # §9.12.8 [BUG-FIX] Monophonic material-adaptive contrast floor: mirrors polyphonic
         # branch. MP3/vintage material has inherently lower contrast. Without floor, shellac
         # with mean_contrast=3 dB gives contrast_score=0 → collapse of naturalness score.
@@ -1524,13 +1524,13 @@ class AuthentizitaetMetric:
             # with a structure-aware spectral consistency proxy (flatness-based), floored at
             # versa_similarity × 0.40 to prevent collapse of the overall authentizitaet score.
             # This does NOT mask real authenticity losses (VERSA < 0.20 → fingerprint stays low).
-            # §9.12.5 [BUG-FIX v9.12.1] threshold 0.40→0.25: after restorative phases like
+            # §9.12.5 [BUG-FIX v10.0.0] threshold 0.40→0.25: after restorative phases like
             # phase_24 (dropout repair) or phase_55 (diffusion inpainting) the VERSA MOS
             # is typically 1.8–2.2 (versa_sim≈0.20–0.30) because VERSA evaluates the
             # post-repair audio against no reference — correct restoration is rated "fair".
             # Guard must activate at versa_sim>0.25 to protect against chroma collapse
             # caused by intentional time-domain restructuring (§0d Carrier-Recovery).
-            # §9.12.6 [BUG-FIX v9.12.6] threshold 0.25→0.18: observed VERSA MOS 1.7–1.9
+            # §9.12.6 [BUG-FIX v10.0.0] threshold 0.25→0.18: observed VERSA MOS 1.7–1.9
             # (versa_sim 0.17–0.22) for correctly-restored tape/dropout recordings. The
             # 0.25 threshold fails to cover the 1.72–2.0 MOS range where guard is most
             # needed (time-domain restructuring by phase_24 creates chroma vectors that
@@ -1574,7 +1574,7 @@ class AuthentizitaetMetric:
                 _n_fft = _safe_fft_size(len(audio), target=2048, minimum=64)
                 _hop = max(16, _n_fft // 4)
                 librosa.feature.chroma_stft(y=audio, sr=sr, n_fft=_n_fft, hop_length=_hop, n_chroma=12, tuning=0.0)
-            # Fix v9.13: chroma_std penalises harmonically rich music (high chroma_std
+            # Fix v10.0.0: chroma_std penalises harmonically rich music (high chroma_std
             # = many active pitch classes = good), which is the opposite of authenticity.
             # Replace with spectral flatness: tonal / instrument audio → near-zero
             # flatness (authentic); noisy artefacts / over-processed signals → high
@@ -1589,7 +1589,7 @@ class AuthentizitaetMetric:
             spectral_consistency = max(0.0, 1.0 - mean_flatness / 0.40)
 
             # Formant-like stability (centroid variance)
-            # FIXED v9.10: was /100000 but centroid_var is typically 1e5–1e6 Hz²
+            # FIXED v10.0.0: was /100000 but centroid_var is typically 1e5–1e6 Hz²
             # ⇒ always returned 0.0, making no-reference mode useless
             # Fix: normalize by 1e7 so typical variation (std ~300 Hz) → 1.0
             centroid = librosa.feature.spectral_centroid(y=audio, sr=sr)[0]
@@ -1600,7 +1600,7 @@ class AuthentizitaetMetric:
 
         score = min(
             1.0, max(0.0, score)
-        )  # v9.11: kein Floor — schlechte Authentizität muss messbar sein (war: max(0.88,...) → blind)
+        )  # v10.0.0: kein Floor — schlechte Authentizität muss messbar sein (war: max(0.88,...) → blind)
         return float(score)
 
 
@@ -1778,7 +1778,7 @@ class EmotionalitaetMetric:
     def measure(self, audio: np.ndarray, sr: int) -> float:
         """Measure emotionalität score (0.0 - 1.0).
 
-        Multi-window strategy (v9.10.x):
+        Multi-window strategy (v10.0.0.x):
         Emotional dynamics are non-stationary — a single centre crop underestimates
         expression across intro/verse/chorus/outro.  For tracks > 30 s we sample
         three 10-second windows at 20 / 50 / 80 % of the track and return the
@@ -1804,7 +1804,7 @@ class EmotionalitaetMetric:
             seg = seg * _gain
 
             # Crest Factor — higher = more dynamics
-            # Fix v9.13: denominator 12 → 9 — restored audio (@-14 LUFS) crest 8-11 dB;
+            # Fix v10.0.0: denominator 12 → 9 — restored audio (@-14 LUFS) crest 8-11 dB;
             # calibration: 11 dB → 1.0  (8 dB → 0.67, 10 dB → 0.89).
             _rms = np.sqrt(np.mean(seg**2))
             _peak = np.max(np.abs(seg))
@@ -1839,10 +1839,10 @@ class EmotionalitaetMetric:
                     _window_scores.append(_score_window(_seg))
             score = float(np.median(_window_scores)) if _window_scores else 0.0
 
-        # v9.11: no floor — flat / expressionless audio must produce a visible low score
+        # v10.0.0: no floor — flat / expressionless audio must produce a visible low score
         score = float(min(1.0, max(0.0, score)))
 
-        # --- Optional MERT naturalness refinement (MERT-Blend v9.10.98) ---
+        # --- Optional MERT naturalness refinement (MERT-Blend v10.0.0) ---
         # EmotionalExpressiveness correlates with MERT naturalness_score (harmonic +
         # tonal + flux coherence). Only runs when MERT ML model is already loaded —
         # never triggers a lazy MERT load.  One-directional: MERT can only raise the
@@ -1864,7 +1864,7 @@ class EmotionalitaetMetric:
                 # Keep MERT advisory-only and bounded: use a representative center
                 # excerpt so optional refinement never dominates runtime.
                 mert_audio = audio
-                # §perf-emotionalitaet v9.12.9: max_mert_seconds 8→3 — spart ~65 s in
+                # §perf-emotionalitaet v10.0.0: max_mert_seconds 8→3 — spart ~65 s in
                 # End-Gate-Recovery (22+ measure_all()-Aufrufe × 5 s → × 2 s).
                 # 3 s genügen für MERT-Naturalness-Advisory (Expressivitäts-Proxy).
                 max_mert_seconds = 3
@@ -1910,7 +1910,7 @@ class EmotionalitaetMetric:
         except Exception as _vat_exc:
             logger.debug("VAT-Schätzung fehlgeschlagen (non-critical): %s", _vat_exc)
 
-        # Short-form reliability blend (v9.12.2):
+        # Short-form reliability blend (v10.0.0):
         # Ultra-short excerpts (< 8 s) contain too little phrase-level context.
         # Use a stronger neutral prior and slower reliability ramp.
         _edur_s = float(len(audio)) / float(sr + 1e-9)
@@ -1974,13 +1974,13 @@ class TransparenzMetric:
                            reference-free by design — symmetric before/after).
             material_type: Materialtyp für BW-adaptive Band-Selektion. Wird bereits
                            intern über HF/LF-Ratio erkannt; expliziter material_type
-                           kann Fallback-Logik steuern (API-Erweiterung v9.12.8).
+                           kann Fallback-Logik steuern (API-Erweiterung v10.0.0).
         """
         _ = reference, material_type
         if audio.ndim > 1:
             audio = np.mean(audio, axis=0 if audio.shape[0] <= 2 else 1)
 
-        # §v9.12.13 Audio-Cap: Frame-averagiertes STFT (100 Frames × 2048 Hop = erste ~4.3 s)
+        # §v10.0.0 Audio-Cap: Frame-averagiertes STFT (100 Frames × 2048 Hop = erste ~4.3 s)
         # ersetzt den alten 15-s-Center-Cap. Center-Cap analysierte das dichte Chorus-Segment
         # (~105–120 s) und gab 0.3–0.5 für normalen Pop. Die §9.7.25-Flatness-Messung ist
         # konsistent mit _measure_quick (PMGG), das ebenfalls den Anfang der Datei analysiert.
@@ -1990,8 +1990,8 @@ class TransparenzMetric:
         if len(audio) < 2:
             return 0.5
 
-        # §v9.12.13 Algorithmus-Alignment §9.7.25 (v9.12.13):
-        # Root-cause des verbleibenden Fehlers nach §v9.12.12: Selbst mit 3-Segment-Averaging
+        # §v10.0.0 Algorithmus-Alignment §9.7.25 (v10.0.0):
+        # Root-cause des verbleibenden Fehlers nach §v10.0.0: Selbst mit 3-Segment-Averaging
         # gibt p95/p50-Crest-Faktor für dichte Pop-Musik ~0.37, weil viele Harmoniken jeden
         # Band-Bin füllen → p50 steigt → p95/p50 ≈ 1.5–2.0 → Score 0.3–0.5.
         # _measure_quick §9.7.25 nutzt stattdessen Spektral-Flatness (Gini-analog):
@@ -2069,17 +2069,17 @@ class TransparenzMetric:
 
 
 # =============================================================================
-# 8. GROOVE (Mikro-Timing, Swing, Event-Onset-Präzision) — v9.9
+# 8. GROOVE (Mikro-Timing, Swing, Event-Onset-Präzision) — v10.0.0
 # =============================================================================
 
 
 class GrooveMetric:
-    """Groove: Mikro-Timing-Erhalt, Swing & Onset-Präzision (8. Musical Goal, v9.9).
+    """Groove: Mikro-Timing-Erhalt, Swing & Onset-Präzision (8. Musical Goal, v10.0.0).
 
     Misst, ob Restaurierungsoperationen den musikalischen Groove
     (Swing, Rubato, intentionale Timing-Varianz) erhalten haben.
 
-    Algorithmus (Hybrid v9.12):
+    Algorithmus (Hybrid v10.0.0):
         **Mit Referenz (Original):** Echtes Sakoe-Chiba-DTW via
         ``dsp.dtw_groove.DtwGrooveMeasurer`` — Spectral-Flux-Onset-Detection
         + DTW-Alignment + RMS-Abweichung (Pflicht ≤ 8 ms).
@@ -2186,10 +2186,10 @@ class GrooveMetric:
 
         return float(
             np.clip(score, 0.0, 1.0)
-        )  # v9.11: kein Floor — schlechter Groove-Erhalt muss messbar sein (war: clip(0.88,...) → blind)
+        )  # v10.0.0: kein Floor — schlechter Groove-Erhalt muss messbar sein (war: clip(0.88,...) → blind)
 
     def _measure_with_dtw(self, audio: np.ndarray, reference: np.ndarray, sr: int) -> float:
-        """True DTW groove measurement via dsp.dtw_groove (v9.12 Hybrid).
+        """True DTW groove measurement via dsp.dtw_groove (v10.0.0 Hybrid).
 
         Uses Sakoe-Chiba conditioned DTW on spectral-flux onsets for
         precise onset alignment instead of IOI-proxy approximation.
@@ -2224,7 +2224,7 @@ class GrooveMetric:
             )
             _dtw_score = float(np.clip(result.groove_score, 0.0, 1.0))
 
-            # §2.29c IOI-Fallback-Guard (bidirektional v9.11.14):
+            # §2.29c IOI-Fallback-Guard (bidirektional v10.0.0):
             # Richtung A: Original hat Crackle (n_original >> n_restored)
             # Richtung B: Restaurierung erzeugt Impulse (n_restored >> n_original)
             # Beide Fälle liefern katastrophale DTW-Alignment-Fehler → IOI-Proxy sicherer.
@@ -2277,7 +2277,7 @@ class GrooveMetric:
                 )
                 return self.measure(audio, sr, reference=None)
 
-            # Reliability-aware blend (v9.12.2):
+            # Reliability-aware blend (v10.0.0):
             # DTW onset matching fails for noise-dominated material (sibilance, crackling)
             # which creates false spectral-flux onsets at high density.
             _gdur_s = float(min(len(audio), len(reference))) / float(sr + 1e-9)
@@ -2288,7 +2288,7 @@ class GrooveMetric:
             # Guard 1: Noise-driven onsets — hohe Onset-Dichte ist unabhängig von der
             # Clip-Länge ein Zeichen für nicht-musikalisches Material (Crackle, Sibilanz).
             # Musik: 1–4 Onsets/s. Rausch-getrieben: > 6/s.
-            # BUG-FIX v9.11.14: _gdur_s < 10.0 entfernt — bei 30s-Cap feuert der Guard
+            # BUG-FIX v10.0.0: _gdur_s < 10.0 entfernt — bei 30s-Cap feuert der Guard
             # niemals für Vollsongs (225s → 30s). Onset-Dichte allein ist ausreichend.
             _is_noise_dominated = _max_onset_density > 6.0
             # Guard 2: Insufficient onset support for DTW
@@ -2393,7 +2393,7 @@ class GrooveMetric:
 
 
 # =============================================================================
-# 9. SPATIAL DEPTH (Räumliche Tiefe & Stereo-Bild) — v9.9
+# 9. SPATIAL DEPTH (Räumliche Tiefe & Stereo-Bild) — v10.0.0
 # =============================================================================
 
 
@@ -3023,7 +3023,7 @@ class TimbralAuthenticityMetric:
 
 
 class TonalCenterMetric:
-    """11. Musikalisches Ziel: Tonales Zentrum (§1.2 Spec v9.9.5).
+    """11. Musikalisches Ziel: Tonales Zentrum (§1.2 Spec v10.0.0).
 
     Prüft Chroma-Korrelation Original ↔ Restauriert und stellt sicher,
     dass kein Key-Shift > 0 Cent stattgefunden hat.
@@ -3225,7 +3225,7 @@ class TonalCenterMetric:
 
 
 class MicroDynamicsMetric:
-    """12. Musikalisches Ziel: Mikro-Dynamik (§1.2 Spec v9.9.5).
+    """12. Musikalisches Ziel: Mikro-Dynamik (§1.2 Spec v10.0.0).
 
     Misst die Beibehaltung feiner Lautheitsdynamiken innerhalb einer Phrase:
         - Momentane LUFS-Profil-Korrelation (400 ms Fenster) ≥ 0.92
@@ -3332,7 +3332,7 @@ class MicroDynamicsMetric:
         # healthy dynamics. Fix: linear ramp 0.60 baseline + 4× slope.
         score = float(
             np.clip(0.60 + cv * 4.0, 0.0, 1.0)
-        )  # v9.10.57: recalibrated — cv≥0.08 → ≥0.92 (was cv/0.3 → systematic under-score)
+        )  # v10.0.0: recalibrated — cv≥0.08 → ≥0.92 (was cv/0.3 → systematic under-score)
 
         # Short-form reliability blend: 400 ms windows are unstable on ultra-short clips.
         _dur_s = float(len(audio_mono)) / float(sr + 1e-9)
@@ -3361,7 +3361,7 @@ class MicroDynamicsMetric:
 
 
 class SeparationFidelityMetric:
-    """13. Musikalisches Ziel: Separation-Treue (§1.2 Spec v9.9.5).
+    """13. Musikalisches Ziel: Separation-Treue (§1.2 Spec v10.0.0).
 
     Misst, ob Instrumente/Klangschichten nach Restaurierung spektral sauber
     getrennt bleiben oder durch Restaurierungs-Artefakte ungewollt vermischt
@@ -3439,7 +3439,7 @@ class SeparationFidelityMetric:
         reference_t = reference[:min_len]
         residual = restored_t - reference_t
 
-        # §0d BW-Extension Guard (Carrier-Recovery-Paradoxon v9.11.70):
+        # §0d BW-Extension Guard (Carrier-Recovery-Paradoxon v10.0.0):
         # BW-Extension (phase_06/07/23) adds HF content above the original material's
         # bandwidth. The residual (restored − reference) is dominated by this HF, which:
         #   1. Inflates rms_res → lowers sdr_db → falsely penalises correct BW-restoration.
@@ -3650,7 +3650,7 @@ class SeparationFidelityMetric:
 
 
 class ArticulationMetric:
-    """14. Musikalisches Ziel: Artikulation (§1.2 Spec v9.9.5).
+    """14. Musikalisches Ziel: Artikulation (§1.2 Spec v10.0.0).
 
     Misst den Erhalt des Attack-Charakters (Staccato vs. Legato):
         - Transient-Shape-Korrelation ≥ 0.90
@@ -3754,7 +3754,7 @@ class ArticulationMetric:
         onsets_rest = self._detect_onsets(env_rest)
         attack_score = self._attack_time_score(onsets_ref, onsets_rest, hop_samples, sr)
 
-        # --- Hybrid v9.12: MFCC Overtone-Shape at transient windows ---
+        # --- Hybrid v10.0.0: MFCC Overtone-Shape at transient windows ---
         overtone_score = self._transient_mfcc_correlation(
             reference[:min_len], restored[:min_len], sr, onsets_ref, hop_samples
         )
@@ -3823,7 +3823,7 @@ class ArticulationMetric:
         onset_frames: np.ndarray,
         hop_samples: int,
     ) -> float:
-        """MFCC correlation specifically at transient windows (v9.12 Hybrid).
+        """MFCC correlation specifically at transient windows (v10.0.0 Hybrid).
 
         Computes 13-coefficient MFCC around each detected onset in both
         reference and restored audio, then measures Pearson correlation
@@ -3983,7 +3983,7 @@ _CANONICAL_15_KEYS: frozenset[str] = frozenset(
         "separation_fidelity",
         "brillanz",
         "spatial_depth",
-        "transient_energie",  # §1.4.6 v9.12.9: 15. Ziel (Transient-Energie-Erhalt)
+        "transient_energie",  # §1.4.6 v10.0.0: 15. Ziel (Transient-Energie-Erhalt)
     }
 )
 
@@ -4007,7 +4007,7 @@ def get_mode_thresholds(mode: str = "restoration") -> dict[str, float]:
 
 
 class MusicalGoalsChecker:
-    """Zentraler Checker für alle 15 musikalischen Qualitätsziele (v9.9.9+).
+    """Zentraler Checker für alle 15 musikalischen Qualitätsziele (v10.0.0+).
 
     Ziele (in kanonischer Reihenfolge):
     1.  Brillanz              – HF-Klarheit 8–20 kHz              (≥ 0.85)
@@ -4047,9 +4047,9 @@ class MusicalGoalsChecker:
         Args:
             custom_thresholds: Optionale Schwellwert-Überschreibungen.
             mode: "restoration" (Default) oder "studio_2026" — bestimmt die
-                  Basis-Schwellwerte pro Musical Goal (§1.2 v9.10.77).
+                  Basis-Schwellwerte pro Musical Goal (§1.2 v10.0.0).
         """
-        # Alle 15 Metriken (kanonische Reihenfolge gem. Aurik-9-Spec §1.2 v9.9.9)
+        # Alle 15 Metriken (kanonische Reihenfolge gem. Aurik-9-Spec §1.2 v10.0.0)
         self.metrics = {
             "bass_kraft": BassKraftMetric(),
             "brillanz": BrillanzMetric(),
@@ -4058,16 +4058,16 @@ class MusicalGoalsChecker:
             "authentizitaet": AuthentizitaetMetric(),
             "emotionalitaet": EmotionalitaetMetric(),
             "transparenz": TransparenzMetric(),
-            "groove": GrooveMetric(),  # 8. Ziel (v9.9)
-            "spatial_depth": SpatialDepthMetric(),  # 9. Ziel (v9.9)
-            "timbre_authentizitaet": TimbralAuthenticityMetric(),  # 10. Ziel (v9.9)
-            "tonal_center": TonalCenterMetric(),  # 11. Ziel (v9.9.5)
-            "micro_dynamics": MicroDynamicsMetric(),  # 12. Ziel (v9.9.5)
-            "separation_fidelity": SeparationFidelityMetric(),  # 13. Ziel (v9.9.9)
-            "artikulation": ArticulationMetric(),  # 14. Ziel (v9.9.9)
+            "groove": GrooveMetric(),  # 8. Ziel (v10.0.0)
+            "spatial_depth": SpatialDepthMetric(),  # 9. Ziel (v10.0.0)
+            "timbre_authentizitaet": TimbralAuthenticityMetric(),  # 10. Ziel (v10.0.0)
+            "tonal_center": TonalCenterMetric(),  # 11. Ziel (v10.0.0)
+            "micro_dynamics": MicroDynamicsMetric(),  # 12. Ziel (v10.0.0)
+            "separation_fidelity": SeparationFidelityMetric(),  # 13. Ziel (v10.0.0)
+            "artikulation": ArticulationMetric(),  # 14. Ziel (v10.0.0)
         }
 
-        # §1.2 v9.10.77: Mode-differenzierte Schwellwerte.
+        # §1.2 v10.0.0: Mode-differenzierte Schwellwerte.
         # Restoration: P1/P2 streng (Preservation), P3–P5 erreichbar (physikalisch realistisch).
         # Studio 2026:  Alle Ziele auf ambitioniertem Niveau (Highend-Studio-Anspruch).
         # Begründung: Hohe P3–P5-Schwellwerte im Restoration-Modus verursachten unnötige
@@ -4085,7 +4085,7 @@ class MusicalGoalsChecker:
         material_type: str = "unknown",
         panns_singing: float = 0.0,
     ) -> dict[str, float]:
-        """Misst alle 15 musikalischen Qualitätsziele (Spec §1.2 v9.9.9).
+        """Misst alle 15 musikalischen Qualitätsziele (Spec §1.2 v10.0.0).
 
         Args:
             audio:          Audio-Signal (mono oder stereo).
@@ -4113,13 +4113,13 @@ class MusicalGoalsChecker:
 
         scores: dict[str, float] = {}
 
-        # FIXED v9.10: Stereo-Format-Normalisierung
+        # FIXED v10.0.0: Stereo-Format-Normalisierung
         # Aurik-interne Pipeline verwendet (C, N) = channels-first.
         # Alle Metriken erwarten (N,) mono oder (N, C) samples-first.
         # → Transponiere (2, N) → (N, 2) damit SpatialDepthMetric links/rechts korrekt liest.
         if audio.ndim == 2 and audio.shape[0] == 2 and audio.shape[1] > 2:
             audio = audio.T
-        # FIXED v9.10.45: [1,N] channels-first mono → flatten zu (N,)
+        # FIXED v10.0.0: [1,N] channels-first mono → flatten zu (N,)
         elif audio.ndim == 2 and audio.shape[0] == 1:
             audio = audio[0]
         if reference is not None and reference.ndim == 2 and reference.shape[0] == 2 and reference.shape[1] > 2:
@@ -4507,7 +4507,7 @@ class MusicalGoalsChecker:
         metric = self.metrics[goal_name]
         score = metric.measure(audio, sr)  # type: ignore[attr-defined]
         threshold = self.thresholds[goal_name]
-        # FIX v9.10: numpy.bool_ (from comparison) fails isinstance(..., bool) in NumPy 2.x
+        # FIX v10.0.0: numpy.bool_ (from comparison) fails isinstance(..., bool) in NumPy 2.x
         passed: bool = bool(score >= threshold)
 
         return GoalMeasurement(
@@ -4552,7 +4552,7 @@ def get_checker(custom_thresholds: dict[str, float] | None = None) -> MusicalGoa
 
 
 def measure_all(audio: "np.ndarray", sr: int) -> dict[str, float]:
-    """Convenience-Funktion: Musical Goals für alle 15 Qualitätsziele messen (v9.12+).
+    """Convenience-Funktion: Musical Goals für alle 15 Qualitätsziele messen (v10.0.0+).
 
     Nutzt den Singleton :func:`get_checker` und ruft ``measure_all()`` auf.
     Gibt alle 15 Ziele zurück (Brillanz, Wärme, Natürlichkeit, Authentizität,

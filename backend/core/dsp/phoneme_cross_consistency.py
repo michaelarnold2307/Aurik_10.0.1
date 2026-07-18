@@ -1,5 +1,5 @@
 """
-Phoneme Cross-Consistency Monitor — Lücke 7 (v9.12.x)
+Phoneme Cross-Consistency Monitor — Lücke 7 (v10.0.0.x)
 ======================================================
 
 Stellt sicher, dass gleiche Phoneme (z.B. das „a" in Strophe 1 und Strophe 3)
@@ -25,7 +25,7 @@ Verwendung (Post-Processing-Hook in UV3):
     correction = monitor.get_correction_eq()  # Spektraler EQ-Term (optional)
 
 Author: Aurik Development Team
-Version: 1.0.0 (v9.12.x — Lücke 7)
+Version: 1.0.0 (v10.0.0.x — Lücke 7)
 """
 
 from __future__ import annotations

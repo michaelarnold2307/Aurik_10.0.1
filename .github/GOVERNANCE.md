@@ -1,8 +1,8 @@
-# Community-Governance — Aurik 9
+# Community-Governance — Aurik 10.0.8
 
 ## Projektstatus
 
-Aurik 9 ist ein Open-Source-Desktop-Projekt (Apache-2.0).
+Aurik 10.0.8 ist ein Open-Source-Desktop-Projekt (Apache-2.0).
 Der Hauptentwickler ist Michael Arnold. Externe Beiträge sind herzlich willkommen.
 
 ---
@@ -60,17 +60,17 @@ Fork → Feature-Branch → Pre-Commit läuft durch → Tests grün → PR öffn
 
 ## Plugin-API Versioning
 
-Aurik 9 verpflichtet sich zu **Plugin-API-Stabilität** innerhalb einer Hauptversion (9.x):
+Aurik 10.0.8 verpflichtet sich zu **Plugin-API-Stabilität** innerhalb einer Hauptversion (10.x):
 
 ```
-9.x.y  → PhaseInterface, RestorationResult, MusicalGoalsChecker API stabil
-10.0   → Breaking Changes erlaubt, Migrationsguide in CHANGELOG.md Pflicht
+10.x.y → PhaseInterface, RestorationResult, MusicalGoalsChecker API stabil
+11.0   → Breaking Changes erlaubt, Migrationsguide in CHANGELOG.md Pflicht
 ```
 
 **Deprecation-Policy:**
 
 1. Veraltete API: 2 Minor-Releases lang mit `DeprecationWarning`
-2. Dann: Entfernung erst in der nächsten Hauptversion (10.x)
+2. Dann: Entfernung erst in der nächsten Hauptversion (11.x)
 3. Deprecation-Hinweis immer in `CHANGELOG.md` und im Docstring
 
 ---
@@ -91,7 +91,7 @@ Aurik 9 verpflichtet sich zu **Plugin-API-Stabilität** innerhalb einer Hauptver
 
 ## Sponsoring & Finanzierung
 
-Aurik 9 ist kostenlos und Open Source. Freiwillige Spenden sind möglich:
+Aurik 10.0.8 ist kostenlos und Open Source. Freiwillige Spenden sind möglich:
 → [.github/FUNDING.yml](.github/FUNDING.yml)
 
 Gespendete Mittel fließen in:
@@ -102,4 +102,4 @@ Gespendete Mittel fließen in:
 
 ---
 
-_Stand: März 2026 — Aurik 9.10.51_
+_Stand: Juli 2026 — Aurik 10.0.8_

@@ -75,11 +75,13 @@ _TRANSIENT_THRESH_PERCENTILE = 75  # Frames über diesem Flux-Perzentil = Transi
 # Micro-Dynamic
 _TARGET_CV_MIN = 0.05  # Mindest-Variationskoeffizient (natural music)
 _TARGET_CV_MAX = 0.20  # Maximal-Variationskoeffizient (noise threshold)
-_MODULATION_STRENGTH = 0.42  # Stärke der re-injizierten Modulation [0–1] (v9.10.114: ↑0.25→0.42 — zu konservativ für über-denoisete Signale)
+_MODULATION_STRENGTH = (
+    0.42  # Stärke der re-injizierten Modulation [0–1] (v10.0.0: ↑0.25→0.42 — zu konservativ für über-denoisete Signale)
+)
 
 # Harmonic Reinforcement
 _HARM_BOOST_DB = (
-    2.5  # Max Anhebung der Obertöne in dB (v9.10.114: ↑1.0→2.5 — Oberton-Brillanz zu konservativ gegen iZotope RX11)
+    2.5  # Max Anhebung der Obertöne in dB (v10.0.0: ↑1.0→2.5 — Oberton-Brillanz zu konservativ gegen iZotope RX11)
 )
 _HARM_MAX_ORDER = 8  # Bis zum 8. Oberton
 _F0_FREQ_MAX = 2000  # Grundfrequenz-Suche nur bis 2000 Hz
@@ -125,8 +127,8 @@ MATERIAL_PROFILES: dict[str, MaterialProfile] = {
         name="vinyl",
         flux_smoothing_max=0.55,
         target_cv_min=0.07,
-        modulation_strength=0.30,  # v9.10.114: ↑0.20→0.30
-        harm_boost_db=1.8,  # v9.10.114: ↑0.8→1.8 — Vinyl-Obertöne zu schwach
+        modulation_strength=0.30,  # v10.0.0: ↑0.20→0.30
+        harm_boost_db=1.8,  # v10.0.0: ↑0.8→1.8 — Vinyl-Obertöne zu schwach
         ola_ms=25.0,
         description="Vinyl-Schallplatte: Wow/Flutter-Micro-Dynamics, Oberton-Boost",
     ),
@@ -134,8 +136,8 @@ MATERIAL_PROFILES: dict[str, MaterialProfile] = {
         name="tape",
         flux_smoothing_max=0.65,
         target_cv_min=0.04,
-        modulation_strength=0.24,  # v9.10.114: ↑0.14→0.24
-        harm_boost_db=1.5,  # v9.10.114: ↑0.6→1.5 — Tape-Sättigung stärker betonen
+        modulation_strength=0.24,  # v10.0.0: ↑0.14→0.24
+        harm_boost_db=1.5,  # v10.0.0: ↑0.6→1.5 — Tape-Sättigung stärker betonen
         ola_ms=15.0,
         description="Magnetband: Dropout-Robustheit, moderater Harmonic-Boost, Kompression-Aware",
     ),
@@ -143,8 +145,8 @@ MATERIAL_PROFILES: dict[str, MaterialProfile] = {
         name="shellac",
         flux_smoothing_max=0.60,
         target_cv_min=0.06,
-        modulation_strength=0.38,  # v9.10.114: ↑0.22→0.38 — Shellac braucht starke Modulation
-        harm_boost_db=2.8,  # v9.10.114: ↑1.2→2.8 — Shellac-Obertöne stark restaurieren
+        modulation_strength=0.38,  # v10.0.0: ↑0.22→0.38 — Shellac braucht starke Modulation
+        harm_boost_db=2.8,  # v10.0.0: ↑1.2→2.8 — Shellac-Obertöne stark restaurieren
         ola_ms=30.0,
         description="Schellack/78rpm: Bandbreitenbegrenzte Anhebung, starke Harmonics, lange Crossfades",
     ),
@@ -213,7 +215,7 @@ MATERIAL_PROFILES["cd"] = replace(MATERIAL_PROFILES["cd_digital"], name="cd")
 def map_panns_to_profile(panns_tags: dict[str, float]) -> str:
     """Mappt PANNs-Konfidenz-Tags auf einen MATERIAL_PROFILES-Schlüssel.
 
-    v9.13-B1: Ermöglicht automatische Materialerkennung aus PANNs-Tagging-
+    v10.0.0-B1: Ermöglicht automatische Materialerkennung aus PANNs-Tagging-
     Ergebnissen, ohne dass der Aufrufer manuell ein Material benennen muss.
 
     Args:
@@ -270,21 +272,23 @@ if "ExcellenceContext" not in globals():
         @property
         def needs_continuity_fix(self) -> bool:
             """Signalisiert Bedarf an Spectral-Continuity-Enhancement."""
-            return 20 < self.snr_estimate_db < 45 and self.transient_density < 0.40  # v9.15-C2: obere SNR-Grenze 45 dB
+            return (
+                20 < self.snr_estimate_db < 45 and self.transient_density < 0.40
+            )  # v10.0.0-C2: obere SNR-Grenze 45 dB
 
         @property
         def needs_micro_dynamics(self) -> bool:
             """Signalisiert Bedarf an Micro-Dynamic Re-injection."""
             return (
                 self.dynamic_cv < _TARGET_CV_MIN
-            )  # v9.12: SNR-Gate entfernt — Mikrodynamik-Injektion unabhängig von SNR
+            )  # v10.0.0: SNR-Gate entfernt — Mikrodynamik-Injektion unabhängig von SNR
 
         @property
         def needs_harmonic_boost(self) -> bool:
             """Signalisiert Bedarf an Harmonic Reinforcement."""
             return (
                 self.harmonicity < 0.60 and self.rms_db > -40
-            )  # v9.12: Schwelle ↑0.45→0.60 — mehr Signale erhalten Boost
+            )  # v10.0.0: Schwelle ↑0.45→0.60 — mehr Signale erhalten Boost
 
 
 if "ExcellenceResult" not in globals():
@@ -709,7 +713,7 @@ def _ola_crossfade_edges(audio: np.ndarray, sample_rate: int) -> tuple[np.ndarra
     if n < xfade_samples * 4:
         return audio, 0
 
-    t = np.linspace(0.0, np.pi, xfade_samples)  # v9.15-B1: echte Kosinusfade (Hanning)
+    t = np.linspace(0.0, np.pi, xfade_samples)  # v10.0.0-B1: echte Kosinusfade (Hanning)
     fade_in = 0.5 * (1.0 - np.cos(t))  # 0 → 1 (Hanning fade-in)
     fade_out = 0.5 * (1.0 + np.cos(t))  # 1 → 0 (Hanning fade-out)
 
@@ -830,7 +834,7 @@ class ExcellenceOptimizer:
                 if "harmonic_boost_db" in p:
                     self._harm_boost_db = float(p["harmonic_boost_db"])
                 if "noise_reduction_strength" in p:
-                    # v9.15-C1: Mapping auf modulation_strength, geclamppt auf [0, _MODULATION_STRENGTH]
+                    # v10.0.0-C1: Mapping auf modulation_strength, geclamppt auf [0, _MODULATION_STRENGTH]
                     self._modulation_strength = float(
                         np.clip(float(p["noise_reduction_strength"]) * 0.3, 0.0, _MODULATION_STRENGTH)
                     )
@@ -842,7 +846,7 @@ class ExcellenceOptimizer:
         except Exception as _gp_exc:
             logger.debug("GPParameterOptimizer nicht verfügbar: %s", _gp_exc)
 
-        # Optional: MERT-Analyse verbessert die Context-Felder (harmonicity)  # v9.15-C3: dynamic_cv korrigiert (MertAnalysis hat kein dynamic_cv-Feld)
+        # Optional: MERT-Analyse verbessert die Context-Felder (harmonicity)  # v10.0.0-C3: dynamic_cv korrigiert (MertAnalysis hat kein dynamic_cv-Feld)
         if self.use_mert and context is None:
             try:
                 from plugins.mert_plugin import get_loaded_mert_plugin, get_mert_plugin  # pylint: disable=import-outside-toplevel  # noqa: I001

@@ -1,10 +1,10 @@
 """
-Tests for Aurik 9.0 AI Framework
+Tests for Aurik 10.0.0 AI Framework
 =================================
 
 Comprehensive test suite for AI-based audio restoration & enhancement.
 
-Author: Aurik 9.0 Development Team
+Author: Aurik 10.0.0 Development Team
 Date: 15. Februar 2026
 """
 

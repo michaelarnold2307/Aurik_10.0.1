@@ -1,4 +1,4 @@
-# GitHub Labels Configuration for Aurik 9.0
+# GitHub Labels Configuration for Aurik 10.0.0
 
 This file documents the label structure used in the Aurik project for issue and PR management.
 

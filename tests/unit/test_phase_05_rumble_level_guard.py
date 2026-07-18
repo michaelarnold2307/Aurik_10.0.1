@@ -4,7 +4,7 @@ Regression-Test Phase 05 (Rumble Filter) — Loudness-Drift-Guard.
 Stellt sicher, dass die Rumble-Entfernung den musikalischen Pegel
 NICHT katastrophal schädigt.
 
-Bug-Hintergrund (v9.11.0):
+Bug-Hintergrund (v10.0.0):
     Der ursprüngliche Loudness-Guard hatte einen defekten Headroom-Guard:
         _headroom_05 = min(1.0, 0.95 / _peak99_05)
     → _headroom immer ≤ 1.0 → Makeup-Gain wurde NIE angewendet.

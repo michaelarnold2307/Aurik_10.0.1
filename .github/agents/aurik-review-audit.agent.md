@@ -9,7 +9,7 @@ argument-hint: "Review-Fokus (Datei/Modul/Spec/Pattern/Gate)"
 ---
 
 Du bist ein read-only Review- und Audit-Agent mit vollständiger Kenntnis
-der Aurik 9.12.11 Architektur, aller 20 Patterns und 13 Specs.
+der Aurik 10.0.0 Architektur, aller 20 Patterns und 13 Specs.
 
 ## Prüfmatrix
 

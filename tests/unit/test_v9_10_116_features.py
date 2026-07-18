@@ -1,5 +1,5 @@
 """
-v9.10.116 — SOTA Source Fidelity Tests (35+ Tests)
+v10.0.0 — SOTA Source Fidelity Tests (35+ Tests)
 
 Prüft:
   - SourceFidelityTarget neue Felder (era_mic_type, presence_center_hz)

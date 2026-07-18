@@ -114,10 +114,10 @@ class Exciter(PhaseInterface):
         },
         MaterialType.CASSETTE: {
             "low_mid": {"intensity": 0.18, "harmonics": "even", "saturation": "tube"},
-            "high_mid": {"intensity": 0.25, "harmonics": "mixed", "saturation": "soft"},  # v9.12.9: leicht reduziert
-            "high": {"intensity": 0.30, "harmonics": "odd", "saturation": "soft"},  # v9.12.9: BW-Ceiling 12 kHz
+            "high_mid": {"intensity": 0.25, "harmonics": "mixed", "saturation": "soft"},  # v10.0.0: leicht reduziert
+            "high": {"intensity": 0.30, "harmonics": "odd", "saturation": "soft"},  # v10.0.0: BW-Ceiling 12 kHz
             "mix": 0.28,
-        },  # v9.12.9: IEC 60094-1 — gleiche Capstan-Physik wie TAPE, HF konservativ
+        },  # v10.0.0: IEC 60094-1 — gleiche Capstan-Physik wie TAPE, HF konservativ
         MaterialType.CD_DIGITAL: {
             "low_mid": {"intensity": 0.10, "harmonics": "even", "saturation": "tube"},
             "high_mid": {"intensity": 0.15, "harmonics": "mixed", "saturation": "soft"},

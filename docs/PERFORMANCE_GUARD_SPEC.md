@@ -1,4 +1,4 @@
-# PerformanceGuard Specification - Aurik 9.x.x
+# PerformanceGuard Specification - Aurik 10.0.8
 
 **Version:** 1.0.0  
 **Status:** ✅ Production-Ready (Tested)  
@@ -8,7 +8,7 @@
 
 ## 1. Purpose
 
-The **PerformanceGuard** enforces Aurik 9.x.x's **3× RT limit** guarantee:
+The **PerformanceGuard** enforces Aurik 10.0.8's **32× RT limit** guarantee:
 - **Real-Time (RT) Factor:** Processing time / audio duration must be ≤3.0
 - **Adaptive Skipping:** Automatically skip low-priority phases if approaching limit
 - **Three Modes:** FAST (1.5× RT), BALANCED (2.4× RT), QUALITY (9× RT, no enforcement)

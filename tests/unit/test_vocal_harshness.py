@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-"""Tests for VOCAL_HARSHNESS DefectType — detection, routing, and remediation (v9.10.77).
+"""Tests for VOCAL_HARSHNESS DefectType — detection, routing, and remediation (v10.0.0).
 
 Validates:
 1. DefectType.VOCAL_HARSHNESS exists and is properly integrated
@@ -227,7 +227,7 @@ class TestVocalHarshnessReasoning:
         assert "vocal_harshness" in CAUSE_TO_PHASES
 
     def test_mapping_excludes_phase_42(self):
-        """§0a BUG-FIX v9.12.0: phase_42 darf nie in CAUSE_TO_PHASES stehen."""
+        """§0a BUG-FIX v10.0.0: phase_42 darf nie in CAUSE_TO_PHASES stehen."""
         from backend.core.causal_defect_reasoner import CAUSE_TO_PHASES
 
         phases = CAUSE_TO_PHASES["vocal_harshness"]
@@ -246,7 +246,7 @@ class TestVocalHarshnessReasoning:
         assert "phase_23_spectral_repair" in phases
 
     def test_reasoner_does_not_recommend_phase42_for_harshness(self):
-        """§0a BUG-FIX v9.12.0: CausalDefectReasoner darf phase_42 nie vorschlagen."""
+        """§0a BUG-FIX v10.0.0: CausalDefectReasoner darf phase_42 nie vorschlagen."""
         from backend.core.causal_defect_reasoner import CausalDefectReasoner
 
         reasoner = CausalDefectReasoner()

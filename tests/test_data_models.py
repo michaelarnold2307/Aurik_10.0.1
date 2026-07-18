@@ -212,7 +212,7 @@ def test_audio_file_multi_channel_metadata_only():
     Test AudioFile data model with multi-channel metadata (5.1 surround)
 
     NOTE: This tests the DATA MODEL only (metadata storage).
-    Aurik 9.0 does NOT support multichannel PROCESSING.
+    Aurik 10.0.0 does NOT support multichannel PROCESSING.
     This test validates that metadata for multichannel files can be stored,
     but such files will be REJECTED by UnifiedRestorerV2.restore().
     """

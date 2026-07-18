@@ -1,4 +1,4 @@
-# Aurik 9 — Spec-Änderungshistorie (historische Entwicklung)
+# Aurik 10.0.8 — Spec-Änderungshistorie (historische Entwicklung)
 
 > Diese Datei enthält die vollständige Changelog-Historie der
 > `copilot-instructions.md`-Spezifikation sowie Code-Releases. Sie wird nicht zur
@@ -7,13 +7,13 @@
 >
 > Historische Versions- und Metrikangaben in dieser Datei sind bewusst als Zeitstände erhalten.
 >
-> Stand: Juli 2026 — Aurik 9.20.3
+> Stand: Juli 2026 — Aurik 10.0.0
 
 ---
 
-## v9.20.3 (2. Juli 2026) — UI-Livezaehler und Fortschrittsreserve
+## v10.0.0 (2. Juli 2026) — UI-Livezaehler und Fortschrittsreserve
 
-- **Frontend-Version synchronisiert**: Paket- und sichtbare App-Version auf `9.20.3` angehoben;
+- **Frontend-Version synchronisiert**: Paket- und sichtbare App-Version auf `10.0.8` angehoben;
   Frontend-Titel/Splash/About beziehen diese Version weiterhin aus `Aurik10.__version__`.
 - **Tonaussetzer-Livezaehler**: Dropout-Aliase (`dropouts`, `DROPOUTS`, `gap`, `gaps`,
   `tape_dropout`) werden auf `dropout` normalisiert. Lokalisierte Dropout-Marker werden waehrend
@@ -27,7 +27,7 @@
 - **Normative Gates**: `test_modern_window_gui_contract.py` sichert Dropout-Aliase,
   timelinebasierte Chip-Zaehlung und Fortschrittsreserve ab.
 
-## v9.15.8 (2. Juli 2026) — CD-Rauschboden für analoge Exportziele
+## v10.0.0 (2. Juli 2026) — CD-Rauschboden für analoge Exportziele
 
 - **Rauschboden-Doktrin aktualisiert**: Analoge Tonträger (`shellac`, `wax_cylinder`,
   `lacquer_disc`, `wire_recording`, `vinyl`, `tape`, `reel_tape`, `cassette`) bekommen
@@ -42,7 +42,7 @@
 - **Specs synchronisiert**: §0a/V19/V21 und Spec 07 §8.2 beschreiben CD-ähnlichen
   Export-Rauschboden als Ziel für alle analogen Tonträger.
 
-## v9.15.7 (4. Juni 2026) — InnovationSuperiorityOrchestrator (Disziplin-Parallelisierung)
+## v10.0.0 (4. Juni 2026) — InnovationSuperiorityOrchestrator (Disziplin-Parallelisierung)
 
 - **Neues Kernmodul**: `backend/core/innovation_superiority_orchestrator.py` fuehrt
   einen disziplinuebergreifenden Runtime-Orchestrator ein (Defektintelligenz,
@@ -59,7 +59,7 @@
   `tests/unit/test_innovation_superiority_orchestrator.py`; UV3- und
   Reliability-Slices weiterhin gruen.
 
-## v9.15.3 (4. Juni 2026) — PMGG Telemetry-Alignment + Coalition-Aware Rescheduler
+## v10.0.0 (4. Juni 2026) — PMGG Telemetry-Alignment + Coalition-Aware Rescheduler
 
 - **PMGG-Rekonstruktions-Telemetrie normiert**: Die Spezifikation dokumentiert jetzt
   `pmgg_reconstruction_threshold_multiplier` und die zugehörigen Begleitfelder als
@@ -76,7 +76,7 @@
 - **Tests**: Rescheduler-Unit-Suite und PMGG-Rekonstruktionssuiten decken die neuen
   Metadaten- und Priorisierungsregeln ab.
 
-## v9.15.4 (4. Juni 2026) — Coalition-Aware RestorationMemory Feedback Loop
+## v10.0.0 (4. Juni 2026) — Coalition-Aware RestorationMemory Feedback Loop
 
 - **UV3 prior propagation**: Geladene RestorationMemory-Priors werden zusätzlich in
   `_restoration_context["restoration_memory_prior"]` gespiegelt, damit Downstream-Module und
@@ -90,7 +90,7 @@
 - **Tests**: `tests/unit/test_gp_parameter_optimizer.py` enthält den neuen Regressionstest
   `test_85_coalition_learning_factor_increases_memory_blend`; UV3- und GP-Slices grün.
 
-## v9.15.5 (4. Juni 2026) — Runtime-Metric-Reliability Graph im Closed Loop
+## v10.0.0 (4. Juni 2026) — Runtime-Metric-Reliability Graph im Closed Loop
 
 - **Neues Kernmodul**: `backend/core/metric_reliability_graph.py` führt einen
   kontextsensitiven Reliability-Graph für Goal-Proxys ein (Modus/Material/Era/TCCI-Bucket,
@@ -104,7 +104,7 @@
   over-/under-conservative werden, ohne harte Gates zu überschreiben.
 - **Tests**: Neue Unit-Suite `tests/unit/test_metric_reliability_graph.py`.
 
-## v9.15.6 (4. Juni 2026) — Adaptive Cross-Run Blend Weights
+## v10.0.0 (4. Juni 2026) — Adaptive Cross-Run Blend Weights
 
 - **Gatekeeper-Ausbaustufe**: Runtime-Reliability wird nicht mehr mit fixen Gewichten
   gemischt. `MetricReliabilityGraph.get_blend_weights(...)` liefert jetzt
@@ -116,7 +116,7 @@
 - **Tests**: `tests/unit/test_metric_reliability_graph.py` enthält zusätzliche
   Validierung für die support-abhängige Gewichtsverschiebung.
 
-## v9.15.2 (4. Juni 2026) — PMGG Localized-Counterfactual Confidence Gate
+## v10.0.0 (4. Juni 2026) — PMGG Localized-Counterfactual Confidence Gate
 
 - **PMGG localized reconstruction confidence**: `backend/core/per_phase_musical_goals_gate.py`
   ergänzt `_assess_reconstruction_localized_confidence(...)` für rekonstruktive
@@ -141,9 +141,9 @@
   `tests/unit/test_pmgg_reconstruction_confidence.py` (Konfidenz-Logik +
   Metadatenpropagation).
 
-## v9.20.3 (14. Mai 2026) — §0p Vocal-Supremacy-Invarianten vollständig implementiert
+## v10.0.0 (14. Mai 2026) — §0p Vocal-Supremacy-Invarianten vollständig implementiert
 
-## v9.12.10 (4. Juni 2026) — PMGG Reconstruction-Collateral-Guard + Phase-01 Stereo-Lokalität
+## v10.0.0 (4. Juni 2026) — PMGG Reconstruction-Collateral-Guard + Phase-01 Stereo-Lokalität
 
 - **PMGG rekonstruktive Kollateralprüfung**: `backend/core/per_phase_musical_goals_gate.py` bewertet
   `phase_24_dropout_repair` und `phase_55_diffusion_inpainting` nicht mehr ausschließlich im defektzentrierten
@@ -165,10 +165,10 @@
 - **§0p Formant-Integritäts-Wächter**: Post-Phase Formant-Guard für `_FORMANT_GUARD_PHASES`
   (phase_03/20/29/42/49): LPC F1/F2-Verifikation pre/post; Überschreitung > 2 dB → sofortiger
   Rollback auf Phase-Input.
-- **phase_55 HNR-Blend (§0p v9.12.6)**: `phase_55_diffusion_inpainting` zu `_NR_PHASES_HNR`
+- **phase_55 HNR-Blend (§0p v10.0.0)**: `phase_55_diffusion_inpainting` zu `_NR_PHASES_HNR`
   hinzugefügt — Diffusions-Inpainting kann Stimmharmonik nicht mehr ohne ΔHNR-Guard halluzinieren.
 
-## v9.12.9 (21. Mai 2026) — Strict-Conflict: Psychoakustische Severity-Orchestrierung + Telemetrie-Kohärenz
+## v10.0.0 (21. Mai 2026) — Strict-Conflict: Psychoakustische Severity-Orchestrierung + Telemetrie-Kohärenz
 
 - **Tape-Spezialdefekte produktiv verdrahtet (SOTA-Lückenschluss)**:
   - Neuer DefectType `SCRAPE_FLUTTER` inkl. materialadaptiver Scanner-Thresholds, Full-Audio-Detektion,
@@ -219,7 +219,7 @@
   - Pyright auf Kernpfaden: **0 Fehler**
   - Snyk (`backend/core`): **issueCount=0**
 
-## v9.12.7 (14. Mai 2026) — Musical-Goals-Metriken: 6 Metadaten-Propagierungslücken + Snyk-Sicherheitsfixes
+## v10.0.0 (14. Mai 2026) — Musical-Goals-Metriken: 6 Metadaten-Propagierungslücken + Snyk-Sicherheitsfixes
 
 - **BrillanzMetric**: Material-adaptive HF-Crest-Formel (tape/cassette offset=0.10/divisor=1.20;
   reel_tape offset=0.05/divisor=1.40); Ceilings rekalibriert (tape 0.42→0.78, reel_tape 0.52→0.85).
@@ -231,31 +231,31 @@
 - **Snyk-Sicherheitsfixes (OWASP)**: torch 2.2.2→2.7.0 (CVE-2025-32434), setuptools≥70.3.0
   (CVE-2024-6345), pillow≥11.0.0, sympy≥1.13.1,<1.14.0, recharts ^3.8.0.
 
-## v9.12.6 (Mai 2026) — Musical-Goals-Metriken: Material-adaptive Böden + Tape-Ceiling-Korrektur
+## v10.0.0 (Mai 2026) — Musical-Goals-Metriken: Material-adaptive Böden + Tape-Ceiling-Korrektur
 
 - 4 systematische Kalibrierungsfehler in Musical-Goals-Metriken behoben.
 - Material-adaptive Böden für Shellac (~0.62), Vinyl (~0.72), CD (~0.82/0.90).
 - Tape-Ceiling-Korrektur: korrekte Formel + Boden-Kalibrierung für reel_tape und cassette.
 
-## v9.12.5 (Mai 2026) — Perceptual-Quality-Bugfixes: Echo + Kratzig + Pegelexplosion
+## v10.0.0 (Mai 2026) — Perceptual-Quality-Bugfixes: Echo + Kratzig + Pegelexplosion
 
 - 3 perceptual-quality Bugfixes: Echo-Artefakte, Kratzig-Detektor-False-Positives,
   Pegelexplosion in leisen Zonen behoben.
 
-## v9.12.4 (Mai 2026) — BrillanzMetric-Offset-Rekalibrierung + Noise-Floor-Test-Fix
+## v10.0.0 (Mai 2026) — BrillanzMetric-Offset-Rekalibrierung + Noise-Floor-Test-Fix
 
 - BrillanzMetric-Offset-Rekalibrierung für konsistente Scores über Materialtypen.
 - Noise-Floor-Test-Fix für deterministisches Testergebnis.
 
-## v9.12.3 (Mai 2026) — BrillanzMetric + TransparenzMetric Sparse-Signal-Fixes
+## v10.0.0 (Mai 2026) — BrillanzMetric + TransparenzMetric Sparse-Signal-Fixes
 
 - Sparse-Signal-Fixes: verhindern Score-Kollaps bei armütigem Spektrum.
 
-## v9.12.2 (Mai 2026) — HPSS-Kernel-Swap-Fix + AMRB-LUFS-Root-Cause
+## v10.0.0 (Mai 2026) — HPSS-Kernel-Swap-Fix + AMRB-LUFS-Root-Cause
 
 - HPSS-Kernel-Swap rückkorrigiert; AMRB LUFS Root Cause identifiziert und behoben.
 
-## v9.12.1 (Mai 2026) — Vocal-Supremacy + VocalFocusAnalyzer + §0p
+## v10.0.0 (Mai 2026) — Vocal-Supremacy + VocalFocusAnalyzer + §0p
 
 - **Neues Kernmodul `VocalFocusAnalyzer`**: `VocalRegisterDetector`, `FrissonCandidateDetector`,
   LPC-FormantTracker, Passaggio-Detektion — injiziert `vfa_result` in `_restoration_context`.
@@ -266,45 +266,45 @@
 - **Spec-Updates**: pipeline.instructions.md, dsp.instructions.md, phases.instructions.md,
   musical_goals.instructions.md — alle §0p-Regeln normativ ergänzt.
 
-## v9.11.56 (Apr 2026) — §2.51a Stereo-Hörsicherheitsprofil
+## v10.0.0 (Apr 2026) — §2.51a Stereo-Hörsicherheitsprofil
 
 - Dreistufiges Stereo-Guardrail-Profil: Hard-Fail (Delay > 1.0 ms, Imbalance > 6 dB,
   True-Peak > -1.0 dBTP), Warnstufe, Zielwerte.
 
-## v9.11.55 (Apr 2026) — §2.45a Cumulative-Guard Decoupling + §2.30b ADMM Wall-Time
+## v10.0.0 (Apr 2026) — §2.45a Cumulative-Guard Decoupling + §2.30b ADMM Wall-Time
 
 - `_cum_rms_reference_audio` immer initialisiert (unabhängig von AFG-Singleton) —
   verhindert unsichtbar deaktivierten Pegelschutz bei AFG-Init-Fehler.
 - ADMM Wall-Time Fixes in phase_23.
 
-## v9.11.52 (Apr 2026) — §09.2 Adaptive Goal Thresholds → PMGG Propagation
+## v10.0.0 (Apr 2026) — §09.2 Adaptive Goal Thresholds → PMGG Propagation
 
 - Ära-adaptive Schwellwerte aus `calibration_matrix` propagieren korrekt in PMGG.
 
-## v9.11.25 (Apr 2026) — AMD GPU: RDNA4 + vollständige APU-Abdeckung
+## v10.0.0 (Apr 2026) — AMD GPU: RDNA4 + vollständige APU-Abdeckung
 
 - AMD GPU Mixed-Mode: RDNA4-Support, APU-Tier-Erkennung, DirectML (Windows) + ROCm (Linux).
 
-## v9.11.20 (Apr 2026) — Globaler Quality-First-Schalter + 64-Phasen-Audit
+## v10.0.0 (Apr 2026) — Globaler Quality-First-Schalter + 68-Phasen-Audit
 
 - `UV3._profiled_phase_call()` injiziert `quality_first_unleashed=True` global in
-  `quality`/`maximum`/studio-Modi — alle 64 Phasen konsistent auf Quality-First-Policy.
-- Neuer 64-Phasen-Policy-Test: `test_quality_first_policy_64_phase_audit.py`.
+  `quality`/`maximum`/studio-Modi — alle 68 Phasen konsistent auf Quality-First-Policy.
+- Neuer 68-Phasen-Policy-Test: `test_quality_first_policy_68_phase_audit.py`.
 
-## v9.11.1–19 (Apr 2026) — Quality-First, PLM-Guards, Peak-Guard, Stereo-Fixes
+## v10.0.0–19 (Apr 2026) — Quality-First, PLM-Guards, Peak-Guard, Stereo-Fixes
 
-- v9.11.19: Quality-First Zeitgates über phase_06/12/19/42/49 gehärtet.
-- v9.11.18: AudioSR-Watchdog in phase_06.
-- v9.11.22–24: Peak-Guard Conformity + Wide-Stereo-Guard phase_13/14 (R11 UAT Fix).
-- v9.11.27–39: PLM set_active Guards für alle schweren ML-Plugins (CREPE, SGMSE+, AudioSR,
+- v10.0.0: Quality-First Zeitgates über phase_06/12/19/42/49 gehärtet.
+- v10.0.0: AudioSR-Watchdog in phase_06.
+- v10.0.0–24: Peak-Guard Conformity + Wide-Stereo-Guard phase_13/14 (R11 UAT Fix).
+- v10.0.0–39: PLM set_active Guards für alle schweren ML-Plugins (CREPE, SGMSE+, AudioSR,
   DiffWave, MIIPHER, FCPE, Vocos, BigVGAN, ResembleEnhance, HiFiGAN, BanquetVinyl u.a.).
-- v9.11.28: Stereo-Slicing-Bug + Ketten-Pflichtphasen + corrcoef NaN-Guard.
+- v10.0.0: Stereo-Slicing-Bug + Ketten-Pflichtphasen + corrcoef NaN-Guard.
 
-> Vollständige Details zu v9.11.1–19 und allen Patch-Releases: `CHANGELOG.md`
+> Vollständige Details zu v10.0.0–19 und allen Patch-Releases: `CHANGELOG.md`
 
 ---
 
-## v9.10.124 (7. April 2026) — Deep-Transfer-Chain-Nachschärfung (3+/4+)
+## v10.0.0 (7. April 2026) — Deep-Transfer-Chain-Nachschärfung (3+/4+)
 
 - **[RELEASE_MUST] §2.46a Deep-Transfer-Chain-Pflicht — NEU** in Slim Core:
   Importsongs mit 3+ Tonträgerstufen müssen vollständig modelliert werden; keine
@@ -326,7 +326,7 @@
 - **Betroffene Dateien**: `.github/copilot-instructions.md`,
   `.github/specs/05_material_system.md`.
 
-### v9.10.124 Nachtrag — Teststabilisierung Audit-Trail (7. April 2026)
+### v10.0.0 Nachtrag — Teststabilisierung Audit-Trail (7. April 2026)
 
 - Integrationstest für Source-Fidelity-Audit-Trail auf deterministischen,
   zeitsicheren Datenfluss fokusiert (heavy Runtime-Pfade im Testkontext gestubbt),
@@ -335,7 +335,7 @@
   `source_fidelity_transfer_chain`, `source_fidelity_generation_count`,
   `source_fidelity_hf_loss_db`.
 
-## v9.10.123 — instructions_version 6.2 (7. April 2026) — Klangwahrheits-Tiefenrevision
+## v10.0.0 — instructions_version 6.2 (7. April 2026) — Klangwahrheits-Tiefenrevision
 
 - **instructions_version**: 6.1 → **6.2** — Klangwahrheits-Tiefenrevision
 - **§0 Oberstes Prinzip — reformuliert**: „Originale Performance hören" statt „besser klingen
@@ -367,7 +367,7 @@
   pipeline-debug SKILL, quality-benchmark SKILL.
 - Keine Code-Änderungen. Alle Tests unverändert.
 
-### v9.10.123 Nachtrag 2 — Referenz-Paradoxon, Interaktions-Guard, Artefakt-Gate (6. April 2026)
+### v10.0.0 Nachtrag 2 — Referenz-Paradoxon, Interaktions-Guard, Artefakt-Gate (6. April 2026)
 
 - **§0a Rauschboden**: Nicht nur **Niveau** sondern auch **Textur** des Restrauschens muss dem
   originalen Trägerprofil entsprechen. „Kein weißes Rauschen nach Vinyl-Denoising."
@@ -397,7 +397,7 @@
   SKILL, new-phase SKILL.
 - Keine Code-Änderungen. Alle Tests unverändert.
 
-### v9.10.123 Nachtrag — Adaptive-Intelligence-Erweiterung (6. April 2026)
+### v10.0.0 Nachtrag — Adaptive-Intelligence-Erweiterung (6. April 2026)
 
 - **§2.47 Adaptive-Intelligence-Prinzip — NEU** (Slim Core + Spec 02): Übergeordnetes Prinzip,
   das die Einzelmechanismen (Material-Erkennung, Ära, Genre, Restorability, Defektanalyse,
@@ -424,7 +424,7 @@
   SKILL, ml-plugin SKILL.
 - Keine Code-Änderungen. Alle Tests unverändert.
 
-## v9.10.122 — instructions_version 6.1 (6. April 2026) — Klangprinzipien-Revision
+## v10.0.0 — instructions_version 6.1 (6. April 2026) — Klangprinzipien-Revision
 
 - **instructions_version**: 6.0 → **6.1** — Klangprinzipien-Revision
 - **§0 Oberstes Prinzip — Klangwahrheit**: Neu in Slim Core. Drei hierarchische Leitprinzipien
@@ -446,7 +446,7 @@
   mit Modus-Differenzierung für Restoration vs. Studio 2026.
 - Keine Code-Änderungen. Alle Tests unverändert.
 
-## v9.10.121 — instructions_version 6.0 (6. April 2026) — Skills-Architektur
+## v10.0.0 — instructions_version 6.0 (6. April 2026) — Skills-Architektur
 
 - **instructions_version**: 5.0 → **6.0** — Skills-Architektur
 - **copilot-instructions.md**: Monolithische 890-Zeilen-Datei → **171-Zeilen Slim Core**.
@@ -465,29 +465,29 @@
 - **Backup**: `copilot-instructions-v5-full.md` enthält die vollständige v5.0-Version.
 - Keine Code-Änderungen. Alle 8 Specs unverändert. Tests unverändert.
 
-## v9.10.121 (6. April 2026) — Spec-Sync: instructions_version 4.2 → 5.0
+## v10.0.0 (6. April 2026) — Spec-Sync: instructions_version 4.2 → 5.0
 
 - **instructions_version**: 4.2 → **5.0**
-- **copilot-instructions.md**: Header auf v9.10.121 aktualisiert. Neue §-Nummern:
-  - §2.41 Denker-Vollkontext — Material-adaptive DSP-Reparatur (v9.10.117)
-  - §2.42 SourceFidelityReconstructor — Generationsverlust-Kompensation (v9.10.115–116)
-  - §2.43 Phase-Preserved Wet/Dry-Blend (v9.10.118)
-  - §9.7.15 Musical-Goals-Metriken-Recalibration (v9.10.120)
-  - Weitere Fixes v9.10.113–121 (Phase 09/29/40/42/55, HPSS, ExcellenceOptimizer, MDEM, EmotionalArc, OMLSA, De-Esser, Phase 12, load_audio_file)
+- **copilot-instructions.md**: Header auf v10.0.0 aktualisiert. Neue §-Nummern:
+  - §2.41 Denker-Vollkontext — Material-adaptive DSP-Reparatur (v10.0.0)
+  - §2.42 SourceFidelityReconstructor — Generationsverlust-Kompensation (v10.0.0–116)
+  - §2.43 Phase-Preserved Wet/Dry-Blend (v10.0.0)
+  - §9.7.15 Musical-Goals-Metriken-Recalibration (v10.0.0)
+  - Weitere Fixes v10.0.0–121 (Phase 09/29/40/42/55, HPSS, ExcellenceOptimizer, MDEM, EmotionalArc, OMLSA, De-Esser, Phase 12, load_audio_file)
 - **Spec 03**: `SourceFidelityReconstructor`, `PerceptualSalienceEstimator`, `MediumDetector` in §2.1 Pflicht-Kernmodule aufgenommen. HPSS Kernel 31→17/13 aktualisiert.
 - **Spec 06**: Phase 06/38/39 mit SourceFidelity-Integration, Phase 55 adaptiver AR-Order.
 - **Spec 08**: A/B-Sync-Loop + Queue-Drag-&-Drop, Plugin-Anzahl 51. Keyboard-Shortcuts erweitert.
 - **pyproject.toml**: Version 9.10.103 → 9.10.121 synchronisiert.
 - Testzahl: ~9990+ `def test_`-Funktionen in 375 Testdateien.
 
-## v9.10.104 (4. April 2026) — Defect-Locations-Completeness (Core uncapped)
+## v10.0.0 (4. April 2026) — Defect-Locations-Completeness (Core uncapped)
 
 - **instructions_version**: 4.1 -> **4.2**
 - **copilot-instructions.md**: Defect-Locations-Flow um normative Completeness-Invariante ergänzt: harte Caps auf `defect_locations` im Analyse-/Reparaturpfad verboten; UI-Dichte-Reduktion nur als Anzeige erlaubt.
 - **Spec 06** (`.github/specs/06_phases_system.md`): `[RELEASE_MUST] Location-Completeness-Invariante` ergänzt (Core uncapped, vollständige Eventlisten auch bei hoher Dichte, keine UI-Rückwirkung auf Routingdaten).
 - **Spec 07** (`.github/specs/07_quality_and_tests.md`): Pflicht-Testfall ergänzt: synthetische Signale mit >50 non-stationary Events müssen >50 `locations` liefern; feste Core-Caps (50/100/256) gelten als Regression.
 
-## v9.10.103 (4. April 2026) — Genre-Phase-2: 17-Genre-Härtung + Disambiguation-Gates
+## v10.0.0 (4. April 2026) — Genre-Phase-2: 17-Genre-Härtung + Disambiguation-Gates
 
 - **instructions_version**: 4.0 -> **4.1**
 - **copilot-instructions.md**: Neuer Abschnitt `§2.19 Genre-Classifier-Härtung (17 Genres, [RELEASE_MUST])`.
@@ -495,7 +495,7 @@
 - **Bindende Disambiguation-Gates**: `Funk` (warmes Centroid-Fenster), `Latin` (BPM-kontextierter Centroid-Bonus + Mindest-Centroid), `Electronic` (Synth-Centroid-Gate), `Hip-Hop` (Vokal/Sample-Centroid-Gate), `Reggae` (Tempo-Gate), `Folk` (DR-Guard), `Jazz` (HSI-Guard).
 - **Testhärtung**: Unit-Test-Isolierung dokumentiert (nicht getestete neue `_score_*`-Methoden auf Neutralwert patchen), um Open-Set-Margin-Kollapse durch Feature-Artefakte zu verhindern.
 
-## v9.10.102 (3. April 2026) — Genre-Phase-1: Family-Stage + Top-k + Open-Set + Lyrics-Fusion
+## v10.0.0 (3. April 2026) — Genre-Phase-1: Family-Stage + Top-k + Open-Set + Lyrics-Fusion
 
 - **Code** (`backend/core/genre_classifier.py`):
   - `SchlagerClassificationResult` erweitert: `genre_family`, `genre_family_confidence`, `top_genres`, `open_set_unknown`
@@ -505,70 +505,70 @@
 - **UI** (`Aurik10/ui/modern_window.py`): Tooltip zeigt Genre-Familie, Top-k, Open-Set-Status; Genre-Badge mit Ampelpunkt (Grün ≥0.70 / Gelb 0.50–0.69 / Rot < 0.50)
 - **Tests**: 3 neue Tests für Family/Top-k/Open-Set
 
-## v9.10.101 (3. April 2026) — Dokumentations-Sync: Phasen 01–64 + Kausal-Mapping
+## v10.0.0 (3. April 2026) — Dokumentations-Sync: Phasen 01–64 + Kausal-Mapping
 
 - **Spec 06** (`.github/specs/06_phases_system.md`): Phasenliste auf **01–64** aktualisiert; `phase_57` (Print-Through) / `phase_58` (Lyrics) korrekt zugeordnet; Phase 59–64 ergänzt; `CAUSE_TO_PHASES` um neue Defektursachen (modulation_noise, inner_groove_distortion, groove_echo, crosstalk, intermodulation_distortion, tape_splice_artifact) erweitert
 - **Spec 02**: `processing_sr=48000` auf Phasen 01–64 aktualisiert
 - **Spec 08**: `phase_output_guard`-Scope auf 01–64 aktualisiert
 - **copilot-instructions.md**: UV3-Kernreihenfolge und SR-Regeln auf 64 Phasen vereinheitlicht
 
-## v9.10.100 (3. April 2026) — Normative Nachschärfung: Tonträgerkette + Lyrics-Produktivpfad
+## v10.0.0 (3. April 2026) — Normative Nachschärfung: Tonträgerkette + Lyrics-Produktivpfad
 
 - **copilot-instructions.md**: Autoritatives Produktionsmodul auf `backend/core/lyrics_guided_enhancement.py` festgelegt; Docker-/MFA-Altpfade aus `backend/lyrics_guided/` als nicht-normativ markiert
 - **Datenschutz-Guard**: Unzulässige Persistenz von Worttext/Transkript in Logs, metadata, Checkpoints explizit verboten
 - `_carrier_bg`-Pflicht-Invariante: `get_medium_detector().detect()` statt `medium_classifier.classify_medium()` (file_ext-Kontext)
 
-## v9.10.99 (3. April 2026) — EmotionalitaetMetric MERT-Blend + WaermeMetric-Guard + AMRB-Codec-Kalibrierung
+## v10.0.0 (3. April 2026) — EmotionalitaetMetric MERT-Blend + WaermeMetric-Guard + AMRB-Codec-Kalibrierung
 
 - **Code** (`backend/core/musical_goals/musical_goals_metrics.py`): `EmotionalitaetMetric` erhält MERT-Arousal-Blend; `WaermeMetric` mit reverb-invariantem Sub-Band-Verhältnis (§9.7.14 Nachfolge)
 - **AMRB-05 Pre-Echo**: Spec 01 Baselines für CODEC-Szenarien kalibriert
 
-## v9.10.98 (3. April 2026) — Codec-Reparatur: Apollo DSP-Fallback + Phase-23-Integration + AMRB-05-Pre-Echo
+## v10.0.0 (3. April 2026) — Codec-Reparatur: Apollo DSP-Fallback + Phase-23-Integration + AMRB-05-Pre-Echo
 
 - **Phase 23**: AudioSR-Inpainting erhält expliziten Fallback-Pfad über Apollo-Plugin für Codec-Artefakte
 - **Apollo DSP-Fallback**: Strukturierter Fallback in `plugins/apollo_plugin.py` für OOM-Szenarien
 - **AMRB-05**: Pre-Echo-Szenario Baseline-Kalibrierung für `mp3_low`/`aac`
 
-## v9.10.97 (3. April 2026) — AMRB-Kalibrierung SHELLAC/CODEC/VOCAL + P4-AudioLDM2-Cascade
+## v10.0.0 (3. April 2026) — AMRB-Kalibrierung SHELLAC/CODEC/VOCAL + P4-AudioLDM2-Cascade
 
 - **AMRB**: Shellac/Codec/Vocal-Szenarien (AMRB-01, 05, 09) mit aktualisierten Baselines kalibriert
 - **AudioLDM2-Kaskade**: P4-Inpainting-Fallback für AMRB-05-Pre-Echo-Reparatur dokumentiert
 
-## v9.10.96 (30. März 2026) — §2.29c Restorative-Phase-Baseline-Capping + PMGG Exclusion-Fixes
+## v10.0.0 (30. März 2026) — §2.29c Restorative-Phase-Baseline-Capping + PMGG Exclusion-Fixes
 
 - **instructions_version**: 4.0
 - **§2.29c** (neu): Defekt-inflationierte Baselines werden gedeckelt (`_RESTORATIVE_PHASES` + `_CANONICAL_THRESHOLDS` + `effective_scores_before`)
 - **§2.31b Material-adaptive PHASE_GOAL_EXCLUSIONS**: `cd_digital`/`dat` → phase_03/phase_29 auf `{"natuerlichkeit", "artikulation"}` reduziert; brillanz/transparenz/waerme (§9.7.12/13/14 SNR-robust) aus allen Materialausschlüssen entfernt
 - **Tests**: 122 PMGG-Tests in `test_per_phase_musical_goals_gate.py`
 
-## v9.10.95 (30. März 2026) — §9.7.11 ext: tonal_center in phase_03/phase_29 PMGG-Exclusions
+## v10.0.0 (30. März 2026) — §9.7.11 ext: tonal_center in phase_03/phase_29 PMGG-Exclusions
 
 - `tonal_center` und `timbre_authentizitaet` zu phase_03/phase_29 PHASE_GOAL_EXCLUSIONS hinzugefügt (shaped NR → K-S volatile + Centroid-CV-Disturbance)
 
-## v9.10.94 (30. März 2026) — §2.31a Iterative Mid-Pipeline-Kalibrierung
+## v10.0.0 (30. März 2026) — §2.31a Iterative Mid-Pipeline-Kalibrierung
 
 - `_build_song_calibration_profile()` kann während der Phasenkette iterativ aktualisiert werden; Kalib.-Profil-Invalidierung bei starken Defektänderungen
 
-## v9.10.93 (30. März 2026) — §9.7.11 K-S + TonalCenterMetric aus _PRECISE_METRICS + K-S Hanning-Fix
+## v10.0.0 (30. März 2026) — §9.7.11 K-S + TonalCenterMetric aus _PRECISE_METRICS + K-S Hanning-Fix
 
 - `TonalCenterMetric` aus `_PRECISE_METRICS` entfernt; Krumhansl-Schmuckler-KDE mit korrektem Hanning-Window implementiert
 
-## v9.10.91 (30. März 2026) — PMGG tonal_center §9.7.11 Krumhansl-Schmuckler-Proxy
+## v10.0.0 (30. März 2026) — PMGG tonal_center §9.7.11 Krumhansl-Schmuckler-Proxy
 
 - **instructions_version**: 3.9 → **4.0**
 - `tonal_center`-Proxy auf Krumhansl-Schmuckler-Key-Detection umgestellt (SNR-invariant); alle früheren tonal_center-Exclusions für phase_02/03/04/08/18/29/49 entfernt
 
-## v9.10.89 (30. März 2026) — PMGG phase_20/phase_23 Exclusions + phase_29 analog timbre
+## v10.0.0 (30. März 2026) — PMGG phase_20/phase_23 Exclusions + phase_29 analog timbre
 
 - phase_20: `{"authentizitaet", "natuerlichkeit"}` Exclusions (SGMSE+ Reverb-Reduction)
 - phase_23/24: `{"natuerlichkeit", "brillanz", "authentizitaet", "artikulation", "timbre_authentizitaet"}` (AudioSR Inpainting: synthetisierter Inhalt)
 - phase_29: `timbre_authentizitaet` Exclusion für analoge Materialien ergänzt
 
-## v9.10.88 (30. März 2026) — PMGG phase_02 Exclusions erweitert
+## v10.0.0 (30. März 2026) — PMGG phase_02 Exclusions erweitert
 
 - phase_02: Exclusion-Set auf `{"bass_kraft", "authentizitaet", "natuerlichkeit", "transparenz", "groove", "timbre_authentizitaet"}` erweitert (Kammfilter Hum-Removal Root-Causes)
 
-## v9.10.87 (30. März 2026) — Dual-SR-Vertrag + 48-kHz-Fail-fast-Härtung
+## v10.0.0 (30. März 2026) — Dual-SR-Vertrag + 48-kHz-Fail-fast-Härtung
 
 - **instructions_version**: 3.7 → **3.8**
 - **copilot-instructions.md**:
@@ -587,7 +587,7 @@
 
 ---
 
-## v9.10.83 (29. März 2026) — Ganzheitliche Song-Selbstkalibrierung (psychoakustisch priorisiert)
+## v10.0.0 (29. März 2026) — Ganzheitliche Song-Selbstkalibrierung (psychoakustisch priorisiert)
 
 - **instructions_version**: 3.6 → **3.7**
 - **copilot-instructions.md**:
@@ -602,11 +602,11 @@
 
 ---
 
-## v9.10.82 (29. März 2026) — Quality-First Standardpfad + MP-SENet Runtime-Vertrag
+## v10.0.0 (29. März 2026) — Quality-First Standardpfad + MP-SENet Runtime-Vertrag
 
 - **instructions_version**: 3.5 → **3.6**
 - **copilot-instructions.md**:
-  - RELEASE_MUST-Abschnitt **Quality-First Hauptlauf (v9.10.80)** als nutzerseitiger Standardpfad präzisiert: GUI/CLI/Batch müssen `AurikDenker.denke(..., no_rt_limit=True)` nutzen.
+  - RELEASE_MUST-Abschnitt **Quality-First Hauptlauf (v10.0.0)** als nutzerseitiger Standardpfad präzisiert: GUI/CLI/Batch müssen `AurikDenker.denke(..., no_rt_limit=True)` nutzen.
   - PerformanceGuard- und KMV-Kontrakt explizit als Schutz-/Telemetrieschicht bei gleichzeitiger Qualitätspriorisierung dokumentiert.
 - **Spec 02** (`.github/specs/02_pipeline_architecture.md`):
   - Kanonischer Ablauf um Quality-First-Hauptlauf ergänzt (Stage-1 ohne RT-bedingtes Qualitätsopfer in Standardpfaden).
@@ -619,7 +619,7 @@
 
 ---
 
-## v9.10.81 (28. März 2026) — §3.9 Stabilitäts-Invarianten (Crash/OOM/Deadlock-Härtung)
+## v10.0.0 (28. März 2026) — §3.9 Stabilitäts-Invarianten (Crash/OOM/Deadlock-Härtung)
 
 - **instructions_version**: 3.4 → **3.5**
 - **Tiefenanalyse**: Systematische Analyse aller Absturz-, OOM-, Deadlock- und Freeze-Szenarien im vollständigen Stack (UV3, ARM, PLM, ml_memory_budget, modern_window, BatchProcessingThread, MLRefinementThread)
@@ -639,7 +639,7 @@
 
 ---
 
-## v9.10.80 (28. März 2026) — PMGG Stable-Metric-Invariante + Tiefen-Immersions-Prinzip
+## v10.0.0 (28. März 2026) — PMGG Stable-Metric-Invariante + Tiefen-Immersions-Prinzip
 
 - **instructions_version**: 3.3 → **3.4**
 - **Root-Cause-Fix**: `NatuerlichkeitMetric` aus `_PRECISE_METRICS` entfernt — CREPE Load-State ändert Gewichte (w_crepe 0.0 → 0.18) zwischen `scores_before`/`scores_after` → Pseudo-Regression Δ≈0.15–0.28 auf unverändertem Audio → false P1-Kaskade → phase_03 best-effort @ 5.6 % Wet → Noise Floor −55 dBFS statt −72 dBFS → Tiefen-Immersion zerstört
@@ -656,7 +656,7 @@
 - **Gate-Tabelle**: §2.29b-Zeile ergänzt (`tests/unit/test_per_phase_musical_goals_gate.py`)
 - **Tests**: 35 Unit-Tests `test_per_phase_musical_goals_gate.py` — alle grün
 
-## v9.10.77 (26. März 2026) — Mode-differenzierte Musical Goals + Priority-Aware PMGG
+## v10.0.0 (26. März 2026) — Mode-differenzierte Musical Goals + Priority-Aware PMGG
 
 - **instructions_version**: 3.0 → **3.1** (§2.29 Priority-Aware Retries, mode-differenzierte Schwellwerte)
 - **Spec 01 §1.2**: Schwellwert-Tabelle jetzt mit Spalten Restoration / Studio 2026 (Pareto-Differenzierung: P3–P5 gesenkt für Restoration)
@@ -666,7 +666,7 @@
 - **Code** (`per_phase_musical_goals_gate.py`): `_max_regression_priority_aware()`, Priority-Budget-Konstanten, Emergency nur P1/P2
 - **Code** (`unified_restorer_v3.py`, `aurik_denker.py`): Mode-Parameter an MusicalGoalsChecker durchgereicht
 
-## v9.10.78 (28. März 2026) — ML-Headroom-Guard + Structured Fallback-Normierung
+## v10.0.0 (28. März 2026) — ML-Headroom-Guard + Structured Fallback-Normierung
 
 - **instructions_version**: 3.1 → **3.2**
 - **copilot-instructions.md**: neuer `[RELEASE_MUST]`-Abschnitt **§2.38a ML-Headroom-Guard + Structured Fallback**
@@ -678,7 +678,7 @@
 - **Spec 07 §5.4**: normative Testfaelle fuer Low-RAM-Completion, Guard-Event-Contract, Deferred-Phase-Contract und KMV-Qualitaetsrueckgewinnung ergaenzt
 - **Spec 08 §3.5a**: Architekturkontrakt fuer Headroom-Guard vor Modell-Load/Inferenz inkl. Cleanup-Reihenfolge (`evict_stale_plugins` + `gc.collect` + `malloc_trim`) ergaenzt
 
-## v9.10.79 (28. März 2026) — Maximum-Qualitaets-Gates (Determinismus, Stratified Competition, Mini-MUSHRA)
+## v10.0.0 (28. März 2026) — Maximum-Qualitaets-Gates (Determinismus, Stratified Competition, Mini-MUSHRA)
 
 - **instructions_version**: 3.2 → **3.3**
 - **copilot-instructions.md**:
@@ -695,13 +695,13 @@
   - §5.6 Stratifiziertes Konkurrenz-Gate
   - §5.7 Externes Mini-MUSHRA-Artefakt als Release-Pflicht bei Kern-aenderungen
 
-## v9.10.76 (26. März 2026) — OOM-Recovery-Checkpoint-System
+## v10.0.0 (26. März 2026) — OOM-Recovery-Checkpoint-System
 
 - **Spec 02 §2.39** (neu): OOM-Recovery-Checkpoint-System — Checkpoint-Save + Startup-Resume
 - **Neues Modul**: `backend/core/recovery_checkpoint.py`
 - **Code**: UV3 MemoryError-Handler, `restore_from_checkpoint()`, Frontend Startup-Recovery
 
-## v9.10.74 (25. März 2026) — Perceptual Salience + Denker-Differenzierung
+## v10.0.0 (25. März 2026) — Perceptual Salience + Denker-Differenzierung
 
 - **instructions_version**: 2.7 → **2.8** (neue RELEASE_MUST-Regeln §9.1c, §11.7a)
 - **Spec 07 §9.1c** (neu): Perceptual-Salience-Annotation — psychoakustische Maskierungsmodelle (Fastl & Zwicker 2007) für Defekt-Salienz
@@ -715,7 +715,7 @@
 - **Code**: `AurikDenker._run_rest()` — Kontextfluss: defect_result → RekonstruktionsDenker, rek → RestaurierDenker
 - **Tests**: 35 neue Tests (`tests/unit/test_perceptual_salience.py`)
 
-## v9.10.73 (24. März 2026) — Dropout-Erkennung: 3 neue Spec-Paragraphen + Code-Fixes
+## v10.0.0 (24. März 2026) — Dropout-Erkennung: 3 neue Spec-Paragraphen + Code-Fixes
 
 - **instructions_version**: 2.6 → **2.7** (3 neue RELEASE_MUST-Regeln)
 - **Spec 05 §6.2a** (neu): Material-Prioritäts-Phasen MÜSSEN unbedingt aktiviert werden, unabhängig vom Severity-Score
@@ -726,7 +726,7 @@
 - **Code**: `UnifiedRestorerV3._select_phases()` — Phase 24 unbedingt für dropout-prone Materials (inkl. DAT); dedupliziertes `_DROPOUT_PRONE_MATERIALS` Set
 - **Ursache**: Tape-Dropouts im Intro (Sec 0–5) waren unhörbar für die Pipeline: 60 s Center-Crop → Intro ausgeschlossen; 10 % statische Schwelle zu hoch für graduellen Tape-Pegelverlust; Phase 24 durch `sev > 0.10` Gate blockiert obwohl sie eigene Multi-Modal-Detektion besitzt
 
-## v9.10.57d (21. März 2026) — Denker-Härtung: Pipeline-Zuverlässigkeit
+## v10.0.0d (21. März 2026) — Denker-Härtung: Pipeline-Zuverlässigkeit
 
 - **Fix 1**: `AurikDenker._recommend_autopilot_mode()` in try/except gewrappt — verhindert Gesamtpipeline-Abbruch bei Autopilot-Fehler (Fallback: requested mode)
 - **Fix 2**: 5 fehlende Tier-1-Severity-Checks in `_select_phases()` ergänzt:
@@ -739,11 +739,11 @@
 - **Fix 3**: `DefectScanner.scan()` None-Guard in UV3 — erzeugt Fallback-`DefectAnalysisResult` statt AttributeError-Crash
 - **Fix 4**: NaN-Merge in paralleler Phase-Ausführung: `logger.warning()` statt stiller `pass` — Traceability bei NaN-Revert
 
-## v9.10.57c (21. März 2026) — Spec-Konsistenz-Audit Mittel-Prio: instructions_version 2.3
+## v10.0.0c (21. März 2026) — Spec-Konsistenz-Audit Mittel-Prio: instructions_version 2.3
 
 - **instructions_version**: 2.2 → **2.3** (Bump für Mittel-Prio Spec-Korrekturen)
 - **B-2**: `streaming`-Material in Spec 05 §6.2 ergänzt (MOS ≥ 4.1, Dropouts/Codec-Artefakte/Bitrate-Varianz)
-- **B-3**: `MusikalischerGlobalplanDienst` (v9.10.50) in Spec 02 §2.2 Pipeline + Spec 03 §2.1 Kernmodule dokumentiert
+- **B-3**: `MusikalischerGlobalplanDienst` (v10.0.0) in Spec 02 §2.2 Pipeline + Spec 03 §2.1 Kernmodule dokumentiert
 - **B-5**: `BigVGAN-v2` Plugin in Spec 08 §11.3 Plugin-Policy ergänzt (0,4 GB, SEKUNDÄRER Vocoder)
 - **D-5**: Vocoder-Kaskade in Spec 04 §4.5 explizit 4-stufig dokumentiert (Vocos → BigVGAN-v2 → HiFi-GAN → PGHI-ISTFT)
 - **D-6**: Hardcodierte Testzähler in Specs 07/08 durch dynamische CI-Referenz ersetzt (`pytest --collect-only`)
@@ -751,7 +751,7 @@
 
 ---
 
-## v9.10.57b (21. März 2026) — Spec-Konsistenz-Audit: instructions_version 2.2
+## v10.0.0b (21. März 2026) — Spec-Konsistenz-Audit: instructions_version 2.2
 
 - **instructions_version**: 2.1 → **2.2** (Bump für SIBILANCE-Mapping + Zahlen-Korrekturen)
 - **B-1**: `SIBILANCE` CAUSE_TO_PHASES-Mapping in `causal_defect_reasoner.py` ergänzt
@@ -759,7 +759,7 @@
 - **A-1**: DefectScanner-Zählung: 29/30/27 → einheitlich **28** (Instructions + Specs 02/03/05)
 - **A-3**: SGMSE+ Modellgröße: Spec 08 „120 MB ONNX" → „251 MB TorchScript" (Realwert)
 - **A-4**: Vocos Primär-Modell: Spec 08 „24 kHz ONNX" → „48 kHz nativ (bevorzugt)"
-- **A-5**: Testzahl: Specs 07/08 „6312" → „~7750+" (aktueller Stand v9.10.57)
+- **A-5**: Testzahl: Specs 07/08 „6312" → „~7750+" (aktueller Stand v10.0.0)
 - **A-6**: Materialien-Zählung: Spec 03/05 „17" → „15 + 2 Multichannel" (SUPPORTED_MATERIALS = 15)
 - **A-7**: `DefectType` Docstring: „30 Defekttypen" → „28 Defekttypen"
 - **A-8**: `utmos_plugin.py` Docstring: CDPAM-Fallback entfernt (VERBOTEN laut §4.4)
@@ -767,7 +767,7 @@
 
 ---
 
-## v9.10.57 (14. März 2026) — §SR-Invariante lückenlos
+## v10.0.0 (14. März 2026) — §SR-Invariante lückenlos
 
 - `backend/core/genre_classifier.py`: `GermanSchlagerClassifier.classify()` — `assert sr == 48000`
 - `backend/core/feedback_chain.py`: `FeedbackChain.run()` — `assert _sr == 48000`
@@ -778,7 +778,7 @@
 
 ---
 
-## v9.10.50 (14. März 2026) — §Dach: MusikalischerGlobalplan
+## v10.0.0 (14. März 2026) — §Dach: MusikalischerGlobalplan
 
 - `backend/core/musikalischer_globalplan.py` (neu): `MusikalischerGlobalplanDienst` (Singleton,
   Double-Checked Locking); 13 Ära-Profile (1890–2020); 7 Genre-Modifikatoren; 17 Per-Phase-Adjustments
@@ -789,7 +789,7 @@
 
 ---
 
-## v9.10.49 (12. März 2026) — §9.7 Performance-Optimierungen
+## v10.0.0 (12. März 2026) — §9.7 Performance-Optimierungen
 
 - `backend/core/defect_scanner.py`: SHA256-Cache (`_scan_cache`, max. 128, FIFO, Thread-sicher)
 - `plugins/panns_plugin.py`: SHA256-Cache (`_tags_cache`, max. 128, FIFO, Thread-sicher)
@@ -799,7 +799,7 @@
 
 ---
 
-## v9.10.48 (9. März 2026) — Infrastruktur: SBOM, GP-Backup, i18n-Tests
+## v10.0.0 (9. März 2026) — Infrastruktur: SBOM, GP-Backup, i18n-Tests
 
 - `scripts/generate_sbom.py`: SPDX-SBOM-Generator mit SHA256-Modell-Verifikation
 - `scripts/backup_gp_memory.py`: Backup/Restore für GP-Speicher (tar.gz)
@@ -810,9 +810,9 @@
 
 ---
 
-## v9.10.47 (7. März 2026) — Spec-Konsistenz-Audit: 6 Korrekturen
+## v10.0.0 (7. März 2026) — Spec-Konsistenz-Audit: 6 Korrekturen
 
-- **S-1**: `EraResult.is_remaster_suspected: bool = False` in Spec ergsänzt (war seit v9.10.45 implementiert)
+- **S-1**: `EraResult.is_remaster_suspected: bool = False` in Spec ergsänzt (war seit v10.0.0 implementiert)
 - **S-2**: `wrap_phase(restorability_score)` Default-Kommentar verschsärft (nur Testfallback)
 - **S-3**: `MaterialQuality`-Enum + `MaterialQualityAssessment`-Dataclass vollständig in §2.31 definiert
 - **S-4**: GP-Gedächtnis-Verzeichnis um Genre-Keys erweitert (schlager.json, jazz.json, etc.)
@@ -829,7 +829,7 @@
 
 ---
 
-## v9.10.46b (März 2026) — §2.36 Lyrics-Guided Enhancement (v10.0-Spec)
+## v10.0.0b (März 2026) — §2.36 Lyrics-Guided Enhancement (v10.0-Spec)
 
 - `LyricsTranscriber`: Whisper-Tiny ONNX lokal (39 MB), CPUExecutionProvider, stiller DSP-Fallback
 - `ContentAwareProcessor`: Phonem-Typ × Betonung → Salienz-Boost 0.5–2.0,
@@ -843,7 +843,7 @@
 
 ---
 
-## v9.10.46 (März 2026) — Spec-Konsistenz-Audit (14 Lücken)
+## v10.0.0 (März 2026) — Spec-Konsistenz-Audit (14 Lücken)
 
 - §2.2: RestorationResult JSON-Serialisierungsschema ergänzt (audio nicht in JSON,
   NaN/Inf → null, genealogy als Sidecar)
@@ -859,7 +859,7 @@
 
 ---
 
-## v9.10.45 (Feb 2026) — RemasterDetector + temporale Defektverortung
+## v10.0.0 (Feb 2026) — RemasterDetector + temporale Defektverortung
 
 - `core/remaster_detector.py` (neu): `RemasterDetector`-Singleton; analysiert Rauschboden
   (< −80 dBFS → `_floor_score`) und HF-Rolloff (> 18 kHz → `_bw_score`);
@@ -871,7 +871,7 @@
 
 ---
 
-## v9.10.43 (Feb 2026) — SGMSE+ entfernt, WPE als kanonisches Dereverb-Plugin
+## v10.0.0 (Feb 2026) — SGMSE+ entfernt, WPE als kanonisches Dereverb-Plugin
 
 - `plugins/wpe_plugin.py` (neu): `WpePlugin`, 3-Tier-WPE (nara_wpe → NumPy-WPE → OMLSA),
   kein Checkpoint, kein Großmodell-Speicher
@@ -883,7 +883,7 @@
 
 ---
 
-## v9.10.42 (Feb 2026) — SCHRITTE_ZUR_MUSIKALISCHEN_EXZELLENZ abgeschlossen
+## v10.0.0 (Feb 2026) — SCHRITTE_ZUR_MUSIKALISCHEN_EXZELLENZ abgeschlossen
 
 Testzahl: 6394 → **6312** (nach v2-Cleanup).
 
@@ -900,7 +900,7 @@ Testzahl: 6394 → **6312** (nach v2-Cleanup).
 
 ---
 
-## v9.9.9 (Feb 2026) — 4 neue Qualitätsmechanismen
+## v10.0.0 (Feb 2026) — 4 neue Qualitätsmechanismen
 
 ### §2.27 TransientDecoupledProcessing (TDP)
 
@@ -923,7 +923,7 @@ Testzahl: 6394 → **6312** (nach v2-Cleanup).
 - 5-s-Stichprobe nach jeder Phase → measure_quick() auf 6 Schnell-Ziele (≤ 200 ms)
 - Δ < −REGRESSION_THRESHOLD → Retry-1 (×0.65) → … → Retry-5 (×0.10) → Rollback
 - Adaptiver Schwellwert: 0.012 (restorability ≥ 70) / 0.040 / 0.060 (< 40)
-- Max. Retries: 5 (v9.15-B3)
+- Max. Retries: 5 (v10.0.0-B3)
 
 ### §2.30 MicroDynamicsEnvelopeMorphing (MDEM)
 
@@ -933,7 +933,7 @@ Testzahl: 6394 → **6312** (nach v2-Cleanup).
 
 ---
 
-## v9.9.8 (Feb 2026) — Spec-Konsistenz-Audit (7 Inkonsistenzen)
+## v10.0.0 (Feb 2026) — Spec-Konsistenz-Audit (7 Inkonsistenzen)
 
 - §2.1: MusicalGoalsChecker → **14** Ziele; CausalDefectReasoner → **23** DefectTypes
 - §2.2: 9 neue Module ins Pipeline-Diagramm: RestorabilityEstimator, EraClassifier,
@@ -946,7 +946,7 @@ Testzahl: 6394 → **6312** (nach v2-Cleanup).
 
 ---
 
-## v9.9.7 (Feb 2026) — 11 Architektur-Lücken geschlossen
+## v10.0.0 (Feb 2026) — 11 Architektur-Lücken geschlossen
 
 - §1.4 **StemRemixBalancer**: g_voc/g_inst Gain-Korrektur; |LUFS(mix) − L_orig| ≤ 0.3 LU
 - §2.21 **EnsembleProcessor**: 3 Ketten (×0.6/×1.0/×1.4), frame-by-frame Goals-Voting
@@ -962,7 +962,7 @@ Testzahl: 6394 → **6312** (nach v2-Cleanup).
 
 ---
 
-## v9.9.6 (Feb 2026) — Zero-Shot-Genre-Klassifikation & Schlager-Erkennung
+## v10.0.0 (Feb 2026) — Zero-Shot-Genre-Klassifikation & Schlager-Erkennung
 
 ### §2.19 GermanSchlagerClassifier (6-Schicht-Ensemble)
 
@@ -981,7 +981,7 @@ Testzahl: 6394 → **6312** (nach v2-Cleanup).
 
 ---
 
-## v9.9.5 (Feb 2026) — Weltführungsanspruch (14 Spec-Lücken)
+## v10.0.0 (Feb 2026) — Weltführungsanspruch (14 Spec-Lücken)
 
 - Musical Goals 9 → **14**: TonalCenterMetric (Chroma ≥ 0.95) + MicroDynamicsMetric (LUFS ≥ 0.92)
 - §2.14 EraClassifier: 1890–2025, CLAP-Tier-1 + DSP-Tier-2 + Mikrofon-Tier-3
@@ -996,7 +996,7 @@ Testzahl: 6394 → **6312** (nach v2-Cleanup).
 
 ---
 
-## v9.9.4 (Feb 2026) — SHA256-Größenabgleich (15 Modelle)
+## v10.0.0 (Feb 2026) — SHA256-Größenabgleich (15 Modelle)
 
 - MDX23C: 2× 64 MB; Apollo: 65 MB; CREPE: 85 MB; DeepFilterNet: 37 MB
 - Vocos: 52 MB; Banquet Vinyl: 92 MB; Resemble-Enhance: 41 MB
@@ -1004,7 +1004,7 @@ Testzahl: 6394 → **6312** (nach v2-Cleanup).
 
 ---
 
-## v9.9.3 (Feb 2026) — Manifest-Verifizierung & Offline-Garantie
+## v10.0.0 (Feb 2026) — Manifest-Verifizierung & Offline-Garantie
 
 - Apollo SHA256 `440c48b1…` / 67,7 MB als primäres Manifest-Modell korrigiert
 - SGMSE+, MERT (3,9 GB), AudioSR (5,9 GB) als Lazy-Load dokumentiert
@@ -1012,14 +1012,14 @@ Testzahl: 6394 → **6312** (nach v2-Cleanup).
 
 ---
 
-## v9.9.2 (Feb 2026) — Manifest-Abgleich
+## v10.0.0 (Feb 2026) — Manifest-Abgleich
 
 - §4.4: Apollo primär (bundled) / Resemble-Enhance Fallback (nicht umgekehrt)
 - §11.3: 18 Manifest-Modelle und Plugin-Dateien vollständig dokumentiert
 
 ---
 
-## v9.9.1 (Feb 2026) — SOTA-Audit & Musik-Ausrichtung
+## v10.0.0 (Feb 2026) — SOTA-Audit & Musik-Ausrichtung
 
 - Musical Goal 9: **SpatialDepthMetric** (≥ 0.75)
 - OQS-Evaluator (algorithmische PEAQ-Approximation, kein BS.1534-3-Hörertest)
@@ -1031,7 +1031,7 @@ Testzahl: 6394 → **6312** (nach v2-Cleanup).
 
 ---
 
-## v9.9.0 (Feb 2026) — Über-SOTA-DSP-Erweiterungen
+## v10.0.0 (Feb 2026) — Über-SOTA-DSP-Erweiterungen
 
 - Musical Goal 8: **GrooveMetric** (DTW ≤ 8 ms RMS)
 - **Multi-Resolution STFT MRSA**: 128–65536 Samples pro Frequenzzone + PGHI
@@ -1044,7 +1044,7 @@ Testzahl: 6394 → **6312** (nach v2-Cleanup).
 
 ---
 
-## v9.8.0 (Feb 2026) — Architektur-Fundament
+## v10.0.0 (Feb 2026) — Architektur-Fundament
 
 - Thread-safe Singletons (Double-Checked Locking, §3.2)
 - PEP 484 Type-Annotation-Pflicht + mypy strict (§3.7)
@@ -1060,7 +1060,7 @@ Testzahl: 6394 → **6312** (nach v2-Cleanup).
 
 ---
 
-## v9.7.0 (Basis)
+## v10.0.0 (Basis)
 
 - Initiale Systemspezifikation: 14 Musical Goals, 27 DefectTypes
 - Pipeline-Grundstruktur: TDP → RestorabilityEstimator → EraClassifier → … → MDEM

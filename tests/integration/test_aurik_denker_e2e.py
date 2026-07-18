@@ -22,7 +22,7 @@ import math
 import numpy as np
 import pytest
 
-# PMGG-Fix (v9.10.64) causes phases to actually execute — needs higher timeout.
+# PMGG-Fix (v10.0.0) causes phases to actually execute — needs higher timeout.
 # Desktop-Budget: Phase-Pipeline ≤ 120 s/min + Cold-Start ≤ 60 s overhead.
 _E2E_TIMEOUT = 180
 

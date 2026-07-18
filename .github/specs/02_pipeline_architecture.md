@@ -74,7 +74,7 @@ VERBOTEN:
 - Akzeptieren von wiederkehrendem Musical-Noise/Metallic-Ringing ohne
   konservative Staerkedaempfung.
 
-### §1.4a [RELEASE_MUST] Fail-Fast-Kontrakt für kritische Qualitätsmodule (v9.10.130)
+### §1.4a [RELEASE_MUST] Fail-Fast-Kontrakt für kritische Qualitätsmodule (v10.0.0)
 
 Kritische Qualitätsmodule dürfen in `restoration` und `studio2026` nicht unbemerkt in
 qualitativ schwache Platzhalterpfade fallen.
@@ -101,7 +101,7 @@ qualitativ schwache Platzhalterpfade fallen.
 **Invariante:** Ein Export darf nie allein deshalb passieren, weil ein kritischer
 Qualitätsdetektor nicht verfügbar war.
 
-### §1.4c [RELEASE_MUST] Disziplin-Parallelisierung via InnovationSuperiorityOrchestrator (v9.15.7)
+### §1.4c [RELEASE_MUST] Disziplin-Parallelisierung via InnovationSuperiorityOrchestrator (v10.0.0)
 
 Ziel: Alle Kern-Disziplinen der Restaurierung (Defektbehebung, Vokalintegritaet,
 timbrale Treue, zeitliche Praezision, raeumliche Kohärenz, Zielkonvergenz)
@@ -138,7 +138,7 @@ VERBOTEN:
 - ungebundene Konfidenz-Boosts,
 - Gate-Bypass durch Innovationslogik.
 
-### §1.4d [RELEASE_MUST] Kombinierte End-Gate-Weltspitzenmassnahmen (v9.12.16)
+### §1.4d [RELEASE_MUST] Kombinierte End-Gate-Weltspitzenmassnahmen (v10.0.0)
 
 Ziel: Geplante und ungeplante Qualitaetsmassnahmen muessen im End-Gate als
 ein gemeinsamer, widerspruchsfreier No-Harm-Entscheider laufen.
@@ -324,7 +324,7 @@ Audio-Eingang (mono/stereo, beliebige SR)
     │ Standard (alle Materialien): scipy.signal.lfilter([1, -1], [1, -0.9999])
     │   → Hochpass-IIR 1. Ordnung, Pol bei z=0.9999, fc ≈ 0.76 Hz @ 48 kHz
     │   → Sicher für BassKraftMetric: Cutoff << 20 Hz, kein Energieverlust im Bassband
-    │ Material-Sonderfall reel_tape (Lücke-H-Fix v9.10.100):
+    │ Material-Sonderfall reel_tape (Lücke-H-Fix v10.0.0):
     │   Tape-Transport erzeugt DYNAMISCHEN DC-Drift (Geschwindigkeitsschwankungen
     │   → Pitch-/Amplitudenmodulation → langsame Basislinienwanderung 0.1–2 Hz).
     │   Für material_type == "reel_tape" MUSS segmentweise DC-Entfernung erfolgen:
@@ -352,7 +352,7 @@ Audio-Eingang (mono/stereo, beliebige SR)
     │ Familien: denoise | reverb | reconstruction | dynamics_eq | transient | general
     │ Invariante: bounded scalars (anti-overfitting) + deterministische Berechnung
     │
-    │ [RELEASE_MUST] Bounds (Lücke-G-Fix v9.10.100):
+    │ [RELEASE_MUST] Bounds (Lücke-G-Fix v10.0.0):
     │   global_scalar       ∈ [0.50, 1.50]  — kein Wert < 0.50 (neutralisiert alle Phasen)
     │                                          kein Wert > 1.50 (Soft-Saturation-Guard umgangen)
     │   family_scalars[*]   ∈ [0.30, 1.80]  — Untergrenze schützt vor Komplettunterdrückung
@@ -399,7 +399,7 @@ Audio-Eingang (mono/stereo, beliebige SR)
     │ extract_harmonic_mask(audio_harmonic, sr) → protected_bins[t,f]
     │ G_floor = 0.85 an Harmonik-Bins, 0.10 sonst
     │
-    │ [RELEASE_MUST] Mask-Gültigkeit (Fix L, v9.10.100):
+    │ [RELEASE_MUST] Mask-Gültigkeit (Fix L, v10.0.0):
     │ Die Maske ist gültig für phase_03 (Denoise) und phase_29 (Tape-Hiss).
     │ Für alle übrigen Phasen (EQ, Pitch, Stem-Sep, Dereverb etc.) darf die
     │ initiale Maske NICHT unverändert wiederverwendet werden — das harmonische
@@ -488,7 +488,7 @@ if not is_schlager and n_active >= 1 and alt_genre == "Hip-Hop" and lang_de_scor
 
 **Einschränkung**: Greift nur bei `lang_de_score >= 0.30`. Bei extrem degradiertem Material ohne erkennbare Sprachsignatur bleibt die Fehlklassifikation möglich — dann ist manuelles Genre-Override nötig.
 
-## §2.30b [RELEASE_MUST] Post-Smoothing-Quiet-Zone-Clamp-Invariante (v9.11.15)
+## §2.30b [RELEASE_MUST] Post-Smoothing-Quiet-Zone-Clamp-Invariante (v10.0.0)
 
 **Normative Reihenfolge in UV3 (kanonisch):**
 
@@ -553,7 +553,7 @@ gain_db_interp[quiet_mask & (gain_db_interp > 0.0)] = 0.0
 
 ---
 
-## §2.56a [RELEASE_MUST] Global All-Phase Harmonic Adaptation (v9.11.12)
+## §2.56a [RELEASE_MUST] Global All-Phase Harmonic Adaptation (v10.0.0)
 
 `SongGoalImportance` muss nicht nur in Gates, sondern auch in der laufenden
 Phasensteuerung wirksam sein, damit alle 64 Phasen harmonisch zusammenarbeiten.
@@ -596,7 +596,7 @@ bei unverändert strikten End-Gates (§2.44, §2.48, §2.49).
 
 ---
 
-## §2.56b [RELEASE_MUST] Per-Phase Strength Oracle und 15-Goal-Teamsteuerung (v9.12.9)
+## §2.56b [RELEASE_MUST] Per-Phase Strength Oracle und 15-Goal-Teamsteuerung (v10.0.0)
 
 Die zentrale All-Phase-Kopplung (§2.56a) bleibt Pflicht, reicht aber allein nicht aus.
 Alle Phasen mit wirksamen Steuerparametern (`strength`, `wet`, `threshold_db`, `ratio`,
@@ -739,7 +739,7 @@ class RestorationResult:
     stufe2_quality_estimate: Optional[float] = None                  # quality nach vollständigem ML-Pass
 ```
 
-### §2.2.3 [RELEASE_MUST] Experience-Telemetrie-Vertrag (v9.11.1)
+### §2.2.3 [RELEASE_MUST] Experience-Telemetrie-Vertrag (v10.0.0)
 
 Für die Produktions-Closed-Loop-Steuerung müssen folgende Felder in `RestorationResult.metadata`
 normativ vorhanden sein (fehlertolerant, aber schema-stabil):
@@ -831,10 +831,10 @@ unverändertem Original-Audio gleichbedeutend mit Phasen-Skip.
 # steuern die initiale Stärke materialadaptiv BEVOR der Guard prüft.
 REGRESSION_THRESHOLD_GOOD: float = 0.020   # restorability ≥ 70
 REGRESSION_THRESHOLD_FAIR: float = 0.035   # restorability 40–69
-REGRESSION_THRESHOLD_POOR: float = 0.040   # restorability < 40 (reduced from 0.055 v9.11.2 — prevent best_effort cascades)
+REGRESSION_THRESHOLD_POOR: float = 0.040   # restorability < 40 (reduced from 0.055 v10.0.0 — prevent best_effort cascades)
 SAMPLE_DURATION_S: float = 5.0
 
-# Priority-Aware Retry-Budget (v9.10.79 + §2.31b v9.10.85):
+# Priority-Aware Retry-Budget (v10.0.0 + §2.31b v10.0.0):
 _RETRY_STRENGTHS: list[float] = [0.65, 0.50, 0.35, 0.25, 0.15]   # 5 Stufen, Floor 0.15 (Last-Resort)
 # §2.31b: initial_strength < 0.90 (SongCal vorreduziert) → Ankerpunkte [0.80, 0.65, 0.50, 0.35, 0.20]
 _PRIORITY_MAX_RETRIES: dict[int, int] = {1: 4, 2: 4, 3: 2, 4: 1, 5: 1}
@@ -876,7 +876,7 @@ for phase in selected_phases:
 # zu behandeln (nie als stiller Success).
 ```
 
-### §9.7.7 [RELEASE_MUST] PMGG Stable-Metric-Invariante (v9.10.79)
+### §9.7.7 [RELEASE_MUST] PMGG Stable-Metric-Invariante (v10.0.0)
 
 Metriken mit ML-zustandsabhängigem Gewicht **DÜRFEN NICHT** in `_PRECISE_METRICS` für PMGG-Delta-Checks stehen.
 
@@ -895,7 +895,7 @@ dem Rauschteppich verdeckt → kein „Ohr-in-die-Musik-Legen", keine Tiefen-Imm
 - Neue Metriken vor `_PRECISE_METRICS`-Aufnahme: Eigenrauschen ≤ 0.02 auf identischen Audio-Paaren Pflicht.
 - `_PRECISE_OVERRIDE_WARN_MS = 200.0` (angehoben von 120.0).
 
-### §2.29c [RELEASE_MUST] PMGG Restorative-Phase-Baseline-Capping (v9.10.96)
+### §2.29c [RELEASE_MUST] PMGG Restorative-Phase-Baseline-Capping (v10.0.0)
 
 **Problem**: In restorativen Phasen (Denoise, Dereverb, Declip, etc.) misst `scores_before` auf
 defekt-belastetem Audio. Bestimmte Defekte **inflationieren** Metriken künstlich:
@@ -960,9 +960,9 @@ else:
 - Defekt-inflationierte Baselines über Canonical+5% werden gedeckelt → kein false Regression-Trigger
 - Deterministisch: kein Zufall, keine ML-Abhängigkeit
 
-**Aktualisierte `PHASE_GOAL_EXCLUSIONS`** (v9.10.96 — kanonische Quelle: `backend/core/per_phase_musical_goals_gate.py`):
+**Aktualisierte `PHASE_GOAL_EXCLUSIONS`** (v10.0.0 — kanonische Quelle: `backend/core/per_phase_musical_goals_gate.py`):
 
-### §2.29e [RELEASE_MUST] PMGG Team-Koordination via `prior_phase_context` (v9.11.5, erweitert v9.11.7)
+### §2.29e [RELEASE_MUST] PMGG Team-Koordination via `prior_phase_context` (v10.0.0, erweitert v10.0.0)
 
 **Problem**: Sequenziell korrekte Reparaturen können durch PMGG-Retry indirekt gegeneinander arbeiten,
 wenn Folgephasen die Vorphasen-Interventionen als Regression interpretieren.
@@ -1013,7 +1013,7 @@ def _allow_emergency_retries(..., team_policy):
 - Für `phase_50` mit `reason="phase50_after_hf_restoration"` sind Emergency-Retries
     zu unterdrücken (kein sinnloses Low-Strength-Looping auf Proxy-Artefakte).
 
-**Team-Telemetrie (v9.11.7, §2.53 RELEASE_MUST)**:
+**Team-Telemetrie (v10.0.0, §2.53 RELEASE_MUST)**:
 
 - `PhaseGateLogEntry.metadata` erhält folgende Felder wenn Team-Policy aktiv:
   `team_policy_reason`, `team_excluded_goals`, `team_threshold_mult`, `team_strength_cap`.
@@ -1025,7 +1025,7 @@ def _allow_emergency_retries(..., team_policy):
 - `bridge.get_experience_insights()` gibt `team_coordination` als Frontend-sicheres Dict zurück.
 - Fehlendes team_coordination darf den Export nie blockieren (non-blocking §2.53).
 
-**CONFLICT_REGISTRY (v9.11.7)**:
+**CONFLICT_REGISTRY (v10.0.0)**:
 
 Explizite Paare in `backend/core/phase_ontology.py` — Phase B darf Arbeit von Phase A NICHT rückgängig machen:
 
@@ -1123,7 +1123,7 @@ PHASE_GOAL_EXCLUSIONS: dict[str, set[str]] = {
 }
 ```
 
-**Änderungen v9.10.90 → v9.10.96**:
+**Änderungen v10.0.0 → v10.0.0**:
 
 - phase_03/29: brillanz/transparenz entfernt (§9.7.12/13 SNR-robust); tonal_center + timbre_authentizitaet eingefügt (§9.7.11 ext: K-S NOT invariant to shaped NR; Centroid-CV-Disturbance).
 - phase_12: **NEU** — K-S volatile nach Pitch-/Speed-Korrektur + Centroid-CV.
@@ -1134,7 +1134,7 @@ PHASE_GOAL_EXCLUSIONS: dict[str, set[str]] = {
 - phase_49: brillanz/waerme/transparenz entfernt (§9.7.12/13/14 reverb-invariant).
 - phase_08: aus Passthrough-Gruppe in eigenen Eintrag verschoben.
 
-### §9.7.8 [RELEASE_MUST] Precise-Metric Audio-Cap (v9.10.79)
+### §9.7.8 [RELEASE_MUST] Precise-Metric Audio-Cap (v10.0.0)
 
 `_apply_precise_metric_overrides` kappt Audio auf **max. 2.5 s** vor dem Metric-Loop.
 
@@ -1144,7 +1144,7 @@ PHASE_GOAL_EXCLUSIONS: dict[str, set[str]] = {
   (NMF) benötigen > 2 s/Call auf 60-s-Material → kumulative PMGG-Latenz 4+ s pro Phase.
 - Mit 2.5 s Cap: alle 7 Metriken < 200 ms gesamt.
 
-### §9.7.9 [RELEASE_MUST] Material-adaptive PHASE_GOAL_EXCLUSIONS (v9.10.85)
+### §9.7.9 [RELEASE_MUST] Material-adaptive PHASE_GOAL_EXCLUSIONS (v10.0.0)
 
 Für hochwertige digitale Quellen (`cd_digital`, `dat`) entfallen Rausch-bedingte Ausschlüsse
 bei `phase_03` (Breitband-Denoise) und `phase_29` (DeepFilterNet Tape-Hiss):
@@ -1158,13 +1158,13 @@ Falsch-Regressions-Ursachen treten nicht auf.
 
 - `natuerlichkeit`: CREPE-Load-State ändert interne Gewichte material-unabhängig
 - `artikulation`: Transient-shape mismatch bei leichter Filterung bleibt relevant
-- `tonal_center`: K-S ist bei shaped/HF-selektiver NR **nicht** invariant (§9.7.11 ext v9.10.95) — nicht-uniformes NR verändert Chroma-Bin-Balance → Key-Label-Flip
+- `tonal_center`: K-S ist bei shaped/HF-selektiver NR **nicht** invariant (§9.7.11 ext v10.0.0) — nicht-uniformes NR verändert Chroma-Bin-Balance → Key-Label-Flip
 - `timbre_authentizitaet`: MFCC-Pearson/Centroid-CV gestört durch Spektral-Hüllkurvenänderung nach NR
 
 **Implementierung** in `wrap_phase()` nach dem `PHASE_GOAL_EXCLUSIONS`-Loop:
 
 ```python
-# §2.31b Material-adaptive exclusion relaxation (v9.10.85, akt. v9.10.96)
+# §2.31b Material-adaptive exclusion relaxation (v10.0.0, akt. v10.0.0)
 if _excluded_goals:
     _mat_str = ... # aus phase_kwargs["material_type"] oder ["material"]
     if _mat_str in {"cd_digital", "dat"} and (
@@ -1178,7 +1178,7 @@ if _excluded_goals:
 digitale Pfade wo bisher Falsch-Ausschlüsse standen. brillanz/transparenz/waerme sind seit
 §9.7.12/13/14 bei **allen** Materialtypen SNR-robust und nicht mehr ausgeschlossen.
 
-### §9.7.10 [RELEASE_MUST] Groove-Proxy LF-Robustheit (v9.10.90)
+### §9.7.10 [RELEASE_MUST] Groove-Proxy LF-Robustheit (v10.0.0)
 
 **Problem**: `_measure_quick` berechnet die Groove-Metrik via Autokorrelation einer 10 ms-Hop
 RMS-Energiehüllkurve `rms_env`. Die Normierungsbasis `autocorr[0]` ist gleich der Gesamtvarianz
@@ -1214,7 +1214,7 @@ autocorr /= autocorr[0] + 1e-12
 
 ---
 
-### §9.7.11 [RELEASE_MUST] Krumhansl-Schmuckler tonal_center Proxy (v9.10.91)
+### §9.7.11 [RELEASE_MUST] Krumhansl-Schmuckler tonal_center Proxy (v10.0.0)
 
 **Problem**: Der bisherige `tonal_center`-Proxy maß **Chroma-Konzentrations-Entropie**
 (`1 − entropy/log(12)`). Das ist SNR-abhängig: Rauschen/Nachhall/EQ-Filter verteilen
@@ -1283,7 +1283,7 @@ tonal_center = 1.0 - min(6, d + mode_penalty) / 6.0
 These exclusions were removed because the old entropy proxy was SNR-dependent. K-S is key-label-based
 and does not react to spectral energy redistribution that doesn't cause a genuine pitch transposition.
 
-**§9.7.11 Extension (v9.10.95/96)**: K-S ist bei **shaped/HF-selektiver NR** (phase_03 OMLSA+ResembleEnhance,
+**§9.7.11 Extension (v10.0.0/96)**: K-S ist bei **shaped/HF-selektiver NR** (phase_03 OMLSA+ResembleEnhance,
 phase_29 DeepFilterNet) **nicht** invariant. Nicht-uniformes NR verändert Chroma-Bin-Balance selektiv
 → Key-Label-Flip möglich. Daher bleiben `tonal_center`-Ausschlüsse für phase_03 und phase_29 bestehen.
 Phase_12 (Wow/Flutter) erhält ebenfalls tonal_center-Ausschluss: Pitch-/Speed-Korrektur verschiebt
@@ -1295,7 +1295,7 @@ fundamentale Frequenzen → K-S volatile.
 
 ---
 
-## §2.37 [RELEASE_MUST] Frontend-Backend-PreAnalysis-Handover-Architektur (v9.10.127)
+## §2.37 [RELEASE_MUST] Frontend-Backend-PreAnalysis-Handover-Architektur (v10.0.0)
 
 ### Kernprinzip
 
@@ -1393,7 +1393,7 @@ pre_result = queue_item.settings["pre_analysis_result"]  # Complete object
 > **Kernprinzip**: Der PerformanceGuard verwirft überschrittene Phasen nie endgültig — er _deferriert_ sie.
 > RT-Limit-Überschreitung führt zu DSP-Fallback für Sofort-Export **plus** automatischer Hintergrund-Veredelung.
 >
-> **Quality-First Ergänzung (v9.10.80)**: In den nutzerseitigen Standardpfaden
+> **Quality-First Ergänzung (v10.0.0)**: In den nutzerseitigen Standardpfaden
 > (GUI/CLI/Batch) wird `no_rt_limit=True` gesetzt. Dadurch darf der Hauptlauf
 > Qualität nicht zugunsten von RT reduzieren; `deferred_phases` entstehen dort
 > primär durch Ressourcen-/Stabilitäts-Fallbacks (OOM, Headroom, Inference-Timeout),
@@ -1584,7 +1584,7 @@ Pflichtfelder pro Eintrag:
 
 **Invariante:** Kein freier String-only Fehlerpfad ohne reason_code in Kernmodulen.
 
-## §2.42 [RELEASE_MUST] Pipeline-Stabilitäts-Kontrakt (v9.10.81)
+## §2.42 [RELEASE_MUST] Pipeline-Stabilitäts-Kontrakt (v10.0.0)
 
 Zusammenfassung aller Stabilitäts-Invarianten. Jede Verletzung einer dieser Regeln ist ein Release-Blocker.
 
@@ -1608,7 +1608,7 @@ Zusammenfassung aller Stabilitäts-Invarianten. Jede Verletzung einer dieser Reg
 
 ### Stabilitäts-Priorisierung
 
-- **S-01 bis S-09**: Neue Invarianten aus Tiefenanalyse v9.10.81 — RELEASE_MUST.
+- **S-01 bis S-09**: Neue Invarianten aus Tiefenanalyse v10.0.0 — RELEASE_MUST.
 - **S-10 bis S-15**: Bestehende Invarianten — bereits implementiert, hier zur Referenz.
 
 ### Für jedes neue Kernmodul / jede neue Phase gilt zusätzlich (§9.1 Checkliste):
@@ -1632,7 +1632,7 @@ Zusammenfassung aller Stabilitäts-Invarianten. Jede Verletzung einer dieser Reg
 
 ---
 
-## §2.44 [RELEASE_MUST] Holistic Perceptual Gate (v9.10.123)
+## §2.44 [RELEASE_MUST] Holistic Perceptual Gate (v10.0.0)
 
 Letztes Gate vor Export. Misst **Gesamt-Hörverbesserung** statt nur Einzel-Goals.
 
@@ -1650,7 +1650,7 @@ Das Ziel ist Nähe zum **unbekannten Studio-Original**, aber wir besitzen nur de
 - **Restorability 50–70** (mittlere Degradation): Gewichtete Mischung aus Input-Referenz (60 %) und MERT-Referenz-Vektor aus GP-Memory (40 %)
 - **Restorability ≤ 50** (schwere Degradation): Input zu weit vom Original entfernt → MERT-Referenz-Vektor aus GP-Memory (genre × material × ära) als primärer Anker (70 %), Input nur noch für musikalische Identität (30 %)
 
-### MERT-Referenz-Embedding-Aufbau (v9.10.123)
+### MERT-Referenz-Embedding-Aufbau (v10.0.0)
 
 Die GP-Memory-Referenz-Vektoren werden **automatisch** aus dem Verarbeitungsverlauf aufgebaut — kein manuelles Kuratieren nötig:
 
@@ -1708,7 +1708,7 @@ Quelle: `[SRC:S06,S07,S08,S09,S10,S11]`
 
 **Invariante:** Klasse-C-Schwellen duerfen ohne neue Evidenz nicht als universale Naturkonstanten deklariert werden; sie bleiben kalibrierte Betriebsparameter.
 
-**[BUG-FIX v9.12.0] Material-adaptive `timbral_fidelity` Floor** (Bug 5):
+**[BUG-FIX v10.0.0] Material-adaptive `timbral_fidelity` Floor** (Bug 5):
 
 `HPI > 0` allein reicht nicht als Export-Bedingung. Ein `timbral_ref` von 0.318 (Vinyl, Restoration) mit MERT=0.65 ergibt `HPI ≈ 0.32 > 0` → Export trotz massiver Klangverfärbung.
 
@@ -1718,7 +1718,7 @@ _TIMBRAL_FLOORS = {
     "shellac": 0.40, "wax_cylinder": 0.35, "lacquer_disc": 0.38,
     "vinyl": 0.55, "tape": 0.55, "reel_tape": 0.55, "cassette": 0.50,
     "cd_digital": 0.75, "dat": 0.70, "mp3_low": 0.60, "unknown": 0.55,
-    "minidisc": 0.60,   # ATRAC-Kompression — gleiche Floor-Klasse wie mp3_low (v9.15.3)
+    "minidisc": 0.60,   # ATRAC-Kompression — gleiche Floor-Klasse wie mp3_low (v10.0.0)
 }
 _tf_floor = _TIMBRAL_FLOORS.get(material, 0.55)
 # Restorability-Skalierung: sehr beschädigtes Material (< 40) hat niedrigeren erreichbaren timbral
@@ -1731,7 +1731,7 @@ if timbral < _tf_floor_adj:
 
 > **[RELEASE_MUST] VERSA-Primärpflicht**: In der HPI-Berechnung ist **VERSA** das primäre MOS-Modell (`use_versa_in_loop=True` — immer aktiv, produktionsstabil). MERT fungiert ausschließlich als Proxy-Fallback wenn VERSA fehlschlägt (`metadata["mert_proxy_used"] = True`). **VERBOTEN**: `use_versa_in_loop=False` oder MERT als primäre Qualitätsmetrik bei verfügbarem VERSA. Referenz: Spec 04 SOTA-Matrix, copilot-instructions.md VERBOTEN-Liste.
 
-### §2.44a [RELEASE_MUST] carrier_chain_recovery_ratio — UV3-Pflichtfeld (v9.11.14)
+### §2.44a [RELEASE_MUST] carrier_chain_recovery_ratio — UV3-Pflichtfeld (v10.0.0)
 
 UV3 MUSS nach der letzten Carrier-Phase (§2.46 Stufe 4) folgende Metadata-Felder befüllen:
 
@@ -1767,7 +1767,7 @@ Die HPI-Multiplikation ist **nicht** gleichgewichtet — die Faktoren operieren 
 
 Ein Artefakt (`artifact_freedom` = 0.5) killt den HPI härter als eine leichte Timbre-Abweichung (`timbral_fidelity` = 0.95) — das ist beabsichtigt.
 
-### §0d CCR-Timbral-Floor (v9.15.3) [RELEASE_MUST]
+### §0d CCR-Timbral-Floor (v10.0.0) [RELEASE_MUST]
 
 **Problem**: Wenn die Carrier-Chain-Inversion erfolgreich war (`carrier_chain_recovery_ratio > 0.15`),
 entfernt sich das restaurierte Signal intentional vom degradierten Input. In diesem Fall misst
@@ -1789,7 +1789,7 @@ if mert_sim >= 0.74 and carrier_checkpoint_used:
 **Invariante**: Nur aktiv wenn `carrier_checkpoint_used=True` (UV3 setzt dieses Flag nach Carrier-Phasen)
 UND `mert_sim ≥ 0.74` (musikalische Identität ist erhalten). Kein Floor bei reinen Enhancement-Phasen.
 
-### §2.44b [RELEASE_MUST] HPG Reference-Memory — UV3-Wiring-Pflicht (v9.15.3)
+### §2.44b [RELEASE_MUST] HPG Reference-Memory — UV3-Wiring-Pflicht (v10.0.0)
 
 **Normative Pflicht**: UV3 MUSS `_hg.update_reference_memory()` nach jedem erfolgreichen HPI-Lauf aufrufen.
 Dieselbe Bedingung wie RestorationMemory-Save (`HPI > 0.0 AND artifact_freedom ≥ 0.95`).
@@ -1840,7 +1840,7 @@ else:
 
 **Erwartetes Ergebnis**: Kein falscher `af=0.000`-Rollback mehr. Das finale Tor vergleicht »finaler Output vs bester Zwischenstand« — genau das, was es in der Restoration intendiert.
 
-## §2.45 [RELEASE_MUST] Minimal-Intervention-Prinzip (v9.10.122, aktualisiert §2.54)
+## §2.45 [RELEASE_MUST] Minimal-Intervention-Prinzip (v10.0.0, aktualisiert §2.54)
 
 **Restoration**: Phasen ohne hörbare Verbesserung werden NICHT angewendet:
 
@@ -1858,7 +1858,7 @@ else:
 > (PhaseConductor-Empfehlung × reduzierte Wetness), nicht sofort geskippt.
 > Erst wenn nach dem iterativen Zyklus kein positives Delta erreichbar ist, wird geskippt.
 
-## §2.45a [RELEASE_MUST] Mid-Pipeline-Loudness-Drift-Guard (v9.10.128, erweitert v9.11.5)
+## §2.45a [RELEASE_MUST] Mid-Pipeline-Loudness-Drift-Guard (v10.0.0, erweitert v10.0.0)
 
 Quelle: `[SRC:S06,S07]`
 
@@ -1876,7 +1876,7 @@ Die finale LUFS-Invariante (`LUFS-Differenz ≤ 1 LU`) schützt den Export, aber
 - Phase-Metadaten müssen `rms_drop_db` und `loudness_makeup_db` ausweisen.
 - Pipeline-Metadaten müssen stärkste Pegelabfälle separat ausweisen (z. B. `phase_regression_top_drops`).
 
-### §2.45a-I [RELEASE_MUST] Gated-RMS-Pflicht (v9.11.5)
+### §2.45a-I [RELEASE_MUST] Gated-RMS-Pflicht (v10.0.0)
 
 Alle RMS-Messungen in Loudness-Drift-Guards MÜSSEN **gated** erfolgen:
 
@@ -1893,7 +1893,7 @@ Alle RMS-Messungen in Loudness-Drift-Guards MÜSSEN **gated** erfolgen:
 > welche Frames in die Pegelreferenz einfließen. Er ist NICHT identisch mit dem **Gain-Gate** von
 > `apply_musical_gain_envelope` — das Gain-Gate MUSS −36 dBFS betragen (§2.45a-V).
 
-### §2.45a-II [RELEASE_MUST] Envelope-Aware Gain (v9.11.5)
+### §2.45a-II [RELEASE_MUST] Envelope-Aware Gain (v10.0.0)
 
 Makeup-Gain-Kompensation MUSS **musik-selektiv** (envelope-aware) erfolgen:
 
@@ -1907,7 +1907,7 @@ Makeup-Gain-Kompensation MUSS **musik-selektiv** (envelope-aware) erfolgen:
 
 **VERBOTEN**: `audio *= gain_factor` als Makeup-Kompensation in Loudness-Guards.
 
-### §2.45a-III [RELEASE_MUST] Soft-Limiter-Invarianten (v9.11.5)
+### §2.45a-III [RELEASE_MUST] Soft-Limiter-Invarianten (v10.0.0)
 
 Wenn Makeup-Gain Peaks über die digitale Grenze treibt, MUSS ein Soft-Limiter eingreifen:
 
@@ -1919,7 +1919,7 @@ Wenn Makeup-Gain Peaks über die digitale Grenze treibt, MUSS ein Soft-Limiter e
 
 **VERBOTEN**: Unbedingter Soft-Limiter nach Makeup-Gain (komprimiert Musikdynamik ohne Clipping-Risiko).
 
-### §2.45a-IV Dreistufige Guard-Kaskade (v9.11.5)
+### §2.45a-IV Dreistufige Guard-Kaskade (v10.0.0)
 
 Die Pipeline implementiert 3 Ebenen Loudness-Drift-Protection:
 
@@ -1936,7 +1936,7 @@ Die Pipeline implementiert 3 Ebenen Loudness-Drift-Protection:
 - Die Stufen sind redundant-sichernd konzipiert: Stufe 2 fängt kumulative Drift, die Stufe 1 nicht einzeln erkennt
 - Stufe 3 ist das finale Sicherheitsnetz (`_MAX_CUMULATIVE_LEVEL_DROP_DB ≈ 0.915 dB` = ~10 % Amplitude)
 
-### §2.45a-V [RELEASE_MUST] Makeup-Gain-Gate −36 dBFS (v9.11.16)
+### §2.45a-V [RELEASE_MUST] Makeup-Gain-Gate −36 dBFS (v10.0.0)
 
 **Das fundamentale Missverständnis**: Das Gated-RMS-Messgate (§2.45a-I, −50 dBFS) und das
 Makeup-Gain-Gate von `apply_musical_gain_envelope` (§2.45a-II) sind **zwei verschiedene Schwellwerte**
@@ -1991,7 +1991,7 @@ nur wenn die Noise-Floor-Evidenz eindeutig genug ist. Der Aufrufer MUSS explizit
 - [ ] Per-Sample-Guard nach `np.interp` (§2.30b) nutzt −36 dBFS
 - [ ] Bei positivem Loudness-/Export-/Mastering-Gain mit Quiet-Edge-Risiko: Referenzvergleich Intro/Outro gegen Eingangs-Audio und post-gain Quiet-Edge-Clamp (`limit_quiet_edge_boost(reference_audio, candidate_audio, sr)`) anwenden
 
-**Zusatzinvariante für positive Gain-Pfade (v9.12.0):**
+**Zusatzinvariante für positive Gain-Pfade (v10.0.0):**
 
 Music-gated Gain allein ist nicht hinreichend, wenn ein Signal bewusst leise Intro-/Outro-Zonen enthält.
 Sobald ein Pfad Programm-Lautheit aktiv anhebt (z. B. LUFS-Normalisierung, Floor-Boost, Export-Normalisierung,
@@ -2019,7 +2019,7 @@ der Referenz nicht neu explodieren.
 
 Schützt §0 (Primum non nocere), §2.45 (Minimal-Intervention) und P1/P2-Pipeline-Ende-Regeln (§2.54) gegen frühe Klangausdünnung, ohne die Defektkorrekturwirkung zu verlieren.
 
-### §2.45a-VI [RELEASE_MUST] Kein Makeup-Gain-Guard in subtraktiven Filtertypen (v9.11.17)
+### §2.45a-VI [RELEASE_MUST] Kein Makeup-Gain-Guard in subtraktiven Filtertypen (v10.0.0)
 
 **Fundamental-Invariante**: Hochpassfilter, Tiefpassfilter, Notchfilter und Bandpassfilter entfernen
 Energie **absichtlich**. Ein per-Phase-Makeup-Gain-Guard, der diesen Energieverlust kompensiert,
@@ -2065,8 +2065,8 @@ if rms_drop < -threshold:
 
 **Betroffene Phasen (kein Makeup-Gain-Guard erlaubt):**
 
-- `phase_05_rumble_filter` (HPF) — Guard entfernt in v9.11.17 (commit 72d993a)
-- `phase_02_hum_removal` (Notch) — Guard entfernt in v9.11.18
+- `phase_05_rumble_filter` (HPF) — Guard entfernt in v10.0.0 (commit 72d993a)
+- `phase_02_hum_removal` (Notch) — Guard entfernt in v10.0.0
 - Jede zukünftige Phase die primär als Spektralband-Filter arbeitet
 
 **Zweite Fehlerquelle: UV3 `_active_quality_intervention` + Cumulative Guard (bestätigt 2026-04-25)**
@@ -2107,7 +2107,7 @@ Implementierung in `backend/core/unified_restorer_v3.py`:
 - `_cum_rms_reference_audio` + `_HPF_NOTCH_CUM_RESET_PHASES` im Phase-Loop (commit 032a83f)
 - `_cum_guard_ref = _cum_rms_reference_audio` im End-of-Pipeline-Guard (commit 032a83f)
 
-## §2.46 [RELEASE_MUST] Carrier-Chain-Inversion (v9.10.122)
+## §2.46 [RELEASE_MUST] Carrier-Chain-Inversion (v10.0.0)
 
 **Restoration-Modus**: Ziel = **gesamte Tonträgerkette invertieren**, nicht Einzel-Defekte reparieren.
 
@@ -2158,7 +2158,7 @@ if _chain_injected:
         _chain.insert(_dpos, _m)
 ```
 
-## §2.46a [RELEASE_MUST] Deep-Transfer-Chain-Pflicht (v9.10.124)
+## §2.46a [RELEASE_MUST] Deep-Transfer-Chain-Pflicht (v10.0.0)
 
 Importsongs mit **3+ Tonträgerstufen** müssen vollständig modelliert werden. Die
 Transferkette darf nicht auf Primärträger + eine Sekundärstufe verkürzt werden.
@@ -2184,7 +2184,7 @@ Transferkette darf nicht auf Primärträger + eine Sekundärstufe verkürzt werd
 
 Referenztests: `tests/unit/test_forensics_medium_detector.py`
 
-## §2.46b [RELEASE_MUST] Spectral-Tilt-Preservation-Invariante (v9.11.x)
+## §2.46b [RELEASE_MUST] Spectral-Tilt-Preservation-Invariante (v10.0.0.x)
 
 **Psychoakustische Motivation**: Der Spektral-Tilt (Steigung der mittleren Spektralhüllkurve in
 dB/Oktave) kodiert den Ära-Charakter eines Recordings: 1920er ≈ −6 dB/oct, 1970er ≈ −4 dB/oct,
@@ -2238,7 +2238,7 @@ if era_result is not None and hasattr(era_result, "spectral_tilt"):
 > Messmethode: `backend/core/era_classifier.py` — `_estimate_spectral_tilt()` (bestehende Methode, nicht kopieren!)
 > Aufruf: `backend/core/phases/phase_06_frequency_restoration.py` — `process(..., **kwargs)`
 
-## §2.46c [RELEASE_MUST] Zentraler BW-Hard-Cap nach additiven Phasen (v9.11.14)
+## §2.46c [RELEASE_MUST] Zentraler BW-Hard-Cap nach additiven Phasen (v10.0.0)
 
 **Problem**: Einzelne Phasen (phase_06, phase_07, phase_23, phase_39) haben per-Phase-BW-Limits, aber es gibt keine zentrale Absicherung, dass die **kumulative** Wirkung mehrerer additiver Phasen das physikalische BW-Ceiling des Quellmaterials nicht überschreitet.
 
@@ -2292,7 +2292,7 @@ def _post_additive_bw_guard(audio, sr, material_type, mode):
 - Material-Keys folgen `SUPPORTED_MATERIALS` (§6.1).
 - Telemetrie: `metadata["bw_ceiling_applied_hz"]` nur wenn tatsächlich gefiltert wurde.
 
-## §2.46e [RELEASE_MUST] Hallucination-Guard (v9.12.0)
+## §2.46e [RELEASE_MUST] Hallucination-Guard (v10.0.0)
 
 **Keine additive Phase darf Material in das Ausgangssignal einbringen, das im Eingangssignal physikalisch nicht vorhanden war.** Dies gilt absolut für `restoration`-Modus.
 
@@ -2306,7 +2306,7 @@ def _post_additive_bw_guard(audio, sr, material_type, mode):
 
 ```python
 # Pre/Post-Additive-Phase:
-# BUG-FIX v9.12.0 (Bug 1): Band-relative Delta-Metrik statt Gesamtenergie-Verhältnis.
+# BUG-FIX v10.0.0 (Bug 1): Band-relative Delta-Metrik statt Gesamtenergie-Verhältnis.
 # Die alte Formel (energy_new_bins / energy_total) war blind für Air-Band-Halluzinationen,
 # da Air-Band-Energie < 0.1% der Gesamtenergie → spectral_novelty nie > 0.03%.
 # Neue Metrik: Band-relative Energie-Verhältnis IM CEILING-BAND:
@@ -2346,7 +2346,7 @@ if harmonic_ceiling_violation:   # rekonstruierte Harmonics > material BW_CEILIN
 - BW-Ceiling-Verletzung → Hard-Rollback in beiden Modi
 - Telemetrie: `metadata["hallucination_rollbacks"]` (Liste betroffener Phase-IDs)
 
-## §2.46f [RELEASE_MUST] Natural-Performance-Artifacts-Guard (v9.12.0)
+## §2.46f [RELEASE_MUST] Natural-Performance-Artifacts-Guard (v10.0.0)
 
 **Performancebedingte Klangereignisse sind keine Defekte und dürfen nicht entfernt werden.**
 
@@ -2391,7 +2391,7 @@ def classify_segment(audio_segment, sr, onset_context=False):
 
 > Kreuzreferenz: Spec 04 §4.5c (Early-Reflection-Guard); §2.46 (Carrier-Chain-Inversion)
 
-## §2.47 [RELEASE_MUST] Adaptive-Intelligence-Prinzip (v9.10.123)
+## §2.47 [RELEASE_MUST] Adaptive-Intelligence-Prinzip (v10.0.0)
 
 Aurik verarbeitet **kein generisches Audio** — jede Eingabe ist ein einzigartiges Musikstück. Das System muss sich **vor Beginn der Verarbeitung** vollständig an das konkrete Material anpassen.
 
@@ -2412,14 +2412,14 @@ Aurik verarbeitet **kein generisches Audio** — jede Eingabe ist ein einzigarti
 
 **Resultat**: Dieselbe Pipeline verarbeitet Schellack 1928 (SNR 15 dB, BW 7 kHz, Mono) fundamental anders als CD 2005 (SNR 60 dB, BW 20 kHz, Stereo) — ohne manuellen Eingriff.
 
-### GP-Wissenstransfer (v9.10.123)
+### GP-Wissenstransfer (v10.0.0)
 
 - GPOptimizer persistiert Beobachtungen pro `gp_memory_key` (Genre × Material)
 - **Cross-Material-Generalisierung**: Bei < 10 Beobachtungen für ein neues Material werden Hyperparameter-Priors (Kernel-Lengthscale, Signal-Varianz) aus dem nächstverwandten Material initialisiert gemäß Material-Ähnlichkeitsmatrix (siehe unten)
 - **Anti-Overfitting**: `global_scalar ∈ [0.30, 1.80]` begrenzt GP-Vorschläge; Extreme führen zu Conservative-Fallback
 - **Batch-Konvergenz**: Bei sequenzieller Verarbeitung mehrerer Dateien gleichen Materials konvergieren GP-Priors → spätere Dateien profitieren von früheren Ergebnissen
 
-### Material-Ähnlichkeitsmatrix (v9.10.123)
+### Material-Ähnlichkeitsmatrix (v10.0.0)
 
 Definiert die Transferierbarkeit von GP-Priors zwischen Materialien. Wert = Ähnlichkeit [0, 1]. Bei < 10 GP-Beobachtungen wird der Prior vom Material mit höchstem Ähnlichkeitswert übernommen.
 
@@ -2444,7 +2444,7 @@ mp3_lossy           0.05    0.05     0.08      0.12       0.20      0.25     0.1
 4. Übernimm Signal-Varianz × `similarity` (= gedämpfter Prior bei geringerer Ähnlichkeit)
 5. Bei `similarity < 0.3` → kein Transfer, nur GP-Default-Priors (uninformativ)
 
-### ML-Failure-Degradations-Kaskade (v9.10.123)
+### ML-Failure-Degradations-Kaskade (v10.0.0)
 
 Wenn ein ML-Plugin nicht geladen werden kann (OOM, korruptes Modell, ONNX-Fehler), **muss** die Pipeline graceful degradieren statt abzubrechen:
 
@@ -2459,7 +2459,7 @@ Wenn ein ML-Plugin nicht geladen werden kann (OOM, korruptes Modell, ONNX-Fehler
 
 **Invariante**: Kein ML-Failure darf die Pipeline vollständig abbrechen. Jede Phase **muss** einen DSP-Fallback haben (§4.4 Spec 04). Der Fallback wird in `RestorationResult.metadata["ml_fallbacks_used"]` protokolliert.
 
-### §2.47 Adaptions-Erweiterungen (v9.11.0)
+### §2.47 Adaptions-Erweiterungen (v10.0.0)
 
 Vier neue Intelligence-Hebel ergänzen die Adaptions-Kaskade. Sie sind **nach** dem GP-Optimizer aktiv und erhöhen die perceptuelle Präzision ohne neue ML-Modelle.
 
@@ -2533,7 +2533,7 @@ Trägertypische Bell-EQ-Profile (Gain in dB, Zentrum-Hz, Q):
 
 > Kreuzreferenz: §2.52 (PhaseConductor), §2.46 (Carrier-Chain-Inversion), Spec 06 §7.4
 
-## §2.47a [RELEASE_MUST] Frontend-Backend-PreAnalysis-Handover-Vertrag (v9.10.127)
+## §2.47a [RELEASE_MUST] Frontend-Backend-PreAnalysis-Handover-Vertrag (v10.0.0)
 
 Der PreAnalysis-Handover ist als **direkte Objektübergabe** verpflichtend und nicht
 als rekonstruierter Cache-Lookup in asynchronen Threads.
@@ -2552,7 +2552,7 @@ Detailarchitektur und Ablaufdiagramm: §2.37 dieses Dokuments.
 
 Referenztest: `tests/unit/test_pre_analysis_handover_no_double_detect.py`
 
-## §2.47b [RELEASE_MUST] JND-Effektivitätsschwelle — Sub-Threshold-Phasen-Markierung (v9.11.x)
+## §2.47b [RELEASE_MUST] JND-Effektivitätsschwelle — Sub-Threshold-Phasen-Markierung (v10.0.0.x)
 
 **Psychoakustische Motivation**: Phasen, deren Musical-Goal-Deltas alle unterhalb der
 Hörschwelle (JND = Just Noticeable Difference) liegen, bringen keinen perceptuell messbaren
@@ -2634,7 +2634,7 @@ if _all_below_jnd:
 > Implementierung: `backend/core/per_phase_musical_goals_gate.py` — `JND_MIN_DELTA` + `_run_with_retry()`
 > Referenztest: `tests/unit/test_jnd_sub_threshold.py`
 
-## §2.48 [RELEASE_MUST] Kumulative-Phasen-Interaktions-Guard (v9.10.123, aktualisiert v9.11.2)
+## §2.48 [RELEASE_MUST] Kumulative-Phasen-Interaktions-Guard (v10.0.0, aktualisiert v10.0.0)
 
 Einzelne Phasen können isoliert korrekt arbeiten, aber in Kombination destruktive Effekte erzeugen (z.B. De-Noise + De-Reverb entfernen gemeinsam mehr Raumklang als beabsichtigt).
 
@@ -2700,7 +2700,7 @@ Mehrfache STFT→Modifikation→ISTFT erzeugt akkumulierte Phasenfehler (Gruppen
 
 - `group_delay_deviation = max(|τ_current(f) - τ_original(f)|)` über alle Frequenz-Bins
 - Schwellwert: ≤ 5 ms (entspricht ~240 Samples bei 48 kHz)
-  - Begründung v9.10.127: 2 ms war unrealistisch. Standard-2048-Punkt-STFT bei 48 kHz hat bereits 42,6 ms Fensterlänge (10,7 ms Hop). Spektralsubtraktions-Filter verschieben pro-Bin-Phase lokal 3–8 ms ohne hörbare Artefakte. Ab 5 ms liegt ein echtes Phase-Distorsions-Problem vor (typisch: unabhängige L/R-IIR-Filter oder falsch kaskadierte STFT-Ketten).
+  - Begründung v10.0.0: 2 ms war unrealistisch. Standard-2048-Punkt-STFT bei 48 kHz hat bereits 42,6 ms Fensterlänge (10,7 ms Hop). Spektralsubtraktions-Filter verschieben pro-Bin-Phase lokal 3–8 ms ohne hörbare Artefakte. Ab 5 ms liegt ein echtes Phase-Distorsions-Problem vor (typisch: unabhängige L/R-IIR-Filter oder falsch kaskadierte STFT-Ketten).
 - Überschreitung → letzte STFT-Phase rollback, Alternative ohne STFT versuchen (z.B. PGHI statt GriffinLim, Zero-Phase-Filterung statt STFT-Modifikation)
 
 **Betroffene Phasen** (STFT-basiert): phase_03 (De-Hiss), phase_07 (Harmonic), phase_20/49 (De-Reverb), phase_23/24 (Super-Resolution), phase_29 (NR), phase_35 (Multiband-Comp)
@@ -2728,7 +2728,7 @@ CAUSE_TO_PHASES wählt **welche** Phasen aktiv sind. Die **Reihenfolge** der akt
 
 > Kreuzreferenz: §2.29d (P1/P2 = Pipeline-Ende-Pflicht, §2.54), §2.45 (perceptual_delta), §2.44 (HPI)
 
-## §2.48a [RELEASE_MUST] Phase-Typ-Ontologie — Architektur-Inversion (v9.11.0)
+## §2.48a [RELEASE_MUST] Phase-Typ-Ontologie — Architektur-Inversion (v10.0.0)
 
 ### Prinzip
 
@@ -2781,7 +2781,7 @@ if phase_type in GDD_VALID_TYPES:                # nicht ML_GENERATIVE, nicht AD
 > Implementierung: `backend/core/phase_ontology.py` — `PhaseOperationType`, `get_phase_type()`, Guard-Applicability-Sets.
 > Konsumenten: `artifact_freedom_gate.py`, `cumulative_interaction_guard.py`, `per_phase_musical_goals_gate.py`.
 
-## §2.49 [RELEASE_MUST] Artefakt-Freiheits-Gate (v9.10.123)
+## §2.49 [RELEASE_MUST] Artefakt-Freiheits-Gate (v10.0.0)
 
 Quelle: `[SRC:S03,S04,S12,S13]`
 
@@ -2797,7 +2797,7 @@ Dediziertes Gate für **Artefakt-Erkennung** — unabhängig von den 15 Musical 
 | Phase-Cancellation | M/S-Korrelation nach Stereo-Processing: `correlation(M, S) ≥ 0.3` (Mono-Kompatibilität) | ≥ 0.3 |
 | Metallic Ringing | CQT-Peak-Detection: isolierte resonante Peaks > 6 dB über Nachbar-Bins, Dauer > 50 ms | 0 Events |
 
-### Material-adaptive Schwellwert-Skalierung (v9.10.123)
+### Material-adaptive Schwellwert-Skalierung (v10.0.0)
 
 Feste Schwellwerte führen zu Fehlalarmen bei historischem Material (z.B. Schellack-Oberflächen-Rauschen als "Musical Noise" fehlklassifiziert) oder zu Durchlassfehlern bei Digital-Material. Deshalb werden die Artefakt-Schwellwerte **material-adaptiv** skaliert:
 
@@ -2811,7 +2811,7 @@ Feste Schwellwerte führen zu Fehlalarmen bei historischem Material (z.B. Schell
 
 **Logik**: Historische Träger haben inhärent höhere Artefakt-Pegel im Eingangssignal. Was bei einer CD ein klarer Verarbeitungsfehler ist (Musical-Noise-Peak +12 dB), ist bei Shellac Teil des Trägerprofils. Die Erkennung muss nur **neue, durch Verarbeitung eingeführte** Artefakte finden — nicht die vorhandenen des Trägers.
 
-**Direktionalitätspflicht für Musical-Noise-Detektor** (v9.10.125): Subtractive Phasen (Surface-Noise-Profiling, Denoise, Click-Removal) erzeugen ein Residual `restored − orig` dessen Spektrum die **entfernten** Artefakte spiegelt — nicht neu hinzugefügte. Die Spektralpeaks im Residual sind korrekte Entfernungen, keine Artefakte. Implementierungspflicht:
+**Direktionalitätspflicht für Musical-Noise-Detektor** (v10.0.0): Subtractive Phasen (Surface-Noise-Profiling, Denoise, Click-Removal) erzeugen ein Residual `restored − orig` dessen Spektrum die **entfernten** Artefakte spiegelt — nicht neu hinzugefügte. Die Spektralpeaks im Residual sind korrekte Entfernungen, keine Artefakte. Implementierungspflicht:
 
 ```python
 # Nur flaggen wenn restored_spectrum[j] > orig_spectrum[j] × 1.05
@@ -2822,7 +2822,7 @@ if rest_spectrum[j] <= orig_spectrum[j] * 1.05:
 
 Ohne diese Prüfung: Surface-Noise-Profiling erzeugt 50 False-Positive-Artefakte → `artifact_freedom=0.000` → Rollback-Loop → Pipeline-Blockade.
 
-**Phase-Cancellation Detektor — Präzisierungen (v9.10.127)**:
+**Phase-Cancellation Detektor — Präzisierungen (v10.0.0)**:
 
 Der Phase-Cancellation-Detektor vergleicht im per-phase-Modus die Stereo-Metrik **vor und nach** der Phase (Delta-Check). Folgende Regeln sind **normativ verbindlich**:
 
@@ -2888,7 +2888,7 @@ Gewichtung: Musical Noise = 1.0, Pre-Echo = 0.8, Spectral Holes = 0.6, Phase-Can
     verpflichtend die Recovery-Kaskade; Export nur als `recovered`/`degraded` mit vollständiger Ursache.
 - **Protokollierung**: `RestorationResult.metadata["artifact_freedom"]` = Score + Detail-Report (detected_artifacts: list)
 
-### §2.49 Finaler Score — Berechnungsregel (v9.10.126)
+### §2.49 Finaler Score — Berechnungsregel (v10.0.0)
 
 **`_artifact_freedom_score` = Minimum aller per-Phase-Scores aller akzeptierten Phasen.**
 
@@ -2896,7 +2896,7 @@ FALSCH (und verboten): `artifact_gate.evaluate(pre_pipeline_audio, pipeline_outp
 
 RICHTIG: Per-Phase-Minimum über alle Phasen, bei denen der Gate-Check durchgeführt wurde (`_min_per_phase_afg_score`). Phasen, die ge-rollt-back wurden, fließen nicht ein.
 
-**[BUG-FIX v9.12.0] IAD → artifact_freedom Kopplung** (Bug 4):
+**[BUG-FIX v10.0.0] IAD → artifact_freedom Kopplung** (Bug 4):
 
 `IntroducedArtifactDetector` (IAD, §2.23) läuft post-Pipeline und erkennt ML-Halluzinationen und neu eingebrachte Artefakte über die gesamte Kette. Sein Ergebnis **MUSS** in `artifact_freedom` einfließen — sonst kann `artifact_freedom=1.0` trotz bekannter IAD-Artefakte einen HPG-VETO-Fail verhindern.
 
@@ -2915,9 +2915,9 @@ self._artifact_freedom_score = float(min(_min_per_phase_afg_score, _iad_af_penal
 
 **Invariante**: IAD-Penalty wird gesetzt für **jedes** `has_artifacts=True` — unabhängig vom Rescue-Threshold. Selbst `fraction=0.010` mit Typen `ml_hallucination`/`musical_noise` = `af_penalty=0.90` → VETO (< 0.95). Der Dry/Wet-Rescue-Blend (`_IAD_RESCUE_THRESHOLD=0.05`) ist ein separater Schritt und darf die Penalty-Logik nicht blockieren.
 
-**Gap-Fix v9.12.0**: Die ursprüngliche Implementierung setzte die Penalty nur innerhalb des `if fraction >= 0.05`-Blocks — damit war `fraction=0.025` (Elke-Best-Fall, Typen `ml_hallucination, musical_noise`) vollständig unsichtbar für den HPG-VETO. **VERBOTEN**: Penalty-Berechnung innerhalb eines Rescue-Threshold-Guards.
+**Gap-Fix v10.0.0**: Die ursprüngliche Implementierung setzte die Penalty nur innerhalb des `if fraction >= 0.05`-Blocks — damit war `fraction=0.025` (Elke-Best-Fall, Typen `ml_hallucination, musical_noise`) vollständig unsichtbar für den HPG-VETO. **VERBOTEN**: Penalty-Berechnung innerhalb eines Rescue-Threshold-Guards.
 
-### §2.49b [RELEASE_MUST] Post-Pipeline Kumulativer Stereo-Collapse-Guard (v9.10.126)
+### §2.49b [RELEASE_MUST] Post-Pipeline Kumulativer Stereo-Collapse-Guard (v10.0.0)
 
 Per-Phase-δ-Guards fangen nur Single-Phase-Kollapsen (> 40 dB in einer Phase). Kumulativer Stereo-Drift — bei dem 4 Stereo-Phasen jeweils 6–8 dB beitragen — bleibt unsichtbar. Lösung: Post-Pipeline-Vergleich gegen Pre-Pipeline-Baseline.
 
@@ -2936,7 +2936,7 @@ if current_audio.ndim == 2 and current_audio.shape[0] == 2:
 
 Schwellwerte: Ausgang-Imbalance > 20 dB; Eingang-Imbalance < 6 dB (Kollaps neu durch Pipeline eingeführt).
 
-### §2.44/§2.49 HPI-Rollback-Checkpoint Stereo-Health-Validation (v9.10.126)
+### §2.44/§2.49 HPI-Rollback-Checkpoint Stereo-Health-Validation (v10.0.0)
 
 Bevor `_hpi_best_rollback_audio` als Rollback-Ziel verwendet wird: L/R-Imbalance prüfen.
 
@@ -2965,7 +2965,7 @@ Die `logger.warning`-Ausgabe des IAD (Introduced Artifact Detector) in `unified_
 
 **Implementierung**: `backend/core/unified_restorer_v3.py` → `_iad_is_trivial = _frac_iad < 0.01` → `logger.info` vs `logger.warning`.
 
-## §2.49c [RELEASE_MUST] Psychoakustischer Rauheit/Schärfe-Guard (v9.11.x)
+## §2.49c [RELEASE_MUST] Psychoakustischer Rauheit/Schärfe-Guard (v10.0.0.x)
 
 **Motivierung**: ArtifactFreedomGate §2.49 prüft strukturelle Artefakte (Spectral Noise,
 Holes, Phasenfehler). Multiband-Kompression (phase_35) kann Rauheit erhöhen und
@@ -3043,7 +3043,7 @@ if phase_type in (_ROUGHNESS_APPLICABLE_TYPES):
 
 ---
 
-## §2.51 [RELEASE_MUST] Stereo-Kohärenz-Invariante für Phasen (v9.10.127)
+## §2.51 [RELEASE_MUST] Stereo-Kohärenz-Invariante für Phasen (v10.0.0)
 
 ### Motivation
 
@@ -3111,7 +3111,7 @@ Kein Accept-Checkpoint darf `mono_compat < 0.20` in mehr als 5 % der Frames habe
 
 ---
 
-## §2.52 [RELEASE_MUST] PhaseConductor — Inter-Phase Adaptive Feedback (v9.11.0)
+## §2.52 [RELEASE_MUST] PhaseConductor — Inter-Phase Adaptive Feedback (v10.0.0)
 
 ### Überblick
 
@@ -3182,7 +3182,7 @@ if phase_id in _conductor_strength_hints and "strength" not in explicit_kwargs:
 | Kein §0-Verstoß | Wenn `recommended_strength < explicit_strength`: PMGG-Wert gewinnt; wenn `recommended_strength > explicit_strength`: PMGG-Wert gewinnt — ConductorHint beeinflusst nur **nicht explizit gesetzten** Strength |
 | Keine ML-Abhängigkeit | Rein DSP, nur numpy + scipy; kein torch, kein ONNX, kein Remote-Call |
 
-### §2.52a PhaseConductor × SongGoalImportance Integration (v9.11.14)
+### §2.52a PhaseConductor × SongGoalImportance Integration (v10.0.0)
 
 `PhaseConductor.recommend()` erhält optional `goal_weights: dict[str, float]`, die ausschließlich
 aus dem zentralen `restoration_policy_profile` abgeleitet werden. `song_goal_weights` ist nur ein
@@ -3226,7 +3226,7 @@ Hebel 1 entscheidet **ob** eine Phase läuft; Hebel 3 entscheidet **wie stark** 
 
 ---
 
-## §2.52b [RELEASE_MUST] SongStructureAnalyzer — Segment-bewusste Pipeline (v9.12.0)
+## §2.52b [RELEASE_MUST] SongStructureAnalyzer — Segment-bewusste Pipeline (v10.0.0)
 
 **Motivation**: Ein Vers braucht aggressiveres NR als ein Klimax-Chorus. Ein Instrumentalintro benötigt kein `LyricsGuidedEnhancement`. Eine Stille-Passage benötigt keinen Dereverb. Aurik behandelte bisher alle Segmente identisch — das ist falsches Minimal-Intervention.
 
@@ -3271,7 +3271,7 @@ def analyze_structure(audio: np.ndarray, sr: int) -> list[SongSegment]:
 
 ---
 
-## §2.52c [RELEASE_MUST] MultiPassScheduler — Iterativer Restaurierungspfad (v9.12.0)
+## §2.52c [RELEASE_MUST] MultiPassScheduler — Iterativer Restaurierungspfad (v10.0.0)
 
 **Motivation**: Phase 03 (NR) senkt den Rauschboden → Phase 09 (Crackle) würde danach bei niedrigerem Grundrauschen präzisere Ergebnisse erzielen. Ein einziger Durchlauf ist suboptimal. Echter Multi-Pass löst diese Sequenz-Abhängigkeit.
 
@@ -3312,7 +3312,7 @@ if (
 
 ---
 
-## §2.53 [RELEASE_MUST] Experience-Closed-Loop + Bridge/UI-Propagation (v9.11.1)
+## §2.53 [RELEASE_MUST] Experience-Closed-Loop + Bridge/UI-Propagation (v10.0.0)
 
 ### Vertrag
 
@@ -3337,7 +3337,7 @@ ins Frontend propagiert werden.
 - Fehler sind non-blocking: fehlende Experience-Telemetrie blockiert keinen Export,
     wird aber als Degrade-Hinweis protokolliert.
 
-## §2.53a [RELEASE_MUST] Exzellenz-API-Kompatibilitätsvertrag (v9.11.1 / v9.15.1)
+## §2.53a [RELEASE_MUST] Exzellenz-API-Kompatibilitätsvertrag (v10.0.0 / v10.0.0)
 
 ### Vertrag
 
@@ -3346,7 +3346,7 @@ ins Frontend propagiert werden.
 1. Primär: `ExzellenzDenker.messe_und_repariere(audio, sr, reference_audio=..., inapplicable_goals=..., mode=..., material=...) -> (audio, goals)`
 2. Legacy-Fallback: `ExzellenzDenker.messe_ziele(audio, sr, reference=None)`
 
-### Signatur-Erweiterungen (v9.15.1)
+### Signatur-Erweiterungen (v10.0.0)
 
 **`reference_audio`** (S6): Originales (prä-Restaurierung) Audio als `np.ndarray | None`. Wird an alle internen `messe_ziele()`-Aufrufe weitergegeben. Ohne `reference_audio` verwendet `TonalCenterMetric` intra-song Chroma-Stabilität (Score 0.50–0.60 für Verse/Chorus-Songs) statt ref-vs-restored Chroma-Korrelation (~0.92+). Bestätigt: tonal_center=0.5501 ohne reference, ~0.95 mit reference (V50). In AurikDenker: `reference_audio=audio` (das `audio`-Argument von `denke()`, vor Restaurierung, 48 kHz, float32).
 
@@ -3360,7 +3360,7 @@ ins Frontend propagiert werden.
 - Fehlt die Primärmethode, darf die Pipeline nicht abbrechen, solange Legacy verfügbar ist.
 - `messe_ziele(audio, sr, reference=None)` ist die normative interne Mess-Funktion — immer mit `reference=reference_audio` aufrufen, wenn `reference_audio` vorhanden (V50).
 
-## §2.53c [RELEASE_MUST] GAF-Inapplicable-Propagationskette (v9.15.1, V51-Fix S7)
+## §2.53c [RELEASE_MUST] GAF-Inapplicable-Propagationskette (v10.0.0, V51-Fix S7)
 
 ```text
 GAF.evaluate_goal_applicability(audio, sr, material, era, ..., transfer_chain)
@@ -3380,7 +3380,7 @@ GAF.evaluate_goal_applicability(audio, sr, material, era, ..., transfer_chain)
 
 **Propagations-Vollständigkeitsinvariante**: Die Kette ist vollständig oder nicht vorhanden. Teilpropagation (GAF feuert, ExzellenzDenker ignoriert) erzeugt systematisch falsche Violation-Counts und Over-Processing. Leer-frozenset → kein Overhead.
 
-## §2.53b [RELEASE_MUST] Denker-Plan-Determinismus in UV3 (v9.11.2)
+## §2.53b [RELEASE_MUST] Denker-Plan-Determinismus in UV3 (v10.0.0)
 
 ### Vertrag
 
@@ -3431,7 +3431,7 @@ songindividuellen Signatur (`crest_db`, `hf_ratio`, `transient_ratio`,
 `dynamic_smoothing_tolerance`. Der finale Hoerkomfort-Guard und alle zukuenftigen
 komfortbezogenen Phasen-/Post-Gates verwenden nur dieses zentrale Profil.
 
-## §2.54 [RELEASE_MUST] Adaptives Phasen-Optimum — Messen-Handeln-Validieren (v9.11.2, erweitert v9.11.14)
+## §2.54 [RELEASE_MUST] Adaptives Phasen-Optimum — Messen-Handeln-Validieren (v10.0.0, erweitert v10.0.0)
 
 > Dieses Paradigma ist normativ übergeordnet gegenüber allen festen Schwellwerten in §2.48, §2.29d, §2.45.
 > Feste Schwellwerte sind **Notbremsen** (letztes Sicherheitsnetz), nicht die Steuerung.
@@ -3520,7 +3520,7 @@ adaptive_drift_tolerance = compute_adaptive_drift_tolerance(
 - `compute_adaptive_max_rollbacks()` ebenda
 - Testpflicht: `tests/unit/test_adaptive_drift_tolerance.py`
 
-### §2.54a PMGG-Blend-Invariante und Pre-Pipeline-Ceiling (v9.11.14)
+### §2.54a PMGG-Blend-Invariante und Pre-Pipeline-Ceiling (v10.0.0)
 
 **Problem**: Fixer 60/40-Blend in PMGG `_run_with_retry()` und UV3 `_effective_goal_thresholds` erzeugt Schwellwerte **über** der physikalischen Ceiling — bei Shellac `brillanz` (canonical 0.78, SGT 0.51): `0.60×0.78 + 0.40×0.51 = 0.71` bei physikalischer Grenze 0.51 → PMGG startet 5-fachen Retry-Zyklus → Stärke sinkt auf 15 % → Restaurierung versagt.
 
@@ -3553,7 +3553,7 @@ blended = float(np.clip(blended, 0.30, 0.99))
 
 **Invariante**: PMGG `_run_with_retry()` und UV3 `_effective_goal_thresholds`-Block verwenden **identische** delta-adaptive Logik.
 
-### §2.54b Headroom-Scalar für additive Enhancement-Phasen (v9.11.14)
+### §2.54b Headroom-Scalar für additive Enhancement-Phasen (v10.0.0)
 
 Additive Phase-Familien (`harmonic_reconstruction`, `harmonic_enhancement`, `tonal_enhancement`, `source_enhancement`, `stereo_enhancement`, `stereo_generation`) erhalten vor `wrap_phase()` einen Strength-Scalar proportional zum **absoluten** Headroom bis zur physikalischen Decke:
 
@@ -3576,7 +3576,7 @@ if hr_strength < 0.95:
 
 **VERBOTEN**: Relative Normierung `(curr - 0.30) / (ceil - 0.30)` — überdämpft CD-Phasen mit großem Headroom (CD `brillanz=0.60, ceil=0.99` → scalar=0.57 trotz 0.39 freiem Raum). Nur absoluter Headroom ist korrekt.
 
-## §2.55 [RELEASE_MUST] PMGG-CIG-Synchronisations-Invariante (v9.11.3)
+## §2.55 [RELEASE_MUST] PMGG-CIG-Synchronisations-Invariante (v10.0.0)
 
 `CIG._PHASE_SPECIFIC_DRIFT_EXCLUSIONS` und
 `PMGG.PHASE_GOAL_EXCLUSIONS` müssen für alle P1/P2-Goals
@@ -3606,7 +3606,7 @@ Drift zählt.
 
 ---
 
-## §2.57 [RELEASE_MUST] Phase-50-HF-Guard + Phase-09-LPC/AR-Reparatur (v9.11.4 / v9.11.13)
+## §2.57 [RELEASE_MUST] Phase-50-HF-Guard + Phase-09-LPC/AR-Reparatur (v10.0.0 / v10.0.0)
 
 ### §2.57a Phase-50 HF-Spike-Schutz für Vorphasen-Harmoniken
 
@@ -3679,7 +3679,7 @@ Die STFT-Redundanz propagiert Spektralstruktur aus unbeschädigten Frames in Lü
 
 ---
 
-## §2.58 [RELEASE_MUST] PMGG Passthrough-Erkennung (v9.11.3)
+## §2.58 [RELEASE_MUST] PMGG Passthrough-Erkennung (v10.0.0)
 
 Phasen, die ihr Audio unverändert zurückgeben (z. B. `phase_31` bei CREPE confidence=0.0),
 dürfen kein Goal-Scoring, Retry oder StrictConflictDecay auslösen.
@@ -3697,7 +3697,7 @@ Passthrough ist kein Qualitätsmangel — die Phase hat einfach keinen Eingriff 
 
 **VERBOTEN**: Passthrough-Audio durch alle Goal-Scoring-Pfade schicken.
 
-### §2.58a [RELEASE_MUST] Strict-Conflict Severity-Orchestrierung (v9.12.9)
+### §2.58a [RELEASE_MUST] Strict-Conflict Severity-Orchestrierung (v10.0.0)
 
 Strict-Conflict-Decays und Cap-Tightening dürfen nicht mehr rein zählbasiert sein.
 Die Schwere muss reason-, psychoakustik- und zielprioritätsbasiert gewichtet werden.
@@ -3773,7 +3773,7 @@ Die Schwere muss reason-, psychoakustik- und zielprioritätsbasiert gewichtet we
 
 ---
 
-## §2.59 [RELEASE_MUST] CausalDefectReasoner Bidirektionale Konsistenz (v9.11.14)
+## §2.59 [RELEASE_MUST] CausalDefectReasoner Bidirektionale Konsistenz (v10.0.0)
 
 `CAUSES` und `CAUSE_TO_PHASES` müssen bidirektional konsistent sein.
 
@@ -3806,7 +3806,7 @@ korrespondierendes `CAUSES`-Feld erzeugt dead code — der Bayes-Loop iteriert *
 
 **Kontextfluss**: `defect_result → ReparaturDenker → RekonstruktionsDenker(+defect_result) → RestaurierDenker(+reconstruction_context) → UV3`
 
-### §2.41 Denker-Vollkontext (v9.10.117)
+### §2.41 Denker-Vollkontext (v10.0.0)
 
 - **ReparaturDenker**: 12 Material-Profile (click_iqr, click_kernel_ms, clip_threshold, hum_detect_db). Shellac IQR=4.0 → CD IQR=9.0. Era-adaptive Hum (≤1940: ≥−42 dB).
 - **RekonstruktionsDenker**: 6 Material-Konfigurationen für GapReconstructor (Shellac: max 200 ms, Tape: bis 2000 ms).
@@ -3870,7 +3870,7 @@ ueberschreiten.
 
 ---
 
-## §2.60 [RELEASE_MUST] Rollback-Hierarchie (v9.12.0)
+## §2.60 [RELEASE_MUST] Rollback-Hierarchie (v10.0.0)
 
 Quelle: `[SRC:S06,S07,S12,S13]`
 
@@ -3926,7 +3926,7 @@ def _recovery_cascade(self, gate_fail_reason: str) -> RestorationResult:
 
 ---
 
-## §2.61 [RELEASE_MUST] Output-Length-Guard (v9.12.0)
+## §2.61 [RELEASE_MUST] Output-Length-Guard (v10.0.0)
 
 **Jede Phase und der finale Export müssen dieselbe Sample-Anzahl wie das Input-Audio haben** (±64 Samples Toleranz für Resampling-Rundung).
 
@@ -3957,7 +3957,7 @@ if abs(len(output) - len(audio_in)) > 64:
 
 ---
 
-## §2.63 [RELEASE_MUST] Intro/Outro-Edge-Safety + Stereo-Lag-Invariante (v9.12.0)
+## §2.63 [RELEASE_MUST] Intro/Outro-Edge-Safety + Stereo-Lag-Invariante (v10.0.0)
 
 **Pegelexplosionen an Intro/Outro müssen in der Entstehung vermieden werden.**
 Nachträgliche Kaschierung (z. B. reiner Crossfade am Ausgang) ist nur sekundäre Fangschicht.
@@ -3991,7 +3991,7 @@ Restaurierung darf weder neue Intro/Outro-Peaks erzeugen noch neue L/R-Zeitversc
 
 ---
 
-## §2.64 [RELEASE_MUST] Per-Phase-Score-Delta-Loop (v9.12.1)
+## §2.64 [RELEASE_MUST] Per-Phase-Score-Delta-Loop (v10.0.0)
 
 **Jede Phase wird von einem bindenden Vorher/Nachher-Messrahmen eingeschlossen.** Keine Phase darf ohne Delta-Analyse ausgeführt werden. Das Ergebnis jeder Messung steuert, ob die Phase übernommen, zurückgerollt oder die Stärke gedämpft wird.
 
@@ -4083,7 +4083,7 @@ def _profiled_phase_call_with_delta(self, phase_fn, audio, phase_id, **kwargs):
 - Delta-Log `metadata["phase_deltas"]` ist Pflicht für jeden Phasenaufruf — ohne Log kein konvergenzgesteuertes Stoppen.
 - `_RESTORATIVE_PHASES` (phase_02/03/09/18/20/23/24/29/49) sind von P1/P2-Regression-Check ausgenommen (§2.29c Baseline-Capping).
 
-### [RELEASE_MUST] Proxy-Kalibrierungs-Invarianten (v9.12.2)
+### [RELEASE_MUST] Proxy-Kalibrierungs-Invarianten (v10.0.0)
 
 Drei bekannte Proxy-Calibration-Bugs, die zu systematisch zu niedrigen Delta-Werten für **alle Import-Songs** führen:
 
@@ -4097,7 +4097,7 @@ Drei bekannte Proxy-Calibration-Bugs, die zu systematisch zu niedrigen Delta-Wer
 
 ---
 
-## §2.65 [RELEASE_MUST] MAS-Convergence-Early-Stop (v9.12.1)
+## §2.65 [RELEASE_MUST] MAS-Convergence-Early-Stop (v10.0.0)
 
 **Sobald alle P1/P2-Goals ihr song-spezifisches Maximum (`MAS`) erreicht haben, stoppt die Pipeline.** Weitere Phasen verletzen §2.45 Minimal-Intervention und riskieren Over-Processing.
 
@@ -4150,7 +4150,7 @@ for phase_id in planned_phases:
 
 ---
 
-## §2.66 [RELEASE_MUST] SharedF0Context — Geteilte F0-Referenz für alle Phasen (v9.12.0)
+## §2.66 [RELEASE_MUST] SharedF0Context — Geteilte F0-Referenz für alle Phasen (v10.0.0)
 
 > **Konzeptuelle Kernlücke geschlossen**: Ohne SharedF0Context schätzt jede Phase die
 > Grundfrequenz unabhängig (CREPE oder PYIN). Das führt zu inkonsistenten F0-Karten über
@@ -4233,7 +4233,7 @@ else:
 
 ---
 
-## §2.67 [RELEASE_MUST] DynamicArcProtection — Schutzmechanismus für den Dynamikbogen (v9.12.0)
+## §2.67 [RELEASE_MUST] DynamicArcProtection — Schutzmechanismus für den Dynamikbogen (v10.0.0)
 
 > **Konzeptuelle Kernlücke geschlossen**: Jede Phase kann lokal korrekt arbeiten und
 > trotzdem den Gesamt-Dynamikbogen des Titels flachdrücken. Akkumulierte Kompression
@@ -4319,7 +4319,7 @@ Phasen, die eine gemeinsame physikalische Ursache behandeln, dürfen nicht so be
 
 ---
 
-## §2.68 [RELEASE_MUST] Structural Silence Isolation Protocol (SSIP) — v9.12.0
+## §2.68 [RELEASE_MUST] Structural Silence Isolation Protocol (SSIP) — v10.0.0
 
 > **Systemproblem**: Generative und inpainting-basierte Phasen erzeugen katastrophal laute
 > Artefakte in Stille-Zonen (Intro, Outro, Fade, Pre-Roll). Konventionelle Silence-Masken,

@@ -68,7 +68,7 @@ aufgerufen via `MusicalGoalsChecker.measure_all(audio, sr)`.
 | **Brillanz** (`BrillanzMetric`) | HF-Klarheit, 8–20 kHz — Sparkle & Air | **5** | ≥ **0.78** | ≥ **0.82** |
 | **Raumtiefe** (`SpatialDepthMetric`) | IACC (Interaural Cross-Correlation, Blauert 1997) + Stereobreite + Phantom-Center-Stabilität; IACC < 0.70 → wahrnehmb. Zusammenbruch | **5** | ≥ **0.70** | ≥ **0.74** |
 
-> **v9.10.77 / Spec 09 Pareto-Differenzierung**: Restoration-Modus senkt P3–P5-Böden auf physikalisch erreichbare Werte (Pareto-Konflikte: Bass↔Transparenz [0.7], Brillanz↔Wärme [0.6]). P1/P2 bleiben identisch. Studio 2026 setzt höhere P1/P2-Böden (Enhancement braucht stärkere Naturalness-Guardrails) und niedrigere P3–P5-Böden (materialadaptiv kalibriert aus AMRB).
+> **v10.0.0 / Spec 09 Pareto-Differenzierung**: Restoration-Modus senkt P3–P5-Böden auf physikalisch erreichbare Werte (Pareto-Konflikte: Bass↔Transparenz [0.7], Brillanz↔Wärme [0.6]). P1/P2 bleiben identisch. Studio 2026 setzt höhere P1/P2-Böden (Enhancement braucht stärkere Naturalness-Guardrails) und niedrigere P3–P5-Böden (materialadaptiv kalibriert aus AMRB).
 > **Kanonische Böden**: Die Werte in dieser Tabelle sind `CANONICAL_THRESHOLDS` — implementiert in `backend/core/calibration_matrix.py` (Single Source of Truth: Spec 09, normativ übergeordnet). Song-spezifische Ziele berechnet die adaptive Schicht §1.2b + §2.31 + §09.2 + §2.56 (Material, Ära, Genre, Tonträgerkette, Restorability, Physical Ceiling) — **garantiert wird immer der effektive Zielwert**, nicht der rohe kanonische Boden.
 > **Schwellwert-Validierung**: Die Schwellwerte wurden algorithmisch aus AMRB-Benchmarkdaten (10 Szenarien, Ø OQS-Kalibrierung) abgeleitet. Ein ITU-R BS.1534-3 MUSHRA-Hörertest steht als externe Validierung aus (geplant). Bis zur Validierung gelten die Werte als „best engineering estimate“. Änderungen ausschließlich in `calibration_matrix.py` + Spec 09 (Single Source of Truth).
 
@@ -103,7 +103,7 @@ Einzelphasen dürfen Proxy-Werte vorübergehend senken, wenn:
 
 Eine Regression nach der **gesamten Kette** macht das Feature ungültig.
 
-### §1.2a [RELEASE_MUST] Carrier-Recovery-Referenz am Pipeline-Ende (v9.11.14)
+### §1.2a [RELEASE_MUST] Carrier-Recovery-Referenz am Pipeline-Ende (v10.0.0)
 
 **Problem**: Am Pipeline-Ende messen referenzbasierte Goals (timbral_fidelity, MFCC, Centroid, Authentizität) den Output gegen den **degradierten Input**. Bei erfolgreicher Carrier-Chain-Inversion hat sich das Signal intentional stark verändert — die Messung bestraft korrekte Restaurierung als Regression.
 
@@ -145,7 +145,7 @@ metadata["best_carrier_checkpoint"] = current_audio.copy()
 
 Alle drei Ebenen MÜSSEN konsistent implementiert sein. Ein Gate (PMGG, CIG, HPI, AFG) darf den Export nie blockieren, weil sich das Signal vom **degradierten** Input entfernt hat — solange es sich dem **physikalischen Ceiling** des erkannten Materials nähert.
 
-### §1.2b [RELEASE_MUST] Effektiver Zielwert und Erreichens-Garantie (v9.12.13)
+### §1.2b [RELEASE_MUST] Effektiver Zielwert und Erreichens-Garantie (v10.0.0)
 
 Für jedes Importstück MUSS Aurik pro anwendbarem Musical Goal genau einen **effektiven Zielwert** berechnen. Dieser Wert ist der einzige harte Zielwert, den Pipeline, PMGG, FeedbackChain, End-Gate, UI und Report verwenden dürfen.
 
@@ -223,7 +223,7 @@ REGRESSION_EPSILON: float = 0.001
 # pro Phase (PMGG + PhaseConductor + SongCalibration).
 ```
 
-### §2.34b [RELEASE_MUST] Cross-Goal-Balancevertrag fuer Waerme und Raumtiefe (v9.12.16)
+### §2.34b [RELEASE_MUST] Cross-Goal-Balancevertrag fuer Waerme und Raumtiefe (v10.0.0)
 
 Bei Goal-Recovery darf `waerme` nicht isoliert maximiert werden, wenn dadurch
 `spatial_depth` hoerbar kollabiert. Beide Goals sind als gekoppeltes Paar zu behandeln.
@@ -249,9 +249,9 @@ VERBOTEN:
 - Waerme-Boost ohne gleichzeitige Raumtiefen-Pruefung.
 - Akzeptanz eines Kandidaten nur aufgrund eines Einzelgoal-Gewinns.
 
-**§2.29 Priority-Aware PMGG Retries (v9.10.77)**:
+**§2.29 Priority-Aware PMGG Retries (v10.0.0)**:
 
-**Ergänzung v9.11.5 (Team-Koordination):**
+**Ergänzung v10.0.0 (Team-Koordination):**
 PMGG-Retry/Strength-Entscheidungen sind kontextbewusst über `prior_phase_context`
 zu steuern, damit Folgephasen (insb. `phase_50`) intentionale Vorphasen-Reparaturen
 nicht indirekt neutralisieren. Normative Details: Spec 02 §2.29e, Spec 06 §6.9b.
@@ -346,7 +346,7 @@ proximity_score = (
 
 ---
 
-## §2.35c [RELEASE_MUST] VocalQualityIndex (VQI) — Gesangs-Gesamtqualitäts-Gate (v9.12.0)
+## §2.35c [RELEASE_MUST] VocalQualityIndex (VQI) — Gesangs-Gesamtqualitäts-Gate (v10.0.0)
 
 **Motivation**: Die bestehenden 15 Musical Goals und §2.35/§2.35b messen jeweils Teilaspekte des Gesangs. Ein zusammengesetzter `VocalQualityIndex` liefert ein einzelnes, messbares Qualitätssignal für Gesangsmaterial — und ermöglicht damit, einen extern belegbaren Spitzenanspruch für Gesangsrestaurierung überhaupt erst zu prüfen.
 
@@ -477,17 +477,17 @@ ALWAYS_APPLICABLE: frozenset[str] = frozenset({
 
 | Ziel | Deaktiviert wenn |
 | --- | --- |
-| `SpatialDepthMetric` | EraResult.decade ≤ 1950 UND M/S-Korrelation ≥ 0.95 (Mono-Aufnahme) **ODER** Transfer-Chain-Ende ist Lossy-Codec (`mp3_low`, `mp3_high`, `aac`, `streaming`) UND L/R-Korrelation ≥ **0.83** (Near-Mono-Codec: Joint-Stereo-Kompression kollabiert Raumcues physikalisch — bestätigt cassette+mp3_low corr=0.8507, v9.15.1) |
+| `SpatialDepthMetric` | EraResult.decade ≤ 1950 UND M/S-Korrelation ≥ 0.95 (Mono-Aufnahme) **ODER** Transfer-Chain-Ende ist Lossy-Codec (`mp3_low`, `mp3_high`, `aac`, `streaming`) UND L/R-Korrelation ≥ **0.83** (Near-Mono-Codec: Joint-Stereo-Kompression kollabiert Raumcues physikalisch — bestätigt cassette+mp3_low corr=0.8507, v10.0.0) |
 | `SeparationFidelityMetric` | Mono-Quelle ODER PANNs < 2 Instrumente mit confidence ≥ 0.4 **ODER** Transfer-Chain-Ende ist Lossy-Codec UND L/R-Korrelation ≥ 0.83 (Joint-Stereo-Kodierung zerstört Stereo-Separation physikalisch — V52-Fix S7: parallele Regel zu `spatial_depth`; gleiches `_CODEC_JOINT_STEREO_MATS`-Set) |
 | `BrillanzMetric` | Quell-Bandbreite < 8 kHz UND AudioSR nicht geladen |
-| `TonalCenterMetric` | MaterialType = WAX_CYLINDER (Fix K, v9.10.100: SNR-Bedingung entfernt — K-S-Key-Detection ist SNR-invariant gemäß §9.7.11) |
+| `TonalCenterMetric` | MaterialType = WAX_CYLINDER (Fix K, v10.0.0: SNR-Bedingung entfernt — K-S-Key-Detection ist SNR-invariant gemäß §9.7.11) |
 | `GrooveMetric` | Dateilänge < 10 s ODER PANNs Percussion confidence < 0.15 |
 | `MicroDynamicsMetric` | Dateilänge < 20 s ODER Original-LUFS-Varianz < 0.5 LU |
 
 Filter läuft EINMAL pro Restaurierung (nach MediumClassifier + EraClassifier).
 Inapplicable Goals: im UI grau ausgeblendet, in `RestorationResult.goal_applicability` gespeichert.
 
-**Chain-End-Codec-Ausschluss** (§2.32a, v9.15.1): `evaluate_goal_applicability()` empfängt `transfer_chain: list[str] | None`. Wenn das Ketten-Ende ein Lossy-Codec ist und der primäre Träger analog ist, gelten die erweiterten Deaktivierungs-Regeln. Schwellwert für Near-Mono-Erkennung: L/R-Korrelation ≥ **0.83** (nicht 0.88 — cassette/analoges Stereo-Tape hat typisch corr ≈ 0.85–0.87; mit 0.88 würde Ausschluss nie feuern). `evaluate_goal_applicability()` übergibt dazu `transfer_chain` auch an `calibration_matrix.get_material_floor()` für korrekte Bodenberechnung (§09.13).
+**Chain-End-Codec-Ausschluss** (§2.32a, v10.0.0): `evaluate_goal_applicability()` empfängt `transfer_chain: list[str] | None`. Wenn das Ketten-Ende ein Lossy-Codec ist und der primäre Träger analog ist, gelten die erweiterten Deaktivierungs-Regeln. Schwellwert für Near-Mono-Erkennung: L/R-Korrelation ≥ **0.83** (nicht 0.88 — cassette/analoges Stereo-Tape hat typisch corr ≈ 0.85–0.87; mit 0.88 würde Ausschluss nie feuern). `evaluate_goal_applicability()` übergibt dazu `transfer_chain` auch an `calibration_matrix.get_material_floor()` für korrekte Bodenberechnung (§09.13).
 
 **Invariante (§2.32b)**: Inapplicable Goals aus UV3 (`RestorationResult.goal_applicability`) MÜSSEN über `RestaurierErgebnis.goal_applicability` (V51) vollständig an AurikDenker und weiter an `ExzellenzDenker.messe_und_repariere(inapplicable_goals=...)` propagiert werden — sonst zählen physikalisch unmögliche Scores als Violations und triggern Over-Processing (V49). `AurikErgebnis` muss ebenfalls `goal_applicability`-Feld für externe Caller besitzen (V51).
 
@@ -543,7 +543,7 @@ thresholds, config, quality_assessment = get_adaptive_goals_and_config(audio, sr
 - Absolute Untergrenze: adaptive_t ≥ 0.50 (unter 0.50 → Goal deaktivieren)
 - NaN in restorability_score → alle Schwellwerte auf Original-Werte
 
-### §2.31d Kombinierte Extrembedingungen (v9.10.123)
+### §2.31d Kombinierte Extrembedingungen (v10.0.0)
 
 Wenn **mehrere** erschwerende Faktoren gleichzeitig vorliegen, kaskadieren die Adaptionen:
 
@@ -555,7 +555,7 @@ Wenn **mehrere** erschwerende Faktoren gleichzeitig vorliegen, kaskadieren die A
 | Dateilänge < 10 s | GrooveMetric + MicroDynamicsMetric + EmotionalArcPreservation deaktivieren; FeedbackChain max 2 Iterationen |
 | Dateilänge > 60 min | SegmentAdaptiveProcessor aktivieren; DefectScanner auf 3×60-s-Segmente (Anfang/Mitte/Ende) |
 
-### §2.31e Prior-Konflikt-Auflösung (v9.10.123)
+### §2.31e Prior-Konflikt-Auflösung (v10.0.0)
 
 Wenn Ära-Prior und Material-Prior widersprüchliche Anpassungen ergeben:
 
@@ -638,7 +638,7 @@ Nutzer-Meldung wenn Decke erreicht (Deutsch):
 
 ---
 
-## §2.56 Song-Goal-Importance — Per-Song Goal Weighting (v9.12.0) [RELEASE_MUST]
+## §2.56 Song-Goal-Importance — Per-Song Goal Weighting (v10.0.0) [RELEASE_MUST]
 
 Die 15 Musical Goals bilden eine Pareto-Front: nicht alle können gleichzeitig vollständig erfüllt werden,
 da sie sich physikalisch teilweise ausschließen (z.B. Brillanz vs. Wärme, Transparenz vs. Raumtiefe).
@@ -648,7 +648,7 @@ Für jedes Stück muss die richtige Gewichtung aus dem musikalischen Kontext ber
 `SongGoalImportance` mit 14 Gewichten ∈ [0.3, 2.0]. Diese Gewichte bestimmen, welche Goals
 bei diesem konkreten Song Vorrang genießen und welche toleranter behandelt werden.
 
-### §2.56a 5-Stufen-Gewichtungsarchitektur (v9.12.0)
+### §2.56a 5-Stufen-Gewichtungsarchitektur (v10.0.0)
 
 Die Berechnung erfolgt in **5 multiplikativen Stufen** + Soft-Cap + Bounds:
 
@@ -774,7 +774,7 @@ Formel:  w > 1.5 → w' = 1.5 + excess/(1 + 3·excess)    // Asymptote: 1.83
 
 ## §1.3 Metric Recalibration Details & Debugging Patterns (konsolidiert aus Skill fix-metric)
 
-### §9.7.15 Recalibration-Werte (v9.10.120)
+### §9.7.15 Recalibration-Werte (v10.0.0)
 
 | Metrik | Änderung | Wissenschaftliche Basis |
 | --- | --- | --- |
@@ -831,7 +831,7 @@ quality_estimate = max(0.0, min(1.0, 0.40 * (1 - defect_severity) + 0.60 * (pqs_
 
 ---
 
-## §1.4 Kritische Kalibrierungsfehler (v9.11.14, normiert 2026-04-25)
+## §1.4 Kritische Kalibrierungsfehler (v10.0.0, normiert 2026-04-25)
 
 Diese Fehler wurden in Produktion bestätigt und haben die gesamte Musical-Goals-Kette desaktiviert.
 
@@ -927,7 +927,7 @@ _is_noise_dominated = _max_onset_density > 6.0  # War: _gdur_s < 10.0 and ...
 
 ---
 
-### §1.4.6 [RELEASE_MUST] TransientEnergyMetric — Algorithmus-Spezifikation (v9.12.0)
+### §1.4.6 [RELEASE_MUST] TransientEnergyMetric — Algorithmus-Spezifikation (v10.0.0)
 
 > **Neue Sub-Spec für das in §1.2 neu eingeführte Goal `Transient-Energie`** (Prio 2).
 >
@@ -1024,13 +1024,13 @@ _GOAL_TO_RECOVERY_PHASES_RESTORATION["TransientEnergie"] = [
 
 ---
 
-## §2.35d [RELEASE_MUST] VQI Sub-Komponenten-Dekomposition (v9.12.0)
+## §2.35d [RELEASE_MUST] VQI Sub-Komponenten-Dekomposition (v10.0.0)
 
 > **Konzeptuelle Kernlücke geschlossen**: VQI war ein Black-Box-Skalar. Für Weltklasse-Vocal-
 > Restaurierung muss jeder Aspekt der Vokalqualität einzeln messbar und angreifbar sein —
 > sonst kann kein Recovery-Pfad gezielt intervenieren.
 
-Die `compute_vqi()`-Funktion gibt ab v9.12.0 neben `vqi` drei normierte Sub-Scores zurück:
+Die `compute_vqi()`-Funktion gibt ab v10.0.0 neben `vqi` drei normierte Sub-Scores zurück:
 
 ```python
 # backend/core/musical_goals/vocal_quality_index.py
@@ -1106,7 +1106,7 @@ vqi = (vibrato_precision ** 0.40) * (consonant_clarity ** 0.35) * (register_tran
 
 ---
 
-## §2.35e [RELEASE_MUST] Dynamikbogen-Schutz (EmotionalArc) als explizites Qualitätsziel (v9.12.0)
+## §2.35e [RELEASE_MUST] Dynamikbogen-Schutz (EmotionalArc) als explizites Qualitätsziel (v10.0.0)
 
 > **Konzeptuelle Kernlücke geschlossen**: Der Dynamikbogen war nur Gewichtungsfaktor in der
 > HPI-Formel (§2.44), aber kein messbares Ziel mit Schwellwert und Recovery-Pfad.

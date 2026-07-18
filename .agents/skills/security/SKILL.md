@@ -1,4 +1,4 @@
-# Security Policy — Aurik 9
+# Security Policy — Aurik 10.0.8
 
 ## Unterstützte Versionen
 
@@ -23,7 +23,7 @@ eine Behebung innerhalb von **14 Tagen** für kritische Schwachstellen.
 
 ## Sicherheitsarchitektur
 
-Aurik 9 verarbeitet lokale Audio-Dateien auf dem Desktop-PC des Nutzers.
+Aurik 10.0.8 verarbeitet lokale Audio-Dateien auf dem Desktop-PC des Nutzers.
 Folgende Sicherheitsprinzipien sind implementiert:
 
 ### Input-Validierung (OWASP A03 — Injection)
@@ -36,7 +36,7 @@ Folgende Sicherheitsprinzipien sind implementiert:
 
 ### Keine Netzwerkabhängigkeiten
 
-- Aurik 9 ist vollständig offline-fähig nach der Installation
+- Aurik 10.0.8 ist vollständig offline-fähig nach der Installation
 - Kein Cloud-Aufruf, kein Telemetrie, keine externe API
 - Alle ML-Modelle sind lokal gebündelt (SHA256-verifiziert)
 
@@ -54,7 +54,7 @@ Folgende Sicherheitsprinzipien sind implementiert:
 
 ## Bekannte Einschränkungen
 
-- Aurik 9 vertraut darauf, dass die verarbeiteten Audio-Dateien vom Nutzer
+- Aurik 10.0.8 vertraut darauf, dass die verarbeiteten Audio-Dateien vom Nutzer
   selbst stammen oder zur Verarbeitung berechtigt sind.
 - Das Projekt enthält keine Zugriffskontrolle für Mehrbenutzer-Szenarien
   (Desktop-Einzelplatz-Anwendung).

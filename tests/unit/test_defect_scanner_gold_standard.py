@@ -3,7 +3,7 @@ from __future__ import annotations
 """
 tests/unit/test_defect_scanner_gold_standard.py
 ================================================
-§3 Gold-Standard-Kalibrierung des DefectScanners (FIXED v9.11)
+§3 Gold-Standard-Kalibrierung des DefectScanners (FIXED v10.0.0)
 
 Ziel: Prüft, ob der DefectScanner synthetisch injizierte bekannte Defekte
       korrekt erkennt bzw. bei sauberem Audio unter der Detektionsschwelle

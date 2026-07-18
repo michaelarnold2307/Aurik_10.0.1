@@ -1,5 +1,5 @@
 """
-Phase 1: Professional Click Removal - Aurik 9.0
+Phase 1: Professional Click Removal - Aurik 10.0.0
 ================================================
 
 Professional-grade click and pop removal competing with iZotope RX De-click.
@@ -49,7 +49,7 @@ BENCHMARK COMPARISON:
 - Audacity Click Removal: Basic, threshold-based
 - Aurik v2.0: Professional, multi-scale, <1.0× realtime ✅
 
-Author: Aurik 9.0 Development Team
+Author: Aurik 10.0.0 Development Team
 Version: 2.0.0 (Professional Upgrade)
 Date: 15. Februar 2026
 """
@@ -784,7 +784,7 @@ class ClickRemovalPhase(PhaseInterface):
         base_strength: float,
         protected_zones: list[tuple[float, float, float]] | None = None,
     ) -> float:
-        """§V38 Per-Event-Strength-Oracle für Click-Reparatur (v9.20.0).
+        """§V38 Per-Event-Strength-Oracle für Click-Reparatur (v10.0.0).
 
         Berechnet eine event-lokale Reparaturstärke basierend auf:
         1) 250 ms Kontext-RMS-Proxy: stille Zonen (Flüster, Pausen) → weniger Blend
@@ -861,7 +861,7 @@ class ClickRemovalPhase(PhaseInterface):
     ) -> tuple[np.ndarray, int]:
         """Wendet einen gekoppelten Reparaturplan kanalweise und ereignislokal an.
 
-        §V38 v9.20.0: Per-Event-Strength-Oracle — jedes Click-Event erhält eine
+        §V38 v10.0.0: Per-Event-Strength-Oracle — jedes Click-Event erhält eine
         lokale Reparaturstärke via `_compute_click_local_strength()`.
         Schützt Vibrato/Frisson/Flüster/Passaggio-Zonen automatisch.
         """
@@ -1030,7 +1030,7 @@ class ClickRemovalPhase(PhaseInterface):
         """
         Professional click removal with multi-scale detection and ML-Hybrid support.
 
-        §V38 v9.20.0: Per-Event-Strength-Oracle — lokale Reparaturstärke
+        §V38 v10.0.0: Per-Event-Strength-Oracle — lokale Reparaturstärke
         via `_compute_click_local_strength()` für jedes Click-Event.
 
         Returns:

@@ -1,4 +1,4 @@
-"""error_notifier.py — Minimaler Fehler-Benachrichtigungs-Stub für Aurik 9.
+"""error_notifier.py — Minimaler Fehler-Benachrichtigungs-Stub für Aurik 10.0.0.
 
 Stellt `setup_error_notifier()` bereit, das von `backend/logging_config.py`
 benötigt wird. Keine externe Netzwerkverbindung — reine lokale Protokollierung.

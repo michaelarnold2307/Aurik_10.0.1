@@ -1,4 +1,4 @@
-"""Unit-Tests für RecordingChainProfiler (§2.66, v9.13)."""
+"""Unit-Tests für RecordingChainProfiler (§2.66, v10.0.0)."""
 
 import pytest
 

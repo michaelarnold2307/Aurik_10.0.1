@@ -13,7 +13,7 @@ Migrationsanleitung::
     from backend.core.musical_phrase_context import MusicalPhraseContextExtractor
 
 Dieser Shim wird in einer zukünftigen Version entfernt.
-Referenz: §2.12 Aurik-9-Spec (v9.9.5)
+Referenz: §2.12 Aurik-9-Spec (v10.0.0)
 """
 
 import warnings as _warnings

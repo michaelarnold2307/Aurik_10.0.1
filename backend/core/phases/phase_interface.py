@@ -8,7 +8,7 @@ Definiert:
     - PhaseInterface (ABC): Abstrakte Basisklasse für alle 64 Phasen
   - create_phase_result(): Convenience-Factory
 
-Aurik 9.10.46 — Kanonische Implementierung (core/phases/phase_interface.py)
+Aurik 10.0.0 — Kanonische Implementierung (core/phases/phase_interface.py)
 """
 
 from __future__ import annotations
@@ -199,8 +199,10 @@ def create_phase_result(
                 summary=_summary,
                 details=_details if _details else None,
             )
-        except Exception:
-            pass  # Fazit-Log ist optional, darf Phase nicht blockieren
+        except Exception as _e:
+            logger.debug(
+                "phase_phase_interface: non-critical exception: %s", _e
+            )  # Fazit-Log ist optional, darf Phase nicht blockieren
 
     return PhaseResult(
         audio=audio,

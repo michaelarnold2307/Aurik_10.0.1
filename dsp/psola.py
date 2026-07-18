@@ -1,5 +1,5 @@
 """
-Aurik 9 — PSOLA: Pitch Synchronous Overlap-Add
+Aurik 10.0.0 — PSOLA: Pitch Synchronous Overlap-Add
 ===============================================
 Formanterhaltende Pitch-Korrektur für Gesangsmaterial (§4.5, §8.2–6).
 

@@ -1,5 +1,5 @@
 """
-Aurik 9 — ArtifaktFreiheitsGate §2.49 [RELEASE_MUST]
+Aurik 10.0.0 — ArtifaktFreiheitsGate §2.49 [RELEASE_MUST]
 ======================================================
 Dediziertes Gate für Artefakt-Erkennung — unabhängig von den 15 Musical Goals.
 5 Artefakttypen mit material-adaptiven Schwellwerten und perzeptueller Salienz-Gewichtung.
@@ -173,7 +173,7 @@ _MATERIAL_FACTORS = {
         "crackle_impulse_kurtosis": 2.0,  # Wachswalze: sehr hoher Impuls-Rauschboden
         "crackle_peak_rms_db": 1.3,
     },
-    # v9.15.1: cassette fehlte in _MATERIAL_FACTORS — _normalize_material() gab fälschlicherweise
+    # v10.0.0: cassette fehlte in _MATERIAL_FACTORS — _normalize_material() gab fälschlicherweise
     # "digital" zurück (kein substring-Match für "cassette" in den anderen Keys).
     # Kassette (IEC 60094-1 Type I): SNR ~52 dB, Flutter 0.2 % WRMS, BW 50–12.5 kHz.
     # Werte: zwischen tape (1.25×) und vinyl (1.5×) — mehr Hiss als Tape, weniger Crackle als Vinyl.
@@ -228,7 +228,7 @@ _ROUGHNESS_MATERIAL_TOLERANCE: dict[str, float] = {
     "streaming": 1.0,
     "tape": 1.25,
     "reel_tape": 1.25,
-    "cassette": 1.25,  # v9.15.1: analog wie tape
+    "cassette": 1.25,  # v10.0.0: analog wie tape
     "vinyl": 1.5,
     "minidisc": 1.5,
     "shellac": 2.0,

@@ -1,5 +1,5 @@
 """
-Phase 7: Professional Harmonic Restoration - Aurik 9.0
+Phase 7: Professional Harmonic Restoration - Aurik 10.0.0
 =======================================================
 
 Professional harmonic enhancement with tube/tape saturation modeling competing with Waves Aphex Vintage Warmer.
@@ -71,7 +71,7 @@ BENCHMARK COMPARISON:
 - iZotope Ozone Exciter: Multi-band harmonic generation
 - Aurik v2.0: Professional, material-adaptive, <0.5× realtime ✅
 
-Author: Aurik 9.0 Development Team
+Author: Aurik 10.0.0 Development Team
 Version: 2.0.0 (Professional Upgrade)
 Date: 15. Februar 2026
 """
@@ -736,7 +736,7 @@ class HarmonicRestorationPhase(PhaseInterface):
         # Shellac ≤ 8 kHz, Vinyl ≤ 16 kHz, WaxCyl ≤ 5 kHz.
         _BW_CEILING_07: dict[str, float] = {
             "shellac": 8000.0,
-            "wax_cylinder": 3000.0,  # §ERA 1900-1925 Sekundär-Guard (v9.12.9)
+            "wax_cylinder": 3000.0,  # §ERA 1900-1925 Sekundär-Guard (v10.0.0)
             "vinyl": 16000.0,
             "reel_tape": 15000.0,  # §6.2c Tape = 15 kHz (IEC)
             "cassette": 14000.0,  # §6.2c Cassette = 14 kHz (central definition)
@@ -785,7 +785,7 @@ class HarmonicRestorationPhase(PhaseInterface):
             )
             _BW_CEILINGS_07 = {
                 "shellac": 8000.0,
-                "wax_cylinder": 3000.0,  # §ERA 1900-1925 Sekundär-Guard (v9.12.9)
+                "wax_cylinder": 3000.0,  # §ERA 1900-1925 Sekundär-Guard (v10.0.0)
                 "vinyl": 16000.0,
                 "reel_tape": 15000.0,  # §6.2c Tape = 15 kHz (IEC)
                 "cassette": 14000.0,  # §6.2c Cassette = 14 kHz (central definition)

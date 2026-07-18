@@ -2,7 +2,7 @@
 applyTo: "backend/core/phases/phase_*.py"
 ---
 
-# Phasen-Regeln (normativ, Aurik 9.12.x)
+# Phasen-Regeln (normativ, Aurik 10.0.0.x)
 
 ## Pflicht-Checkliste bei jeder neuen Phase
 
@@ -142,7 +142,7 @@ max_dr = _MATERIAL_DR_CEILING_DB[material]  # Vinyl ≤ 70dB, Shellac ≤ 45dB, 
 # Expansion über Ceiling = Artefakt → sofortiger Rollback
 ```
 
-## Phase 23 — BW-Ceiling-First-Invariante (v9.12.9)
+## Phase 23 — BW-Ceiling-First-Invariante (v10.0.0)
 
 Generative/Inpainting-Phasen (phase_23) MÜSSEN `_apply_material_bw_ceiling()` **VOR** dem HallucinationGuard aufrufen:
 

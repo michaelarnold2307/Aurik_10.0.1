@@ -386,7 +386,7 @@ class MusicalGoalsQualityGate:
         degradations = {}
         critical_violations = []
 
-        # v9.10.76: Per-goal critical threshold — wenn adaptive_thresholds aktiv
+        # v10.0.0: Per-goal critical threshold — wenn adaptive_thresholds aktiv
         # sind (degradiertes Material), darf critical_threshold nicht höher als
         # der adaptive Schwellwert sein, sonst werden alle material-adaptiven
         # Relaxationen durch den festen critical_threshold=0.70 zunichte gemacht.
@@ -581,7 +581,7 @@ class MusicalGoalsQualityGate:
             post_check=post_check,
             processing_steps=processing_steps,
             total_violations=len(post_check.violations),
-            # v9.10.76: Die post_check-Logik hat critical_violations bereits
+            # v10.0.0: Die post_check-Logik hat critical_violations bereits
             # korrekt mit per-goal adaptive critical_threshold berechnet und
             # in die decision kodiert. Wir zählen die Violations, die unter
             # dem material-adaptiven Floor liegen.
@@ -1113,7 +1113,7 @@ class EnhancedQualityGate:
         Returns:
             EnhancedPostCheckResult with multi-metric decision
         """
-        # v9.10.76: adaptive_thresholds auch aus context extrahieren (Rückwärtskompatibilität)
+        # v10.0.0: adaptive_thresholds auch aus context extrahieren (Rückwärtskompatibilität)
         _adaptive = adaptive_thresholds
         if _adaptive is None and context:
             _adaptive = context.get("adaptive_thresholds")

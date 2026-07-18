@@ -1,5 +1,5 @@
 """
-Optimization Integration für Aurik 8.0 Adaptive Pipeline
+Optimization Integration für Aurik 10.0.0 Adaptive Pipeline
 
 Integriert die neuen Optimierungs-Features:
 Phase 1:
@@ -64,7 +64,7 @@ class OptimizationIntegration:
         self,
         optimization_base_path: Path | None = None,
         sr: int = 48000,
-        device: str = "cpu",  # §9.5: Aurik 9 — ausschließlich CPU, kein CUDA/ROCm/Metal
+        device: str = "cpu",  # §9.5: Aurik 10.0.0 — ausschließlich CPU, kein CUDA/ROCm/Metal
     ) -> None:
         """
         Initialisiert optimization integration.

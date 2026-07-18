@@ -5,7 +5,7 @@ VocalQualityIndex (VQI) — §2.35c [RELEASE_MUST]
 Vocal overall quality gate. Aggregates 5 orthogonal vocal metrics into a
 single score [0, 1]. Activated when PANNs singing confidence >= 0.35.
 
-Spec: 01_musical_goals.md §2.35c (v9.12.0)
+Spec: 01_musical_goals.md §2.35c (v10.0.0)
 """
 
 import logging
@@ -295,7 +295,7 @@ def _compute_formant_stability(
         hop = frame_len // 2
 
         # LPC-Order 14: Standard für Vokal-Formant-Analyse im Bandpass-Band 200–3400 Hz.
-        # §BUG-FIX v9.12.10: Order 30 ist für das VOLLE 48 kHz-Spektrum gedacht —
+        # §BUG-FIX v10.0.0: Order 30 ist für das VOLLE 48 kHz-Spektrum gedacht —
         # nach dem 200–3400 Hz Bandpass enthält das Signal nur noch ~3,2 kHz Bandbreite.
         # LPC Order 30 auf einem 3,2 kHz-Band → 15 Polpaare → alle spektralen Details
         # (HF-Boost-Artefakte, Kassetten-Flutter-Harmonische) als "Formanten" erkannt.

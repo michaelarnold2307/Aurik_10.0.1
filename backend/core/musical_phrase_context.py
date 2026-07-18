@@ -1,8 +1,8 @@
 """
-Musikalische Phrasenkontextfenster für Dropout-Inpainting — Aurik 9 (§2.12)
+Musikalische Phrasenkontextfenster für Dropout-Inpainting — Aurik 10.0.0 (§2.12)
 
 Standard-Inpainting (DiffWave, NMF-β) konditioniert auf ±200 ms lokalen Kontext.
-Aurik 9 erweitert dies auf musikalische Phrasen-Kontextfenster (4–30 Sekunden),
+Aurik 10.0.0 erweitert dies auf musikalische Phrasen-Kontextfenster (4–30 Sekunden),
 die durch Beat-Tracking und Phrasenanalyse bestimmt werden.
 
 Segmentierungsalgorithmus:

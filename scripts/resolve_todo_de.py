@@ -468,7 +468,7 @@ _LOOKUP: dict[str, str] = {
     "optimization/profiling.py — Performance profiler and quality validator": "optimization/profiling.py – Performance-Profiler und Qualitätsvalidator.",
     "Optimized DSP Module for AURIK v8": "Optimiertes DSP-Modul für AURIK v8.",
     "Parst MFA TextGrid output to extract phoneme alignments.": "Parst MFA-TextGrid-Ausgabe zur Extraktion von Phonem-Ausrichtungen.",
-    "Parst 'v9.10.77' or '9.10.77' into comparable tuple.": "Parst 'v9.10.77' oder '9.10.77' in ein vergleichbares Tupel.",
+    "Parst 'v10.0.0' or '9.10.77' into comparable tuple.": "Parst 'v10.0.0' oder '9.10.77' in ein vergleichbares Tupel.",
     "phase_rotation.py - Phase Rotation/Alignment for AURIK 6.0": "phase_rotation.py – Phasendrehung/Ausrichtung für AURIK 6.0.",
     "Remove/reduce crowd noise from audio.": "Entfernt/Reduziert Publikumsgeräusche aus Audio.",
     "Resolved alle Konflikte durch Priority-based Adjustments.": "Löst alle Konflikte durch prioritätsbasierte Anpassungen.",

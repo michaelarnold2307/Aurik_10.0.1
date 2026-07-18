@@ -199,7 +199,7 @@ def main() -> int:
         return 1
 
     logger.info("═" * 70)
-    logger.info("Aurik 9 — Studio-2026-Exzellenzlauf")
+    logger.info("Aurik 10.0.0 — Studio-2026-Exzellenzlauf")
     logger.info("Eingabe : %s", input_path.name)
     logger.info("Modus   : %s", MODE)
     logger.info("═" * 70)
@@ -301,8 +301,8 @@ def main() -> int:
             quality="high",
             metadata={
                 "title": stem,
-                "comment": f"Aurik 9 Studio 2026 | quality={ergebnis.quality_estimate:.3f}",
-                "software": "Aurik 9.15.0",
+                "comment": f"Aurik 10.0.0 Studio 2026 | quality={ergebnis.quality_estimate:.3f}",
+                "software": "Aurik 10.0.0",
             },
         )
         logger.info("✓ WAV exportiert: %s", out_wav_final)
@@ -316,8 +316,8 @@ def main() -> int:
             quality="high",
             metadata={
                 "title": stem,
-                "comment": f"Aurik 9 Studio 2026 | quality={ergebnis.quality_estimate:.3f}",
-                "software": "Aurik 9.15.0",
+                "comment": f"Aurik 10.0.0 Studio 2026 | quality={ergebnis.quality_estimate:.3f}",
+                "software": "Aurik 10.0.0",
             },
         )
         logger.info("✓ FLAC exportiert: %s", out_flac_final)

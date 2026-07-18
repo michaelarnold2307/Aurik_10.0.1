@@ -1,5 +1,5 @@
 """
-§2.35c [RELEASE_MUST] LPC-Formant-Tracker für Shellac-Material — Aurik 9.12.0
+§2.35c [RELEASE_MUST] LPC-Formant-Tracker für Shellac-Material — Aurik 10.0.0
 
 Burg-LPC-basierte Formant-Schätzung für schmalbandiges Material (BW ≤ 8 kHz).
 Wenn MelBandRoformer / MDX23C / NMF / HPSS fehlschlagen, ist dies der finale

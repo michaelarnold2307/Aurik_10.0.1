@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""[RELEASE_MUST] §0a Restoration-Mode-Guard — normative CI-Gate (v9.12.0)
+"""[RELEASE_MUST] §0a Restoration-Mode-Guard — normative CI-Gate (v10.0.0)
 
 Dieser Test schließt strukturell die Klasse von Bugs, die am 2026-05-05 gefunden wurden:
 Spec/Code-Drift bei §0a-verbotenen Phasen (phase_42 in forced_phases, phase_39 in
@@ -70,7 +70,7 @@ _SECTION_0A_DOCUMENTED_EXCEPTIONS: dict[str, str] = {
     # Phasen mit _enhancement-Suffix die KEIN Stem-Enhancement im §0a-Sinne sind
     "phase_13_stereo_enhancement": "Stereo-Enhancement = geometrische Korrektur (M/S-Balance), kein Stem-Enhancement; §0a nicht zutreffend",
     "phase_37_bass_enhancement": "Bass-Enhancement = passiver EQ-Boost für Fundamental-Wiedergabe; kein Stem-Enhancement. In Restoration nur aktiv wenn Organ/Bass-Evidenz",
-    "phase_39_air_band_enhancement": "Air-Band: §0a ambig. Im Restoration-Modus durch BW-Ceiling-Guard (§6.2c) begrenzt; über Material-BW-Ceiling hinaus verboten (BUG-FIX v9.12.0, CAUSE_TO_PHASES bereinigt)",
+    "phase_39_air_band_enhancement": "Air-Band: §0a ambig. Im Restoration-Modus durch BW-Ceiling-Guard (§6.2c) begrenzt; über Material-BW-Ceiling hinaus verboten (BUG-FIX v10.0.0, CAUSE_TO_PHASES bereinigt)",
     "phase_43_ml_deesser": "ML-De-Esser = passive Defektkorrektur (Sibilanten-Entfernung), kein Stem-Enhancement",
     # Phase-IDs die im UV3-Guard stehen aber (noch) keine .py-Datei haben
     "phase_56_reference_mastering": "KEIN .PY: UV3-Guard-Eintrag ist vorbeugend für eine zukünftige Phase. Wenn Phase implementiert wird: automatisch §0a-verboten.",
