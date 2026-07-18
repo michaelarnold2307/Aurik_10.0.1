@@ -37350,11 +37350,26 @@ class UnifiedRestorerV3:
                 # Nur kompensieren wenn Delay > 1ms und Korrelation hoch genug
                 if _lag > sample_rate // 1000 and _peak_corr > 0.5:
                     _trim = int(_lag)
-                    if _trim < current_audio.shape[-1] // 2:
+                    _orig_len = current_audio.shape[-1]
+                    if _trim < _orig_len // 2:
                         if current_audio.ndim == 2:
                             current_audio = current_audio[:, _trim:]
+                            # Null-Padding am Ende: Länge erhalten für
+                            # Post-Processing (MicroDynamics, GoalMetrics etc.)
+                            _pad = _orig_len - current_audio.shape[1]
+                            if _pad > 0:
+                                current_audio = np.pad(
+                                    current_audio, ((0, 0), (0, _pad)),
+                                    mode='constant', constant_values=0.0
+                                )
                         else:
                             current_audio = current_audio[_trim:]
+                            _pad = _orig_len - len(current_audio)
+                            if _pad > 0:
+                                current_audio = np.pad(
+                                    current_audio, (0, _pad),
+                                    mode='constant', constant_values=0.0
+                                )
                         _delay_compensated = True
                         logger.info(
                             "§v10.32 Delay-Kompensation: %d samples (%.1f ms) getrimmt — "
