@@ -7295,6 +7295,9 @@ class UnifiedRestorerV3:
         _input_path_for_ext = str(kwargs.get("input_path", "") or kwargs.get("file_path", "") or "")
         import os as _os_uv3
 
+        _audio_update_cb_kwarg = kwargs.pop("audio_update_callback", None)
+        _no_rt_limit = bool(kwargs.pop("no_rt_limit", False))
+
         _file_ext_for_scan = _os_uv3.path.splitext(_input_path_for_ext)[1].lower() if _input_path_for_ext else ""
         self._active_global_plan = _gp_kwarg if _gp_kwarg is not None else self.config.global_plan
         self._active_chain_info = _chain_kwarg  # TonträgerketteDenker: Ketten-Phasen
