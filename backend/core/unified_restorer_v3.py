@@ -7314,6 +7314,22 @@ class UnifiedRestorerV3:
         # Robuste Sample-Count-Ermittlung: (N,2) → N, (2,N) → N, (N,) → N
         _n_samples = max(audio.shape) if audio.ndim == 2 else len(audio)
         logger.info("Starting restoration: %.1fs audio @ %d Hz", _n_samples / sample_rate, sample_rate)
+        # §v10.11 MetadataAggregator: vollständiger Metadaten-Flow
+        try:
+            from backend.core.metadata_aggregator import get_aggregator
+            _mda = get_aggregator()
+            _mda.start_session(
+                material=str(getattr(_cached_medium_kwarg, "value", _cached_medium_kwarg)
+                             if _cached_medium_kwarg else "unknown") or "unknown",
+                era=_cached_era_kwarg,
+                genre=str(getattr(_cached_genre_kwarg, "is_schlager", "unknown")
+                          if _cached_genre_kwarg else "unknown") or "unknown",
+                duration_s=float(_n_samples / sample_rate),
+                sample_rate=int(sample_rate),
+            )
+            self._restoration_context["metadata_aggregator"] = _mda
+        except Exception as _mda_exc:
+            logger.debug("MetadataAggregator init non-blocking: %s", _mda_exc)
         # §2.59 ContractValidator: Cross-Module-Konsistenz einmalig prüfen
         try:
             from backend.core.defect_contract_validator import run_contract_validation
@@ -30801,6 +30817,23 @@ class UnifiedRestorerV3:
         elapsed = t1 - t0
         mem_used = max(mem1) - min(mem0) if _phase_mem_profiling else None
 
+        # §v10.11: Record phase metadata
+        try:
+            _mda_phase = getattr(self, "_restoration_context", {}).get("metadata_aggregator")
+            if _mda_phase is not None:
+                _phase_id_rec = str(getattr(phase_metadata, "phase_id", ""))
+                _phase_family = self._phase_family_from_phase_id(_phase_id_rec)
+                _phase_hpe = float(getattr(getattr(result, "metadata", {}), "hpe", 0.0) or 0.0)
+                _mda_phase.record_phase(
+                    phase_id=_phase_id_rec,
+                    strength=float(kwargs.get("strength", 0.5)),
+                    wet_dry=float(_sev_wet_dry),
+                    elapsed_s=float(elapsed),
+                    hpe_after=_phase_hpe if _phase_hpe > 0 else None,
+                    phase_family=_phase_family,
+                )
+        except Exception as _mda_rec_exc:
+            logger.debug("MetadataAggregator phase record non-blocking: %s", _mda_rec_exc)
         logger.info(
             f"Profiling: Phase {phase_name} | Zeit: {elapsed:.3f}s"
             + (f" | Speicher: {mem_used:.1f} MiB" if mem_used is not None else "")
