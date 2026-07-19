@@ -223,7 +223,27 @@ def check_file(filepath: Path) -> list[tuple[int, str, str]]:
 
 def main() -> int:
     """Haupteinstiegspunkt."""
-    files = get_changed_files()
+    all_mode = "--all" in sys.argv or "--fix" in sys.argv
+    
+    if all_mode:
+        # Scan all Python files
+        files: list[Path] = []
+        for root, dirs, fns in os.walk(str(_PROJECT_ROOT / "backend")):
+            dirs[:] = [d for d in dirs if d not in ('__pycache__', 'tests', '.git')]
+            for fn in fns:
+                if fn.endswith('.py'):
+                    files.append(Path(root) / fn)
+        for root, dirs, fns in os.walk(str(_PROJECT_ROOT / "denker")):
+            for fn in fns:
+                if fn.endswith('.py'):
+                    files.append(Path(root) / fn)
+        for root, dirs, fns in os.walk(str(_PROJECT_ROOT / "Aurik10")):
+            for fn in fns:
+                if fn.endswith('.py'):
+                    files.append(Path(root) / fn)
+    else:
+        files = get_changed_files()
+    
     if not files:
         print("✅ Sprache-Guard: Keine .py-Dateien zum Prüfen")
         return 0
