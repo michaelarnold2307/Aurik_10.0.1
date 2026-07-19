@@ -28622,15 +28622,25 @@ class UnifiedRestorerV3:
 
         # Finale Strength-Invariante: nichts darf die vorab berechnete Planstärke
         # überschreiten. Das verhindert Overprocessing durch späte Recovery-/Oracle-Pfade.
+        # §v10.11: Reparatur-Phasen (Click, Brumm, Crackle, Dropout) brauchen
+        # einen Mindest-Floor von 0.25 — sie sind keine QOL-Phasen.
         if _planned_strength_cap is not None and isinstance(kwargs.get("strength"), (int, float)):
             _runtime_strength = float(kwargs.get("strength", 0.0) or 0.0)
-            if _runtime_strength > _planned_strength_cap:
-                kwargs["strength"] = _planned_strength_cap
+            _is_repair = any(
+                str(getattr(phase_metadata, "phase_id", "")).startswith(p)
+                for p in ("phase_01", "phase_02", "phase_09", "phase_24", "phase_27")
+            )
+            _floor = 0.25 if _is_repair else 0.0
+            _effective_cap = max(_planned_strength_cap, _floor)
+            if _runtime_strength > _effective_cap:
+                kwargs["strength"] = _effective_cap
                 logger.info(
-                    "§Strength-Invariante %s: runtime strength %.3f -> %.3f (planned cap)",
+                    "§Strength-Invariante %s: runtime strength %.3f -> %.3f (planned cap=%.3f floor=%.3f)",
                     phase_metadata.phase_id,
                     _runtime_strength,
+                    _effective_cap,
                     _planned_strength_cap,
+                    _floor,
                 )
 
         # §v10.0.5 Minimum-Effective-Strength-Guard: Wenn die finale Stärke
