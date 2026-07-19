@@ -1086,7 +1086,7 @@ class SpectralBandGapRepairPhase(PhaseInterface):
                 np.asarray(Zxx_refined, dtype=np.complex64), sr, nperseg=REF_WIN, noverlap=REF_WIN - REF_HOP
             )
         except Exception as e:
-            logger.warning("phase_56_spectral_band_gap_repair.py::unknown fallback: %s", e)
+            logger.warning("phase_56_spectral_band_gap_repair.py::unbekannter Fallback: %s", e)
             return audio_out
 
         if len(result) < n:

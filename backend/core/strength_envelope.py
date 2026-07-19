@@ -454,7 +454,7 @@ def _apply_temporal_masking(
         return np.asarray(envelope_masked, dtype=np.float64)
 
     except Exception as e:
-        logger.warning("strength_envelope.py::unknown fallback: %s", e)
+        logger.warning("strength_envelope.py::unbekannter Fallback: %s", e)
         return envelope
 
 

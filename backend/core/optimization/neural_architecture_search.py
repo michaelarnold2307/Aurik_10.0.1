@@ -446,7 +446,7 @@ class NASTrainer:
             val_loader: Validation data loader
             epochs: Number of search epochs
         """
-        logger.info("Starting NAS for %s epochs...", epochs)
+        logger.info("Starte NAS for %s epochs...", epochs)
 
         for epoch in range(epochs):
             epoch_losses = []

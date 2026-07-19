@@ -310,7 +310,7 @@ class ArchiveManager:
         deleted_count = 0
         deleted_paths = []
 
-        logger.info("Starting intermediate cleanup (dry_run=%s)...", dry_run)
+        logger.info("Starte intermediate cleanup (dry_run=%s)...", dry_run)
 
         for job_dir in self.intermediates_dir.iterdir():
             if not job_dir.is_dir():

@@ -441,7 +441,7 @@ class AurikDenker:
             try:
                 _evict_stale_plugins(required_mb=4096.0)
             except Exception as _exc:
-                logger.debug("Operation failed (non-critical): %s", _exc)
+                logger.debug("Operation fehlgeschlagen (nicht-kritisch): %s", _exc)
             logger.error("AurikDenker: Speicherfehler in Pipeline: %s", exc)
             return self._fallback(
                 audio,

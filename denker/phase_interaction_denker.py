@@ -754,7 +754,7 @@ class PhaseInteractionDenker:
                     _fahrplan.note,
                 )
             except Exception:
-                logger.warning("phase_interaction_denker.py::unknown fallback", exc_info=True)
+                logger.warning("phase_interaction_denker.py::unbekannter Fallback", exc_info=True)
             if _n_cal > 0:
                 logger.info(
                     "§2.60 Denker-Kalibrierung: %d/%d Phasen intensitäts-angepasst",
@@ -762,7 +762,7 @@ class PhaseInteractionDenker:
                     len(ordered),
                 )
         except Exception:
-            logger.warning("phase_interaction_denker.py::unknown fallback", exc_info=True)
+            logger.warning("phase_interaction_denker.py::unbekannter Fallback", exc_info=True)
 
         # ── §ROADMAP-4: Dynamic Phase Ordering (DAG) ──
         # Sortiert Phasen topologisch nach Frequenzbereich-Überlappungen,

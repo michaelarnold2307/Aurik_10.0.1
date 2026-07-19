@@ -395,7 +395,7 @@ class AdvancedDereverbPhase(PhaseInterface):
                     float(_get_lfc_49().track(_ft_in_49.astype(np.float32), sample_rate).get("f1_mean", 0.0)) or None
                 )
             except Exception as e:
-                logger.warning("phase_49_advanced_dereverb.py::unknown fallback: %s", e)
+                logger.warning("phase_49_advanced_dereverb.py::unbekannter Fallback: %s", e)
 
         # §2.20 Genre-adaptive dereverb hardcap (defense-in-depth — SongCal is primary guard).
         _genre_label_49 = str(kwargs.get("genre_label", ""))
@@ -536,7 +536,7 @@ class AdvancedDereverbPhase(PhaseInterface):
                         try:
                             _plm49.touch_plugin("SGMSE+")  # type: ignore[attr-defined]
                         except Exception as e:
-                            logger.warning("phase_49_advanced_dereverb.py::unknown fallback: %s", e)
+                            logger.warning("phase_49_advanced_dereverb.py::unbekannter Fallback: %s", e)
                     _sgmse_result = _sgmse_factory_49().enhance(
                         audio,
                         sample_rate,
@@ -564,7 +564,7 @@ class AdvancedDereverbPhase(PhaseInterface):
                         try:
                             _plm49.set_active("SGMSE+", False)
                         except Exception as e:
-                            logger.warning("phase_49_advanced_dereverb.py::unknown fallback: %s", e)
+                            logger.warning("phase_49_advanced_dereverb.py::unbekannter Fallback: %s", e)
                     _release_49("SGMSE+_phase49")
         except Exception as _imp_err:
             logger.debug("Phase 49: SGMSE+-Import nicht verfügbar (%s) → WPE DSP-Fallback", _imp_err)
@@ -839,7 +839,7 @@ class AdvancedDereverbPhase(PhaseInterface):
                     )
                     processed = audio.copy()
             except Exception as e:
-                logger.warning("phase_49_advanced_dereverb.py::unknown fallback: %s", e)
+                logger.warning("phase_49_advanced_dereverb.py::unbekannter Fallback: %s", e)
 
         # §Gap3 PhraseBoundaryGuard — taper artifacts at phrase transitions (§0p Vocal-Supremacy)
         try:

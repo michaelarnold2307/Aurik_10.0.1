@@ -247,7 +247,7 @@ class AdaptiveCoreScheduler:
         """
         start_time = time.time()
 
-        logger.info("Starting execution of %s phases on %s cores", len(self.phases), self.num_cores)
+        logger.info("Starte execution of %s phases on %s cores", len(self.phases), self.num_cores)
 
         # Reset State
         self.completed_phases.clear()

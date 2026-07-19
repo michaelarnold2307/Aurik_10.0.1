@@ -828,7 +828,7 @@ class LyricsGuidedEnhancement:
                     try:
                         _plm_w2v.set_active("lyrics_aligner_wav2vec2", False)  # type: ignore[attr-defined]
                     except Exception as e:
-                        logger.warning("lyrics_guided_enhancement.py::unknown fallback: %s", e)
+                        logger.warning("lyrics_guided_enhancement.py::unbekannter Fallback: %s", e)
 
             # Run encoder: output is (1, T_frames, vocab_size) CTC log-probs
             if logits.ndim != 3:

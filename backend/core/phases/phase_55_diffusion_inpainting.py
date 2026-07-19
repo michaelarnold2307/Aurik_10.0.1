@@ -260,7 +260,7 @@ def _detect_gaps(audio: np.ndarray, sample_rate: int, min_gap_ms: float) -> list
                     _slope = float(np.polyfit(np.arange(len(_fade_frames_db)), _fade_frames_db, 1)[0])
                     _is_fadeout = _slope < -0.5  # energy was already declining → fadeout, not dropout
                 except Exception as e:
-                    logger.warning("phase_55_diffusion_inpainting.py::unknown fallback: %s", e)
+                    logger.warning("phase_55_diffusion_inpainting.py::unbekannter Fallback: %s", e)
             if _pre_db > _gap_db + 8.0 and not _is_fadeout:
                 gaps.append((gap_start, gap_end))
 
@@ -1418,24 +1418,24 @@ class DiffusionInpaintingPhase(PhaseInterface):
             try:
                 _p55_protected_zones.append((float(_z[0]), float(_z[1]), 0.20))  # §0p Vibrato
             except Exception as e:
-                logger.warning("phase_55_diffusion_inpainting.py::unknown fallback: %s", e)
+                logger.warning("phase_55_diffusion_inpainting.py::unbekannter Fallback: %s", e)
         for _z in kwargs.get("frisson_zones") or []:
             try:
                 _fz_s = float(getattr(_z, "start_s", None) or _z[0])
                 _fz_e = float(getattr(_z, "end_s", None) or _z[1])
                 _p55_protected_zones.append((_fz_s, _fz_e, 0.30))  # Frisson sakrosankt
             except Exception as e:
-                logger.warning("phase_55_diffusion_inpainting.py::unknown fallback: %s", e)
+                logger.warning("phase_55_diffusion_inpainting.py::unbekannter Fallback: %s", e)
         for _z in kwargs.get("whisper_zones") or []:
             try:
                 _p55_protected_zones.append((float(_z[0]), float(_z[1]), 0.25))  # Flüsterpassagen
             except Exception as e:
-                logger.warning("phase_55_diffusion_inpainting.py::unknown fallback: %s", e)
+                logger.warning("phase_55_diffusion_inpainting.py::unbekannter Fallback: %s", e)
         for _z in kwargs.get("passaggio_zones") or []:
             try:
                 _p55_protected_zones.append((float(_z[0]), float(_z[1]), 0.35))  # Passaggio-Übergänge
             except Exception as e:
-                logger.warning("phase_55_diffusion_inpainting.py::unknown fallback: %s", e)
+                logger.warning("phase_55_diffusion_inpainting.py::unbekannter Fallback: %s", e)
         if _p55_protected_zones:
             logger.debug(
                 "§V38 phase_55: %d VFA-Schutzzone(n) aktiv (Vibrato/Frisson/Flüster/Passaggio)",

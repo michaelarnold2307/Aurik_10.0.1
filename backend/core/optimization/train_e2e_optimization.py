@@ -134,7 +134,7 @@ def train_e2e_optimization(
         device: Device for training
     """
     logger.info("=" * 80)
-    logger.info("Starting E2E Optimization Training")
+    logger.info("Starte E2E Optimization Training")
     logger.info("=" * 80)
     logger.info("Dataset: %s", dataset_path)
     logger.info("Output: %s", output_path)
@@ -224,7 +224,7 @@ def train_hyperparameter_optimization(  # type: ignore[return]
         n_jobs: Number of parallel jobs
     """
     logger.info("=" * 80)
-    logger.info("Starting Hyperparameter Optimization for %s", material_type)
+    logger.info("Starte Hyperparameter Optimization for %s", material_type)
     logger.info("=" * 80)
     logger.info("Dataset: %s", dataset_path)
     logger.info("Output: %s", output_path)
@@ -266,7 +266,7 @@ def train_all_materials(dataset_path: Path, output_path: Path, n_trials: int = 1
         n_trials: Number of trials per material
     """
     logger.info("=" * 80)
-    logger.info("Starting Multi-Material Optimization")
+    logger.info("Starte Multi-Material Optimization")
     logger.info("=" * 80)
     logger.info("Dataset root: %s", dataset_path)
 

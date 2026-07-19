@@ -309,7 +309,7 @@ class NSGAII:
         Returns:
             Pareto front (list of non-dominated individuals)
         """
-        logger.info("Starting NSGA-II optimization for %s generations...", self.n_generations)
+        logger.info("Starte NSGA-II optimization for %s generations...", self.n_generations)
 
         # Initialize population
         self.population = self.initialize_population()

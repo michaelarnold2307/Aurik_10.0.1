@@ -1012,7 +1012,7 @@ class ReverbReduction(PhaseInterface):
                     )
                     reduced = audio.copy()
             except Exception as e:
-                logger.warning("phase_20_reverb_reduction.py::unknown fallback: %s", e)
+                logger.warning("phase_20_reverb_reduction.py::unbekannter Fallback: %s", e)
         if _p20_panns >= 0.35:
             try:
                 from backend.core.musical_goals.era_vocal_profile import (
@@ -1187,7 +1187,7 @@ class ReverbReduction(PhaseInterface):
                 _after = apply_per_band_mask(_before, _per_band_mask, sample_rate, mix=0.55)
                 audio = _after
             except Exception as e:
-                logger.warning("phase_20_reverb_reduction.py::unknown fallback: %s", e)
+                logger.warning("phase_20_reverb_reduction.py::unbekannter Fallback: %s", e)
 
         # §2.71 Strength-Envelope: Chirurgische Dereverb
         _strength_env = kwargs.get("strength_envelope")
@@ -1511,7 +1511,7 @@ class ReverbReduction(PhaseInterface):
                         _mfloor_z20 = np.interp(f_z, _masking_freqs_p20, _masking_floor_p20).astype(np.float32)
                         G_z = np.maximum(G_z, _mfloor_z20[:, np.newaxis])
                     except Exception as e:
-                        logger.warning("phase_20_reverb_reduction.py::unknown fallback: %s", e)
+                        logger.warning("phase_20_reverb_reduction.py::unbekannter Fallback: %s", e)
 
                 # §4.8a-ii preserve_mask (§Gap8 v10.0.0): G_eff = mask*0.90 + (1-mask)*G_z
                 # Bewahrt Shellac-H2/H4-Wärme und Vinyl-Charakter während Nachhall-Reduktion.

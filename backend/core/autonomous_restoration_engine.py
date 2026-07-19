@@ -866,7 +866,7 @@ class AutonomousRestorationEngine:
             try:
                 progress_callback(88, f"Beste Strategie: {best_variant.name}", 0.0)
             except Exception as e:
-                logger.warning("autonomous_restoration_engine.py::unknown fallback: %s", e)
+                logger.warning("autonomous_restoration_engine.py::unbekannter Fallback: %s", e)
 
         # Audio unverändert zurückgeben (Parameter werden downstream angewandt)
         _all_scores: dict[str, float] = dict(results)

@@ -1965,7 +1965,7 @@ class TapeHissReductionPhase(PhaseInterface):
                             G_z,
                         )
                     except Exception as e:
-                        logger.warning("phase_29_tape_hiss_reduction.py::unknown fallback: %s", e)
+                        logger.warning("phase_29_tape_hiss_reduction.py::unbekannter Fallback: %s", e)
                         pass  # nie pipeline-blockierend
 
                 # §v10.0.0: Stronger HF suppression in presence/air zones when DeepFilterNet absent.
@@ -2355,7 +2355,7 @@ class TapeHissReductionPhase(PhaseInterface):
                 try:
                     _plm29_dfn.set_active("DeepFilterNetV3", False)
                 except Exception as e:
-                    logger.warning("phase_29_tape_hiss_reduction.py::unknown fallback: %s", e)
+                    logger.warning("phase_29_tape_hiss_reduction.py::unbekannter Fallback: %s", e)
 
     def _apply_adaptive_gate(
         self, band_signal: np.ndarray, noise_floor_db: float, threshold_db: float, reduction_db: float, sample_rate: int

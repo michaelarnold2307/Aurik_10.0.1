@@ -50,7 +50,7 @@ try:
 
     _clap_factory_impl = _clap_factory_loaded
 except Exception as e:
-    logger.warning("phase_53_semantic_audio.py::unknown fallback: %s", e)
+    logger.warning("phase_53_semantic_audio.py::unbekannter Fallback: %s", e)
 _clap_factory: Any = _clap_factory_impl
 
 _beats_factory_impl: Any = None
@@ -59,7 +59,7 @@ try:
 
     _beats_factory_impl = _beats_factory_loaded
 except Exception as e:
-    logger.warning("phase_53_semantic_audio.py::unknown fallback: %s", e)
+    logger.warning("phase_53_semantic_audio.py::unbekannter Fallback: %s", e)
 _beats_factory: Any = _beats_factory_impl
 
 

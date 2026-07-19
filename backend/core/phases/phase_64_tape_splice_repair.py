@@ -468,12 +468,12 @@ class TapeSpliceRepairPhase(PhaseInterface):
             try:
                 _p64_zones.append((float(_z[0]), float(_z[1]), 0.25))  # Flüsterpassagen
             except Exception as e:
-                logger.warning("phase_64_tape_splice_repair.py::unknown fallback: %s", e)
+                logger.warning("phase_64_tape_splice_repair.py::unbekannter Fallback: %s", e)
         for _z in kwargs.get("passaggio_zones") or []:
             try:
                 _p64_zones.append((float(_z[0]), float(_z[1]), 0.35))  # Passaggio-Übergänge
             except Exception as e:
-                logger.warning("phase_64_tape_splice_repair.py::unknown fallback: %s", e)
+                logger.warning("phase_64_tape_splice_repair.py::unbekannter Fallback: %s", e)
         result_audio = apply(
             audio,
             sample_rate,

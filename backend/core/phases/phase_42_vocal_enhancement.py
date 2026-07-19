@@ -1406,7 +1406,7 @@ class VocalEnhancement(PhaseInterface):
                     try:
                         _plm42_rof.set_active("MelBandRoformer", False)
                     except Exception as e:
-                        logger.warning("phase_42_vocal_enhancement.py::unknown fallback: %s", e)
+                        logger.warning("phase_42_vocal_enhancement.py::unbekannter Fallback: %s", e)
 
         # ── 2: HTDemucs 6s fallback (nur live/crowd + native Session) ───────
         if _prefer_demucs_native:
@@ -1475,14 +1475,14 @@ class VocalEnhancement(PhaseInterface):
                         _plm42_mdx.touch_plugin("MDX23C_vocals")  # type: ignore[attr-defined]
                         _plm42_mdx.touch_plugin("MDX23C_inst")  # type: ignore[attr-defined]
                     except Exception as e:
-                        logger.warning("phase_42_vocal_enhancement.py::unknown fallback: %s", e)
+                        logger.warning("phase_42_vocal_enhancement.py::unbekannter Fallback: %s", e)
                 voc_mono = mdx.process(audio_mono, sr, stem="vocals")
                 if _plm42_mdx is not None:
                     try:
                         _plm42_mdx.touch_plugin("MDX23C_vocals")  # type: ignore[attr-defined]
                         _plm42_mdx.touch_plugin("MDX23C_inst")  # type: ignore[attr-defined]
                     except Exception as e:
-                        logger.warning("phase_42_vocal_enhancement.py::unknown fallback: %s", e)
+                        logger.warning("phase_42_vocal_enhancement.py::unbekannter Fallback: %s", e)
                 inst_mono = mdx.process(audio_mono, sr, stem="inst")
                 n = min(len(audio_mono), len(voc_mono), len(inst_mono))
                 if audio.ndim == 2:
@@ -1500,7 +1500,7 @@ class VocalEnhancement(PhaseInterface):
                         _plm42_mdx.set_active("MDX23C_vocals", False)
                         _plm42_mdx.set_active("MDX23C_inst", False)
                     except Exception as e:
-                        logger.warning("phase_42_vocal_enhancement.py::unknown fallback: %s", e)
+                        logger.warning("phase_42_vocal_enhancement.py::unbekannter Fallback: %s", e)
 
         # ── 4: NMF-β Fallback (§2.47 ML-Failure-Degradationskascade: NMF-β→HPSS) ──
         try:

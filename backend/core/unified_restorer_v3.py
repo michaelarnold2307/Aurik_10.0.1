@@ -863,7 +863,7 @@ def _is_effective_self_comparison(
 
         return True
     except Exception:
-        logger.debug("fallback in unified_restorer_v3.py", exc_info=True)
+        logger.debug("Fallback in unified_restorer_v3.py", exc_info=True)
         return False
 
 
@@ -941,7 +941,7 @@ def _should_use_carrier_reference_for_hpi(
             return True
         return False
     except Exception:
-        logger.debug("fallback in unified_restorer_v3.py", exc_info=True)
+        logger.debug("Fallback in unified_restorer_v3.py", exc_info=True)
         return False
 
 
@@ -1052,7 +1052,7 @@ def _build_waerme_focus_rescue_candidate(
         _meta["waerme_rescue_used"] = True
         return _cand.astype(np.float32), _meta
     except Exception:
-        logger.debug("fallback in unified_restorer_v3.py", exc_info=True)
+        logger.debug("Fallback in unified_restorer_v3.py", exc_info=True)
         return None, _meta
 
 
@@ -1430,7 +1430,7 @@ class UnifiedRestorerV3:
                 )
             )
         except Exception:
-            logger.debug("fallback in unified_restorer_v3.py", exc_info=True)
+            logger.debug("Fallback in unified_restorer_v3.py", exc_info=True)
             return True
 
     @staticmethod
@@ -1459,7 +1459,7 @@ class UnifiedRestorerV3:
                 dtype=np.float32,
             )
         except Exception:
-            logger.debug("fallback in unified_restorer_v3.py", exc_info=True)
+            logger.debug("Fallback in unified_restorer_v3.py", exc_info=True)
             return np.asarray(candidate_audio, dtype=np.float32)  # type: ignore[no-any-return]
 
     @staticmethod
@@ -3250,7 +3250,7 @@ class UnifiedRestorerV3:
             _edge_delta = _edge_after - _edge_before
             return float(0.7 * _rms_delta + 0.3 * _edge_delta)
         except Exception:
-            logger.debug("fallback in unified_restorer_v3.py", exc_info=True)
+            logger.debug("Fallback in unified_restorer_v3.py", exc_info=True)
             return 0.0
 
     def _budget_pressure_skip_reason(
@@ -3445,7 +3445,7 @@ class UnifiedRestorerV3:
                 "outro_depth_db": outro_depth_db,
             }
         except Exception:
-            logger.debug("fallback in unified_restorer_v3.py", exc_info=True)
+            logger.debug("Fallback in unified_restorer_v3.py", exc_info=True)
             return {"has_quiet_edges": False}
 
     @staticmethod
@@ -4819,7 +4819,7 @@ class UnifiedRestorerV3:
             mono = np.nan_to_num(mono, nan=0.0, posinf=0.0, neginf=0.0)
             return float(_est_tilt(mono, sr))
         except Exception:
-            logger.debug("fallback in unified_restorer_v3.py", exc_info=True)
+            logger.debug("Fallback in unified_restorer_v3.py", exc_info=True)
             return None
 
     @staticmethod
@@ -6867,7 +6867,7 @@ class UnifiedRestorerV3:
 
             _targets = get_reverse_phase_map().get(phase_id)
         except Exception:
-            logger.debug("fallback in unified_restorer_v3.py", exc_info=True)
+            logger.debug("Fallback in unified_restorer_v3.py", exc_info=True)
             return None  # fail-safe: keine Sicherheit → kein Cap → volle Härte
         if not _targets:
             return None  # keine Defekt-Reparatur-Phase (z.B. Limiter/Enhancement) → nicht cappen
@@ -6887,7 +6887,7 @@ class UnifiedRestorerV3:
             _max_s = get_phase_strength_range(phase_id, _mat, _rest)[1]
             return float(np.clip(_max_s, 0.05, 1.0))
         except Exception:
-            logger.debug("fallback in unified_restorer_v3.py", exc_info=True)
+            logger.debug("Fallback in unified_restorer_v3.py", exc_info=True)
             return None
 
     @staticmethod
@@ -7353,7 +7353,7 @@ class UnifiedRestorerV3:
         _cb(1, "Initialisierung…")
         # Robuste Sample-Count-Ermittlung: (N,2) → N, (2,N) → N, (N,) → N
         _n_samples = max(audio.shape) if audio.ndim == 2 else len(audio)
-        logger.info("Starting restoration: %.1fs audio @ %d Hz", _n_samples / sample_rate, sample_rate)
+        logger.info("Starte restoration: %.1fs audio @ %d Hz", _n_samples / sample_rate, sample_rate)
         # §v10.11 MetadataAggregator: vollständiger Metadaten-Flow
         try:
             from backend.core.metadata_aggregator import get_aggregator
@@ -12108,7 +12108,7 @@ class UnifiedRestorerV3:
                         self._restoration_context["matched_strengths"] = _match["phase_strengths"]
                     logger.info("§AB Fingerprint-Match: Parameter von ähnlicher Aufnahme übernommen")
             except Exception:
-                logger.debug("fallback in unified_restorer_v3.py", exc_info=True)
+                logger.debug("Fallback in unified_restorer_v3.py", exc_info=True)
 
             # §AD: Defect Precision Enhancement — per-defect Stärke-Hints
             try:
@@ -12196,7 +12196,7 @@ class UnifiedRestorerV3:
                             self._restoration_context["surgical_plan"] = _sp
                             logger.debug("SurgicalPlan: %d Instruktionen für %d Phasen", len(_sp), len(_sp.by_phase()))
                         except Exception:
-                            logger.debug("fallback in unified_restorer_v3.py", exc_info=True)
+                            logger.debug("Fallback in unified_restorer_v3.py", exc_info=True)
                         # §2.61: Chirurgie mit ECHTEN Phasen via surgical_dispatch()
                         try:
                             from backend.core.phases.phase_interface import PhaseInterface
@@ -12362,7 +12362,7 @@ class UnifiedRestorerV3:
             if _pdr_repaired > 0:
                 logger.info("STUFE 2 PrecisionDropout: %d/%d repariert", _pdr_repaired, _pdr_found)
         except Exception:
-            logger.debug("fallback in unified_restorer_v3.py", exc_info=True)
+            logger.debug("Fallback in unified_restorer_v3.py", exc_info=True)
 
         # §AO VocalScratchRepair — Kratzer im Gesang
         try:
@@ -12575,7 +12575,7 @@ class UnifiedRestorerV3:
                 else:
                     logger.info("§v10.15 ListeningEQ SKIPPED: %s", _eq_result.skip_reason)
             except Exception:
-                logger.debug("fallback in unified_restorer_v3.py", exc_info=True)
+                logger.debug("Fallback in unified_restorer_v3.py", exc_info=True)
         # §Z: Batch-Intelligence speichern
         try:
             _bi_data = {
@@ -28888,7 +28888,7 @@ class UnifiedRestorerV3:
                     if _cal_val is not None and 0.0 < _cal_val < 1.0:
                         kwargs["strength"] = float(_cal_val)
             except Exception:
-                logger.debug("fallback in unified_restorer_v3.py", exc_info=True)
+                logger.debug("Fallback in unified_restorer_v3.py", exc_info=True)
 
         # ── §DENKER: Zentrale Guard-Modulation via PhaseInteractionDenker ──
         if "strength" in kwargs:
@@ -28906,7 +28906,7 @@ class UnifiedRestorerV3:
                     material=_mat,
                 )
             except Exception:
-                logger.debug("fallback in unified_restorer_v3.py", exc_info=True)
+                logger.debug("Fallback in unified_restorer_v3.py", exc_info=True)
                 pass  # Denker nicht verfügbar — unmodulierte Stärke
         # ── Ende Denker-Guard-Modulation ──────────────────────────
 
@@ -29567,7 +29567,7 @@ class UnifiedRestorerV3:
                     _ps_bounds, _ps_strengths = _ps_info
                     _use_per_segment = True
         except Exception:
-            logger.debug("fallback in unified_restorer_v3.py", exc_info=True)
+            logger.debug("Fallback in unified_restorer_v3.py", exc_info=True)
 
         # §CODEC+VOCAL: effective_chain an Phase 03 weitergeben (für Codec-Guard)
         if "effective_chain" not in kwargs:
@@ -29658,7 +29658,7 @@ class UnifiedRestorerV3:
                     verdict=_verdict,
                 )
             except Exception:
-                logger.debug("fallback in unified_restorer_v3.py", exc_info=True)
+                logger.debug("Fallback in unified_restorer_v3.py", exc_info=True)
                 pass  # GuardWisdom recording ist nicht kritisch für die Pipeline
         # ── Ende Intra-Pipeline-GuardWisdom ──────────────────────
 
@@ -31110,7 +31110,7 @@ class UnifiedRestorerV3:
                         try:
                             _pid_ctrl_post.after_phase(_phase_delta_pid, _post_snap)
                         except Exception:
-                            logger.debug("fallback in unified_restorer_v3.py", exc_info=True)
+                            logger.debug("Fallback in unified_restorer_v3.py", exc_info=True)
 
                     # §2.64 K-3: HPI-Live-Proxy per Phase-Checkpoint
                     # Leichtgewichtig aus bereits berechneten _post_snap-Werten — kein
@@ -31898,7 +31898,7 @@ class UnifiedRestorerV3:
                 tonal_ratio = float(p90 / (p10 + 1e-12))  # type: ignore[has-type]
                 return float(np.clip(tonal_ratio / 6.0, 0.0, 1.0))
             except Exception:
-                logger.debug("fallback in unified_restorer_v3.py", exc_info=True)
+                logger.debug("Fallback in unified_restorer_v3.py", exc_info=True)
                 return 0.5  # fail-open
 
         # Persistent OOM forensics: write phase-level RAM snapshots to NDJSON.
@@ -32226,7 +32226,7 @@ class UnifiedRestorerV3:
                     return 1.0
                 return float(np.clip(_c95 / _r95, 0.0, 4.0))
             except Exception:
-                logger.debug("fallback in unified_restorer_v3.py", exc_info=True)
+                logger.debug("Fallback in unified_restorer_v3.py", exc_info=True)
                 return 1.0
 
         def _mono_compatibility(_x: np.ndarray) -> float:
@@ -32240,7 +32240,7 @@ class UnifiedRestorerV3:
                 _side_rms = float(np.sqrt(np.mean(_side * _side)) + 1e-12)
                 return float(np.clip(_mid_rms / (_mid_rms + _side_rms + 1e-12), 0.0, 1.0))
             except Exception:
-                logger.debug("fallback in unified_restorer_v3.py", exc_info=True)
+                logger.debug("Fallback in unified_restorer_v3.py", exc_info=True)
                 return 1.0
 
         def _hf_energy_ratio(_ref: np.ndarray, _cand: np.ndarray) -> float:
@@ -32260,7 +32260,7 @@ class UnifiedRestorerV3:
                 _cand_hf = float(np.mean(_cand_mag[_start:]) + 1e-12)
                 return float(np.clip(_cand_hf / _ref_hf, 0.0, 4.0))
             except Exception:
-                logger.debug("fallback in unified_restorer_v3.py", exc_info=True)
+                logger.debug("Fallback in unified_restorer_v3.py", exc_info=True)
                 return 1.0
 
         def _quiet_zone_explosion_stats(
@@ -32324,7 +32324,7 @@ class UnifiedRestorerV3:
                     "delta_mean_db": _mean,
                 }
             except Exception:
-                logger.debug("fallback in unified_restorer_v3.py", exc_info=True)
+                logger.debug("Fallback in unified_restorer_v3.py", exc_info=True)
                 return {
                     "count": 0.0,
                     "quiet_frames": 0.0,
@@ -32522,7 +32522,7 @@ class UnifiedRestorerV3:
                 _meta["applied"] = 1.0 if _meta["after_count"] < _meta["before_count"] else 0.0
                 return (_y if _meta["applied"] > 0.5 else _x), _meta
             except Exception:
-                logger.debug("fallback in unified_restorer_v3.py", exc_info=True)
+                logger.debug("Fallback in unified_restorer_v3.py", exc_info=True)
                 return np.asarray(_cand, dtype=np.float32), _meta
 
         def _derive_phase_guard_contract(_phase_id: str, _ref: np.ndarray, _prof: dict[str, Any]) -> dict[str, float]:
@@ -35442,7 +35442,7 @@ class UnifiedRestorerV3:
                                         emotional_arc_preserver=getattr(self, "_emotional_arc_preserver", None),
                                     )
                             except Exception:
-                                logger.debug("fallback in unified_restorer_v3.py", exc_info=True)
+                                logger.debug("Fallback in unified_restorer_v3.py", exc_info=True)
                                 pass  # Non-blocking
                             # §J: Goal-Budget nach Phase abbuchen
                             try:
@@ -35467,7 +35467,7 @@ class UnifiedRestorerV3:
                                     ) - _spectral_quality_score(_pdv_pre_phase, sample_rate)
                                     _plateau_delta_history.append(float(_pdelta_plateau))
                             except Exception:
-                                logger.debug("fallback in unified_restorer_v3.py", exc_info=True)
+                                logger.debug("Fallback in unified_restorer_v3.py", exc_info=True)
                                 pass  # non-critical telemetry, never blocks pipeline
                             # §Live-Waveform: Emit updated audio after PMGG phase
                             if audio_update_callback is not None:

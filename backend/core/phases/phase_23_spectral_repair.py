@@ -1868,7 +1868,7 @@ class SpectralRepair(PhaseInterface):
                         )
                         _mrsa_ok = False
             except Exception as e:
-                logger.warning("phase_23_spectral_repair.py::unknown fallback: %s", e)
+                logger.warning("phase_23_spectral_repair.py::unbekannter Fallback: %s", e)
                 pass  # psutil nicht verfügbar — MRSA versuchen
             if _mrsa_ok:
                 try:

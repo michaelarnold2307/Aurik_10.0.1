@@ -359,7 +359,7 @@ class MaterialSpecificOptimizer:
             load_if_exists=True,
         )
 
-        logger.info("Starting optimization: %s", study_name)
+        logger.info("Starte optimization: %s", study_name)
         logger.info("  Dataset size: %s", len(evaluation_dataset))
         logger.info("  Trials: %s", self.n_trials)
 

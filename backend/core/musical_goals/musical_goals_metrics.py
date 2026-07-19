@@ -2178,7 +2178,7 @@ class GrooveMetric:
                     _sub_score = float(np.clip(_sub_peak * 1.5, 0.0, 0.10))
                     score = min(1.0, score + _sub_score)
             except Exception as e:
-                logger.warning("musical_goals_metrics.py::unknown fallback: %s", e)
+                logger.warning("musical_goals_metrics.py::unbekannter Fallback: %s", e)
 
         except Exception as exc:
             logger.debug("GrooveMetric Fallback (Fehler: %s)", exc)

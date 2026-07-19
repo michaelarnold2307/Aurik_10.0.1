@@ -285,7 +285,7 @@ class EmotionalArcPreservationMetric:
                             break
                     _seg_idx += 1
             except Exception as e:
-                logger.warning("emotional_arc_preservation.py::unknown fallback: %s", e)
+                logger.warning("emotional_arc_preservation.py::unbekannter Fallback: %s", e)
                 pass  # non-blocking: frisson_zones Fehler darf Messung nicht blockieren
 
         # ----------------------------------------------------------------

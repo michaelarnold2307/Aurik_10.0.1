@@ -906,7 +906,7 @@ class PhaseDefectVerifier:
                         }
                     )
                 except Exception as e:
-                    logger.warning("phase_defect_verifier.py::unknown fallback: %s", e)
+                    logger.warning("phase_defect_verifier.py::unbekannter Fallback: %s", e)
 
             return audio_before if rollback else audio_after
 

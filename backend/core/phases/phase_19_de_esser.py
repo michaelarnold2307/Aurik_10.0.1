@@ -2533,7 +2533,7 @@ def _estimate_vibrato_from_pyin(
         depth = float(1200.0 * np.log2((np.median(f0_v) + np.std(f0_c)) / np.median(f0_v)))
         return (rate, depth) if 15 < depth < 600 else (rate, None)
     except Exception as e:
-        logger.warning("phase_19_de_esser.py::unknown fallback: %s", e)
+        logger.warning("phase_19_de_esser.py::unbekannter Fallback: %s", e)
         return None, None
 
 

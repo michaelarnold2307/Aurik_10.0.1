@@ -946,7 +946,7 @@ def _repair_tape_splice(audio: np.ndarray, sr: int, **kwargs) -> np.ndarray:
             else:
                 result[ch_idx] = ch_data
     except Exception as e:
-        logger.warning("surgical_repair.py::unknown fallback: %s", e)
+        logger.warning("surgical_repair.py::unbekannter Fallback: %s", e)
     result = _safety_clamp(result, audio)
     return result.astype(np.float32)
 

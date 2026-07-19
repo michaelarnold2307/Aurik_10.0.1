@@ -136,7 +136,7 @@ class CrossChannelRepair:
                     damaged, sr, repair_start, repair_end, context_ms=40, crossfade_ms=12
                 )
             except Exception as e:
-                logger.warning("cross_channel_repair.py::unknown fallback: %s", e)
+                logger.warning("cross_channel_repair.py::unbekannter Fallback: %s", e)
 
         result[affected_channel] = damaged
 
@@ -155,7 +155,7 @@ class CrossChannelRepair:
                     result[affected_channel], sr, repair_start, repair_end, context_ms=80, crossfade_ms=20
                 )
             except Exception as e:
-                logger.warning("cross_channel_repair.py::unknown fallback: %s", e)
+                logger.warning("cross_channel_repair.py::unbekannter Fallback: %s", e)
 
         self._repair_boundaries.append((affected_channel, repair_start, repair_end))
         return result

@@ -1667,7 +1667,7 @@ def _resolve_team_context_policy(phase_id: str, phase_kwargs: dict[str, Any] | N
             if not _policy["reason"]:
                 _policy["reason"] = str(_tp.get("reason", ""))
     except Exception as e:
-        logger.warning("per_phase_musical_goals_gate.py::unknown fallback: %s", e)
+        logger.warning("per_phase_musical_goals_gate.py::unbekannter Fallback: %s", e)
 
     # Team rule: if prior phases already restored HF content, phase_50 should
     # avoid treating those bins as "damage" via indirect metric pressure.
@@ -3269,7 +3269,7 @@ def _content_integrity_penalty(
         _penalty = float(max(_drop_pen, _corr_pen))
         return _penalty, {"rms_drop_db": _rms_drop_db, "corr": _corr}
     except Exception as e:
-        logger.warning("per_phase_musical_goals_gate.py::unknown fallback: %s", e)
+        logger.warning("per_phase_musical_goals_gate.py::unbekannter Fallback: %s", e)
         return 0.0, {"rms_drop_db": 0.0, "corr": 1.0}
 
 
@@ -4929,7 +4929,7 @@ class PerPhaseMusicalGoalsGate:
                 )
                 return best_audio, best_scores, "hpe_ultra_low", _ultra_strength
         except Exception as e:
-            logger.warning("per_phase_musical_goals_gate.py::unknown fallback: %s", e)
+            logger.warning("per_phase_musical_goals_gate.py::unbekannter Fallback: %s", e)
 
         # §v10.16 Binary-Search State
         _bs_lo = 0.0

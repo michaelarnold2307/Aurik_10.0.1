@@ -643,7 +643,7 @@ class HumRemovalPhase(PhaseInterface):
                 try:
                     _plm02_dfn.set_active("DeepFilterNetV3", False)
                 except Exception as e:
-                    logger.warning("phase_02_hum_removal.py::unknown fallback: %s", e)
+                    logger.warning("phase_02_hum_removal.py::unbekannter Fallback: %s", e)
 
     def _track_harmonics(
         self, audio: np.ndarray, fundamental: int, max_harmonics: int, threshold_db: float

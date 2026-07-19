@@ -290,7 +290,7 @@ class PhaseConductor:
                     _gw_mod = float(np.clip((_gw_mean - 1.0) * 0.10, -0.10, 0.10))
                     recommended_strength = float(np.clip(recommended_strength + _gw_mod, 0.0, 1.0))
             except Exception as e:
-                logger.warning("phase_conductor.py::unknown fallback: %s", e)
+                logger.warning("phase_conductor.py::unbekannter Fallback: %s", e)
                 pass  # Non-blocking: goal_weights integration failure → neutral
 
         # §2.31 Per-Song Studio-Day-Target Stopp-Signal: Phasen über Ziel hinaus verhindern
@@ -345,7 +345,7 @@ class PhaseConductor:
                         state_snapshot=current_state,
                     )
             except Exception as e:
-                logger.warning("phase_conductor.py::unknown fallback: %s", e)
+                logger.warning("phase_conductor.py::unbekannter Fallback: %s", e)
                 pass  # Non-blocking — Stopp-Signal-Fehler nie pipeline-blockierend
 
         if coalition_continuation:

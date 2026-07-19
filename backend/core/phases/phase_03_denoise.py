@@ -2783,7 +2783,7 @@ class DenoisePhase(PhaseInterface):
                         _mfloor_z = np.interp(f_z, _masking_freqs_ref, _masking_floor_ref).astype(np.float32)
                         G_z = np.maximum(G_z, _mfloor_z[:, np.newaxis])
                     except Exception as e:
-                        logger.warning("phase_03_denoise.py::unknown fallback: %s", e)
+                        logger.warning("phase_03_denoise.py::unbekannter Fallback: %s", e)
                         pass  # nie pipeline-blockierend
                 G_mb = self._apply_multiband_gate(G_z, f_z, params["bands"])
                 G_sm = self._suppress_musical_noise(

@@ -147,7 +147,7 @@ def apply(
         ).astype(np.float32)
         gain = np.maximum(gain, _mfloor_interp59[:, np.newaxis])
     except Exception as e:
-        logger.warning("phase_59_modulation_noise_reduction.py::unknown fallback: %s", e)
+        logger.warning("phase_59_modulation_noise_reduction.py::unbekannter Fallback: %s", e)
         pass  # nie pipeline-blockierend
 
     # Apply gain and reconstruct

@@ -549,7 +549,7 @@ class RestaurierDenker:
                     _uv3_kwargs["bitrate_aware_limits"] = get_bitrate_aware_limits(str(material), audio, sr)
                     logger.info("RestaurierDenker: Bitrate ~%d kbps (conf=%.2f)", _kbps, _conf)
             except Exception as e:
-                logger.warning("restaurier_denker.py::unknown fallback: %s", e)
+                logger.warning("restaurier_denker.py::unbekannter Fallback: %s", e)
 
             try:
                 # §v10 HPE Baseline + Inviting VOR UV3
@@ -631,11 +631,11 @@ class RestaurierDenker:
                                 for w in _sweet.warnings[:3]:
                                     logger.info("  - %s", w)
                         except Exception as e:
-                            logger.warning("restaurier_denker.py::unknown fallback: %s", e)
+                            logger.warning("restaurier_denker.py::unbekannter Fallback: %s", e)
 
                         if _sweet is not None and _sweet.all_green:
                             # PERFEKT — alle Metriken in Grünzone + Aura Check
-                            logger.info("RestaurierDenker: SWEET SPOT ERREICHT")
+                            logger.info("RestaurierDenker: OPTIMALPUNKT ERREICHT")
                             # §v10 Aura-Check: Wurde die Epoche zerstört?
                             try:
                                 from backend.core.aura_guard import compare_aura
@@ -644,7 +644,7 @@ class RestaurierDenker:
                                 if not _aura_cmp.get("aura_preserved", True):
                                     logger.warning("RestaurierDenker: AURA VERLETZT — %s", _aura_cmp.get("verdict", ""))
                             except Exception as e:
-                                logger.warning("restaurier_denker.py::unknown fallback: %s", e)
+                                logger.warning("restaurier_denker.py::unbekannter Fallback: %s", e)
                             # §v10 Song-Profil aktualisieren
                             try:
                                 from backend.core.aurik_completion_engine import update_song_profile

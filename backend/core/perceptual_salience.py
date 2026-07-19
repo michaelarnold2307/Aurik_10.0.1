@@ -183,7 +183,7 @@ class PerceptualSalienceEstimator:
                         _binaural_factor,
                     )
             except Exception as e:
-                logger.warning("perceptual_salience.py::unknown fallback: %s", e)
+                logger.warning("perceptual_salience.py::unbekannter Fallback: %s", e)
 
         return result
 
