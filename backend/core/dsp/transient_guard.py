@@ -29,6 +29,11 @@ logger = logging.getLogger(__name__)
 # physikalisch um 5-30 ms. 2 ms war zu aggressiv und unterdrückte legitime
 # Harmonic-Restauration komplett (blend_reduction=1.00 bei 26 ms Shift).
 TRANSIENT_SHIFT_THRESHOLD_MS = 3.5
+# §v10.52 Pre-Echo-Calibration: Blend-Divisor 2.0→5.0 + Max-Cap 0.60.
+# 21ms Shift: 21/(3.5×5.0)=1.20→0.60 (vorher 1.00=100%)
+# 5ms Shift: 5/(3.5×5.0)=0.29→29% (vorher 71%)
+_BLEND_DIVISOR = 5.0
+_MAX_BLEND_REDUCTION = 0.60
 # Maximale Suchfenster-Breite für Onset-Matching
 _MATCH_WINDOW_MS = 30.0
 
@@ -135,7 +140,7 @@ def detect_transient_shifts(
         # Blend-Reduktion: proportional zur Überschreitung
         blend_reduction = 0.0
         if not ok:
-            blend_reduction = float(np.clip(max_shift / (TRANSIENT_SHIFT_THRESHOLD_MS * 2.0), 0.0, 1.0))
+            blend_reduction = float(np.clip(max_shift / (TRANSIENT_SHIFT_THRESHOLD_MS * _BLEND_DIVISOR), 0.0, _MAX_BLEND_REDUCTION))
             logger.info(
                 "§V22 Pre-Echo: max_shift=%.2f ms > %.0f ms → blend_reduction=%.2f",
                 max_shift,
