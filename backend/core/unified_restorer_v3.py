@@ -28042,8 +28042,18 @@ class UnifiedRestorerV3:
                 )
                 return _cap
 
-        # ── Guard 3: VQI Pre-Cap — Subtractive Cleanup auf analogem Vocal-Material ──
+        # ── Guard 2b: Air-Band auf Analog-Material → Skip (Phase verbietet sich selbst) ──
         _analog_mats = {"cassette", "vinyl", "reel_tape", "tape", "shellac"}
+        if _pid == "phase_39_air_band_enhancement" and _mat in _analog_mats:
+            logger.info(
+                "🔮 Predictive AFG-Guard %s: analog material=%s → Phase SKIP "
+                "(Air-Band/Harmonic Exciter auf analogem Material verboten)",
+                _pid, _mat,
+            )
+            return 0.0
+
+        # ── Guard 3: VQI Pre-Cap — Subtractive Cleanup auf analogem Vocal-Material ──
+        # _analog_mats oben definiert (Guard 2b)
         if _panns >= 0.25 and _mat in _analog_mats and _strength > 0.35:
             # Prüfe ob Phase subtractiv ist (via Phase-Effect-Catalog)
             try:
@@ -31721,6 +31731,7 @@ class UnifiedRestorerV3:
                                     "phase_08", "phase_13",               # Enhancement
                                     "phase_16", "phase_17",               # Tonal
                                     "phase_36", "phase_37", "phase_38",  # Bass/Presence
+                                    "phase_39", "phase_41",               # Air-Band/Brilliance
                                     "phase_48",                            # Stereo-Enhance
                                 )
                             )
