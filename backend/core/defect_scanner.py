@@ -1363,10 +1363,10 @@ class DefectScanner:
                 DefectType.PRINT_THROUGH,
             }
         )
-        _measured_snr = _estimate_local_snr(audio[: min(len(audio), sample_rate * 5)], sample_rate)
+        _measured_snr = _estimate_local_snr(audio[: min(len(audio), sr * 5)], sr)
         _snr_scale = float(np.clip(30.0 / max(5.0, _measured_snr), 0.6, 1.4))
         for _dt in self.thresholds:
-            if _dt not in _NON_SCALING_DEFECTS:
+            if _dt not in _NON_SCALING_DEFECTS and self.thresholds.get(_dt) is not None:
                 self.thresholds[_dt] = float(np.clip(self.thresholds[_dt] * _snr_scale, 0.05, 0.98))
         logger.debug(
             "§v10 SNR-adaptive thresholds: snr=%.1fdB scale=%.2f material=%s",

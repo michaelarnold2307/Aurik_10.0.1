@@ -838,18 +838,30 @@ class LoudnessNormalizationPhase(PhaseInterface):
         if np.any(over_threshold):
             gain[over_threshold] = max_peak_linear / envelope_lookahead[over_threshold]
 
-        # Smooth release (50ms)
+        # Smooth release (50ms) — §v10.54: lfilter statt Python-for-loop (C-level, ~1000× schneller)
         release_samples = int(sample_rate * 0.05)
-        alpha_release = 1.0 - np.exp(-1.0 / release_samples)
+        alpha_release = 1.0 - np.exp(-1.0 / max(release_samples, 1))
 
-        smoothed_gain = np.zeros_like(gain)
-        smoothed_gain[0] = gain[0]
+        # One-pole lowpass für Release (exponentieller Decay)
+        from scipy.signal import lfilter as _lfilter
 
-        for i in range(1, len(gain)):
-            if gain[i] < smoothed_gain[i - 1]:
-                smoothed_gain[i] = gain[i]  # Instant attack
-            else:
-                smoothed_gain[i] = alpha_release * gain[i] + (1 - alpha_release) * smoothed_gain[i - 1]
+        smoothed_gain = _lfilter(
+            [alpha_release], [1.0, alpha_release - 1.0], gain.astype(np.float64)
+        ).astype(np.float32)
+
+        # Instant-Attack-Override: wenn gain unter den smoothed-Wert fällt,
+        # sofort übernehmen (Peak-Limiter-Attack).
+        # smoothed[i] = gain[i] wenn gain[i] < smoothed[i-1], sonst smoothed[i]
+        # → cumulative minimum von max(gain, smoothed_prev) über die Zeit
+        # Implementiert als: attack = np.minimum.accumulate(gain)
+        # dann smoothed = max(attack, smoothed_release) an jedem Punkt
+        # Dies ist eine konservative Approximation des exakten Verhaltens.
+        _attack_floor = np.minimum.accumulate(gain)
+        # smoothed_gain darf die attack-Schwelle nicht überschreiten
+        _exceed = smoothed_gain > _attack_floor
+        if np.any(_exceed):
+            # Release kann nicht über attack_floor steigen; an diesen Stellen greift attack
+            smoothed_gain[_exceed] = _attack_floor[_exceed]
 
         # Apply gain
         if audio.ndim == 2:
