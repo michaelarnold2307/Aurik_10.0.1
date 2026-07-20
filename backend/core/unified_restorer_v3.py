@@ -31739,11 +31739,38 @@ class UnifiedRestorerV3:
                                     "phase_48",                            # Stereo-Enhance
                                 )
                             )
+                            # §v10.54: Subtraktive Cleanup-Phasen — NOVELTY_CRIT ist hier IMMER
+                            # ein Messartefakt. De-Esser, Noise-Gate, Denoiser ENTFERNEN Energie;
+                            # sie können kein destruktives neues Material erzeugen. Die PSD-Änderung
+                            # durch Attenuation wird von _compute_spectral_novelty_fast() als
+                            # "Novelty" fehlinterpretiert (nur >+3 dB Bins werden gezählt, aber
+                            # Attenuation in Nachbar-Bins verändert die spektrale Hüllkurve).
+                            # → Hoher Wet-Floor: die Arbeit der Phase wird erhalten.
+                            _is_subtractive_cleanup_phase = any(
+                                str(getattr(phase_metadata, "phase_id", "")).startswith(p)
+                                for p in (
+                                    "phase_03",   # Denoise
+                                    "phase_05",   # Rumble-Filter
+                                    "phase_18",   # Noise-Gate
+                                    "phase_19",   # De-Esser (DSP)
+                                    "phase_20",   # Reverb-Reduction
+                                    "phase_28",   # Surface-Noise-Profiling
+                                    "phase_29",   # Tape-Hiss-Reduction
+                                    "phase_30",   # DC-Offset-Removal
+                                    "phase_43",   # ML-De-Esser
+                                    "phase_49",   # Advanced-Dereverb
+                                    "phase_57",   # Print-Through-Reduction
+                                    "phase_59",   # Modulation-Noise-Reduction
+                                )
+                            )
                             if _is_repair_phase:
                                 _sft_wet = float(np.clip(_wet_ceil_repair - _sft_novelty_val, 0.30, 0.75))
                             elif _is_enhancement_phase:
                                 # Enhancement nutzt Repair-Ceiling: Spektrumänderung ist Ziel, nicht Schaden
                                 _sft_wet = float(np.clip(_wet_ceil_repair - _sft_novelty_val, 0.35, 0.70))
+                            elif _is_subtractive_cleanup_phase:
+                                # Subtraktiv: Novelty = Messartefakt → hoher Floor, volle Wirkung erhalten
+                                _sft_wet = float(np.clip(_wet_ceil_repair - _sft_novelty_val * 0.5, 0.65, 0.88))
                             else:
                                 _sft_wet = float(np.clip(_wet_ceil_nonrepair - _sft_novelty_val, 0.20, 0.65))
                         else:
