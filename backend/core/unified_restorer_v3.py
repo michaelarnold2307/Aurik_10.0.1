@@ -29022,18 +29022,23 @@ class UnifiedRestorerV3:
             phase_metadata, audio, kwargs, _sev_wet_dry
         )
         if _pred_cap is not None:
-            if _pred_cap <= 0.0:
+            # _pred_cap kann float (Strength-Cap) oder dict {"cap": N, "reason": str} sein
+            _cap_val = float(_pred_cap if isinstance(_pred_cap, (int, float)) else _pred_cap.get("cap", 0.0))
+            _cap_reason = str(
+                _pred_cap.get("reason", "quality") if isinstance(_pred_cap, dict) else "quality"
+            )
+            if _cap_val <= 0.0:
                 # Skip completely — Phase würde garantiert Rollback triggern
                 logger.info(
                     "🔮 Predictive Guard SKIP %s: Phase hätte %s-Rollback ausgelöst → übersprungen",
                     phase_metadata.phase_id,
-                    _pred_cap.get("reason", "quality"),
+                    _cap_reason,
                 )
                 return audio
             else:
                 # Cap strength — verhindert Rollback durch präemptive Reduktion
                 _old_strength = float(kwargs.get("strength", 1.0) or 1.0)
-                _new_strength = float(min(_old_strength, _pred_cap))
+                _new_strength = float(min(_old_strength, _cap_val))
                 if _new_strength < _old_strength:
                     kwargs["strength"] = _new_strength
                     logger.info(
@@ -29041,7 +29046,7 @@ class UnifiedRestorerV3:
                         phase_metadata.phase_id,
                         _old_strength,
                         _new_strength,
-                        _pred_cap.get("reason", "quality"),
+                        _cap_reason,
                     )
 
         # ── §v10.35 Wet/Dry-Strength-Kohärenz: wenn eine Phase kaum Output liefert
