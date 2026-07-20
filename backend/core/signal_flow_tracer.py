@@ -496,6 +496,13 @@ class SignalFlowTracer:
                             "phase_42",
                             "de_esser",
                             "vocal_enhance",
+                            # Dynamics-Repair (Hüllkurve → indirekte Spektrumänderung)
+                            "phase_10",
+                            "phase_26",
+                            "phase_40",
+                            "compress",
+                            "dynamic_range",
+                            "loudness_normalization",
                         )
                     )
                 )
