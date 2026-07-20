@@ -31711,8 +31711,23 @@ class UnifiedRestorerV3:
                                 _wet_ceil_nonrepair, _wet_ceil_repair = get_sft_wet_ceilings()
                             except Exception:
                                 _wet_ceil_nonrepair, _wet_ceil_repair = 0.70, 0.80
+                            # §v10.53: Enhancement-Phasen — Novelty ist ERWÜNSCHT (Bass-Boost,
+                            # Presence, EQ, Harmonics). Höherer Min-Wet als non-repair, weil
+                            # die Spektrumänderung das ZIEL der Phase ist, kein Artefakt.
+                            _is_enhancement_phase = any(
+                                str(getattr(phase_metadata, "phase_id", "")).startswith(p)
+                                for p in (
+                                    "phase_04", "phase_06", "phase_07",  # EQ/Harmonic
+                                    "phase_08", "phase_13",               # Enhancement
+                                    "phase_16", "phase_17",               # Tonal
+                                    "phase_36", "phase_37", "phase_38",  # Bass/Presence
+                                    "phase_48",                            # Stereo-Enhance
+                                )
+                            )
                             if _is_repair_phase:
                                 _sft_wet = float(np.clip(_wet_ceil_repair - _sft_novelty_val, 0.30, 0.75))
+                            elif _is_enhancement_phase:
+                                _sft_wet = float(np.clip(_wet_ceil_nonrepair - _sft_novelty_val, 0.35, 0.70))
                             else:
                                 _sft_wet = float(np.clip(_wet_ceil_nonrepair - _sft_novelty_val, 0.20, 0.65))
                         else:
