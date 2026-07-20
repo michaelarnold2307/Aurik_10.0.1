@@ -160,15 +160,17 @@ class OneTakeExport:
                 )
 
             # 2. LUFS out of range → Gain-Korrektur
+            # §Fix Oscillation: ab Versuch 2 nur noch Limiter, kein Gain (verhindert Schaukel)
             lufs_target = _LUFS_STUDIO if is_studio_2026 else _LUFS_RESTORATION
             if not check.lufs_in_range or abs(check.integrated_lufs - lufs_target) > 1.0:
-                gain_db = lufs_target - check.integrated_lufs
-                gain_db = float(np.clip(gain_db, -6.0, 6.0))
-                if abs(gain_db) > 0.5:
-                    current *= 10.0 ** (gain_db / 20.0)
-                    corrections_this_round.append(
-                        f"gain({check.integrated_lufs:+.1f}→{lufs_target:+.0f} LUFS, Δ={gain_db:+.1f}dB)"
-                    )
+                if attempt < _MAX_RETRIES - 2:  # Nur in Versuch 0-1 Gain anpassen
+                    gain_db = lufs_target - check.integrated_lufs
+                    gain_db = float(np.clip(gain_db, -6.0, 6.0))
+                    if abs(gain_db) > 0.5:
+                        current *= 10.0 ** (gain_db / 20.0)
+                        corrections_this_round.append(
+                            f"gain({check.integrated_lufs:+.1f}→{lufs_target:+.0f} LUFS, Δ={gain_db:+.1f}dB)"
+                        )
 
             # 3. Fatigue zu hoch → adaptive Höhenabsenkung
             # §v10.9: Adaptiver Cut: -1dB@0.35, -2dB@0.40, -3dB@0.50

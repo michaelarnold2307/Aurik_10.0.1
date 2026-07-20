@@ -10223,7 +10223,9 @@ class UnifiedRestorerV3:
 
             _rs = float(getattr(self, "_last_restorability_score", 50.0) or 50.0)
             _depth = int(self._strict_autosetup_policy.get("transfer_chain_depth", 1))
-            _cal_novelty = float(np.clip(0.20 + (1.0 - _rs / 100.0) * 0.40 + max(0, _depth - 1) * 0.03, 0.18, 0.65))
+            # §Fix MP3-Terminal: erhöhter Toleranz-Faktor für verlustbehaftete Ketten
+            _codec_bonus = 0.02 if _cal_transfer_chain and any("mp3" in str(c).lower() for c in _cal_transfer_chain) else 0.0
+            _cal_novelty = float(np.clip(0.20 + (1.0 - _rs / 100.0) * 0.40 + max(0, _depth - 1) * 0.04 + _codec_bonus, 0.18, 0.65))
             _mat_for_sft = str(getattr(self, "_primary_material", "unknown") or "unknown")
             _vocal_for_sft = float(getattr(self, "_restoration_context", {}).get("panns_vocals_confidence", 0.0))
             calibrate_sft_thresholds(
@@ -12890,7 +12892,15 @@ class UnifiedRestorerV3:
                                 # Goals bereits erreicht, treibt bei Defizit hoeher.
                                 strength=1.0,
                             )
-                            return _res.audio if hasattr(_res, "audio") else _audio
+                            _result_audio = _res.audio if hasattr(_res, "audio") else _audio
+                            # §Fix Phase-07-Silence: Harmonic Restoration kann Signal kollabieren
+                            _pid_str = str(getattr(_ph, "phase_id", ""))
+                            if "phase_07" in _pid_str or "HarmonicRestoration" in str(type(_ph).__name__):
+                                _rms_db = float(20.0 * np.log10(float(np.sqrt(np.mean(np.square(_result_audio))) + 1e-12)))
+                                if _rms_db < -60.0:
+                                    logger.warning("🔇 Phase-07-Silence-Guard: Output-RMS %.1f dBFS → Rollback", _rms_db)
+                                    return _audio
+                            return _result_audio
 
                         return _fc_call
 
@@ -29618,6 +29628,11 @@ class UnifiedRestorerV3:
                         )
             else:
                 result = phase.process(audio, **kwargs)
+                # §Fix tuple-ndim: Phasen die (audio, metadata) statt audio zurückgeben
+                if isinstance(result, tuple) and len(result) >= 1:
+                    _unwrapped = result[0]
+                    if isinstance(_unwrapped, np.ndarray):
+                        result = _unwrapped
                 # §v10.31: Normalize result audio to channels-first (2,N) to match pipeline.
                 # Phases like phase_15 convert to channels-last (N,2) internally and
                 # return results in that format, but the pipeline expects (2,N).

@@ -283,6 +283,7 @@ def main() -> int:
                 if not shown:
                     print(f"\n─── {rel} ───")
                     shown = True
+                violation_line = f"  L{line}: [{rule}] {desc}"
                 print(violation_line)
                 new_violations += 1
 
