@@ -10224,8 +10224,8 @@ class UnifiedRestorerV3:
             _rs = float(getattr(self, "_last_restorability_score", 50.0) or 50.0)
             _depth = int(self._strict_autosetup_policy.get("transfer_chain_depth", 1))
             # §Fix MP3-Terminal: erhöhter Toleranz-Faktor für verlustbehaftete Ketten
-            _codec_bonus = 0.02 if _cal_transfer_chain and any("mp3" in str(c).lower() for c in _cal_transfer_chain) else 0.0
-            _cal_novelty = float(np.clip(0.20 + (1.0 - _rs / 100.0) * 0.40 + max(0, _depth - 1) * 0.04 + _codec_bonus, 0.18, 0.65))
+            _codec_bonus = 0.05 if _cal_transfer_chain and any("mp3" in str(c).lower() for c in _cal_transfer_chain) else 0.0
+            _cal_novelty = float(np.clip(0.20 + (1.0 - _rs / 100.0) * 0.40 + max(0, _depth - 1) * 0.05 + _codec_bonus, 0.18, 0.65))
             _mat_for_sft = str(getattr(self, "_primary_material", "unknown") or "unknown")
             _vocal_for_sft = float(getattr(self, "_restoration_context", {}).get("panns_vocals_confidence", 0.0))
             calibrate_sft_thresholds(

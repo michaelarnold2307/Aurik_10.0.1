@@ -130,7 +130,7 @@ class PerformanceGuard:
     # _get_status() multipliziert diese mit target_rt_factor.
     WARNING_FRACTION_OPTIMAL = 0.25  # < 25 % → OPTIMAL
     WARNING_FRACTION_GOOD = 0.50  # < 50 % → GOOD
-    WARNING_FRACTION_ACCEPTABLE = 0.75  # < 75 % → ACCEPTABLE
+    WARNING_FRACTION_ACCEPTABLE = 0.85  # < 85 % → ACCEPTABLE (§v10.52: 0.75→0.85)
     WARNING_FRACTION_CRITICAL = 1.0  # < 100 % → CRITICAL, darüber → EXCEEDED
 
     # Phase Priorities (höher = wichtiger für Quality)
